@@ -3,8 +3,8 @@ import { TEAMS, CIRCUITS, ROUNDS, DRIVERS, getTrack } from "./data";
 import { $, esc, fmtLap, fmtRace, tyreHtml, fmtDate, sheet } from "./common";
 import { SeasonState, driverStandings, teamStandings, RACE_POINTS, SPRINT_POINTS } from "../sim/season";
 import { Weekend, newWeekend, DAY_NAMES } from "../sim/weekend";
-import { SESSION_NAMES, SessionKind, ResultRow, isRaceKind, Car, Session } from "../sim/session";
-import { COMPOUNDS, DRY, setWear } from "../sim/tyres";
+import { SESSION_NAMES, SessionKind, ResultRow, isRaceKind, Car, Session, LongRun } from "../sim/session";
+import { COMPOUNDS, DRY, setWear, Compound } from "../sim/tyres";
 import { stintProfile } from "../sim/strategy";
 import { SCENARIO_NAMES } from "../sim/weather";
 import { saveSeason, clearSeason } from "./store";
@@ -134,6 +134,7 @@ export function weekendScreen(nav: Nav, s: SeasonState) {
       ${outlook.length ? outlook.map((o) => `<div class="row"><span class="grow up">${SESSION_NAMES[o.kind]}</span><span class="mono">lluvia ${Math.round(o.rain * 100)} %</span><span class="mono dim">${o.air[0].toFixed(0)}–${o.air[1].toFixed(0)} °C · asfalto ~${o.track.toFixed(0)} °C</span></div>`).join("") : "—"}
       <div class="dim" style="margin-top:6px">Clima típico: ${esc(def.clima.fuente)}.</div>
     </div></div>
+    ${longRunsPanel(Object.entries(st.longRuns ?? {}).flatMap(([kind, rs]) => (rs ?? []).map((r) => ({ kind: kind as SessionKind, r }))), s.playerTeam)}
     <div class="panel"><div class="hd"><span class="t">Lo que saben tus ingenieros</span></div><div class="bd" style="padding:0">
       <table class="tv"><tr><th>Compuesto</th><th>Nuevo</th><th>Pierde/v</th><th>Vida</th><th>Error</th></tr>${knowRows}</table>
       <div class="small dim" style="padding:6px 10px">Cada tanda larga en libres mide el desgaste real y reduce el error (📊 = ya medido). El desgaste puede salir mayor o menor de lo previsto.</div>
@@ -165,6 +166,30 @@ export function drawMini(cv: HTMLCanvasElement, track: ReturnType<typeof getTrac
   for (let i = 0; i < track.xs.length; i++) { const x = ox + track.xs[i] * sc, y = oy - track.ys[i] * sc; if (i) g.lineTo(x, y); else g.moveTo(x, y); }
   g.closePath(); g.stroke();
   g.fillStyle = "#e10600"; g.beginPath(); g.arc(ox + track.xs[0] * sc, oy - track.ys[0] * sc, 5 * dpr, 0, 7); g.fill();
+}
+
+// --------------------------------------------------------------- tandas largas
+/**
+ * Tandas largas de libres, por compuesto y de más rápida a más lenta. El ritmo está corregido a
+ * depósito vacío para poder comparar tandas con distinta carga; la caída es lo que pierde por vuelta.
+ */
+export function longRunsPanel(runs: { kind: SessionKind; r: LongRun }[], playerTeam: string): string {
+  const dry = runs.filter((x) => !x.r.wet);
+  if (!dry.length) return "";
+  const drivers = TEAMS.flatMap((t) => t.pilotos.map((d) => ({ d, team: t })));
+  const rows = (["S", "M", "H"] as Compound[]).map((c) => {
+    const list = dry.filter((x) => x.r.c === c).sort((a, b) => a.r.avg - b.r.avg);
+    if (!list.length) return "";
+    const best = list[0].r.avg;
+    return list.map((x, i) => {
+      const dd = drivers[x.r.id];
+      return `<tr class="${dd.team.id === playerTeam ? "me" : ""}"><td>${i === 0 ? tyreHtml(c) : ""}</td><td><span class="teamdot" style="background:${dd.team.color}"></span>${esc(dd.d.abrev)} <span class="dim small">${SESSION_NAMES[x.kind].replace("Libres ", "L")}</span></td><td class="mono">${x.r.n}</td><td class="mono">${fmtLap(x.r.avg)}</td><td class="mono">${i === 0 ? "" : `+${(x.r.avg - best).toFixed(2)}`}</td><td class="mono ${x.r.deg > 0.12 ? "redt" : ""}">${x.r.deg >= 0 ? "+" : "−"}${Math.abs(x.r.deg).toFixed(2)}</td></tr>`;
+    }).join("");
+  }).join("");
+  return `<div class="panel"><div class="hd"><span class="t">Tandas largas</span></div><div class="bd" style="padding:0">
+    <table class="tv"><tr><th></th><th>Piloto</th><th>V</th><th>Ritmo</th><th>Dif.</th><th>Caída/v</th></tr>${rows}</table>
+    <div class="small dim" style="padding:6px 10px">Ritmo medio corregido a depósito vacío (para comparar tandas con distinta carga). Caída/v: lo que pierde por vuelta con el desgaste. En rojo, las que caen mucho.</div>
+  </div></div>`;
 }
 
 // --------------------------------------------------------------- resultados

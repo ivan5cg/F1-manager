@@ -31,6 +31,8 @@ export interface Minisector {
   energyR: number;
   cornerSens: number; // cuánto depende de la adherencia (0..1, relativo)
   aero: number; // parte del agarre en curva que viene de la carga aerodinámica (0..1): lo que se pierde en aire sucio
+  hx: number; hy: number; // dirección de marcha media, pesada por la velocidad² (donde más pesa el aire): para el viento
+  vAvg: number; // velocidad media (km/h)
   overtake: number; // 0 = no se adelanta; >0 dificultad inversa (zona de frenada)
   drs: boolean;
   drsDetect: boolean;
@@ -255,11 +257,15 @@ export function buildTrack(def: any): Track {
   }
   // carga aerodinámica frente a peso en las curvas de cada minisector (ponderado por el tiempo en curva)
   const aeroW = new Array(N).fill(0), aeroT = new Array(N).fill(0), vMin = new Array(N).fill(999);
+  const hxW = new Array(N).fill(0), hyW = new Array(N).fill(0), hW = new Array(N).fill(0);
   const aeroFrac = (v: number) => { const df = 0.5 * car.rho * car.clA * v * v; return df / (car.mass * 9.81 + df); };
   for (let i = 0; i < n; i++) {
     const k = msOfPoint[i];
     vMin[k] = Math.min(vMin[k], base.v[i]);
     if (Math.abs(base.ay[i]) > 8) { aeroW[k] += aeroFrac(base.v[i]) * base.dt[i]; aeroT[k] += base.dt[i]; }
+    const j = (i + 1) % n, dx = xs[j] - xs[i], dy = ys[j] - ys[i], dl = Math.hypot(dx, dy) || 1;
+    const wgt = base.v[i] * base.v[i] * base.dt[i];
+    hxW[k] += (dx / dl) * wgt; hyW[k] += (dy / dl) * wgt; hW[k] += wgt;
   }
   const totF = eF.reduce((a, b) => a + b, 0), totR = eR.reduce((a, b) => a + b, 0);
   const totE = (totF + totR) / 2;
@@ -283,6 +289,8 @@ export function buildTrack(def: any): Track {
       energyR: eR[k] / totE,
       cornerSens: gSens[k] / t0[k] / maxSens,
       aero: aeroT[k] > 0 ? aeroW[k] / aeroT[k] : aeroFrac(vMin[k]),
+      hx: hW[k] ? hxW[k] / hW[k] : 0, hy: hW[k] ? hyW[k] / hW[k] : 0,
+      vAvg: ((bounds[k + 1] - bounds[k]) * ds) / Math.max(0.01, t0[k]) * 3.6,
       overtake: 0,
       drs: false,
       drsDetect: false,

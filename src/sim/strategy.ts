@@ -16,7 +16,7 @@ export interface TeamKnowledge {
   noise: Record<Compound, number>; // error relativo de su estimación por compuesto
   measured: Partial<Record<Compound, { perLap: number; laps: number }>>;
   /** Caché de perfiles de tanda, por compuesto, coche y temperatura (es una función pura de esas claves). */
-  profile: Record<string, { dt: number[]; wear: number[]; trackT: number }>;
+  profile: Record<string, { dt: number[]; wear: number[]; trackT: number; cum?: number[] }>;
   wetIn: number;
   wetOut: number;
   quality: number; // meteorólogo
@@ -78,10 +78,12 @@ export function stintProfile(sess: Session, car: Car, k: TeamKnowledge, c: Compo
   const lapRef = sess.lapRefRace;
   const spg = sess.secPerGrip;
   for (let age = 0; age < MAX_AGE; age++) {
+    // gastado del todo: lo que queda no se va a usar (se rellena con un coste prohibitivo)
+    if (age > 0 && wear[age - 1] > 0.985) { dt.push(dt[age - 1] + 5); wear.push(1); continue; }
     let gripSum = 0, tSum = 0;
     for (const m of tr.ms) {
       const tm = msTimeAtGrip(m, 1);
-      const steps = Math.max(1, Math.round(tm / 1.0));
+      const steps = Math.max(1, Math.round(tm / 2.0));
       const h = tm / steps;
       for (let s = 0; s < steps; s++) {
         updateSet(set, {
@@ -97,7 +99,10 @@ export function stintProfile(sess: Session, car: Car, k: TeamKnowledge, c: Compo
     dt.push(-(g - 1) * 100 * spg);
     wear.push(setWear(set));
   }
-  const p = { dt, wear, trackT };
+  // sumas acumuladas: el coste de una tanda sale en O(1)
+  const cum = [0];
+  for (let i = 0; i < dt.length; i++) cum.push(cum[i] + dt[i]);
+  const p = { dt, wear, trackT, cum };
   k.profile[key] = p;
   return p;
 }
@@ -106,8 +111,9 @@ function stintCost(sess: Session, car: Car, k: TeamKnowledge, c: Compound, from:
   if (laps <= 0) return 0;
   const p = stintProfile(sess, car, k, c);
   if (from + laps > MAX_AGE) return 1e9;
-  let t = 0;
-  for (let a = from; a < from + laps; a++) t += p.dt[a];
+  let t: number;
+  if (p.cum) t = p.cum[from + laps] - p.cum[from];
+  else { t = 0; for (let a = from; a < from + laps; a++) t += p.dt[a]; }
   const w = p.wear[from + laps - 1];
   if (w > 0.93) t += (w - 0.93) * 400;
   return t;
@@ -136,7 +142,28 @@ export function availableSets(car: Car): Record<Compound, TyreSet[]> {
  * Si curC es null también elige el de salida. Solo usa los juegos que quedan.
  */
 export function planStrategy(sess: Session, car: Car, k: TeamKnowledge, fromLap = 0, curC: Compound | null = null, curAge = 0, rng: Rng | null = null): Plan {
+  const n = (k.noise.M + k.noise.S) / 2;
+  const temp = 1 + n * 15;
+  // solo hacen falta las opciones cercanas a la mejor (con rng se elige entre ellas)
+  const options = enumeratePlans(sess, car, k, fromLap, curC, curAge, rng ? temp * 3 : 0);
   const total = sess.laps;
+  if (!options.length) return { stints: [{ c: curC ?? "M", endLap: total }] };
+  if (rng) {
+    const best = options[0].total!;
+    const pool = options.filter((o) => o.total! - best < temp * 3).slice(0, 400);
+    const w = pool.map((o) => Math.exp(-(o.total! - best) / temp));
+    let r = rng.next() * w.reduce((a, b) => a + b, 0);
+    for (let i = 0; i < pool.length; i++) { r -= w[i]; if (r <= 0) return pool[i]; }
+  }
+  return options[0];
+}
+
+/** Todas las estrategias posibles en seco (0, 1 o 2 paradas) con los juegos que quedan, de mejor a peor. */
+function enumeratePlans(sess: Session, car: Car, k: TeamKnowledge, fromLap = 0, curC: Compound | null = null, curAge = 0, margin = Infinity): Plan[] {
+  const total = sess.laps;
+  // se descartan sobre la marcha las que ya están peor que la mejor + margen (sin crear objetos)
+  let bestT = Infinity;
+  const keep = (t: number) => { if (t < bestT) bestT = t; return t <= bestT + margin; };
   const remain = total - fromLap;
   // pérdida en boxes + lo que cuesta perder posición en pista (tráfico al volver)
   const loss = pitLoss(sess) + car.team.boxes + 1.0 + 4;
@@ -168,14 +195,14 @@ export function planStrategy(sess: Session, car: Car, k: TeamKnowledge, fromLap 
     const c0 = st.c, a0 = st.age;
     const id0 = st.own ? avail[c0][0]?.id : undefined;
     const idx = (c: Compound, n: number) => n + (st.own && c === c0 ? 1 : 0); // índice del juego libre
-    if (ruleOk([c0])) options.push({ stints: [{ c: c0, endLap: total, setId: id0 }], total: stintCost(sess, car, k, c0, a0, remain) });
+    if (ruleOk([c0])) { const t = stintCost(sess, car, k, c0, a0, remain); if (keep(t)) options.push({ stints: [{ c: c0, endLap: total, setId: id0 }], total: t }); }
     for (const c2 of DRY) {
       const i2 = idx(c2, 0);
       if (!avail[c2][i2] || !ruleOk([c0, c2])) continue;
       const a2 = ageOf(c2, i2);
       for (let l1 = 4; l1 <= remain - 4; l1++) {
         const t = stintCost(sess, car, k, c0, a0, l1) + stintCost(sess, car, k, c2, a2, remain - l1) + loss;
-        options.push({ stints: [{ c: c0, endLap: fromLap + l1, setId: id0 }, { c: c2, endLap: total, setId: avail[c2][i2].id }], total: t });
+        if (keep(t)) options.push({ stints: [{ c: c0, endLap: fromLap + l1, setId: id0 }, { c: c2, endLap: total, setId: avail[c2][i2].id }], total: t });
       }
     }
     for (const c2 of DRY) for (const c3 of DRY) {
@@ -185,23 +212,61 @@ export function planStrategy(sess: Session, car: Car, k: TeamKnowledge, fromLap 
       const a2 = ageOf(c2, i2), a3 = ageOf(c3, i3);
       for (let l1 = 4; l1 <= remain - 8; l1++) for (let l2 = 4; l1 + l2 <= remain - 4; l2++) {
         const t = stintCost(sess, car, k, c0, a0, l1) + stintCost(sess, car, k, c2, a2, l2) + stintCost(sess, car, k, c3, a3, remain - l1 - l2) + 2 * loss;
-        options.push({ stints: [{ c: c0, endLap: fromLap + l1, setId: id0 }, { c: c2, endLap: fromLap + l1 + l2, setId: avail[c2][i2].id }, { c: c3, endLap: total, setId: avail[c3][i3].id }], total: t });
+        if (keep(t)) options.push({ stints: [{ c: c0, endLap: fromLap + l1, setId: id0 }, { c: c2, endLap: fromLap + l1 + l2, setId: avail[c2][i2].id }, { c: c3, endLap: total, setId: avail[c3][i3].id }], total: t });
       }
     }
   }
-  options.sort((a, b) => a.total! - b.total!);
-  if (!options.length) return { stints: [{ c: curC ?? "M", endLap: total }] };
-  if (rng) {
-    const best = options[0].total!;
-    const n = (k.noise.M + k.noise.S) / 2;
-    const temp = 1 + n * 15;
-    const pool = options.filter((o) => o.total! - best < temp * 3).slice(0, 400);
-    const w = pool.map((o) => Math.exp(-(o.total! - best) / temp));
-    let r = rng.next() * w.reduce((a, b) => a + b, 0);
-    for (let i = 0; i < pool.length; i++) { r -= w[i]; if (r <= 0) return pool[i]; }
-  }
-  return options[0];
+  const out = options.filter((o) => o.total! <= bestT + margin);
+  out.sort((a, b) => a.total! - b.total!);
+  return out;
 }
+
+export interface PlanOption {
+  plan: Plan;
+  stops: number;
+  delta: number; // s respecto a la mejor
+  /** s que perdería este mismo plan si los neumáticos se gastan un 15 % más de lo que cree el equipo */
+  ifWorse: number;
+}
+
+/** Las mejores estrategias distintas (por compuestos y número de paradas) para elegir antes de la salida. */
+export function planOptions(sess: Session, car: Car, k: TeamKnowledge, n = 3): PlanOption[] {
+  const all = enumeratePlans(sess, car, k, 0, null, 0);
+  const seen = new Set<string>();
+  const picked: Plan[] = [];
+  for (const o of all) {
+    const sig = o.stints.map((x) => x.c).join("-");
+    if (seen.has(sig)) continue;
+    seen.add(sig);
+    picked.push(o);
+    if (picked.length >= n) break;
+  }
+  if (!picked.length) return [];
+  const best = picked[0].total!;
+  // el mismo plan con un desgaste un 15 % mayor (el error típico de lo que sabe un equipo)
+  const worse: TeamKnowledge = { ...k, profile: {}, hidden: { ...k.hidden, wearMult: Object.fromEntries(Object.entries(k.hidden.wearMult).map(([c, v]) => [c, (v as number) * 1.15])) as TeamKnowledge["hidden"]["wearMult"] } };
+  const avail = availableSets(car);
+  const ageFor = (kk: TeamKnowledge, c: Compound, setId?: string) => {
+    const set = setId ? car.e.sets.find((x) => x.id === setId) : avail[c][0];
+    const w = set ? setWear(set) : 0;
+    if (w <= 0) return 0;
+    const p = stintProfile(sess, car, kk, c);
+    let a = 0;
+    while (a < MAX_AGE - 1 && p.wear[a] < w) a++;
+    return a;
+  };
+  const cost = (kk: TeamKnowledge, plan: Plan) => {
+    let t = 0, from = 0;
+    plan.stints.forEach((st, i) => {
+      t += stintCost(sess, car, kk, st.c, ageFor(kk, st.c, st.setId), st.endLap - from);
+      if (i > 0) t += pitLoss(sess) + car.team.boxes + 1.0 + 4;
+      from = st.endLap;
+    });
+    return t;
+  };
+  return picked.map((p) => ({ plan: p, stops: p.stints.length - 1, delta: p.total! - best, ifWorse: cost(worse, p) - cost(k, p) }));
+}
+
 
 /** Previsión del equipo (se refresca cada minuto). */
 export function teamForecast(sess: Session, car: Car): Forecast {

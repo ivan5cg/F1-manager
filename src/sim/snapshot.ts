@@ -15,7 +15,7 @@ export interface SessionSnapshot {
 }
 
 // campos de la sesión que se reconstruyen al crearla (o son referencias)
-const SKIP_SESS = new Set(["opt", "track", "onEvent", "cars", "rng", "weather", "water", "waterOff", "hidden", "parts", "breaks", "tRef", "secStart"]);
+const SKIP_SESS = new Set(["opt", "track", "onEvent", "cars", "rng", "weather", "water", "waterOff", "hidden", "parts", "breaks", "tRef", "secStart", "windAir"]);
 // campos de cada coche que son referencias a otros objetos
 const SKIP_CAR = new Set(["e", "d", "team", "tyres", "usedCompounds", "cross"]);
 const CROSS_KEEP_LAPS = 6;

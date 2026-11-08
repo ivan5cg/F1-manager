@@ -3,7 +3,7 @@ import { CIRCUITS, TEAMS } from "./data";
 import { Weekend } from "../sim/weekend";
 import { Session, Car, RaceEvent, SESSION_NAMES, SessionKind, isRaceKind, isQualiKind, PUSH_NAMES, ENGINE_NAMES, ERS_NAMES, SOC_MAX } from "../sim/session";
 import { COMPOUNDS, Compound, DRY, ALL, setWear, TyreSet, WET } from "../sim/tyres";
-import { rainAt, forecast, RadarFrame } from "../sim/weather";
+import { rainAt, forecast, RadarFrame, windNow } from "../sim/weather";
 import { renderField, colorize, terrain, RADAR_STEPS, fmtHour } from "./radar";
 
 /** Icono del cielo para la caja de hora local (sol, nubes, lluvia, chaparrón). */
@@ -20,9 +20,9 @@ function skyIcon(cloud: number, rain: number, clock: number): string {
   if (cloud > 0.3) return `<svg viewBox="0 0 22 15">${sun}${cl(5, 3, 0.8, "#e6e8eb")}</svg>`;
   return `<svg viewBox="0 0 22 15">${sun}</svg>`;
 }
-import { makeRun, availableSets, stintProfile } from "../sim/strategy";
+import { makeRun, availableSets, stintProfile, planOptions } from "../sim/strategy";
 import { Rng } from "../sim/rng";
-import { snapshotSession, SessionSnapshot } from "../sim/snapshot";
+import { snapshotSession, SessionSnapshot, parseSnapshot, applySnapshot, snapshotConditions } from "../sim/snapshot";
 import { stopOptions, undercut, gapHistory, pitLoss, StopOption } from "../sim/pitwall";
 import { saveSession } from "./store";
 
@@ -378,7 +378,10 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     const rAvg = sess.rainOnTrack();
     const sw = sess.sectorWater();
     const f1 = (x: number) => x.toFixed(x < 10 ? 1 : 0);
-    $("#wx").innerHTML = `<span class="tab">Hora</span><span class="bar mono"><span class="sky">${fmtHour(w.clock)}${skyIcon(w.cloud, rAvg, w.clock)}</span></span>
+    const wn = windNow(w);
+    // flecha: hacia dónde sopla, en el mismo sentido que el mapa (norte arriba)
+    const arrow = `<svg class="wind" viewBox="0 0 16 16" style="transform:rotate(${(-wn.dir * 180) / Math.PI}deg)"><path d="M2 8h10M8.5 4.5 12 8l-3.5 3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+    $("#wx").innerHTML = `<span class="tab">Hora</span><span class="bar mono"><span class="sky">${fmtHour(w.clock)}${skyIcon(w.cloud, rAvg, w.clock)}</span><span class="grow"></span><span class="sky" title="Viento">${arrow}${Math.round(wn.speed)}<span class="small" style="text-transform:none">&nbsp;km/h</span></span></span>
       <span class="tab">Aire</span><span class="bar mono">${w.airT.toFixed(0)}° <span class="dim">pista</span> ${w.trackT.toFixed(0)}°</span>
       <span class="tab">Cielo</span><span class="bar" style="white-space:nowrap">${rMax > 0.15 ? `Lluvia ${f1(rAvg)}<span class="small dim">&nbsp;máx</span>&nbsp;${f1(rMax)}<span class="small" style="text-transform:none">&nbsp;mm/h</span>` : w.cloud > 0.6 ? "Cubierto" : w.cloud > 0.3 ? "Nubes" : "Sol"}</span>
       <span class="tab">Agua</span><span class="bar"><span class="wxsec grow">${sw.map((x) => `<div title="${x.toFixed(2)} mm" style="background:${x > 0.05 ? `rgba(58,139,232,${Math.min(1, 0.35 + x)})` : "#26282d"}"></div>`).join("")}</span><span class="mono small">${Math.max(...sw).toFixed(2)}</span></span>`;
@@ -996,13 +999,23 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   // -------------------------------------------------- previa de carrera
   function preRace(start: () => void) {
     const me = mine();
+    // estrategias para elegir: las mejores distintas según lo que sabe el equipo
+    const plansOf = new Map(me.map((c) => [c.id, planOptions(sess, c, c.e.knowledge, 3)]));
+    const sigOf = (p: { stints: { c: string; endLap: number }[] }) => p.stints.map((x) => `${x.c}${x.endLap}`).join("-");
     const grid = sess.order();
     const html = () => `<b class="up">Parrilla · ${SESSION_NAMES[kind]}</b>
       <div class="small dim">${kind === "RACE" ? "En seco hay que usar dos compuestos distintos. " : "Sin parada obligatoria. "}Sin repostaje: el combustible que cargues es el que hay.</div>
       ${sess.flag === "sc" ? `<div class="small yellow" style="margin-top:4px">🟨 Salida detrás del coche de seguridad: hay demasiada agua (${sess.avgWater().toFixed(1)} mm). Sigue en pista hasta que se pueda correr.</div>` : ""}
       ${me.map((c, i) => `<div class="panel" style="margin:6px 0"><div class="hd"><span class="t">P${grid.indexOf(c) + 1} · ${esc(c.d.nombre)}</span></div><div class="bd">
         ${(() => { const w = sess.startWater(c); const plan = c.plan.stints.map((s, j, a) => `${tyreHtml(s.c)}${j < a.length - 1 ? ` v${s.endLap}` : ""}`).join(" → ");
-          return w > WET.si ? `<div class="small">Con agua (${w.toFixed(2)} mm previstos al empezar): el equipo recomienda salir con ${tyreHtml(w > WET.iw * 1.05 ? "W" : "I")}. <span class="dim">Plan para cuando se seque: ${plan}</span></div>` : `<div class="small dim">Plan recomendado: ${plan}</div>`; })()}
+          void plan;
+          return w > WET.si ? `<div class="small">Con agua (${w.toFixed(2)} mm previstos al empezar): el equipo recomienda salir con ${tyreHtml(w > WET.iw * 1.05 ? "W" : "I")}. <span class="dim">Las estrategias de abajo son para cuando se seque.</span></div>` : ""; })()}
+        <h2>Estrategia</h2>
+        <div class="plans" data-plans="${i}">${(plansOf.get(c.id) ?? []).map((o, j) => {
+          const seq = o.plan.stints.map((x) => `${tyreHtml(x.c)}${x.endLap < sess.laps ? `<span class="dim small"> v${x.endLap} </span>` : ""}`).join(`<span class="dim">›</span>`);
+          const on = sigOf(c.plan) === sigOf(o.plan);
+          return `<button data-plan="${j}" class="plan${on ? " on" : ""}"><span class="pl-s">${seq}</span><span class="pl-d">${o.stops} ${o.stops === 1 ? "parada" : "paradas"} · ${o.delta < 0.05 ? "la más rápida" : `+${o.delta.toFixed(1)} s`}</span><span class="pl-r">si se gastan un 15 % más: +${o.ifWorse.toFixed(1)} s</span></button>`;
+        }).join("")}</div>
         <h2>Neumático de salida</h2><div class="opts" data-start="${i}">${setButtons(c, (s) => true, c.tyres?.id)}</div>
         <h2>Combustible</h2><div class="seg" data-fuel="${i}">${[[-1.2, "Muy justo"], [-0.5, "Justo"], [0, "Exacto"], [0.6, "Con margen"]].map(([v, n]) => `<button data-v="${v}" class="${Math.abs(sess.fuelMargin(c) - (v as number)) < 0.05 ? "on" : ""}">${n}</button>`).join("")}</div>
       </div></div>`).join("")}
@@ -1011,6 +1024,15 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     sheetOpen = true;
     const { el } = sheet(`<div id="pre">${html()}</div>`, () => { sheetOpen = false; });
     const wire = () => {
+      el.querySelectorAll<HTMLElement>("[data-plans]").forEach((box) => box.querySelectorAll<HTMLButtonElement>("[data-plan]").forEach((b) => (b.onclick = () => {
+        const c = me[Number(box.dataset.plans)];
+        const o = plansOf.get(c.id)![Number(b.dataset.plan)];
+        // en seco, se sale con el neumático del plan elegido (montarlo recalcula el plan: va antes)
+        const first = o.plan.stints[0];
+        if (sess.startWater(c) <= WET.si && first.setId && c.tyres?.c !== first.c) sess.setStartTyre(c, first.setId);
+        c.plan = { stints: o.plan.stints.map((x) => ({ ...x })), total: o.plan.total };
+        el.querySelector("#pre")!.innerHTML = html(); wire();
+      })));
       el.querySelectorAll<HTMLElement>("[data-start]").forEach((box) => box.querySelectorAll<HTMLButtonElement>("[data-set]").forEach((b) => (b.onclick = () => {
         sess.setStartTyre(me[Number(box.dataset.start)], b.dataset.set!);
         el.querySelector("#pre")!.innerHTML = html(); wire();
@@ -1036,22 +1058,59 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   }
   function skipToEnd() {
     if (skipping) return;
-    if (!confirm("¿Simular hasta el final de la sesión? Tus pilotos seguirán con lo que tengan programado (o en automático).")) return;
+    if (!confirm(race ? "¿Simular hasta el final? El equipo llevará a tus pilotos con la estrategia elegida (paradas, neumáticos y lluvia)." : "¿Simular hasta el final de la sesión? Tus pilotos seguirán con lo que tengan programado (o en automático).")) return;
     skipping = true;
     paused = true;
     updSpeed();
     for (const c of mine()) if (!race && !c.run && !c.queue.length) c.auto = true;
+    if (race) sess.autoPlayers = true;
     const t0 = sess.wall;
-    const chunk = () => {
-      const lim = performance.now() + 30;
-      while (!sess.finished && performance.now() < lim) for (let i = 0; i < 200 && !sess.finished; i++) sess.step();
-      const est = race ? sess.leaderLap / sess.laps : (sess.wall - t0) / Math.max(1, (sess.parts.length ? 70 * 60 : 3600) - t0);
+    const progress = (est: number) => {
       showToast(`Simulando… ${Math.round(Math.min(1, est) * 100)} %<div class="progress"><i style="width:${Math.min(100, est * 100)}%"></i></div>`, 60000, "Muro", false, "left");
       renderMessages();
+    };
+    // en segundo plano (Web Worker): la pantalla no se bloquea; si no se puede, aquí mismo por trozos
+    if (typeof Worker !== "undefined") {
+      try {
+        const worker = new Worker(new URL("./simWorker.ts", import.meta.url), { type: "module" });
+        progress(0);
+        worker.onmessage = (ev: MessageEvent<{ type: string; p?: number; raw?: string }>) => {
+          const m = ev.data;
+          if (m.type === "progress") progress(m.p ?? 0);
+          else if (m.type === "done" && m.raw) {
+            worker.terminate();
+            const fin = parseSnapshot(m.raw);
+            if (!fin) { chunk(); return; }
+            adoptFinal(fin);
+            hideToast(); renderTower(); renderTop(); finish();
+          } else { worker.terminate(); chunk(); }
+        };
+        worker.onerror = () => { worker.terminate(); chunk(); };
+        worker.postMessage({ raw: snapshotSession(sess, wk.st), playerTeam: wk.playerTeam });
+        return;
+      } catch { /* sin workers: por trozos */ }
+    }
+    chunk();
+    function chunk() {
+      const lim = performance.now() + 30;
+      while (!sess.finished && performance.now() < lim) for (let i = 0; i < 200 && !sess.finished; i++) sess.step();
+      progress(race ? sess.leaderLap / sess.laps : (sess.wall - t0) / Math.max(1, (sess.parts.length ? 70 * 60 : 3600) - t0));
       renderTower(); renderTop(); drawMap();
       if (sess.finished) { hideToast(); finish(); } else setTimeout(chunk, 0);
-    };
-    chunk();
+    }
+  }
+  /** Vuelca aquí el estado final calculado en segundo plano (mismos objetos de juegos y conocimiento). */
+  function adoptFinal(fin: SessionSnapshot) {
+    for (const [id, sets] of Object.entries(fin.weekend.sets)) {
+      const mineSets = wk.st.sets[Number(id)];
+      for (const x of sets) { const o = mineSets.find((y) => y.id === x.id); if (o) Object.assign(o, x); }
+    }
+    for (const [team, k] of Object.entries(fin.weekend.knowledge)) Object.assign(wk.st.knowledge[team], k, { profile: {} });
+    const cond = snapshotConditions(fin);
+    sess.weather = cond.weather;
+    sess.water = Float64Array.from(cond.water);
+    sess.waterOff = Float64Array.from(cond.waterOff);
+    applySnapshot(sess, fin);
   }
   sizeMap();
   window.onresize = sizeMap;
@@ -1065,11 +1124,15 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     if (!paused && !sess.finished && !skipping) {
       leftover += real * speed;
       let n = 0;
+      // como mucho ~10 ms de simulación por fotograma: si el móvil no da para tanto, la sesión
+      // va algo más lenta en vez de dar tirones (y no se acumula retraso)
+      const budget = performance.now() + 10;
       while (leftover >= sess.dt && n < 3000) {
         sess.step();
         leftover -= sess.dt;
         n++;
         if (paused) { leftover = 0; break; }
+        if ((n & 15) === 0 && performance.now() > budget) { leftover = Math.min(leftover, sess.dt * 4); break; }
       }
     }
     try {

@@ -6,7 +6,7 @@
 import { Rng, clamp } from "./rng";
 import { Track, Minisector, msTimeAtGrip, MIN_MASS, REF_CAR } from "./track";
 import { Compound, COMPOUNDS, DRY, HiddenTyre, TyreSet, setGrip, updateSet, axleGrip, warmBlankets, setWear, bestWaterGrip, WET } from "./tyres";
-import { WeatherState, stepWeather, rainAt, evaporation, waterStep } from "./weather";
+import { WeatherState, stepWeather, rainAt, evaporation, waterStep, windNow } from "./weather";
 import { Plan, planStrategy, aiDecide, aiErs, TeamKnowledge, practiceProgram, qualiTick, pickSet, learnFromRun, aiRedFlagTyres, practiceWeather, wrongTyresForWater, teamForecast } from "./strategy";
 
 export const PUSH_NAMES = ["Conservar", "Gestionar", "Normal", "Atacar", "Al límite"];
@@ -174,6 +174,7 @@ export interface Car {
   bestTyreByPart: Compound[]; // en clasificación, por parte
   bestSecs: number[]; // sectores de su mejor vuelta (para comparar parciales)
   bestSecsByPart: number[][]; // en clasificación, por parte
+  stintLog: { c: Compound; from: number; used: boolean }[]; // carrera: neumáticos montados y desde qué vuelta
 }
 
 export type FlagState = "green" | "vsc" | "sc" | "sc_in" | "red";
@@ -204,6 +205,9 @@ export interface SessionOptions {
   sprintWeekend: boolean;
   restore?: boolean; // se va a volcar una instantánea encima: sin preparar parrilla ni programas
 }
+
+/** Una tanda larga de libres, resumida: ritmo medio sin combustible y caída por vuelta. */
+export interface LongRun { id: number; c: Compound; n: number; avg: number; deg: number; wet: boolean }
 
 export interface ResultRow {
   id: number;
@@ -255,6 +259,9 @@ export class Session {
   secStart: number[]; // primer minisector de cada sector
   secBest = [Infinity, Infinity, Infinity]; // mejores sectores de la sesión
   bestLap = Infinity;
+  longRuns: LongRun[] = []; // tandas largas de los libres
+  autoPlayers = false; // carrera simulada hasta el final: la IA decide también por el jugador
+  lapOrder: number[][] = []; // carrera: orden (ids) al cerrar cada vuelta el líder; [0] = parrilla
   /** Hueco que se busca en la vuelta de salida (s): rebufo en circuitos de rectas, aire limpio en el resto. */
   outLapGap = 2.5;
   towTrack = false;
@@ -285,6 +292,7 @@ export class Session {
     this.sprintWeekend = opt.sprintWeekend;
     this.lapRefRace = this.track.refLap;
     this.tRef = this.track.ms.map((m) => msTimeAtGrip(m, 1));
+    this.updateWind();
     // ¿compensa ir a rebufo de otro en una vuelta lanzada? (Monza sí; en circuitos de curvas, aire limpio)
     let bestG = 9, bestNet = 0;
     for (let g = 0.5; g <= 2.5; g += 0.1) {
@@ -321,7 +329,7 @@ export class Session {
         wearMult: team.desgaste * (1.18 - d.neumaticos * 0.002),
         slowPuncture: false, autoPush: !e.player, autoErs: true, auto: true, gapWant: 2.5,
         queue: [], eliminated: false, sessionLaps: 0, stintW0: 0, stintL0: 0, learnedLap: -99, lastImpede: -1,
-        secCur: [NaN, NaN, NaN], secLast: [NaN, NaN, NaN], secBest: [Infinity, Infinity, Infinity], lastLapValid: true, bestTyreByPart: [], bestSecs: [], bestSecsByPart: [],
+        secCur: [NaN, NaN, NaN], secLast: [NaN, NaN, NaN], secBest: [Infinity, Infinity, Infinity], lastLapValid: true, bestTyreByPart: [], bestSecs: [], bestSecsByPart: [], stintLog: [],
       };
       this.cars.push(car);
     }
@@ -363,6 +371,7 @@ export class Session {
 
   // ---------------------------------------------------------------- carrera
   private setupRace(grid: number[]) {
+    this.lapOrder[0] = [...grid];
     const now = this.avgWater();
     // con mucha agua la carrera empieza detrás del coche de seguridad, hasta que se pueda correr
     if (now > WET_SC_START) {
@@ -392,6 +401,12 @@ export class Session {
   }
 
   mount(c: Car, set: TyreSet) {
+    if (isRaceKind(this.kind)) {
+      const from = this.lapsDone(c);
+      // antes de la salida, cambiar el neumático de salida sustituye al anterior
+      if (this.t === 0) c.stintLog = [];
+      c.stintLog.push({ c: set.c, from, used: set.laps > 0 });
+    }
     warmBlankets(set);
     set.punctured = false;
     set.flatSpot = 0;
@@ -492,6 +507,7 @@ export class Session {
     if (this.weatherAcc >= 5) {
       stepWeather(this.weather, this.weatherAcc / 60);
       this.updateWater(this.weatherAcc);
+      this.updateWind();
       this.weatherAcc = 0;
       this.weatherRadio();
       this.torrentialCheck();
@@ -541,6 +557,19 @@ export class Session {
     if (isRaceKind(this.kind) && this.cars.every((c) => c.loc === "fin" || c.loc === "out")) {
       this.finished = true;
       this.log({ kind: "control", text: `🏁 ${SESSION_NAMES[this.kind]} terminada`, important: true, pause: true });
+    }
+  }
+
+  /** Cambio de presión dinámica por el viento en cada minisector (0,1 = +10 %: viento de cara). */
+  windAir: Float64Array = new Float64Array(0);
+  private updateWind() {
+    const { speed, dir } = windNow(this.weather);
+    const wx = Math.cos(dir) * speed, wy = Math.sin(dir) * speed;
+    if (this.windAir.length !== this.N) this.windAir = new Float64Array(this.N);
+    for (const m of this.track.ms) {
+      const head = -(wx * m.hx + wy * m.hy); // km/h de cara (+) o de cola (−)
+      const v = Math.max(60, m.vAvg);
+      this.windAir[m.i] = Math.pow((v + head) / v, 2) - 1;
     }
   }
 
@@ -741,12 +770,16 @@ export class Session {
     const wetSkill = water > 0.05 ? 1 + (c.d.lluvia - 80) * 0.0012 * Math.min(1, water / 0.6) : 1;
     let grip = setGrip(tyres, water) * c.pace * wetSkill * PUSH_GRIP[c.push] * (1 + 0.018 * this.rubber) * (1 - c.wing - c.floor);
     if (c.aheadId >= 0) grip *= 1 - DIRTY_AIR * m.aero * m.cornerSens * dirtyAir(c.followGap);
+    // viento: de cara frena en recta pero da carga en curva; de cola, al revés
+    const air = this.windAir[m.i];
+    grip *= 1 + 0.5 * m.aero * m.cornerSens * air;
     let t = msTimeAtGrip(m, grip);
     const scale = t / this.tRef[m.i];
     let power = c.team.potencia * 0.6 + ENGINE_POWER[c.engine] + (c.soc > 0.05 || c.ers === 0 ? ERS_POWER[c.ers] : -3.5);
     if (c.drs && m.drs) power += MO_POWER;
     let dragCut = -c.team.resistencia - WATER_DRAG * Math.min(3, water);
     if (c.aheadId >= 0) dragCut += tow(c.followGap) * m.throttle;
+    dragCut -= 100 * air;
     t -= scale * (m.dPower * power + m.dDrag * dragCut);
     t += m.dMass * (MIN_MASS + c.fuel - REF_CAR.mass);
     t *= 1 + c.noise;
@@ -895,8 +928,9 @@ export class Session {
     else if (!m.drsDetect) c.drs = false;
 
     if (isRaceKind(this.kind)) {
-      if (ms === this.N - 3 && !c.player) aiDecide(this, c);
-      if (ms === this.N - 3 && c.player) this.playerAdvice(c);
+      // al simular hasta el final, el equipo también lleva a tus pilotos (con la estrategia elegida)
+      if (ms === this.N - 3 && (!c.player || this.autoPlayers)) aiDecide(this, c);
+      if (ms === this.N - 3 && c.player && !this.autoPlayers) this.playerAdvice(c);
     }
     aiErs(this, c);
     if (this.flag !== "green") return;
@@ -937,6 +971,7 @@ export class Session {
 
   private onLeaderLap(lap: number) {
     if (this.flag === "green") this.greenLeaderLaps++;
+    this.lapOrder[lap] = this.order().filter((c) => c.loc !== "out").map((c) => c.id);
     // reglamento: 2 h de carrera (sin contar las suspensiones) y 3 h en total; al cumplirse, bandera
     // a cuadros al final de la vuelta en la que se agota el tiempo
     if (!this.chequered && lap < this.laps && (this.wall - this.suspended >= RACE_MAX || this.wall >= RACE_WINDOW)) {
@@ -1158,6 +1193,7 @@ export class Session {
     if (run && c.tyres) {
       c.tyres.laps++;
       if (run.kind === "long" || run.lapsData.length >= 3) learnFromRun(this, c, run);
+      if (run.kind === "long" && run.lapsData.length >= 4) this.recordLongRun(c, run.lapsData, run.fuel, c.tyres.c);
     }
     c.loc = "garage";
     c.run = undefined;
@@ -1165,6 +1201,20 @@ export class Session {
     c.v = 0;
     c.followGap = 99;
     c.aheadId = -1;
+  }
+
+  /** Resume una tanda larga: vueltas corregidas a depósito vacío, media sin las raras y pendiente. */
+  private recordLongRun(c: Car, laps: number[], fuel0: number, comp: Compound) {
+    const kgSens = this.track.ms.reduce((a, m) => a + m.dMass, 0); // s por kg
+    // combustible al empezar cada vuelta lanzada (la de salida ya ha gastado una)
+    const corr = laps.map((t, i) => t - kgSens * Math.max(0, fuel0 - this.fuelPerLap * (i + 1)));
+    const sorted = [...corr].sort((a, b) => a - b);
+    const med = sorted[Math.floor(sorted.length / 2)];
+    const pts = corr.map((t, i) => [i, t] as const).filter(([, t]) => t < med * 1.025);
+    if (pts.length < 3) return;
+    const n = pts.length, mx = pts.reduce((a, [i]) => a + i, 0) / n, my = pts.reduce((a, [, t]) => a + t, 0) / n;
+    const sxy = pts.reduce((a, [i, t]) => a + (i - mx) * (t - my), 0), sxx = pts.reduce((a, [i]) => a + (i - mx) ** 2, 0);
+    this.longRuns.push({ id: c.id, c: comp, n: laps.length, avg: my, deg: sxx ? sxy / sxx : 0, wet: this.avgWater() > WET.si * 0.6 });
   }
 
   /** Vuelve a boxes (el jugador aborta). */
@@ -1218,6 +1268,8 @@ export class Session {
     const deficit = Math.max(0, 0.9 - setGrip(tyres, water) / (sp.base * bestWaterGrip(water))) * 5;
     let p = 1.1e-4 * PUSH_ERR[c.push] * (1 + (85 - c.d.regularidad) / 25) * (1 + deficit + coldF);
     p *= 1 + 5 * Math.min(1.2, water) * (1.3 - c.d.lluvia / 100);
+    const wind = windNow(this.weather).speed;
+    if (wind > 25) p *= 1 + ((wind - 25) / 25) * m.aero;
     if (isRaceKind(this.kind) && this.lapsDone(c) === 0) p *= 2;
     if (!this.rng.chance(p * m.cornerSens * 2)) return;
     const r = this.rng.next();

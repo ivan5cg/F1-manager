@@ -5,11 +5,12 @@ document.documentElement.dataset.tema = "grafito";
 import { TEAMS, CIRCUITS, ROUNDS, DRIVERS, getTrack } from "./data";
 import { loadSeason, saveSeason, loadSession, clearSession } from "./store";
 import type { SessionSnapshot } from "../sim/snapshot";
-import { startScreen, seasonScreen, weekendScreen, resultsScreen, Nav } from "./hubs";
+import { startScreen, seasonScreen, weekendScreen, resultsScreen, longRunsPanel, Nav } from "./hubs";
 import { sessionView } from "./sessionView";
 import { SeasonState, driverStandings } from "../sim/season";
 import { Weekend } from "../sim/weekend";
-import { SessionKind } from "../sim/session";
+import { SessionKind, isRaceKind } from "../sim/session";
+import { raceSummaryHtml, drawRaceSummary } from "./summary";
 import { esc } from "./common";
 
 let season: SeasonState | null = loadSeason();
@@ -40,12 +41,15 @@ const nav: Nav = {
         const ds = driverStandings(s, DRIVERS.length).slice(0, 5);
         extra = `<div class="panel"><div class="hd"><span class="t">Mundial tras ${esc(gp)}</span></div><div class="bd">${ds.map((x, i) => `<div class="row"><span class="pos">${i + 1}</span><span class="grow">${esc(DRIVERS[x.id].d.nombre)}</span><b class="mono">${x.points}</b></div>`).join("")}</div></div>`;
       }
+      if (kind.startsWith("FP") && sess.longRuns.length) extra = longRunsPanel(sess.longRuns.map((r) => ({ kind, r })), s.playerTeam) + extra;
       if (sess.shortened) {
         const t = sess.pointsTable();
         extra = `<div class="panel"><div class="hd"><span class="t">Carrera acortada</span></div><div class="bd small">Suspendida y no reanudada: cuenta la clasificación al final de la vuelta ${sess.shortened.laps} de ${sess.laps} (${Math.round((100 * sess.shortened.laps) / sess.laps)} %). ${!t ? "Puntos completos (más del 75 %)." : t.length ? `Puntos reducidos: ${t.join("-")}.` : "Sin puntos: no se completaron dos vueltas en verde."}</div></div>` + extra;
       }
+      if (isRaceKind(kind)) extra = raceSummaryHtml(sess) + extra;
       saveSeason(s);
       resultsScreen(kind, sess.results(), s, gp, extra, () => (kind === "RACE" ? nav.season() : nav.weekend()));
+      if (isRaceKind(kind)) requestAnimationFrame(() => drawRaceSummary(sess));
       window.scrollTo(0, 0);
     }, snap);
   },

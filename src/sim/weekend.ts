@@ -5,7 +5,7 @@ import { Rng, clamp } from "./rng";
 import { Track } from "./track";
 import { HiddenTyre, TyreSet, allocation, setWear, DRY } from "./tyres";
 import { Climate, Scenario, WeatherState, createDayWeather, stepWeather, rainAt, pickScenario, evaporation, waterStep } from "./weather";
-import { Session, SessionKind, Entrant, TeamDef, ResultRow, isRaceKind } from "./session";
+import { Session, SessionKind, Entrant, TeamDef, ResultRow, isRaceKind, LongRun } from "./session";
 import { TeamKnowledge, buildKnowledge } from "./strategy";
 import { SessionSnapshot, snapshotConditions, applySnapshot } from "./snapshot";
 
@@ -23,6 +23,7 @@ export interface WeekendState {
   days: { scenario: Scenario; seed: number }[];
   anomaly: number;
   scoring?: Partial<Record<SessionKind, number[]>>; // puntos de una carrera acortada (si no, los normales)
+  longRuns?: Partial<Record<SessionKind, LongRun[]>>; // tandas largas de cada libre
 }
 
 export const NORMAL_SESSIONS: SessionKind[] = ["FP1", "FP2", "FP3", "Q", "RACE"];
@@ -154,6 +155,7 @@ export class Weekend {
   /** Cierra una sesión: guarda resultados, goma y devuelve juegos tras los libres. */
   finish(sess: Session) {
     this.st.results[sess.kind] = sess.results();
+    if (sess.longRuns.length) this.st.longRuns = { ...this.st.longRuns, [sess.kind]: sess.longRuns };
     const table = sess.pointsTable();
     if (table) this.st.scoring = { ...this.st.scoring, [sess.kind]: table };
     this.st.rubber = sess.rubber;

@@ -105,9 +105,12 @@ export function fbm(x: number, y: number, s: number) {
 
 /** Lluvia (mm/h) que deja una célula en el punto (x, y). */
 export function cellRain(c: Cell, x: number, y: number): number {
+  const dx = x - c.x, dy = y - c.y;
+  // descarte rápido: fuera del alcance máximo de la célula (r² > 12 con el mayor tamaño posible)
+  const reach = 3.5 * 1.3 * c.sigma * c.ax;
+  if (dx * dx + dy * dy > reach * reach) return 0;
   const e = envelope(c);
   if (e <= 0) return 0;
-  const dx = x - c.x, dy = y - c.y;
   const ca = Math.cos(c.ang), sa = Math.sin(c.ang);
   const sg = c.sigma * sizeFactor(c);
   const u = (dx * ca + dy * sa) / (sg * c.ax);
@@ -358,6 +361,12 @@ export function stepWeather(w: WeatherState, dtMin: number): void {
   }
 }
 
+/** Viento en superficie en este momento (km/h y hacia dónde sopla), con rachas. */
+export function windNow(w: WeatherState): { speed: number; dir: number; gust: number } {
+  const gust = 0.75 + 0.6 * fbm(w.clock * 0.9, 3.3, 41); // rachas: cambian en un par de minutos
+  return { speed: w.surfaceWind * gust, dir: w.windDir, gust };
+}
+
 /** Evaporación (mm/s): más con asfalto caliente, viento y sol. */
 export function evaporation(w: WeatherState): number {
   return 2.2e-5 * (1 + (w.trackT - 20) / 15) * (1 + w.surfaceWind / 20) * (1 - 0.5 * w.cloud);
@@ -391,6 +400,9 @@ export interface Forecast {
 export function forecast(w: WeatherState, quality: number, rng: Rng, members = 30, horizons = [0, 5, 10, 15, 20, 25, 30, 40, 50, 60], pts: [number, number][] = [[0, 0]]): Forecast {
   const res: number[][] = horizons.map(() => []);
   const err = 1.4 - quality / 100;
+  // centro y radio de los puntos del circuito (para descartar células lejanas)
+  const cx0 = pts.reduce((a, p) => a + p[0], 0) / pts.length, cy0 = pts.reduce((a, p) => a + p[1], 0) / pts.length;
+  const span = Math.max(...pts.map((p) => Math.hypot(p[0] - cx0, p[1] - cy0)));
   for (let m = 0; m < members; m++) {
     const dDir = rng.gauss(0, 0.2 * err);
     const dSpd = rng.logn(0.18 * err);
@@ -401,13 +413,13 @@ export function forecast(w: WeatherState, quality: number, rng: Rng, members = 3
       return { ...c, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp, peak: c.peak * rng.logn(0.45 * err), life: c.age + (c.life - c.age) * rng.logn(0.5 * err) };
     });
     horizons.forEach((h, k) => {
+      // cada célula se mueve una vez por horizonte (no una por punto) y solo cuentan las que alcanzan el circuito
+      const moved = cells.filter((c) => c.age + h <= c.life).map((c) => ({ ...c, x: c.x + c.vx * h, y: c.y + c.vy * h, age: c.age + h }))
+        .filter((c) => { const reach = 3.5 * 1.3 * c.sigma * c.ax + span; return (c.x - cx0) ** 2 + (c.y - cy0) ** 2 < reach * reach; });
       let rmax = 0;
       for (const [px, py] of pts) {
         let r = w.drizzle * rng.logn(0.3);
-        for (const c of cells) {
-          if (c.age + h > c.life) continue;
-          r += cellRain({ ...c, x: c.x + c.vx * h, y: c.y + c.vy * h, age: c.age + h }, px, py);
-        }
+        for (const c of moved) r += cellRain(c, px, py);
         rmax = Math.max(rmax, r);
       }
       res[k].push(rmax);
