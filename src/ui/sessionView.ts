@@ -8,7 +8,7 @@ import { renderField, colorize, terrain, RADAR_STEPS, fmtHour } from "./radar";
 
 /** Icono del cielo para la caja de hora local (sol, nubes, lluvia, chaparrón). */
 function skyIcon(cloud: number, rain: number, clock: number): string {
-  const day = clock > 7 * 60 && clock < 20.5 * 60;
+  const day = clock > 7 * 60 && clock < 19.25 * 60; // de noche (Singapur), luna
   const sun = day ? `<circle cx="7" cy="6" r="4" fill="#ffd84a"/>` : `<path d="M9 2a5 5 0 1 0 3 8 4 4 0 1 1-3-8z" fill="#e8e8ef"/>`;
   const cl = (x: number, y: number, s: number, c: string) => `<path transform="translate(${x} ${y}) scale(${s})" d="M4 10h11a3.5 3.5 0 0 0 0-7 5 5 0 0 0-9.5 1A3 3 0 0 0 4 10z" fill="${c}"/>`;
   if (rain > 0.15) {

@@ -1,5 +1,5 @@
 import type { SessionSnapshot } from "../sim/snapshot";
-import { TEAMS, CIRCUITS, ROUNDS, DRIVERS, getTrack } from "./data";
+import { TEAMS, CIRCUITS, ROUNDS, DRIVERS, getTrack, calendarOf } from "./data";
 import { $, esc, fmtLap, fmtRace, tyreHtml, fmtDate, sheet } from "./common";
 import { SeasonState, driverStandings, teamStandings, RACE_POINTS, SPRINT_POINTS } from "../sim/season";
 import { Weekend, newWeekend, DAY_NAMES } from "../sim/weekend";
@@ -27,8 +27,8 @@ export function startScreen(nav: Nav, saved: SeasonState | null, onNew: (team: s
     <div style="padding-bottom:16px">
       <div class="panel"><div class="hd"><span class="t">Muro de Boxes · Temporada 2026</span></div><div class="bd">
         <h1>Muro de Boxes</h1>
-        <div class="dim">Minitemporada de ${ROUNDS.length} grandes premios. Tú decides en el muro; el coche y los pilotos son los que son.</div>
-        ${saved ? `<div style="margin-top:10px"><button class="red big-cta" id="cont">Continuar temporada · ${esc(TEAMS.find((t) => t.id === saved.playerTeam)!.nombre)} · ronda ${Math.min(saved.round + 1, ROUNDS.length)}/${ROUNDS.length}</button></div>` : ""}
+        <div class="dim">Temporada de ${ROUNDS.length} grandes premios. Tú decides en el muro; el coche y los pilotos son los que son.</div>
+        ${saved ? `<div style="margin-top:10px"><button class="red big-cta" id="cont">Continuar temporada · ${esc(TEAMS.find((t) => t.id === saved.playerTeam)!.nombre)} · ronda ${Math.min(saved.round + 1, calendarOf(saved).length)}/${calendarOf(saved).length}</button></div>` : ""}
       </div></div>
       <div class="panel"><div class="hd"><span class="t">${saved ? "O empieza una nueva con" : "Elige tu equipo"}</span></div><div class="bd" style="padding:0">
         ${TEAMS.map((t) => `<div class="list-item" data-team="${t.id}" style="cursor:pointer;${pick === t.id ? "background:rgba(225,6,0,.22)" : ""}">
@@ -49,15 +49,16 @@ export function startScreen(nav: Nav, saved: SeasonState | null, onNew: (team: s
 export function seasonScreen(nav: Nav, s: SeasonState) {
   const ds = driverStandings(s, DRIVERS.length);
   const ts = teamStandings(s, TEAMS);
-  const done = s.round >= ROUNDS.length;
+  const ROUNDS_S = calendarOf(s);
+  const done = s.round >= ROUNDS_S.length;
   const champ = done ? DRIVERS[ds[0].id] : null;
   app().innerHTML = `
   <div style="padding-bottom:16px">
     <div class="panel"><div class="hd"><span class="t">Temporada 2026 · ${esc(TEAMS.find((t) => t.id === s.playerTeam)!.nombre)}</span><button id="home">Inicio</button></div><div class="bd">
-      ${done ? `<h1>🏆 ${esc(champ!.d.nombre)}</h1><div class="dim">Campeón de la minitemporada con ${ds[0].points} puntos</div>` : `<button class="red big-cta" id="go">${flagOf(ROUNDS[s.round])} Ir al ${esc(CIRCUITS[ROUNDS[s.round]].gp)}</button>`}
+      ${done ? `<h1>🏆 ${esc(champ!.d.nombre)}</h1><div class="dim">Campeón de la minitemporada con ${ds[0].points} puntos</div>` : `<button class="red big-cta" id="go">${flagOf(ROUNDS_S[s.round])} Ir al ${esc(CIRCUITS[ROUNDS_S[s.round]].gp)}</button>`}
     </div></div>
     <div class="panel"><div class="hd"><span class="t">Calendario</span></div><div class="bd" style="padding:0">
-      ${ROUNDS.map((id, i) => {
+      ${ROUNDS_S.map((id, i) => {
         const c = CIRCUITS[id];
         const r = s.rounds.find((x) => x.round === i + 1);
         const win = r?.race?.[0];
@@ -76,7 +77,7 @@ export function seasonScreen(nav: Nav, s: SeasonState) {
   $("#home").onclick = () => nav.home();
   if (!done) $("#go").onclick = () => {
     if (!s.weekend || s.weekend.round !== s.round + 1) {
-      s.weekend = newWeekend(s.round + 1, CIRCUITS[ROUNDS[s.round]], TEAMS, s.seed * 1000 + s.round * 97 + 1);
+      s.weekend = newWeekend(s.round + 1, CIRCUITS[ROUNDS_S[s.round]], TEAMS, s.seed * 1000 + s.round * 97 + 1);
       saveSeason(s);
     }
     nav.weekend();

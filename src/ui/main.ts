@@ -17,7 +17,7 @@ let season: SeasonState | null = loadSeason();
 
 const nav: Nav = {
   home() { startScreen(nav, season, (team) => {
-    season = { v: 1, playerTeam: team, seed: Math.floor(Math.random() * 1e6), round: 0, weekend: null, rounds: [] };
+    season = { v: 1, playerTeam: team, seed: Math.floor(Math.random() * 1e6), round: 0, weekend: null, rounds: [], calendar: [...ROUNDS] };
     saveSeason(season);
     nav.season();
   }); },

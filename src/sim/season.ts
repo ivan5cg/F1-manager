@@ -20,6 +20,7 @@ export interface SeasonState {
   playerTeam: string;
   seed: number;
   round: number; // índice de la ronda en curso
+  calendar?: string[]; // ids de los circuitos, en orden (las temporadas antiguas no lo tienen: 5 carreras)
   weekend: WeekendState | null;
   rounds: RoundResult[];
 }

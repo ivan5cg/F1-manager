@@ -1,6 +1,6 @@
 # Muro de Boxes
 
-Juego de estrategia de Fórmula 1 centrado en el **fin de semana de carrera**. No hay gestión de equipo: eres el muro de boxes de tus dos pilotos en una minitemporada de 5 grandes premios con la parrilla real de 2026.
+Juego de estrategia de Fórmula 1 centrado en el **fin de semana de carrera**. No hay gestión de equipo: eres el muro de boxes de tus dos pilotos en una temporada de 8 grandes premios con la parrilla real de 2026.
 
 Es una web para el móvil (se instala como aplicación desde el navegador) y funciona sin conexión. La pantalla de sesión imita el grafismo de las retransmisiones de 2010-2013 sobre un tema gris pizarra (degradados suaves, sin negro puro): extremos en diagonal pero todo apilado en vertical para aprovechar el espacio:
 - contador «Vuelta 28/71» en caja oscura, con el estado al lado en amarillo (coche de seguridad) o rojo (bandera roja),
@@ -23,11 +23,16 @@ npm run dev        # abre la URL que muestra (también desde el móvil en la mis
 
 | Ronda | Gran Premio | Circuito | Fecha | Formato |
 |---|---|---|---|---|
-| 1 | Gran Bretaña | Silverstone | 5 de julio | Normal |
-| 2 | Bélgica | Spa-Francorchamps | 19 de julio | Normal |
-| 3 | Italia | Monza | 6 de septiembre | Normal |
-| 4 | Sierra Norte (ficticio) | Sierra Norte | 11 de octubre | Normal |
-| 5 | São Paulo | Interlagos | 8 de noviembre | **Sprint** |
+| 1 | Japón | Suzuka | 29 de marzo | Normal |
+| 2 | Mónaco | Mónaco | 7 de junio | Normal |
+| 3 | Gran Bretaña | Silverstone | 5 de julio | Normal |
+| 4 | Bélgica | Spa-Francorchamps | 19 de julio | Normal |
+| 5 | Italia | Monza | 6 de septiembre | Normal |
+| 6 | Singapur (de noche) | Marina Bay | 11 de octubre | **Sprint** |
+| 7 | Sierra Norte (ficticio) | Sierra Norte | 25 de octubre | Normal |
+| 8 | São Paulo | Interlagos | 8 de noviembre | **Sprint** |
+
+Las temporadas empezadas antes de ampliar el calendario siguen con sus 5 carreras.
 
 - **Formato normal:** Libres 1, Libres 2, Libres 3, Clasificación (Q1 18', Q2 15', Q3 12'; caen 6 y 6) y Carrera.
 - **Formato sprint:** Libres 1, Clasificación sprint (SQ1 12', SQ2 10', SQ3 8'; medios en SQ1 y SQ2, blandos en SQ3), Sprint (24 vueltas), Clasificación y Carrera.
@@ -59,7 +64,7 @@ Todo es determinista a partir de la semilla de la temporada.
 
 **Simulación a 20 Hz.** Cada coche avanza en pasos de 0,05 s sobre el perfil de velocidad del circuito, escalado por el tiempo que tardaría él en ese tramo con su adherencia, potencia, resistencia y masa de ese instante. Un fin de semana entero se calcula en ~7 s.
 
-**Circuitos reales** (`data/circuitos/`). Silverstone, Spa, Monza e Interlagos usan la línea central real del trazado. De la curvatura sale la velocidad máxima en cada punto (masa puntual con carga aerodinámica, potencia y frenada), con la carga de cada circuito (Monza baja). Cada circuito se calibra contra la pole real de 2026: Silverstone 1:28.111, Spa 1:44.361 y Monza 1:21.786; Interlagos, estimada en ~1:12.1. La pérdida en boxes es la de cada circuito. Zonas de adelantamiento y de modo adelantamiento (MO, el sustituto del DRS en 2026) salen de la geometría.
+**Circuitos reales** (`data/circuitos/`). Silverstone, Spa, Monza, Interlagos y Suzuka usan la línea central real del trazado; Mónaco y Marina Bay, su trazado en GeoJSON convertido a metros. De la curvatura sale la velocidad máxima en cada punto (masa puntual con carga aerodinámica, potencia y frenada), con la carga de cada circuito (Monza baja). Cada circuito se calibra contra la pole real de 2026: Suzuka 1:28.778, Mónaco 1:12.051, Silverstone 1:28.111, Spa 1:44.361, Monza 1:21.786 y Singapur 1:31.373; Interlagos, estimada en ~1:12.1. Los adelantamientos de cada circuito se calibran con su media real por carrera: Monza ~47, Spa ~41, Suzuka ~40, Interlagos ~40, Singapur ~35, Silverstone ~35 y Mónaco ~9. La pérdida en boxes es la de cada circuito. Zonas de adelantamiento y de modo adelantamiento (MO, el sustituto del DRS en 2026) salen de la geometría.
 
 **Neumáticos** (`src/sim/tyres.ts`). Duro, medio, blando, intermedio y lluvia. Por eje: temperatura de carcasa y de superficie, ventana de cada compuesto, desgaste con precipicio, graining y ampollas. Entre compuestos hay ~1 s por vuelta con neumático nuevo en un circuito como Silverstone. Asignación real de juegos: 13 de seco (8 blandos, 3 medios, 2 duros), 4 intermedios y 3 de lluvia; en sprint, 12 de seco (6/4/2), 6 intermedios y 3 de lluvia. Tras cada libre se devuelven los más gastados. En carrera en seco hay que usar dos compuestos. Los juegos usados conservan su desgaste.
 
@@ -111,7 +116,11 @@ npx tsx scripts/pista.ts spa                         # análisis del circuito
 
 ## Fuentes
 
-- Trazados: [TUMFTM racetrack-database](https://github.com/TUMFTM/racetrack-database), licencia LGPL-3.0 (copia en `data/circuitos/LICENCIA-TRAZADOS-TUM.txt`).
+- Trazados: [TUMFTM racetrack-database](https://github.com/TUMFTM/racetrack-database), licencia LGPL-3.0 (copia en `data/circuitos/LICENCIA-TRAZADOS-TUM.txt`); Mónaco y Marina Bay de [bacinger/f1-circuits](https://github.com/bacinger/f1-circuits), licencia MIT (copia en `data/circuitos/LICENCIA-TRAZADOS-BACINGER.txt`).
+- Poles 2026 de los circuitos nuevos: [FIA: Antonelli, pole en Japón](https://api.fia.com/news/f1-antonelli-takes-second-pole-2026-ahead-russell-and-piastri-japan), [FIA: clasificación de Mónaco 2026](https://www.fia.com/system/files/decision-document/2026_monaco_grand_prix_-_final_qualifying_classification.pdf), [Formula One History: clasificación de Singapur 2026](https://www.formulaonehistory.com/2026-singapore-gp-qualifying/).
+- Calendario y horarios: [The Race: calendario 2026](https://www.the-race.com/formula-1/f1-2026-calendar-when-is-next-race/), [Crash.net: horario de Singapur 2026](https://www.crash.net/f1/news/1106593/1/f1-2026-singapore-grand-prix-start-time-and-full-weekend-schedule).
+- Adelantamientos por circuito: [F1 Race Review: circuitos por adelantamientos](https://www.f1-race-review.com/stats/best-track-by-overtakes/), [GPBlog: Mónaco 2024](https://www.gpblog.com/en/news/very-little-overtaking-at-grand-prix-of-monaco-2024.html).
+- Clima de los circuitos nuevos: [weatherapi.com: Suzuka en marzo](https://www.weatherapi.com/history/march/q/suzuka-3126056), [weather2travel: Mónaco](https://weather2travel.com/monaco/monte-carlo/climate), [weatherapi.com: Singapur en octubre](https://www.weatherapi.com/history/october/q/singapore-2285382). La pérdida en boxes de Suzuka, Mónaco y Singapur, la carga aerodinámica y la abrasividad son estimaciones propias.
 - Parrilla y números: [formula1.com: Verstappen usará el 3](https://www.formula1.com/en/latest/article/max-verstappen-confirms-he-will-use-car-number-3-for-2026-season.6qvN2SQwcyGYnMWhGdDpNS), [Goodwood: pilotos y equipos 2026](https://www.goodwood.com/grr/f1/2026-f1-drivers-and-teams/), [formula1.com: Alpine completa su alineación](https://www.formula1.com/en/latest/article/colapinto-earns-new-deal-as-alpine-complete-2026-driver-line-up.5KBTVHBlPBBR0Ld91fSJim), [Motorsport Magazine: los 22 pilotos](https://www.motorsportmagazine.com/articles/single-seaters/f1/f1-2026-driver-line-ups-latest-contract-news-and-rumours).
 - Mundial de constructores 2026: [GPFans](https://www.gpfans.com/en/f1-standings/constructors/).
 - Poles 2026: [Wikipedia: GP de Gran Bretaña 2026](https://en.wikipedia.org/wiki/2026_British_Grand_Prix), [formula1.com: clasificación de Bélgica 2026](https://www.formula1.com/en/latest/article/antonelli-charges-to-pole-position-in-exhilarating-belgian-gp-qualifying.zpGgC6xi6e3QnZEOmi6qS), [Wikipedia: GP de Italia 2026](https://en.wikipedia.org/wiki/2026_Italian_Grand_Prix).

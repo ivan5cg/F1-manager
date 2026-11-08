@@ -5,12 +5,20 @@ import spa from "../../data/circuitos/spa.json";
 import monza from "../../data/circuitos/monza.json";
 import sierra from "../../data/circuitos/sierra-norte.json";
 import interlagos from "../../data/circuitos/interlagos.json";
+import suzuka from "../../data/circuitos/suzuka.json";
+import monaco from "../../data/circuitos/monaco.json";
+import singapur from "../../data/circuitos/singapur.json";
 import { buildTrack, Track } from "../sim/track";
 import type { TeamDef, DriverDef } from "../sim/session";
 
 export const TEAMS = teamsJson.equipos as unknown as TeamDef[];
-export const CIRCUITS: Record<string, any> = { silverstone, spa, monza, "sierra-norte": sierra, interlagos };
+export const CIRCUITS: Record<string, any> = { silverstone, spa, monza, "sierra-norte": sierra, interlagos, suzuka, monaco, singapur };
+/** Calendario de las temporadas nuevas. */
 export const ROUNDS: string[] = cal.rondas;
+/** Calendario de una temporada: las empezadas antes de ampliar el calendario siguen con el suyo de 5 carreras. */
+export function calendarOf(s: { calendar?: string[] } | null | undefined): string[] {
+  return s?.calendar ?? (s ? cal.rondasV1 : cal.rondas);
+}
 
 export const DRIVERS: { id: number; d: DriverDef; team: TeamDef }[] = [];
 {

@@ -261,6 +261,8 @@ export class Session {
   bestLap = Infinity;
   longRuns: LongRun[] = []; // tandas largas de los libres
   autoPlayers = false; // carrera simulada hasta el final: la IA decide también por el jugador
+  passCount = 0; // adelantamientos completados en pista (sin contar doblados ni los de boxes)
+  get passFactor(): number { return this.track.def.adelantamientos?.factor ?? 1; }
   lapOrder: number[][] = []; // carrera: orden (ids) al cerrar cada vuelta el líder; [0] = parrilla
   /** Hueco que se busca en la vuelta de salida (s): rebufo en circuitos de rectas, aire limpio en el resto. */
   outLapGap = 2.5;
@@ -1328,7 +1330,8 @@ export class Session {
     const ersEdge = (ERS_POWER[c.ers] - ERS_POWER[a.ers]) * 0.02;
     const x = delta * 9 + skill * 1.5 + ersEdge - 1.85 + zone * 2.2 - (1 - zone) * 0.4;
     const p = zone * (1 / (1 + Math.exp(-x)));
-    if (!this.rng.chance(Math.min(0.85, p * PASS_K))) return;
+    // cada circuito, calibrado con su media real de adelantamientos por carrera
+    if (!this.rng.chance(Math.min(0.85, p * PASS_K * this.passFactor))) return;
     const contactP = 0.01 * (0.5 + c.d.agresividad / 100) * (0.5 + a.d.agresividad / 120) * (lap1 ? 2.5 : 1) * (1 + Math.min(1, wAtt) * 1.5);
     if (this.rng.chance(contactP)) return this.contact(c, a);
     this.grantPass(c, a, this.rng.range(0.1, 0.35));
@@ -1397,7 +1400,11 @@ export class Session {
       // referencia de SU punto, no en bruto (en una frenada el de delante siempre va más despacio)
       const rel = (c: Car) => c.v / Math.max(15, this.track.vref[Math.min(this.track.vref.length - 1, Math.floor(posOf(c) / this.track.ds))]);
       const slowAhead = race && this.flag === "green" && (a.delay > 0.8 || a.slowPuncture || !!a.tyres?.punctured || (this.lapsDone(b) > 0 && rel(a) < rel(b) * 0.8));
-      if (gapM < minGap + 25 && slowAhead) { this.grantPass(b, a, 0); continue; }
+      if (gapM < minGap + 25 && slowAhead) {
+        if (!(b.grant === a.id && this.t < b.grantUntil) && this.lapsDone(b) === this.lapsDone(a)) b.passLog = { a: a.id, until: this.t + 10 };
+        this.grantPass(b, a, 0);
+        continue;
+      }
       if (gapM < minGap && !(b.grant === a.id && this.t < b.grantUntil)) {
         if (!race && this.isFlying(b) === this.isFlying(a) && (b.v > a.v * 1.05 || a.run?.phase === "in")) { this.grantPass(b, a, 0.1); continue; }
         const back = minGap - gapM;
@@ -1415,6 +1422,7 @@ export class Session {
       let ahead = posOf(c) - posOf(a);
       if (ahead < 0) ahead += L;
       if (a.loc === "track" && ahead > 0 && ahead < 150) {
+        this.passCount++;
         const pos = this.order().indexOf(c) + 1;
         if (c.player || a.player || pos <= 3) this.log({ kind: "info", text: `⚔️ ${c.d.abrev} adelanta a ${a.d.abrev} por la P${pos}`, carId: c.id });
         c.passLog = undefined;
