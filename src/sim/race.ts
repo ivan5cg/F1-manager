@@ -434,7 +434,9 @@ export class Race {
     const wmax = Math.max(c.tyres.F.wear, c.tyres.R.wear);
     if (!c.tyres.punctured && wmax > 0.96 && this.rng.chance(dt * 0.02 * (wmax - 0.95) * 20)) {
       c.tyres.punctured = true;
-      this.log({ kind: "incident", text: `💥 ¡Pinchazo de ${c.d.abrev}! Neumático destrozado.`, carId: c.id, important: true, pause: c.player });
+      // el piloto vuelve a boxes por su cuenta
+      if (!c.pitRequest) c.pitRequest = water > 0.9 ? "W" : water > 0.2 ? "I" : this.track.laps - this.lapsDone(c) < 20 ? "S" : "M";
+      this.log({ kind: "incident", text: `💥 ¡Pinchazo de ${c.d.abrev}! Neumático destrozado, vuelve a boxes.`, carId: c.id, important: true, pause: c.player });
     }
 
     // cruces de minisector
