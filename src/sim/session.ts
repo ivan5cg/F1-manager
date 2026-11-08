@@ -487,11 +487,11 @@ export class Session {
       const all = wet.length > this.N * 0.8;
       const list = secs.length === 1 ? `el sector ${secs[0]}` : `los sectores ${secs.slice(0, -1).join(", ")} y ${secs[secs.length - 1]}`;
       const txt = all ? `🌧️ Empieza a llover en todo el circuito (${r.toFixed(1)} mm/h)` : secs.length === 3 ? `🌧️ Lluvia en zonas de los tres sectores; hay tramos aún secos` : `🌧️ Lluvia en ${list}; el resto sigue seco`;
-      this.log({ kind: "weather", text: txt, pause: true, important: true });
+      this.log({ kind: "weather", text: txt, important: true });
     }
     if (!now && this.wasRaining && this.wall - this.lastRainMsg > 120) {
       this.lastRainMsg = this.wall;
-      this.log({ kind: "weather", text: "🌤️ Deja de llover. La pista empezará a secarse por la trazada.", pause: true, important: true });
+      this.log({ kind: "weather", text: "🌤️ Deja de llover. La pista empezará a secarse por la trazada.", important: true });
     }
     this.wasRaining = now;
   }

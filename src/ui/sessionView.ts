@@ -40,7 +40,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     <div class="ctrl"><span>${def.bandera}</span><span class="gp">${esc(SESSION_NAMES[kind])} · ${esc(def.nombre)}</span><div class="speed" id="speed"></div></div>
     <div class="lapc mono" id="lapc"></div>
     <div class="main">
-      <div class="leftcol"><div class="tower" id="tower"></div><div class="toast" id="toast"></div></div>
+      <div class="leftcol"><div class="tower" id="tower"></div><div class="toast" id="toast" title="Dirección de carrera y meteo"></div></div>
       <div class="side">
         <div class="mapbox"><canvas id="map"></canvas></div>
         <div class="wxbox" id="wx"></div>
@@ -71,43 +71,78 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     if (w === "tiempo") weatherSheet();
     if (w === "radio") radioSheet();
   }));
-  $("#toast").onclick = () => { hideToast(); paused = false; updSpeed(); };
+  // tocar un aviso pendiente reanuda la sesión
+  const resume = () => { hideToast(); paused = false; updSpeed(); renderMessages(); };
+  $("#toast").onclick = () => { if (pend.left) resume(); };
+  $("#ticker").onclick = () => { if (pend.right) resume(); };
   function updSpeed() {
     spEl.querySelectorAll<HTMLButtonElement>("button").forEach((b) => {
       const v = b.dataset.v;
       b.classList.toggle("on", v === "0" ? paused : v === "skip" ? skipping : !paused && Number(v) === speed);
     });
   }
-  function showToast(html: string, ms = 0, tab = "Muro", hint = false) {
-    const t = $("#toast");
-    if (!t) return;
-    const cls = /BANDERA ROJA/.test(html) ? "red" : /SEGURIDAD|Empieza|lluv|Lluvia/i.test(html) ? "ctl" : "";
-    t.innerHTML = `<div class="rm ${cls}"><div class="row" style="gap:0"><span class="tab">${tab}</span>${hint ? `<span class="hint">▶ Seguir</span>` : ""}</div><div class="bar">${clean(html)}</div></div>`;
-    t.classList.add("show");
-    clearTimeout(toastTimer);
-    if (ms) toastTimer = window.setTimeout(hideToast, ms);
+  // Avisos. Izquierda: dirección de carrera y meteo. Derecha: lo de tus pilotos.
+  // Un aviso «pendiente» ha parado la sesión y se reanuda al tocarlo; uno «temporal» se va solo.
+  type Note = { html: string; tab: string; cls: string; until: number };
+  const pend: { left: Note | null; right: Note | null } = { left: null, right: null };
+  const temp: { left: Note | null; right: Note | null } = { left: null, right: null };
+  const clsFor = (text: string, kind?: RaceEvent["kind"]) => (/BANDERA ROJA/.test(text) ? "red" : kind === "control" || kind === "weather" || /SEGURIDAD/.test(text) ? "ctl" : "");
+  function showToast(html: string, ms = 0, tab = "Muro", hint = false, side: "left" | "right" = "right") {
+    const n: Note = { html, tab, cls: clsFor(html), until: ms ? performance.now() + ms : Infinity };
+    if (hint && !ms) pend[side] = n; else temp[side] = n;
+    renderMessages();
   }
-  function hideToast() { $("#toast")?.classList.remove("show"); idleMsg = ""; }
-  // con el hueco libre, el último mensaje de dirección de carrera o meteo, en tenue
-  let idleMsg = "";
-  function renderIdleMsg() {
-    const t = $("#toast");
-    if (!t || t.classList.contains("show")) return;
-    const e = [...sess.events].reverse().find((x) => x.kind === "control" || x.kind === "weather" || (x.carId !== undefined && sess.carById(x.carId).player && x.important));
-    const html = e ? rmHtml(TAB[e.kind], e.text, e.kind === "control" && /ROJA/.test(e.text) ? "red" : e.kind === "control" || e.kind === "weather" ? "ctl" : "") : "";
-    if (html !== idleMsg) { idleMsg = html; t.innerHTML = html; }
+  function hideToast() { pend.left = pend.right = null; temp.left = temp.right = null; }
+  const isMineEv = (e: RaceEvent) => {
+    if (e.carId !== undefined && sess.carById(e.carId).player) return true;
+    return mine().some((c) => new RegExp(`\\b${c.d.abrev}\\b`).test(e.text));
+  };
+  const noteHtml = (n: Note, hint: boolean) => `<div class="rm ${n.cls}${hint ? " pend" : ""}"><div class="row" style="gap:0"><span class="tab">${n.tab}</span>${hint ? `<span class="hint">▶ Seguir</span>` : ""}</div><div class="bar">${clean(n.html)}</div></div>`;
+  let lastLeft = "", lastRight = "";
+  function renderMessages() {
+    const now = performance.now();
+    for (const k of ["left", "right"] as const) if (temp[k] && temp[k]!.until < now) temp[k] = null;
+    // izquierda
+    const L = $("#toast");
+    let lh = "";
+    if (pend.left) lh = noteHtml(pend.left, true);
+    else if (temp.left) lh = noteHtml(temp.left, false);
+    else {
+      const e = [...sess.events].reverse().find((x) => x.kind === "control" || x.kind === "weather");
+      if (e) lh = rmHtml(TAB[e.kind], e.text, clsFor(e.text, e.kind));
+    }
+    L.classList.toggle("show", !!pend.left);
+    if (lh !== lastLeft) { lastLeft = lh; L.innerHTML = lh; }
+    // derecha: lo de tus pilotos
+    const tk = $("#ticker");
+    const items: string[] = [];
+    if (pend.right) items.push(noteHtml(pend.right, true));
+    else if (temp.right) items.push(noteHtml(temp.right, false));
+    const evs = sess.events.filter((e) => e.kind !== "control" && e.kind !== "weather" && isMineEv(e)).slice(-6).reverse();
+    for (const e of evs) { if (pend.right && e.text === pend.right.html) continue; items.push(rmHtml(TAB[e.kind], e.text, clsFor(e.text, e.kind))); }
+    const rh = items.join("") || `<div class="rm"><span class="tab">Tus pilotos</span><div class="bar dim">Sin novedades.</div></div>`;
+    tk.classList.toggle("show", !!pend.right);
+    if (rh !== lastRight) {
+      lastRight = rh;
+      tk.innerHTML = rh;
+      while (tk.children.length > 1 && tk.scrollHeight > tk.clientHeight + 1) tk.lastElementChild!.remove();
+    }
   }
 
   sess.onEvent = (e: RaceEvent) => {
     if (skipping) return;
-    const isMine = e.carId !== undefined && sess.carById(e.carId).player;
-    if (e.pause && autoPause && (isMine || e.kind === "control" || e.kind === "weather")) {
+    const mineEv = isMineEv(e) && e.kind !== "control" && e.kind !== "weather";
+    // la meteo informa pero no para; dirección de carrera y lo de tus pilotos, sí (si la pausa automática está activa)
+    if (e.pause && autoPause && e.kind !== "weather" && (mineEv || e.kind === "control")) {
       paused = true;
       leftover = 0;
-      showToast(e.text, 0, TAB[e.kind], true);
+      const n: Note = { html: e.text, tab: TAB[e.kind], cls: clsFor(e.text, e.kind), until: Infinity };
+      if (e.kind === "control") pend.left = n; else pend.right = n;
       updSpeed();
-    } else if (isMine && e.important) showToast(e.text, 3500, TAB[e.kind]);
+    }
+    renderMessages();
   };
+
 
   // ---------------------------------------------------------------- mapa
   let mapScale = 1, mapOx = 0, mapOy = 0;
@@ -294,11 +329,6 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     $("#wx").innerHTML = `<span class="tab">Aire</span><span class="bar mono">${w.airT.toFixed(0)}° <span class="dim">pista</span> ${w.trackT.toFixed(0)}°</span>
       <span class="tab">Cielo</span><span class="bar" style="white-space:nowrap">${rMax > 0.15 ? `Lluvia ${rMax.toFixed(rMax < 10 ? 1 : 0)}<span class="small" style="text-transform:none">&nbsp;mm/h</span>` : w.cloud > 0.6 ? "Cubierto" : w.cloud > 0.3 ? "Nubes" : "Sol"}</span>
       <span class="tab">Agua</span><span class="bar"><span class="wxsec grow">${sw.map((x) => `<div title="${x.toFixed(2)} mm" style="background:${x > 0.05 ? `rgba(58,139,232,${Math.min(1, 0.35 + x)})` : "#26282d"}"></div>`).join("")}</span><span class="mono small">${Math.max(...sw).toFixed(2)}</span></span>`;
-    const evs = sess.events.filter((e) => e.kind !== "info" || e.important || (e.carId !== undefined && sess.carById(e.carId).player)).slice(-4).reverse();
-    const tk = $("#ticker");
-    tk.innerHTML = evs.map((e) => rmHtml(TAB[e.kind], e.text, e.kind === "control" && /ROJA/.test(e.text) ? "red" : e.kind === "control" || e.kind === "weather" ? "ctl" : "")).join("");
-    // solo los mensajes que caben enteros
-    while (tk.children.length > 1 && tk.scrollHeight > tk.clientHeight + 1) tk.lastElementChild!.remove();
     // última vuelta de tu piloto (libres/clasificación): [P][NOMBRE][TIEMPO][+DIF]
     const lb = $("#lapban");
     if (!race) {
@@ -741,7 +771,8 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       const lim = performance.now() + 30;
       while (!sess.finished && performance.now() < lim) for (let i = 0; i < 200 && !sess.finished; i++) sess.step();
       const est = race ? sess.leaderLap / sess.laps : (sess.wall - t0) / Math.max(1, (sess.parts.length ? 70 * 60 : 3600) - t0);
-      showToast(`Simulando… ${Math.round(Math.min(1, est) * 100)} %<div class="progress"><i style="width:${Math.min(100, est * 100)}%"></i></div>`);
+      showToast(`Simulando… ${Math.round(Math.min(1, est) * 100)} %<div class="progress"><i style="width:${Math.min(100, est * 100)}%"></i></div>`, 60000, "Muro", false, "left");
+      renderMessages();
       renderTower(); renderTop(); drawMap();
       if (sess.finished) { hideToast(); finish(); } else setTimeout(chunk, 0);
     };
@@ -770,7 +801,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       if (!skipping) { drawMap(); drawGauges(); }
       if (now - lastUi > 250 && !skipping) {
         lastUi = now;
-        renderTower(); renderTop(); renderIdleMsg();
+        renderTower(); renderTop(); renderMessages();
         if (!sheetOpen) renderDrivers();
       }
     } catch (err) {
@@ -780,8 +811,8 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     raf = requestAnimationFrame(loop);
   };
   const begin = () => {
-    if (race) showToast("Pulsa una velocidad para dar la salida.");
-    else showToast(quali ? "Pulsa una velocidad para empezar. «Salir» manda a tu piloto a pista; «Auto» deja que el equipo decida." : "Pulsa una velocidad para empezar. Programa tandas con «Tanda» o deja el programa en «Auto». ⏭ simula hasta el final.");
+    if (race) showToast("Pulsa una velocidad para dar la salida.", 0, "Muro", true, "left");
+    else showToast(quali ? "Pulsa una velocidad para empezar. «Salir» manda a tu piloto a pista; «Auto» deja que el equipo decida." : "Pulsa una velocidad para empezar. Programa tandas con «Tanda» o deja el programa en «Auto». ⏭ simula hasta el final.", 0, "Muro", true, "left");
     raf = requestAnimationFrame(loop);
   };
   if (race) preRace(begin); else begin();
