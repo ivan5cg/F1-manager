@@ -40,7 +40,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     <div class="ctrl"><span>${def.bandera}</span><span class="gp">${esc(SESSION_NAMES[kind])} · ${esc(def.nombre)}</span><div class="speed" id="speed"></div></div>
     <div class="lapc mono" id="lapc"></div>
     <div class="main">
-      <div class="tower" id="tower"></div>
+      <div class="leftcol"><div class="tower" id="tower"></div><div class="toast" id="toast"></div></div>
       <div class="side">
         <div class="mapbox"><canvas id="map"></canvas></div>
         <div class="wxbox" id="wx"></div>
@@ -50,7 +50,6 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       </div>
     </div>
     <div class="drivers" id="drivers"></div>
-    <div class="toast" id="toast"></div>
   </div>`;
 
   // ------------------------------------------------------------- controles
@@ -79,16 +78,25 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       b.classList.toggle("on", v === "0" ? paused : v === "skip" ? skipping : !paused && Number(v) === speed);
     });
   }
-  function showToast(html: string, ms = 0, tab = "Muro") {
+  function showToast(html: string, ms = 0, tab = "Muro", hint = false) {
     const t = $("#toast");
     if (!t) return;
     const cls = /BANDERA ROJA/.test(html) ? "red" : /SEGURIDAD|Empieza|lluv|Lluvia/i.test(html) ? "ctl" : "";
-    t.innerHTML = `<div class="rm ${cls}"><span class="tab">${tab}</span><div class="bar" style="font-size:14px;padding:7px 9px">${clean(html)}</div></div>`;
+    t.innerHTML = `<div class="rm ${cls}"><div class="row" style="gap:0"><span class="tab">${tab}</span>${hint ? `<span class="hint">▶ Seguir</span>` : ""}</div><div class="bar">${clean(html)}</div></div>`;
     t.classList.add("show");
     clearTimeout(toastTimer);
     if (ms) toastTimer = window.setTimeout(hideToast, ms);
   }
-  function hideToast() { $("#toast")?.classList.remove("show"); }
+  function hideToast() { $("#toast")?.classList.remove("show"); idleMsg = ""; }
+  // con el hueco libre, el último mensaje de dirección de carrera o meteo, en tenue
+  let idleMsg = "";
+  function renderIdleMsg() {
+    const t = $("#toast");
+    if (!t || t.classList.contains("show")) return;
+    const e = [...sess.events].reverse().find((x) => x.kind === "control" || x.kind === "weather" || (x.carId !== undefined && sess.carById(x.carId).player && x.important));
+    const html = e ? rmHtml(TAB[e.kind], e.text, e.kind === "control" && /ROJA/.test(e.text) ? "red" : e.kind === "control" || e.kind === "weather" ? "ctl" : "") : "";
+    if (html !== idleMsg) { idleMsg = html; t.innerHTML = html; }
+  }
 
   sess.onEvent = (e: RaceEvent) => {
     if (skipping) return;
@@ -96,7 +104,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     if (e.pause && autoPause && (isMine || e.kind === "control" || e.kind === "weather")) {
       paused = true;
       leftover = 0;
-      showToast(e.text + "<div class='small dim' style='margin-top:4px'>Toca para seguir</div>", 0, TAB[e.kind]);
+      showToast(e.text, 0, TAB[e.kind], true);
       updSpeed();
     } else if (isMine && e.important) showToast(e.text, 3500, TAB[e.kind]);
   };
@@ -762,7 +770,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       if (!skipping) { drawMap(); drawGauges(); }
       if (now - lastUi > 250 && !skipping) {
         lastUi = now;
-        renderTower(); renderTop();
+        renderTower(); renderTop(); renderIdleMsg();
         if (!sheetOpen) renderDrivers();
       }
     } catch (err) {
