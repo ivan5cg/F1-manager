@@ -192,6 +192,7 @@ export interface SessionOptions {
   minutes?: number; // libres
   laps?: number; // carreras
   sprintWeekend: boolean;
+  restore?: boolean; // se va a volcar una instantánea encima: sin preparar parrilla ni programas
 }
 
 export interface ResultRow {
@@ -308,7 +309,8 @@ export class Session {
       };
       this.cars.push(car);
     }
-    if (isRaceKind(this.kind)) this.setupRace(opt.grid ?? opt.entrants.map((e) => e.id));
+    if (opt.restore) { /* el estado llega de una instantánea */ }
+    else if (isRaceKind(this.kind)) this.setupRace(opt.grid ?? opt.entrants.map((e) => e.id));
     else if (this.kind.startsWith("FP")) for (const c of this.cars) c.queue = practiceProgram(this, c);
   }
 

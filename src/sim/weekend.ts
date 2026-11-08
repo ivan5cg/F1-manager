@@ -7,6 +7,7 @@ import { HiddenTyre, TyreSet, allocation, setWear, DRY } from "./tyres";
 import { Climate, Scenario, WeatherState, createDayWeather, stepWeather, rainAt, pickScenario, evaporation, waterStep } from "./weather";
 import { Session, SessionKind, Entrant, TeamDef, ResultRow, isRaceKind } from "./session";
 import { TeamKnowledge, buildKnowledge } from "./strategy";
+import { SessionSnapshot, snapshotConditions, applySnapshot } from "./snapshot";
 
 export interface WeekendState {
   round: number;
@@ -123,6 +124,29 @@ export class Weekend {
       laps: kind === "SPRINT" ? this.def.vueltasSprint : this.def.vueltas,
       sprintWeekend: this.st.sprint,
     });
+    return sess;
+  }
+
+  /** Retoma una sesión a medias desde su instantánea (el estado del fin de semana ya es el suyo). */
+  restore(snap: SessionSnapshot): Session {
+    const kind = snap.kind;
+    const cond = snapshotConditions(snap);
+    const sess = new Session({
+      kind,
+      seed: this.st.seed * 31 + this.sessions().indexOf(kind) * 7919,
+      track: this.track,
+      entrants: this.entrants(),
+      hidden: this.st.hidden,
+      weather: cond.weather,
+      water: cond.water,
+      waterOff: cond.waterOff,
+      rubber: snap.sess.rubber as number,
+      minutes: 60,
+      laps: kind === "SPRINT" ? this.def.vueltasSprint : this.def.vueltas,
+      sprintWeekend: this.st.sprint,
+      restore: true,
+    });
+    applySnapshot(sess, snap);
     return sess;
   }
 

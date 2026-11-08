@@ -1,3 +1,4 @@
+import type { SessionSnapshot } from "../sim/snapshot";
 import { TEAMS, CIRCUITS, ROUNDS, DRIVERS, getTrack } from "./data";
 import { $, esc, fmtLap, fmtRace, tyreHtml, fmtDate, sheet } from "./common";
 import { SeasonState, driverStandings, teamStandings, RACE_POINTS, SPRINT_POINTS } from "../sim/season";
@@ -12,7 +13,7 @@ export interface Nav {
   home(): void;
   season(): void;
   weekend(): void;
-  session(kind: SessionKind): void;
+  session(kind: SessionKind, snap?: SessionSnapshot): void;
 }
 
 const app = () => document.getElementById("app")!;

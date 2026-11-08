@@ -1,6 +1,7 @@
 import "./style.css";
 import { TEAMS, CIRCUITS, ROUNDS, DRIVERS, getTrack } from "./data";
-import { loadSeason, saveSeason } from "./store";
+import { loadSeason, saveSeason, loadSession, clearSession } from "./store";
+import type { SessionSnapshot } from "../sim/snapshot";
 import { startScreen, seasonScreen, weekendScreen, resultsScreen, Nav } from "./hubs";
 import { sessionView } from "./sessionView";
 import { SeasonState, driverStandings } from "../sim/season";
@@ -18,11 +19,14 @@ const nav: Nav = {
   }); },
   season() { if (season) seasonScreen(nav, season); else nav.home(); window.scrollTo(0, 0); },
   weekend() { if (season?.weekend) weekendScreen(nav, season); else nav.season(); window.scrollTo(0, 0); },
-  session(kind: SessionKind) {
+  session(kind: SessionKind, snap?: SessionSnapshot) {
     const s = season!;
+    // al retomar una sesión a medias, el fin de semana es el de la instantánea (neumáticos ya usados, etc.)
+    if (snap) s.weekend = snap.weekend;
     const st = s.weekend!;
     const wk = new Weekend(st, getTrack(st.circuitId), TEAMS, s.playerTeam);
     sessionView(wk, kind, (sess) => {
+      clearSession();
       wk.finish(sess);
       const gp = CIRCUITS[st.circuitId].gp;
       let extra = "";
@@ -36,10 +40,17 @@ const nav: Nav = {
       saveSeason(s);
       resultsScreen(kind, sess.results(), s, gp, extra, () => (kind === "RACE" ? nav.season() : nav.weekend()));
       window.scrollTo(0, 0);
-    });
+    }, snap);
   },
 };
 
 if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});
-if (season) nav.season(); else nav.home();
+// si se cerró la app a mitad de una sesión, se retoma donde estaba
+const pending = loadSession();
+const cur = season?.weekend;
+if (pending && cur && pending.weekend.round === cur.round && pending.weekend.circuitId === cur.circuitId && pending.weekend.next === cur.next) nav.session(pending.kind, pending);
+else {
+  if (pending) clearSession();
+  if (season) nav.season(); else nav.home();
+}
 void ROUNDS;

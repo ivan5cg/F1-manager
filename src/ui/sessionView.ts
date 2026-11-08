@@ -22,14 +22,17 @@ function skyIcon(cloud: number, rain: number, clock: number): string {
 }
 import { makeRun, availableSets, stintProfile } from "../sim/strategy";
 import { Rng } from "../sim/rng";
+import { snapshotSession, SessionSnapshot } from "../sim/snapshot";
+import { stopOptions, undercut, gapHistory, pitLoss, StopOption } from "../sim/pitwall";
+import { saveSession } from "./store";
 
 type TowerMode = "int" | "gap" | "last" | "tyre";
 
-export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Session) => void) {
+export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Session) => void, snap?: SessionSnapshot) {
   const app = document.getElementById("app")!;
   const def = CIRCUITS[wk.st.circuitId];
   const track = wk.track;
-  const sess = wk.build(kind);
+  const sess = snap ? wk.restore(snap) : wk.build(kind);
   const race = isRaceKind(kind);
   const quali = isQualiKind(kind);
   let speed = race ? 4 : 16;
@@ -44,6 +47,16 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   let skipping = false;
   let ended = false;
   let toastTimer = 0;
+  let lastSave = performance.now();
+  let started = !!snap; // la carrera no cuenta hasta la salida
+  /** Guarda la sesión a medias para poder retomarla si se cierra la app. */
+  const persist = () => {
+    if (ended || skipping || !started || sess.finished) return;
+    lastSave = performance.now();
+    saveSession(snapshotSession(sess, wk.st));
+  };
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") persist(); });
+  window.addEventListener("pagehide", persist);
   const mine = () => sess.cars.filter((c) => c.player).sort((a, b) => a.id - b.id);
   const tvName = (c: Car) => { const parts = c.d.nombre.split(" "); return `${parts[0][0]} ${parts.slice(1).join(" ")}`.toUpperCase(); };
   const clean = (t: string) => t.replace(/^[\p{Extended_Pictographic}\u{1F1E6}-\u{1F1FF}\uFE0F\u200D\s]+/u, "");
@@ -61,7 +74,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
         <div class="wxbox" id="wx"></div>
         <div id="lapban"></div>
         <div class="ticker" id="ticker"></div>
-        <div class="sidebtns"><button data-s="pilotos">Pilotos</button><button data-s="tiempo">Radar</button><button data-s="radio">Radio</button></div>
+        <div class="sidebtns${race ? " four" : ""}"><button data-s="pilotos">Pilotos</button>${race ? `<button data-s="muro">Muro</button>` : ""}<button data-s="tiempo">Radar</button><button data-s="radio">Radio</button></div>
       </div>
     </div>
     <div class="drivers" id="drivers"></div>
@@ -77,12 +90,15 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     const s = Number(b.dataset.v);
     if (s === 0) paused = !paused;
     else { speed = s; paused = false; }
+    started = true;
     hideToast();
     updSpeed();
+    if (paused) persist();
   };
   document.querySelectorAll<HTMLElement>(".sidebtns button").forEach((b) => (b.onclick = () => {
     const w = b.dataset.s;
     if (w === "pilotos") pilotsSheet();
+    if (w === "muro") muroSheet();
     if (w === "tiempo") weatherSheet();
     if (w === "radio") radioSheet();
   }));
@@ -512,6 +528,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     open(`<div class="row"><b class="up grow">Parada de ${esc(c.d.nombre)}</b><span class="dim small">quedan ${left} v</span></div>
       <div class="small dim">Para al final de esta vuelta. Usados: ${used}.${kind === "RACE" ? " En seco hay que usar dos compuestos." : ""}</div>
       <div class="opts">${setButtons(c, (s) => s !== c.tyres && !s.punctured, c.pitRequest ?? undefined)}</div>
+      ${race ? (() => { const os = stopOptions(sess, c).filter((o) => fitsWater(o.c)); if (!os.length) return ""; const catches = os.filter((o) => o.catchLaps !== null); return `<div style="margin:-2px 0 8px">${exitLine(os[0])}${catches.length ? `<div class="small">${catches.map((o) => `${tyreHtml(o.c)} alcanza a ${o.ahead!.car.d.abrev} en ${o.catchLaps} v`).join(" · ")}</div>` : ""}<div class="small dim">Más detalle en «Muro».</div></div>`; })() : ""}
       <div class="btnrow" style="padding:0"><button data-close>${c.pitRequest ? "Mantener" : "Cerrar"}</button>${c.pitRequest ? `<button class="red" id="cancel">Anular parada</button>` : ""}</div>`, (el, close) => {
       el.querySelectorAll<HTMLButtonElement>("[data-set]").forEach((b) => (b.onclick = () => {
         c.pitRequest = b.dataset.set!;
@@ -628,6 +645,140 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       wire();
     });
   }
+  // ------------------------------------------------------- muro de boxes
+  const SERIES = { ahead: "#bd860e", behind: "#3a8be8", mate: "#e94f8a" }; // validados para fondo oscuro y daltonismo
+  const signed = (x: number) => `${x >= 0 ? "+" : "−"}${Math.abs(x).toFixed(1)}`;
+  /** Compuestos que tiene sentido ofrecer con el agua que hay. */
+  const fitsWater = (c: Compound) => { const w = sess.avgWater(); return w < WET.si * 0.6 ? DRY.includes(c) : w > WET.si * 1.5 ? !DRY.includes(c) : true; };
+  function exitLine(o: StopOption) {
+    const who = o.ahead ? `detrás de <b>${o.ahead.car.d.abrev}</b>${o.ahead.tyre ? ` ${tyreHtml(o.ahead.tyre)}<span class="dim">${o.ahead.age} v</span>` : ""} a <b>${o.ahead.gap.toFixed(1)} s</b>` : "en cabeza";
+    const back = o.behind ? ` · <b>${o.behind.car.d.abrev}</b> a ${o.behind.gap.toFixed(1)} s detrás` : "";
+    return `<div class="mw-exit">Sale <b class="mw-p">P${o.pos}</b> ${who}${back}</div>`;
+  }
+  function optionLine(o: StopOption) {
+    const gain = Number.isFinite(o.lapGain) ? `<span class="${o.lapGain > 0 ? "green" : "redt"}">${signed(o.lapGain)} s/v</span>` : `<span class="dim">—</span>`;
+    const cat = !o.ahead ? "" : o.catchLaps !== null ? `<span class="green">alcanza a ${o.ahead.car.d.abrev} en ${o.catchLaps} v</span>` : Number.isFinite(o.lapGain) ? `<span class="dim">no le alcanza en 15 v</span>` : "";
+    return `<div class="mw-row"><span class="mw-t">${tyreHtml(o.c)}<span class="dim small">${o.setLaps ? `usado ${o.setLaps} v` : "nuevo"}</span></span><span class="mw-w">ritmo ${gain} <span class="dim small">frente a seguir</span><br>${cat}</span><button data-stop="${o.setId}">Parar</button></div>`;
+  }
+  function muroBody() {
+    return mine().map((c, idx) => {
+      if (c.loc === "out" || c.loc === "fin") return `<div class="panel" style="margin:6px 0"><div class="hd"><span class="t">${esc(c.d.nombre)}</span></div><div class="bd dim">${c.loc === "fin" ? "Ha terminado." : "Fuera de carrera."}</div></div>`;
+      const opts = stopOptions(sess, c);
+      const uc = undercut(sess, c);
+      const ucLine = (k: "defend" | "attack") => {
+        const u = uc[k];
+        if (!u) return "";
+        const r = u.rival.d.abrev;
+        const gapNow = Math.max(0, u.gapNow);
+        if ((u.rival.tyres?.laps ?? 99) <= 2 || u.rival.loc === "pit") return `<div class="mw-uc"><span class="tab">${k === "defend" ? "Defensa" : "Ataque"}</span> <b>${r}</b> acaba de parar${u.rival.tyres ? ` (${tyreHtml(u.rival.tyres.c)})` : ""}: no hay undercut posible.</div>`;
+        if (gapNow > 30) return "";
+        void gapNow;
+        if (k === "defend") return `<div class="mw-uc"><span class="tab">Defensa</span> Si <b>${r}</b> (a ${Math.max(0, u.gapNow).toFixed(1)} s, para a ${tyreHtml(u.rivalTyre)}) para ya y tú en la siguiente: ${u.after > 0 ? `<span class="green">sigues delante por ${u.after.toFixed(1)} s</span>` : `<span class="redt">te pasa por ${(-u.after).toFixed(1)} s</span>`}.</div>`;
+        return `<div class="mw-uc"><span class="tab">Ataque</span> Si paras ya con ${tyreHtml(u.myTyre)} y <b>${r}</b> (a ${Math.max(0, u.gapNow).toFixed(1)} s) en la siguiente: ${u.after < 0 ? `<span class="green">le pasas por ${(-u.after).toFixed(1)} s</span>` : `<span class="redt">sigue delante por ${u.after.toFixed(1)} s</span>`}.</div>`;
+      };
+      const req = c.pitRequest ? c.e.sets.find((x) => x.id === c.pitRequest) : null;
+      return `<div class="panel" style="margin:6px 0"><div class="hd"><span class="t"><span class="teamdot" style="background:${c.team.color}"></span>${esc(c.d.nombre)} · P${sess.order().indexOf(c) + 1}</span>${c.tyres ? `${tyreHtml(c.tyres.c)}<span class="small dim">${c.tyres.laps} v</span>` : ""}</div><div class="bd">
+        <h2>Si para ahora <span class="dim small" style="text-transform:none">· pierde ${pitLoss(sess, c).toFixed(1)} s en boxes${sess.flag === "sc" || sess.flag === "sc_in" ? " (coche de seguridad)" : sess.flag === "vsc" ? " (VSC)" : ""}</span></h2>
+        ${req ? `<div class="small yellow">Parada pedida: ${COMPOUNDS[req.c].name.toLowerCase()} ${req.laps ? "usado" : "nuevo"}. <button data-cancel="${idx}" style="padding:2px 8px">Anular</button></div>` : ""}
+        ${opts[0] ? exitLine(opts[0]) : ""}
+        <div data-car="${idx}">${opts.filter((o) => fitsWater(o.c)).map(optionLine).join("") || `<div class="dim small">Sin juegos para cambiar.</div>`}</div>
+        ${ucLine("defend")}${ucLine("attack")}
+        <h2>Huecos en meta <span class="dim small" style="text-transform:none">· últimas 15 vueltas, ${esc(c.d.abrev)} en el 0</span></h2>
+        <div class="mw-leg" id="leg${idx}"></div>
+        <canvas class="gapchart" id="gc${idx}"></canvas>
+        <div class="small dim mono" id="gt${idx}">Toca la gráfica para ver los huecos de una vuelta.</div>
+      </div></div>`;
+    }).join("") + `<div class="small dim" style="margin:4px 0 8px">Estimación del equipo: ritmo de las últimas vueltas, su modelo de neumáticos (con su error) y la pérdida en boxes del circuito. No sabe qué harán los rivales ni si saldrá el coche de seguridad.</div><button data-close style="width:100%">Cerrar</button>`;
+  }
+  /** Gráfica de huecos: una línea por coche (delante, detrás, compañero), tu piloto en el 0. */
+  function drawGapChart(idx: number, me: Car) {
+    const cv = document.getElementById(`gc${idx}`) as HTMLCanvasElement | null;
+    if (!cv) return;
+    const ord = sess.order().filter((x) => x.loc !== "out");
+    const i = ord.indexOf(me);
+    const series: { car: Car; color: string; role: string }[] = [];
+    if (ord[i - 1]) series.push({ car: ord[i - 1], color: SERIES.ahead, role: "Delante" });
+    if (ord[i + 1]) series.push({ car: ord[i + 1], color: SERIES.behind, role: "Detrás" });
+    const mate = sess.cars.find((x) => x.player && x !== me && x.loc !== "out");
+    if (mate && !series.some((sr) => sr.car === mate)) series.push({ car: mate, color: SERIES.mate, role: "Compañero" });
+    const hist = gapHistory(sess, me, series.map((sr) => sr.car), 15);
+    const leg = document.getElementById(`leg${idx}`);
+    if (leg) leg.innerHTML = series.map((sr) => `<span><i style="background:${sr.color}"></i>${sr.role}: <b>${sr.car.d.abrev}</b></span>`).join("");
+    const W = cv.clientWidth || 300, H = 150, dpr = window.devicePixelRatio || 1;
+    cv.width = W * dpr; cv.height = H * dpr; cv.style.height = `${H}px`;
+    const g = cv.getContext("2d")!;
+    g.scale(dpr, dpr);
+    g.fillStyle = "#0b0b0d"; g.fillRect(0, 0, W, H);
+    if (hist.length < 2) { g.fillStyle = "#9da3ad"; g.font = '600 12px "Titillium Web", sans-serif'; g.fillText("Hacen falta al menos dos vueltas.", 10, H / 2); return; }
+    const vals = hist.flatMap((h) => h.gaps.filter((x): x is number => x !== null && Math.abs(x) < 120));
+    let lim = Math.max(2, ...vals.map(Math.abs)) * 1.15;
+    lim = Math.ceil(lim / 2) * 2;
+    const padL = 32, padR = 66, padT = 8, padB = 18;
+    const FONT = (w: number, px: number) => `${w} ${px}px "Titillium Web", "Arial Narrow", sans-serif`;
+    const x = (k: number) => padL + ((W - padL - padR) * k) / (hist.length - 1);
+    const y = (v: number) => padT + ((H - padT - padB) * (lim - v)) / (2 * lim);
+    // rejilla discreta: el 0 (tu piloto) y dos marcas por lado
+    g.font = FONT(600, 11); g.textAlign = "right"; g.textBaseline = "middle";
+    for (const v of [-lim, -lim / 2, 0, lim / 2, lim]) {
+      g.strokeStyle = v === 0 ? "#6a6d74" : "#1f2024"; g.lineWidth = 1;
+      g.beginPath(); g.moveTo(padL, y(v)); g.lineTo(W - padR, y(v)); g.stroke();
+      g.fillStyle = "#9da3ad"; g.fillText(v === 0 ? me.d.abrev : `${v > 0 ? "+" : "−"}${Math.abs(v).toFixed(0)}`, padL - 4, y(v));
+    }
+    g.textAlign = "center"; g.textBaseline = "top";
+    for (let k = 0; k < hist.length; k += Math.max(1, Math.ceil(hist.length / 6))) g.fillText(`V${hist[k].lap}`, x(k), H - padB + 4);
+    const ends: { j: number; k: number; y: number }[] = [];
+    series.forEach((sr, j) => {
+      g.strokeStyle = sr.color; g.lineWidth = 2; g.lineJoin = "round"; g.beginPath();
+      let started = false, lastK = -1;
+      hist.forEach((h, k) => {
+        const v = h.gaps[j];
+        if (v === null || Math.abs(v) > 120) { started = false; return; }
+        const vv = Math.max(-lim, Math.min(lim, v));
+        if (!started) { g.moveTo(x(k), y(vv)); started = true; } else g.lineTo(x(k), y(vv));
+        lastK = k;
+      });
+      g.stroke();
+      if (lastK >= 0) {
+        const v = Math.max(-lim, Math.min(lim, hist[lastK].gaps[j]!));
+        g.fillStyle = sr.color; g.beginPath(); g.arc(x(lastK), y(v), 4, 0, Math.PI * 2); g.fill();
+        ends.push({ j, k: lastK, y: y(v) });
+      }
+    });
+    // etiquetas al final de cada línea, separadas para que no se pisen
+    ends.sort((a, b) => a.y - b.y);
+    for (let n = 1; n < ends.length; n++) ends[n].y = Math.max(ends[n].y, ends[n - 1].y + 13);
+    g.font = FONT(700, 11); g.fillStyle = "#ffffff"; g.textAlign = "left"; g.textBaseline = "middle";
+    for (const e of ends) g.fillText(`${series[e.j].car.d.abrev} ${signed(hist[e.k].gaps[e.j]!)}`, W - padR + 8, Math.min(H - padB, e.y));
+    // tocar: huecos de esa vuelta
+    cv.onclick = (ev) => {
+      const r = cv.getBoundingClientRect();
+      const k = Math.max(0, Math.min(hist.length - 1, Math.round(((ev.clientX - r.left - padL) / (W - padL - padR)) * (hist.length - 1))));
+      const t = document.getElementById(`gt${idx}`);
+      if (t) t.innerHTML = `V${hist[k].lap}: ` + series.map((sr, j) => `${sr.car.d.abrev} ${hist[k].gaps[j] === null ? "—" : `${signed(hist[k].gaps[j]!)} s`}`).join(" · ") + ` <span class="dim">(+ va delante de ${me.d.abrev})</span>`;
+    };
+  }
+  function muroSheet() {
+    open(`<span class="tab">Muro de boxes</span><div id="mbody">${muroBody()}</div>`, (el, close) => {
+      const draw = () => {
+        el.querySelector("#mbody")!.innerHTML = muroBody();
+        mine().forEach((c, i) => drawGapChart(i, c));
+        el.querySelectorAll<HTMLButtonElement>("[data-stop]").forEach((b) => (b.onclick = () => {
+          const c = mine()[Number(b.closest<HTMLElement>("[data-car]")!.dataset.car)];
+          if (c.loc !== "track") return;
+          c.pitRequest = b.dataset.stop!;
+          const set = c.e.sets.find((x) => x.id === c.pitRequest)!;
+          showToast(`📻 "${c.d.abrev}, box, box. ${COMPOUNDS[set.c].name}${set.laps ? " usados" : ""}."`, 3000);
+          close();
+        }));
+        el.querySelectorAll<HTMLButtonElement>("[data-cancel]").forEach((b) => (b.onclick = () => { mine()[Number(b.dataset.cancel)].pitRequest = null; draw(); }));
+        el.querySelectorAll<HTMLElement>("[data-close]").forEach((b) => (b.onclick = () => close()));
+      };
+      draw();
+      // se refresca sola mientras está abierta (la carrera sigue)
+      const timer = window.setInterval(() => { if (!el.isConnected) return window.clearInterval(timer); if (!paused) draw(); }, 2000);
+    });
+  }
+
   function weatherSheet() {
     const team = TEAMS.find((t) => t.id === wk.playerTeam)!;
     const w = sess.weather;
@@ -825,14 +976,21 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     } catch (err) {
       console.error(err); // un fallo de dibujo no puede parar la sesión
     }
+    if (!paused && now - lastSave > 8000) persist();
     if (sess.finished) return finish();
     raf = requestAnimationFrame(loop);
   };
   const begin = () => {
+    if (snap) {
+      const at = new Date(snap.savedAt);
+      showToast(`Sesión recuperada tal como estaba a las ${String(at.getHours()).padStart(2, "0")}:${String(at.getMinutes()).padStart(2, "0")}. Pulsa una velocidad para seguir.`, 0, "Muro", true, "left");
+      raf = requestAnimationFrame(loop);
+      return;
+    }
     if (race) showToast("Pulsa una velocidad para dar la salida.", 0, "Muro", true, "left");
     else showToast(quali ? "Pulsa una velocidad para empezar. «Salir» manda a tu piloto a pista; «Auto» deja que el equipo decida." : "Pulsa una velocidad para empezar. Programa tandas con «Tanda» o deja el programa en «Auto». ⏭ simula hasta el final.", 0, "Muro", true, "left");
     raf = requestAnimationFrame(loop);
   };
-  if (race) preRace(begin); else begin();
+  if (race && !snap) preRace(begin); else begin();
   void availableSets; void stintProfile; void DRY;
 }
