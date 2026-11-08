@@ -71,7 +71,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     <div class="lapc mono" id="lapc"></div>
     <div class="main">
       <div class="leftcol"><div class="tower" id="tower"></div><div class="toast" id="toast" title="Dirección de carrera y meteo"></div></div>
-      <div class="side">
+      <div class="side${race ? "" : " timed"}">
         <div class="mapbox"><canvas id="map"></canvas><div class="flyov" id="flyov"></div></div>
         <div class="wxbox" id="wx"></div>
         <div id="lapban"></div>
@@ -720,7 +720,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       if (!st.active) continue;
       const done = c.secCur.filter((x) => !Number.isNaN(x)).length;
       if (done > st.splitN) { st.splitN = done; st.splitReal = now; st.splitT = sess.t; }
-      const showSplit = st.splitN > 0 && st.splitN < 3 && (now - st.splitReal < 2500 || sess.t - st.splitT < 7);
+      const showSplit = st.splitN > 0 && st.splitN < 3 && (now - st.splitReal < 1200 || sess.t - st.splitT < 7);
       const ref = st.ref;
       let time: string, row: string;
       if (!c.lapValid) { time = fmtRun(Math.max(0, sess.t - c.lapStart)); row = `<span class="fd bad">Vuelta anulada</span>`; }
@@ -732,7 +732,10 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
         row = ref && rs !== null ? `${refBox(ref)}${deltaBox(mine - rs)}` : ref ? `${refBox(ref)}<span class="fd mono">${fmtLap(ref.time)}</span>` : "";
       } else {
         time = fmtRun(Math.max(0, sess.t - c.lapStart));
-        row = ref ? `${refBox(ref)}<span class="fd mono">${fmtLap(ref.time)}</span>` : "";
+        // la referencia del próximo punto: su parcial del sector 1, luego hasta el 2 y al final la vuelta
+        const okSplits = !!ref && ref.splits.length === 3 && ref.splits.every((x) => Number.isFinite(x));
+        const target = ref ? (okSplits && st.splitN < 2 ? fmtSplit(cum(ref.splits, st.splitN)) : fmtLap(ref.time)) : "";
+        row = ref ? `${refBox(ref)}<span class="fd mono">${target}</span>` : "";
       }
       out.push(`<div class="fly">${name}<div class="ft"><span class="mono">${time}</span></div><div class="fr">${row}</div></div>`);
     }

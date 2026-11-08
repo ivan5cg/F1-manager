@@ -328,3 +328,7 @@ canvas.gapchart { width: 100%; height: 150px; display: block; margin: 2px 0 4px;
 .fly .fd.fast { background: linear-gradient(180deg, #7be58f 0%, #2fb350 46%, #1d8c3a 54%, #23a044 100%); color: #fff; }
 .fly .fd.slow { background: var(--gl-gold); color: #000; text-shadow: none; }
 .fly .fd.bad { background: var(--gl-red); color: #fff; }
+
+/* columna derecha con alturas fijas: el mapa no cambia de tamaño al llegar mensajes */
+.side .ticker { flex: 0 0 30%; max-height: none; }
+.side.timed #lapban { flex: none; height: 22px; }
