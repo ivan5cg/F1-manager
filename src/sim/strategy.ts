@@ -498,6 +498,9 @@ export function qualiTick(sess: Session, car: Car) {
   if (!plan.deps.length) return;
   const fc = teamForecast(sess, car);
   const urgent = Math.max(fc.prob[1], fc.prob[2]) > 0.6 && sess.avgWater() < 0.3;
+  // ante la lluvia cada muro reacciona a su ritmo: unos salen ya, otros tardan en decidirse
+  if (urgent && plan.urgentAt === undefined) plan.urgentAt = R - sess.rng.range(3, 20) - sess.rng.range(0, 80) * (1.25 - car.team.estrategia / 100);
+  if (urgent && R > plan.urgentAt!) return;
   if (!urgent && R > plan.deps[0]) return;
   if (urgent) plan.deps = [];
   else plan.deps.shift();

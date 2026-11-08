@@ -62,7 +62,18 @@ Apartar agua frena también en recta: con pista empapada se pierde velocidad pun
 
 **Tiempo** (`src/sim/weather.ts`). Siempre dinámico y localizado. Hay células de lluvia grandes (frentes) y pequeñas (chubascos de 0,3-1,2 km) que mojan solo una parte del circuito. Nacen, crecen, se mueven con el viento y mueren. El clima de cada circuito corresponde a su lugar y fecha: temperaturas medias, días de lluvia y tormentas de tarde en Interlagos y Spa. Hay ciclo diario de temperatura y sol, y cada día es continuo: la clasificación hereda el agua y las nubes de la mañana. El agua se calcula por tramo de pista: la lluvia la sube enseguida (con 4 mm/h, en un par de minutos ya hacen falta intermedios), el drenaje la baja deprisa cuando hay agua estancada y despacio cuando la pista solo está húmeda, y la evaporación remata. Cada coche que pasa aparta algo de agua de la trazada: en carrera se abre una línea seca y la pista se seca en ~15 minutos, más rápido que en unos libres con pocos coches. Fuera de la trazada sigue mojado, y quien sale de ella para adelantar lo nota. El radar ve el campo real; la previsión de tu meteorólogo extrapola lo que ve, con su error.
 
-**Carrera** (`src/sim/session.ts`). Aire sucio, rebufo, modo adelantamiento, tapones, adelantamientos según diferencia de ritmo y habilidad, banderas azules, toques, errores, pinchazos, averías, coche de seguridad y VSC.
+**Carrera** (`src/sim/session.ts`). Modo adelantamiento, tapones, adelantamientos en las zonas de frenada según diferencia de ritmo y habilidad (quien acaba de perder la posición no puede devolverla en la frenada siguiente), banderas azules, toques, errores, pinchazos, averías, coche de seguridad y VSC.
+
+**Aire sucio y rebufo.**
+- **Aire sucio:** detrás de otro coche se pierde carga aerodinámica. Pesa en las curvas rápidas, donde el agarre depende de ella, y apenas en una chicane lenta. Se diluye deprisa: a 1 s ya es poco y a 1,6 s nada.
+- **Rebufo:** en recta ahorra resistencia y dura más; aún se nota a 1,5-2 s.
+
+Cada circuito tiene su balance. En Monza ir a rebufo compensa; en Silverstone o Interlagos es mejor el aire limpio, salvo con mucho hueco.
+
+**Clasificación y libres con tráfico.**
+- Los garajes están repartidos por el pit-lane y se sale de uno en uno.
+- Ante la lluvia, cada muro reacciona a su ritmo.
+- En la vuelta de salida, cada piloto levanta para abrir hueco con el de delante: en Monza para quedarse a rebufo, en el resto para tener aire limpio. No todos lo hacen igual de bien, así que hay quien empieza la vuelta pegado a otro, y quien va lanzado a veces se encuentra a uno lento que no se aparta a tiempo.
 
 **Banderas rojas** en todas las sesiones, por accidente fuerte (barreras dañadas) o por lluvia torrencial (agua estancada en algún sector o chaparrón muy fuerte). En carrera se para todo, se pueden cambiar los neumáticos sin perder tiempo y se reanuda detrás del coche de seguridad; con lluvia no se reanuda hasta que la pista lo permite. En clasificación hay tráfico (coches en vuelta de salida que estorban) y vueltas anuladas por límites de pista.
 

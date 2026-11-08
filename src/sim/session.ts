@@ -20,6 +20,17 @@ const ENGINE_POWER = [-1.6, 0, 0.9];
 const ENGINE_FUEL = [0.93, 1, 1.05];
 /** Resistencia extra por apartar agua (% por mm): con pista empapada se pierde velocidad punta. */
 const WATER_DRAG = 12;
+/** Aire sucio: pérdida máxima de agarre pegado a otro coche, en curvas que dependen de la carga
+ * aerodinámica (en una chicane lenta casi no se nota; en una curva rápida, mucho). Se diluye
+ * deprisa con la distancia: a 1 s ya es poca y a 1,6 s ninguna. */
+const DIRTY_AIR = 0.12;
+const dirtyAir = (gap: number) => (gap < 1.6 ? Math.pow(1 - gap / 1.6, 1.5) : 0);
+/** Rebufo: % de resistencia que se ahorra detrás de otro coche en recta; dura más que el aire sucio. */
+const TOW = 16;
+/** Escala de la probabilidad de adelantar en una zona de frenada (calibrada para ~1-2 adelantamientos por vuelta). */
+let PASS_K = 0.7;
+export function setPassK(k: number) { PASS_K = k; }
+const tow = (gap: number) => (gap < 3 ? TOW * Math.exp(-gap * 1.6) : 0);
 /** Fracción del agua de la trazada que aparta cada coche al pasar (a ritmo de carrera). */
 const CAR_DRY = 0.0035;
 const ENGINE_FAIL = [0.6, 1, 2.2];
@@ -130,6 +141,7 @@ export interface Car {
   autoErs: boolean;
   auto: boolean; // en libres/clasificación: la IA lleva el programa
   wetWarned?: boolean; // ya se avisó al jugador de que va con el neumático equivocado
+  gapWant: number; // hueco que busca con el de delante en la vuelta de salida (s)
   letPass?: number;
   advice?: { lap: number; setId: string };
   // libres / clasificación
@@ -137,7 +149,7 @@ export interface Car {
   queue: Run[];
   eliminated: boolean;
   elimPart?: number;
-  qPlan?: { part: number; deps: number[] };
+  qPlan?: { part: number; deps: number[]; urgentAt?: number };
   sessionLaps: number;
   pitWhy?: string;
   stintW0: number; // desgaste del juego al montarlo
@@ -149,6 +161,7 @@ export interface Car {
   secBest: number[]; // mejores sectores personales
   lastLapValid: boolean;
   passLog?: { a: number; until: number }; // adelantamiento en curso (se anuncia al completarse)
+  passedBy?: { id: number; t: number }; // quién le acaba de pasar: sin inercia para devolvérsela en la siguiente frenada
   bestTyre?: Compound; // neumático de la mejor vuelta
   bestTyreByPart: Compound[]; // en clasificación, por parte
 }
@@ -230,6 +243,10 @@ export class Session {
   secStart: number[]; // primer minisector de cada sector
   secBest = [Infinity, Infinity, Infinity]; // mejores sectores de la sesión
   bestLap = Infinity;
+  /** Hueco que se busca en la vuelta de salida (s): rebufo en circuitos de rectas, aire limpio en el resto. */
+  outLapGap = 2.5;
+  towTrack = false;
+  private lastPitExit = -99;
   redReason: "rain" | "crash" | null = null;
   redWall = 0; // cuándo empezó la bandera roja (tiempo real simulado)
   onEvent?: (e: RaceEvent) => void;
@@ -251,6 +268,15 @@ export class Session {
     this.sprintWeekend = opt.sprintWeekend;
     this.lapRefRace = this.track.refLap;
     this.tRef = this.track.ms.map((m) => msTimeAtGrip(m, 1));
+    // ¿compensa ir a rebufo de otro en una vuelta lanzada? (Monza sí; en circuitos de curvas, aire limpio)
+    let bestG = 9, bestNet = 0;
+    for (let g = 0.5; g <= 2.5; g += 0.1) {
+      let net = 0;
+      for (const m of this.track.ms) net += msTimeAtGrip(m, 1 - DIRTY_AIR * m.aero * m.cornerSens * dirtyAir(g)) - msTimeAtGrip(m, 1) - m.dDrag * tow(g) * m.throttle;
+      if (net < bestNet) { bestNet = net; bestG = g; }
+    }
+    this.towTrack = bestNet < -0.05 && bestG < 1.4;
+    this.outLapGap = this.towTrack ? Math.max(0.8, bestG) : 2.5;
     this.secStart = [0, this.track.ms.findIndex((m) => m.sector === 1), this.track.ms.findIndex((m) => m.sector === 2)];
     let t0 = 0, t1 = 0;
     for (const m of this.track.ms) { t0 += msTimeAtGrip(m, 1); t1 += msTimeAtGrip(m, 0.99); }
@@ -276,7 +302,7 @@ export class Session {
         grant: -1, grantUntil: 0, finishT: 0, plan: { stints: [] }, lastPitLap: -1,
         pace: 1 + (d.ritmo - 85) * 0.0007 + team.agarre / 180,
         wearMult: team.desgaste * (1.18 - d.neumaticos * 0.002),
-        slowPuncture: false, autoPush: !e.player, autoErs: true, auto: true,
+        slowPuncture: false, autoPush: !e.player, autoErs: true, auto: true, gapWant: 2.5,
         queue: [], eliminated: false, sessionLaps: 0, stintW0: 0, stintL0: 0, learnedLap: -99, lastImpede: -1,
         secCur: [NaN, NaN, NaN], secLast: [NaN, NaN, NaN], secBest: [Infinity, Infinity, Infinity], lastLapValid: true, bestTyreByPart: [],
       };
@@ -627,13 +653,13 @@ export class Session {
     const tyres = c.tyres!;
     const wetSkill = water > 0.05 ? 1 + (c.d.lluvia - 80) * 0.0012 * Math.min(1, water / 0.6) : 1;
     let grip = setGrip(tyres, water) * c.pace * wetSkill * PUSH_GRIP[c.push] * (1 + 0.018 * this.rubber) * (1 - c.wing - c.floor);
-    if (c.followGap < 1.6 && c.aheadId >= 0) grip *= 1 - 0.045 * (1 - c.followGap / 1.6) * m.cornerSens;
+    if (c.aheadId >= 0) grip *= 1 - DIRTY_AIR * m.aero * m.cornerSens * dirtyAir(c.followGap);
     let t = msTimeAtGrip(m, grip);
     const scale = t / this.tRef[m.i];
     let power = c.team.potencia * 0.6 + ENGINE_POWER[c.engine] + (c.soc > 0.05 || c.ers === 0 ? ERS_POWER[c.ers] : -3.5);
     if (c.drs && m.drs) power += MO_POWER;
     let dragCut = -c.team.resistencia - WATER_DRAG * Math.min(3, water);
-    if (c.followGap < 1.2) dragCut += 7 * (1 - c.followGap / 1.2) * m.throttle;
+    if (c.aheadId >= 0) dragCut += tow(c.followGap) * m.throttle;
     t -= scale * (m.dPower * power + m.dDrag * dragCut);
     t += m.dMass * (MIN_MASS + c.fuel - REF_CAR.mass);
     t *= 1 + c.noise;
@@ -659,6 +685,16 @@ export class Session {
     const pi = Math.min(this.track.vref.length - 1, Math.floor(pos / this.track.ds));
     const ph = this.phaseScale(c);
     let v = this.track.vref[pi] * (this.tRef[m.i] / t) * ph.speed;
+    // libres/clasificación: en la vuelta de salida se levanta para abrir hueco con el de delante
+    // (o para quedarse a rebufo en Monza), sin arriesgarse a no llegar a la bandera
+    // (solo en la parte final de la vuelta y no todos con el mismo cuidado: los huecos no salen perfectos)
+    if (!isRaceKind(this.kind) && c.run && (c.run.phase === "out" || c.run.phase === "cool") && pos > this.L * 0.5 && c.aheadId >= 0 && c.followGap < c.gapWant) {
+      const a = this.carById(c.aheadId);
+      if (a.loc === "track" && !this.isFlying(a) && a.run?.phase !== "in") {
+        const toLine = (this.L - pos) / Math.max(30, this.track.vref[pi] * 0.8);
+        if (this.remaining() - toLine > 12) v *= 0.86;
+      }
+    }
 
     if (isRaceKind(this.kind) && this.lapsDone(c) === 0 && c.s < 400) v = Math.min(v, Math.sqrt(2 * 11 * Math.max(0.3, c.s - c.gridS + 0.3)));
     if (this.flag === "vsc") v = Math.min(v, this.track.vref[pi] * 0.6);
@@ -982,7 +1018,8 @@ export class Session {
     c.run = { ...run, phase: "out", done: 0, startT: this.t, lapsData: [] };
     c.wetWarned = false;
     c.loc = "lane_out";
-    c.lane = { t: 0, total: this.track.pit.laneLength / 2 / this.track.pit.limit };
+    c.lane = { t: 0, total: (this.track.pit.laneLength / this.track.pit.limit) * (1 - this.garageAt(c)) };
+    c.gapWant = this.rng.chance(0.15) ? 0 : this.towTrack ? this.outLapGap + this.rng.range(-0.15, 0.4) : this.outLapGap * this.rng.range(0.7, 1.5);
     c.push = 2;
     c.wing = 0;
     c.slowPuncture = false;
@@ -995,6 +1032,9 @@ export class Session {
     c.v = this.track.pit.limit;
     if (l.t < l.total) return;
     if (c.loc === "lane_out") {
+      // al final del pit-lane se sale de uno en uno
+      if (this.t - this.lastPitExit < 1.2) return;
+      this.lastPitExit = this.t;
       c.loc = "track";
       const base = (Math.floor(Math.max(0, c.s) / this.L) + 1) * this.L;
       c.s = base + this.track.pit.exit;
@@ -1006,7 +1046,13 @@ export class Session {
 
   private enterLaneIn(c: Car) {
     c.loc = "lane_in";
-    c.lane = { t: 0, total: this.track.pit.laneLength / 2 / this.track.pit.limit };
+    c.lane = { t: 0, total: (this.track.pit.laneLength / this.track.pit.limit) * this.garageAt(c) };
+  }
+
+  /** Posición del garaje en el pit-lane (0 = entrada, 1 = salida): por el orden de los equipos. */
+  garageAt(c: Car): number {
+    const teams = [...new Set(this.cars.map((x) => x.team.id))];
+    return 0.12 + (0.76 * teams.indexOf(c.team.id)) / Math.max(1, teams.length - 1);
   }
 
   toGarage(c: Car) {
@@ -1114,7 +1160,9 @@ export class Session {
       return;
     }
     const lap1 = this.lapsDone(c) === 0;
-    const zone = m.overtake > 0 ? m.overtake : lap1 ? 0.12 : 0.025;
+    // recién adelantado: sale de la frenada fuera de la trazada y sin tracción, no puede devolverla enseguida
+    if (c.passedBy && c.passedBy.id === a.id && this.t - c.passedBy.t < 12) return;
+    const zone = m.overtake > 0 ? m.overtake : lap1 ? 0.12 : 0.006;
     const water = this.water[m.i];
     // el que ataca sale de la trazada: si se ha abierto línea seca, pisa más agua
     const wAtt = water + 0.6 * Math.max(0, this.waterOff[m.i] - water);
@@ -1128,13 +1176,14 @@ export class Session {
     const delta = ta - tc + (tap - tcp);
     const skill = (c.d.ataque - a.d.defensa) / 100;
     const ersEdge = (ERS_POWER[c.ers] - ERS_POWER[a.ers]) * 0.02;
-    const x = delta * 9 + skill * 1.5 + ersEdge - 1.6 + zone * 2.2 - (1 - zone) * 0.4;
+    const x = delta * 9 + skill * 1.5 + ersEdge - 1.85 + zone * 2.2 - (1 - zone) * 0.4;
     const p = zone * (1 / (1 + Math.exp(-x)));
-    if (!this.rng.chance(Math.min(0.85, p * 2.2))) return;
+    if (!this.rng.chance(Math.min(0.85, p * PASS_K))) return;
     const contactP = 0.01 * (0.5 + c.d.agresividad / 100) * (0.5 + a.d.agresividad / 120) * (lap1 ? 2.5 : 1) * (1 + Math.min(1, wAtt) * 1.5);
     if (this.rng.chance(contactP)) return this.contact(c, a);
     this.grantPass(c, a, this.rng.range(0.1, 0.35));
     c.passLog = { a: a.id, until: this.t + 10 };
+    a.passedBy = { id: c.id, t: this.t };
   }
 
   /** Permiso para pasar: el de delante cede (pierde algo de tiempo) y el otro pasa por velocidad. */
@@ -1186,18 +1235,21 @@ export class Session {
       if (!race && b.followGap < 1.2 && this.isFlying(b) && !this.isFlying(a)) {
         if (b.lastImpede !== a.id) {
           b.lastImpede = a.id;
-          if (!this.rng.chance(0.07)) { if (gapM < 25) this.grantPass(b, a, 0.15); continue; }
-          b.delay += this.rng.range(0.2, 0.9);
+          if (!this.rng.chance(0.1)) { b.delay += this.rng.range(0.02, 0.15); if (gapM < 25) this.grantPass(b, a, 0.15); continue; }
+          b.delay += this.rng.range(0.3, 1.2);
           if (b.player || a.player) this.log({ kind: "incident", text: `🚧 ${a.d.abrev} estorba a ${b.d.abrev} en su vuelta rápida`, carId: b.id, important: b.player });
         }
         if (gapM < 25) this.grantPass(b, a, 0.15);
         continue;
       }
       const minGap = 7;
-      const slowAhead = race && this.flag === "green" && (a.delay > 0.05 || a.slowPuncture || !!a.tyres?.punctured || (this.lapsDone(b) > 0 && a.v < b.v * 0.8));
+      // lento de verdad (avería, daños, salida de pista): se compara cada uno con la velocidad de
+      // referencia de SU punto, no en bruto (en una frenada el de delante siempre va más despacio)
+      const rel = (c: Car) => c.v / Math.max(15, this.track.vref[Math.min(this.track.vref.length - 1, Math.floor(posOf(c) / this.track.ds))]);
+      const slowAhead = race && this.flag === "green" && (a.delay > 0.8 || a.slowPuncture || !!a.tyres?.punctured || (this.lapsDone(b) > 0 && rel(a) < rel(b) * 0.8));
       if (gapM < minGap + 25 && slowAhead) { this.grantPass(b, a, 0); continue; }
       if (gapM < minGap && !(b.grant === a.id && this.t < b.grantUntil)) {
-        if (!race && this.isFlying(b) === this.isFlying(a) && b.v > a.v * 1.05) { this.grantPass(b, a, 0.1); continue; }
+        if (!race && this.isFlying(b) === this.isFlying(a) && (b.v > a.v * 1.05 || a.run?.phase === "in")) { this.grantPass(b, a, 0.1); continue; }
         const back = minGap - gapM;
         b.s -= back;
         // esa distancia se volverá a recorrer: no debe gastar combustible dos veces
