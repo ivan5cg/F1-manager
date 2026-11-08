@@ -1,8 +1,8 @@
 # Muro de Boxes
 
-Juego de estrategia de carreras de monoplazas centrado en el **día de carrera**. No hay gestión de equipo: eres el muro de boxes de dos pilotos y decides paradas, neumáticos, ritmo, motor y batería mientras el tiempo, los neumáticos y los rivales hacen de las suyas.
+Juego de estrategia de Fórmula 1 centrado en el **fin de semana de carrera**. No hay gestión de equipo: eres el muro de boxes de tus dos pilotos en una minitemporada de 5 grandes premios con la parrilla real de 2026.
 
-Es una web para el móvil (se instala como aplicación desde el navegador) y funciona sin conexión.
+Es una web para el móvil (se instala como aplicación desde el navegador) y funciona sin conexión. La pantalla de sesión imita el grafismo de las retransmisiones de 2010-2013: torre de tiempos a la izquierda, barras negras, posiciones en recuadro gris, morado para el mejor tiempo y amarillo para boxes.
 
 ## Jugar
 
@@ -11,45 +11,63 @@ npm install
 npm run dev        # abre la URL que muestra (también desde el móvil en la misma wifi)
 ```
 
-- **Previa**: eliges equipo, ves la previsión del meteorólogo y los datos de los libres (estimados, con error), y decides neumático de salida y carga de combustible.
-- **Carrera**: velocidad ×1 a ×64. La carrera **se pausa sola** cuando hay que decidir (lluvia, coche de seguridad, neumáticos que caen, consejo del estratega). Toca el aviso para seguir.
-- Abajo, siempre a mano: posición, distancia delante/detrás, vida del neumático, ritmo (− / +) y **BOX**.
-- Pestañas: clasificación, pilotos (temperaturas de carcasa y superficie por eje, desgaste, graining, ampollas, combustible, batería, modos), tiempo (radar de 40 km, previsión por minutos, agua por sector) y radio.
+## La temporada
+
+| Ronda | Gran Premio | Circuito | Fecha | Formato |
+|---|---|---|---|---|
+| 1 | Gran Bretaña | Silverstone | 5 de julio | Normal |
+| 2 | Bélgica | Spa-Francorchamps | 19 de julio | Normal |
+| 3 | Italia | Monza | 6 de septiembre | Normal |
+| 4 | Sierra Norte (ficticio) | Sierra Norte | 11 de octubre | Normal |
+| 5 | São Paulo | Interlagos | 8 de noviembre | **Sprint** |
+
+- **Formato normal:** Libres 1, Libres 2, Libres 3, Clasificación (Q1 18', Q2 15', Q3 12'; caen 6 y 6) y Carrera.
+- **Formato sprint:** Libres 1, Clasificación sprint (SQ1 12', SQ2 10', SQ3 8'; medios en SQ1 y SQ2, blandos en SQ3), Sprint (24 vueltas), Clasificación y Carrera.
+- **Puntos:** 25-18-15-12-10-8-6-4-2-1 en carrera; 8-7-6-5-4-3-2-1 en la sprint. Mundial de pilotos y de constructores.
+- La partida se guarda sola al terminar cada sesión (no a mitad de una).
+
+## Qué decides
+
+- **Libres:** qué tandas hace cada piloto (instalación, simulación de clasificación, tanda larga de 5-16 vueltas) y con qué juego, o dejarlo en automático. Cada tanda larga **mide el desgaste real** y reduce el error de lo que saben tus ingenieros, pero gasta neumáticos.
+- **Clasificación:** cuándo sale cada piloto, con qué juego y cuántas vueltas lanzadas, mirando el reloj, el tráfico y el radar.
+- **Carrera:** neumático y combustible de salida (sin repostaje), paradas y con qué juego, ritmo, motor, batería y órdenes de equipo.
+- ⏸ ×1 ×4 ×16 ×64 y ⏭ (simular hasta el final). La sesión se pausa sola en los momentos clave.
+
+## El modelo
+
+Todo es determinista a partir de la semilla de la temporada.
+
+**Simulación a 20 Hz.** Cada coche avanza en pasos de 0,05 s sobre el perfil de velocidad del circuito, escalado por el tiempo que tardaría él en ese tramo con su adherencia, potencia, resistencia y masa de ese instante. Un fin de semana entero se calcula en ~7 s.
+
+**Circuitos reales** (`data/circuitos/`). Silverstone, Spa, Monza e Interlagos usan la línea central real del trazado. De la curvatura sale la velocidad máxima en cada punto (masa puntual con carga aerodinámica, potencia y frenada), con la carga de cada circuito (Monza baja). Cada circuito se calibra contra la pole real de 2026: Silverstone 1:28.111, Spa 1:44.361 y Monza 1:21.786; Interlagos, estimada en ~1:12.1. La pérdida en boxes es la de cada circuito. Zonas de adelantamiento y de modo adelantamiento (MO, el sustituto del DRS en 2026) salen de la geometría.
+
+**Neumáticos** (`src/sim/tyres.ts`). Duro, medio, blando, intermedio y lluvia. Por eje: temperatura de carcasa y de superficie, ventana de cada compuesto, desgaste con precipicio, graining y ampollas. Entre compuestos hay ~1 s por vuelta con neumático nuevo en un circuito como Silverstone. Asignación real de juegos: 13 de seco (8 blandos, 3 medios, 2 duros), 4 intermedios y 3 de lluvia; en sprint, 12 de seco (6/4/2), 6 intermedios y 3 de lluvia. Tras cada libre se devuelven los más gastados. En carrera en seco hay que usar dos compuestos. Los juegos usados conservan su desgaste.
+
+**Lo que nadie sabe.** Cada fin de semana esconde cuánto desgasta de verdad cada compuesto (±12-13 %), si los neumáticos trabajan más calientes o fríos de lo previsto y la tendencia al graining. Los equipos lo estiman con más o menos error, lo afinan en libres y lo corrigen en carrera comparando el desgaste real del stint con el previsto.
+
+**Tiempo** (`src/sim/weather.ts`). Siempre dinámico y localizado. Hay células de lluvia grandes (frentes) y pequeñas (chubascos de 0,3-1,2 km) que mojan solo una parte del circuito. Nacen, crecen, se mueven con el viento y mueren. El clima de cada circuito corresponde a su lugar y fecha: temperaturas medias, días de lluvia y tormentas de tarde en Interlagos y Spa. Hay ciclo diario de temperatura y sol, y cada día es continuo: la clasificación hereda el agua y las nubes de la mañana. El agua se calcula por tramo de pista; los coches abren trazada seca. El radar ve el campo real; la previsión de tu meteorólogo extrapola lo que ve, con su error.
+
+**Carrera** (`src/sim/session.ts`). Aire sucio, rebufo, modo adelantamiento, tapones, adelantamientos según diferencia de ritmo y habilidad, banderas azules, toques, errores, pinchazos, averías, coche de seguridad, VSC y banderas rojas en libres y clasificación. En clasificación hay tráfico (coches en vuelta de salida que estorban) y vueltas anuladas por límites de pista.
+
+**Estrategia** (`src/sim/strategy.ts`). La IA simula stints con el mismo modelo de neumáticos (con su error) y busca la mejor combinación de 0, 1 o 2 paradas **con los juegos que le quedan**, valorando la posición en pista. En carrera reacciona a coches de seguridad, undercuts y lluvia.
+
+## Parrilla 2026
+
+`data/equipos-2026.json`: los 11 equipos y 22 pilotos reales con sus números. El rendimiento de cada coche es una estimación a partir del mundial de constructores 2026 tras México (Mercedes, Ferrari, Red Bull, McLaren, Racing Bulls, Alpine, Haas, Audi, Williams, Aston Martin, Cadillac); la potencia, del motor de cada equipo. Los atributos de los pilotos son una valoración propia y se pueden editar.
 
 ## Simular sin interfaz
 
 ```bash
-npm run sim -- 42 frente     # una carrera, semilla 42, escenario forzado
-npm run lote -- 20 chubascos # estadísticas de 20 carreras
+npx tsx scripts/finde.ts silverstone 42 --resumen   # fin de semana completo
+npx tsx scripts/pista.ts spa                         # análisis del circuito
 ```
 
-Sirve para calibrar: paradas por coche, abandonos, coches de seguridad, adelantamientos, distancias...
+## Fuentes
 
-## El modelo
-
-Todo es determinista a partir de la semilla: la misma semilla repite la misma carrera.
-
-**Circuito y coche** (`src/sim/track.ts`). El trazado es una curva; de su curvatura sale la velocidad máxima en cada punto con un modelo de masa puntual con carga aerodinámica (adherencia × (peso + carga) ≥ fuerza centrífuga), más pasadas de aceleración (potencia, tracción, resistencia) y frenada. Así se obtiene la vuelta de referencia y, para cada uno de los 25 minisectores, cuánto tiempo cambia con la adherencia, la potencia, la resistencia y la masa. El carácter del circuito (qué zonas castigan los neumáticos delanteros o traseros, dónde se puede adelantar, dónde va el DRS) sale de la geometría, no se escribe a mano.
-
-**Neumáticos** (`src/sim/tyres.ts`). Por eje: temperatura de carcasa (lenta) y de superficie (rápida), que dependen del asfalto, el aire, la energía que mete cada curva, el ritmo, el calor de los frenos (llanta delantera) y el agua. La adherencia depende de la ventana de temperatura de cada compuesto, el desgaste (con "precipicio"), el graining (carcasa fría, se limpia al calentarse) y las ampollas (permanentes). Un día frío favorece al blando y el duro hace graining; un día caluroso el blando se sobrecalienta.
-
-**Lo que nadie sabe.** Cada carrera esconde cuánto desgasta de verdad cada compuesto (±12-15 %), si los neumáticos trabajan más fríos o calientes de lo previsto y la tendencia al graining. Cada equipo tiene una estimación con más o menos error según su calidad; la IA compara el desgaste real con el que esperaba, corrige su modelo y replanifica en carrera. Al final se revela lo oculto.
-
-**Tiempo** (`src/sim/weather.ts`). La lluvia son células que nacen, crecen, se desplazan con el viento en altura y mueren. Cuatro escenarios: estable, chubascos dispersos, frente y llovizna. Afecta a la temperatura del aire y del asfalto (sol, nubes, hora). El agua en pista se calcula por minisector: entra con la lluvia y sale por drenaje, evaporación y **el paso de los coches**, que abren trazada seca. El radar muestra el campo real; la previsión del equipo es un conjunto de 30 miembros que extrapola lo que ve, sin saber qué células nacerán ni cuándo morirán.
-
-**Carrera** (`src/sim/race.ts`). Pasos de 0,2 s. Cada coche avanza según su tiempo en cada minisector con su estado de ese instante. Aire sucio (pierde carga en curva y calienta los delanteros), rebufo, DRS, tapones físicos, adelantamientos en zonas de frenada según la diferencia de ritmo, la batería y las habilidades de ataque y defensa, banderas azules, toques, errores (más con neumáticos fríos, desgastados o con agua), pinchazos, averías, coche de seguridad y VSC, salida parada, combustible por distancia y regla de dos compuestos en seco.
-
-**Estrategia** (`src/sim/strategy.ts`). La IA simula stints con el mismo modelo de neumáticos (con su error), busca la mejor combinación de 0, 1 o 2 paradas, y en carrera reacciona a coches de seguridad, undercuts, lluvia (con su previsión) y desgaste inesperado. A tus pilotos les da consejos, pero decides tú.
-
-## Datos editables
-
-- `data/equipos.json`: equipos y pilotos (inventados).
-- `data/circuito-sierra.json`: trazado (puntos), vueltas, boxes, abrasividad.
-
-## Próximos pasos
-
-1. Clasificación jugable (Q1-Q3, tráfico, vuelta de preparación, evolución de pista, elegir cuándo salir).
-2. Estratega con Monte Carlo: simular cientos de futuros de la carrera para dar probabilidades ("parar ahora: 62 % de quedar delante").
-3. Temperatura de frenos y motor, refrigeración en aire sucio.
-4. Más circuitos y temporada.
-5. Reglaje (carga aerodinámica / mecánico) antes de la carrera.
+- Trazados: [TUMFTM racetrack-database](https://github.com/TUMFTM/racetrack-database), licencia LGPL-3.0 (copia en `data/circuitos/LICENCIA-TRAZADOS-TUM.txt`).
+- Parrilla y números: [formula1.com: Verstappen usará el 3](https://www.formula1.com/en/latest/article/max-verstappen-confirms-he-will-use-car-number-3-for-2026-season.6qvN2SQwcyGYnMWhGdDpNS), [Goodwood: pilotos y equipos 2026](https://www.goodwood.com/grr/f1/2026-f1-drivers-and-teams/), [formula1.com: Alpine completa su alineación](https://www.formula1.com/en/latest/article/colapinto-earns-new-deal-as-alpine-complete-2026-driver-line-up.5KBTVHBlPBBR0Ld91fSJim), [Motorsport Magazine: los 22 pilotos](https://www.motorsportmagazine.com/articles/single-seaters/f1/f1-2026-driver-line-ups-latest-contract-news-and-rumours).
+- Mundial de constructores 2026: [GPFans](https://www.gpfans.com/en/f1-standings/constructors/).
+- Poles 2026: [Wikipedia: GP de Gran Bretaña 2026](https://en.wikipedia.org/wiki/2026_British_Grand_Prix), [formula1.com: clasificación de Bélgica 2026](https://www.formula1.com/en/latest/article/antonelli-charges-to-pole-position-in-exhilarating-belgian-gp-qualifying.zpGgC6xi6e3QnZEOmi6qS), [Wikipedia: GP de Italia 2026](https://en.wikipedia.org/wiki/2026_Italian_Grand_Prix).
+- Calendario: [Silverstone: calendario 2026](https://www.silverstone.co.uk/news/f1-2026-calendar-full-list-venues-key-dates).
+- Neumáticos: [formula1.com: asignación en fin de semana sprint](https://www.formula1.com/en/latest/article/what-tyres-will-the-teams-and-drivers-have-for-the-2025-chinese-grand-prix.6yy4SvLV4JKr2GQ39wJPa1), [f1technical: reglas de SQ en Spa](https://www.f1technical.net/news/27363), [F1 Chronicle](https://f1chronicle.com/how-many-tyres-can-f1-teams-use).
+- Clima: [24 Horas de Spa (julio)](https://www.crowdstrike24hoursofspa.com/news/1919/what-an-autumn-edition-means-for-the-total-24-hours-of-spa-weather-forecast), [weatherapi.com: Spa](https://www.weatherapi.com/history/july/q/spa-205712), [weatherapi.com: Monza](https://www.weatherapi.com/history/september/q/monza-1281402), [weatheronthisday.com: São Paulo](https://weatheronthisday.com/intl/sao-paulo/november), [weathermonth.com: São Paulo](https://weathermonth.com/en/sao-paulo-weather-in-november). Silverstone en julio es aproximado (no se encontró una normal climática fiable).

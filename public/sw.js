@@ -1,5 +1,5 @@
 // Service worker mínimo: guarda lo visitado para jugar sin conexión.
-const CACHE = "muro-v1";
+const CACHE = "muro-v2";
 self.addEventListener("install", (e) => self.skipWaiting());
 self.addEventListener("activate", (e) => e.waitUntil(self.clients.claim()));
 self.addEventListener("fetch", (e) => {

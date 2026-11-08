@@ -15,6 +15,7 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "@fontsource/titillium-web": "^5.1.0",
     "@types/node": "^22.10.1",
     "tsx": "^4.19.2",
     "typescript": "^5.6.3",

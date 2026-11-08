@@ -138,6 +138,7 @@ export interface Car {
   stintW0: number; // desgaste del juego al montarlo
   stintL0: number; // vueltas que llevaba
   learnedLap: number;
+  lastImpede: number; // id del último coche lento con el que se ha cruzado en vuelta rápida
 }
 
 export type FlagState = "green" | "vsc" | "sc" | "sc_in" | "red";
@@ -255,7 +256,7 @@ export class Session {
         pace: 1 + (d.ritmo - 85) * 0.0007 + team.agarre / 180,
         wearMult: team.desgaste * (1.18 - d.neumaticos * 0.002),
         slowPuncture: false, autoPush: !e.player, autoErs: true, auto: true,
-        queue: [], eliminated: false, sessionLaps: 0, stintW0: 0, stintL0: 0, learnedLap: -99,
+        queue: [], eliminated: false, sessionLaps: 0, stintW0: 0, stintL0: 0, learnedLap: -99, lastImpede: -1,
       };
       this.cars.push(car);
     }
@@ -661,7 +662,7 @@ export class Session {
     if (pushing) this.errorCheck(c, m);
     if (isRaceKind(this.kind)) this.overtakeCheck(c, m);
     // límites de pista en vuelta lanzada
-    if (c.run?.phase === "push" && c.lapValid && m.cornerSens > 0.5 && this.rng.chance(0.0016 * PUSH_ERR[c.push])) {
+    if (c.run?.phase === "push" && c.lapValid && m.cornerSens > 0.5 && this.rng.chance(0.001 * PUSH_ERR[c.push])) {
       c.lapValid = false;
       if (c.player || this.isTop(c)) this.log({ kind: "control", text: `🚩 Vuelta anulada a ${c.d.abrev}: límites de pista en el sector ${m.sector + 1}`, carId: c.id, important: c.player });
     }
@@ -955,6 +956,7 @@ export class Session {
     if (c.aheadId < 0 || c.followGap > 0.45) return;
     const a = this.carById(c.aheadId);
     if (a === c || a.loc !== "track") return;
+    if (c.grant === a.id && this.t < c.grantUntil) return;
     const lapped = this.lapsDone(c) > this.lapsDone(a) || c.s - a.s > this.L * 0.5;
     if (a.s - c.s > this.L * 0.5) return;
     if (lapped) {
@@ -1037,7 +1039,9 @@ export class Session {
       b.aheadId = a.id;
       // libres/clasificación: el que no va lanzado se aparta del que sí
       if (!race && b.followGap < 1.2 && this.isFlying(b) && !this.isFlying(a)) {
-        if (this.rng.chance(0.004)) {
+        if (b.lastImpede !== a.id) {
+          b.lastImpede = a.id;
+          if (!this.rng.chance(0.07)) { if (gapM < 25) this.grantPass(b, a, 0.15); continue; }
           b.delay += this.rng.range(0.2, 0.9);
           if (b.player || a.player) this.log({ kind: "incident", text: `🚧 ${a.d.abrev} estorba a ${b.d.abrev} en su vuelta rápida`, carId: b.id, important: b.player });
         }
@@ -1047,7 +1051,10 @@ export class Session {
       const minGap = 7;
       if (gapM < minGap && !(b.grant === a.id && this.t < b.grantUntil)) {
         if (!race && this.isFlying(b) === this.isFlying(a) && b.v > a.v * 1.05) { this.grantPass(b, a, 0.1); continue; }
-        b.s -= minGap - gapM;
+        const back = minGap - gapM;
+        b.s -= back;
+        // esa distancia se volverá a recorrer: no debe gastar combustible dos veces
+        b.fuel += (this.fuelPerLap * ENGINE_FUEL[b.engine] * PUSH_FUEL[b.push] * back) / L;
         b.followGap = minGap / Math.max(20, b.v);
       }
     }

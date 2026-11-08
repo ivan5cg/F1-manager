@@ -469,6 +469,8 @@ export function qualiTick(sess: Session, car: Car) {
   if (!set && c === "W") { c = "I"; set = pickSet(car, c, true); }
   if (!set) return;
   const freshLeft = car.e.sets.filter((s) => s.c === c && s.laps === 0 && !s.returned).length;
-  const pushLaps = water > 0.18 ? 3 : freshLeft <= 1 && part.advance === null ? 2 : 1;
+  // si no habrá otra salida, dos vueltas lanzadas para tener un margen ante un error o una vuelta anulada
+  const lastChance = plan.deps.length === 0 && R < outLap + lap * 3.2 + 60;
+  const pushLaps = water > 0.18 ? 3 : (freshLeft <= 1 && part.advance === null) || lastChance ? 2 : 1;
   sess.startRun(car, { kind: "quali", setId: set.id, pushLaps, fuel: QUALI_FUEL + pushLaps * 2 * sess.fuelPerLap });
 }
