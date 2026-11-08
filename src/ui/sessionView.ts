@@ -3,7 +3,8 @@ import { CIRCUITS, TEAMS } from "./data";
 import { Weekend } from "../sim/weekend";
 import { Session, Car, RaceEvent, SESSION_NAMES, SessionKind, isRaceKind, isQualiKind, PUSH_NAMES, ENGINE_NAMES, ERS_NAMES, SOC_MAX } from "../sim/session";
 import { COMPOUNDS, Compound, DRY, ALL, setWear, TyreSet } from "../sim/tyres";
-import { rainAt, forecast } from "../sim/weather";
+import { rainAt, forecast, RadarFrame } from "../sim/weather";
+import { renderField, colorize, terrain, RADAR_STEPS, fmtHour } from "./radar";
 import { makeRun, availableSets, stintProfile } from "../sim/strategy";
 import { Rng } from "../sim/rng";
 
@@ -29,7 +30,6 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   let ended = false;
   let toastTimer = 0;
   const mine = () => sess.cars.filter((c) => c.player).sort((a, b) => a.id - b.id);
-  let onbId = mine()[0].id; // piloto de la cámara onboard
   const tvName = (c: Car) => { const parts = c.d.nombre.split(" "); return `${parts[0][0]} ${parts.slice(1).join(" ")}`.toUpperCase(); };
   const clean = (t: string) => t.replace(/^[\p{Extended_Pictographic}\u{1F1E6}-\u{1F1FF}\uFE0F\u200D\s]+/u, "");
   const TAB: Record<RaceEvent["kind"], string> = { radio: "Radio del equipo", control: "Dirección de carrera", pit: "Boxes", info: "Carrera", weather: "Meteo", incident: "Incidente" };
@@ -43,11 +43,10 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       <div class="tower" id="tower"></div>
       <div class="side">
         <div class="mapbox"><canvas id="map"></canvas></div>
-        <div class="onb" id="onb"><canvas id="gauge"></canvas><div class="tags" id="onbtags"></div></div>
         <div class="wxbox" id="wx"></div>
-        <div class="sidebtns"><button data-s="pilotos">Pilotos</button><button data-s="tiempo">Tiempo</button><button data-s="radio">Radio</button></div>
         <div id="lapban"></div>
         <div class="ticker" id="ticker"></div>
+        <div class="sidebtns"><button data-s="pilotos">Pilotos</button><button data-s="tiempo">Radar</button><button data-s="radio">Radio</button></div>
       </div>
     </div>
     <div class="drivers" id="drivers"></div>
@@ -106,8 +105,9 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   let mapScale = 1, mapOx = 0, mapOy = 0;
   function sizeMap() {
     const cv = $<HTMLCanvasElement>("#map");
-    const w = cv.parentElement!.clientWidth;
-    const h = Math.round(w * 0.72);
+    if (!cv) return;
+    const box = cv.parentElement!;
+    const w = box.clientWidth, h = Math.max(80, box.clientHeight);
     const dpr = window.devicePixelRatio || 1;
     cv.width = w * dpr; cv.height = h * dpr;
     cv.style.height = h + "px";
@@ -117,31 +117,44 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     mapScale = Math.min((cv.width - 2 * pad) / (maxx - minx), (cv.height - 2 * pad) / (maxy - miny));
     mapOx = (cv.width - (maxx - minx) * mapScale) / 2 - minx * mapScale;
     mapOy = (cv.height - (maxy - miny) * mapScale) / 2 + maxy * mapScale;
+    rainLayerT = -1;
   }
   const mx = (x: number) => mapOx + x * mapScale;
   const my = (y: number) => mapOy - y * mapScale;
+  // capa de lluvia del mapa (mismo campo que el radar), se recalcula cada pocos segundos de sesión
+  const rainLayer = document.createElement("canvas");
+  let rainLayerT = -1, rainLayerOn = false;
+  function updateRainLayer(cv: HTMLCanvasElement) {
+    if (rainLayerT >= 0 && Math.abs(sess.wall - rainLayerT) < 4) return;
+    rainLayerT = sess.wall;
+    const S = 110, H = Math.max(8, Math.round((S * cv.height) / cv.width));
+    const R = cv.width / 2 / mapScale / 1000; // km
+    const cx = (cv.width / 2 - mapOx) / mapScale / 1000, cy = (mapOy - cv.height / 2) / mapScale / 1000;
+    const field = renderField(sess.weather as unknown as RadarFrame, cx, cy, R, S, H);
+    rainLayerOn = field.some((v) => v >= 0.1);
+    if (!rainLayerOn) return;
+    rainLayer.width = S; rainLayer.height = H;
+    rainLayer.getContext("2d")!.putImageData(colorize(field, S, H, null, 105), 0, 0);
+  }
   function drawMap() {
     const cv = $<HTMLCanvasElement>("#map");
     if (!cv) return;
     const g = cv.getContext("2d")!;
     const dpr = window.devicePixelRatio || 1;
     g.clearRect(0, 0, cv.width, cv.height);
+    updateRainLayer(cv);
+    if (rainLayerOn) { g.imageSmoothingEnabled = true; g.drawImage(rainLayer, 0, 0, cv.width, cv.height); }
     g.lineCap = "round"; g.lineJoin = "round";
     for (const m of track.ms) {
       const i0 = Math.floor(m.s0 / track.ds), i1 = Math.min(track.xs.length - 1, Math.floor(m.s1 / track.ds));
       const w = sess.water[m.i];
-      g.strokeStyle = w > 0.05 ? `rgba(58,139,232,${Math.min(1, 0.4 + w * 0.6)})` : "#5a5d64";
+      g.strokeStyle = w > 0.05 ? `rgba(120,190,255,${Math.min(1, 0.45 + w * 0.5)})` : "#6a6d74";
       g.lineWidth = 5 * dpr;
       g.beginPath();
       g.moveTo(mx(track.xs[i0]), my(track.ys[i0]));
       for (let i = i0 + 1; i <= i1 + 1 && i < track.xs.length; i++) g.lineTo(mx(track.xs[i]), my(track.ys[i]));
       if (m.i === track.ms.length - 1) g.lineTo(mx(track.xs[0]), my(track.ys[0]));
       g.stroke();
-      const r = rainAt(sess.weather, m.x / 1000, m.y / 1000);
-      if (r > 0.15) {
-        g.fillStyle = `rgba(110,170,255,${Math.min(0.3, r / 25)})`;
-        g.beginPath(); g.arc(mx(m.x), my(m.y), 13 * dpr, 0, 7); g.fill();
-      }
     }
     g.strokeStyle = "#fff"; g.lineWidth = 2 * dpr;
     g.beginPath(); g.moveTo(mx(track.xs[0]), my(track.ys[0]) - 6 * dpr); g.lineTo(mx(track.xs[0]), my(track.ys[0]) + 6 * dpr); g.stroke();
@@ -246,7 +259,9 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
         else g = `<span class="${b === sessBest ? "purple" : ""}">${fmtLap(b)}</span>`;
         if (c.eliminated) g = `<span class="dim">${g}</span>`;
       }
-      html += `<div class="${cls}">${pre}<span class="g mono">${g}</span><span class="t">${mode === "tyre" || race ? tyre : ""}</span></span></div>`;
+      const bt = race ? null : quali ? c.bestTyreByPart[c.eliminated ? c.elimPart! : sess.part] : c.bestTyre;
+      const tyreCell = race || mode === "tyre" ? tyre : bt ? tyreHtml(bt) : "";
+      html += `<div class="${cls}">${pre}<span class="g mono">${g}</span><span class="t">${tyreCell}</span></span></div>`;
     });
     towerEl.innerHTML = html;
   }
@@ -270,11 +285,14 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       <span class="tab">Cielo</span><span class="bar" style="white-space:nowrap">${rMax > 0.15 ? `Lluvia ${rMax.toFixed(rMax < 10 ? 1 : 0)}<span class="small" style="text-transform:none">&nbsp;mm/h</span>` : w.cloud > 0.6 ? "Cubierto" : w.cloud > 0.3 ? "Nubes" : "Sol"}</span>
       <span class="tab">Agua</span><span class="bar"><span class="wxsec grow">${sw.map((x) => `<div title="${x.toFixed(2)} mm" style="background:${x > 0.05 ? `rgba(58,139,232,${Math.min(1, 0.35 + x)})` : "#26282d"}"></div>`).join("")}</span><span class="mono small">${Math.max(...sw).toFixed(2)}</span></span>`;
     const evs = sess.events.filter((e) => e.kind !== "info" || e.important || (e.carId !== undefined && sess.carById(e.carId).player)).slice(-4).reverse();
-    $("#ticker").innerHTML = evs.map((e) => rmHtml(TAB[e.kind], e.text, e.kind === "control" && /ROJA/.test(e.text) ? "red" : e.kind === "control" || e.kind === "weather" ? "ctl" : "")).join("");
+    const tk = $("#ticker");
+    tk.innerHTML = evs.map((e) => rmHtml(TAB[e.kind], e.text, e.kind === "control" && /ROJA/.test(e.text) ? "red" : e.kind === "control" || e.kind === "weather" ? "ctl" : "")).join("");
+    // solo los mensajes que caben enteros
+    while (tk.children.length > 1 && tk.scrollHeight > tk.clientHeight + 1) tk.lastElementChild!.remove();
     // última vuelta de tu piloto (libres/clasificación): [P][NOMBRE][TIEMPO][+DIF]
     const lb = $("#lapban");
     if (!race) {
-      const c = sess.carById(onbId);
+      const c = [...mine()].sort((a, b) => (b.lapStart || 0) - (a.lapStart || 0))[0];
       const last = c.lapTimes[c.lapTimes.length - 1];
       const ord = sess.timingOrder();
       const pos = ord.indexOf(c) + 1;
@@ -284,42 +302,39 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     } else lb.innerHTML = "";
   }
 
-  // ------------------------------------------------------------ onboard
-  let prevV = 0;
-  function drawGauge() {
-    const cv = $<HTMLCanvasElement>("#gauge");
-    if (!cv) return;
-    const c = sess.carById(onbId);
+  // ------------------------------------------------------------ velocímetros
+  function drawGauge(cv: HTMLCanvasElement, c: Car) {
     const dpr = window.devicePixelRatio || 1;
-    const S = 96 * dpr;
+    // cuadrado exacto: lo que permita el alto de la tarjeta y como mucho el 44 % del ancho
+    const mid = cv.parentElement!;
+    const side = Math.max(48, Math.floor(Math.min(mid.clientHeight, mid.clientWidth * 0.44)));
+    if (cv.style.width !== side + "px") { cv.style.width = side + "px"; cv.style.height = side + "px"; }
+    const S = side * dpr;
     if (cv.width !== S) { cv.width = S; cv.height = S; }
     const g = cv.getContext("2d")!;
     g.clearRect(0, 0, S, S);
+    const u = S / 96; // unidad relativa
     const cx = S / 2, cy = S / 2, R = S * 0.44;
     const kmh = c.loc === "track" || c.loc === "pit" ? c.v * 3.6 : 0;
-    // arco de velocidad (0-360 km/h)
     const a0 = Math.PI * 0.75, a1 = Math.PI * 2.25;
-    g.lineWidth = 5 * dpr; g.lineCap = "butt";
-    g.strokeStyle = "rgba(255,255,255,.15)";
+    g.lineWidth = 5 * u; g.lineCap = "butt";
+    g.strokeStyle = "rgba(255,255,255,.14)";
     g.beginPath(); g.arc(cx, cy, R, a0, a1); g.stroke();
-    const f = Math.min(1, kmh / 360);
     const grad = g.createLinearGradient(0, S, S, 0);
     grad.addColorStop(0, "#1f6fd1"); grad.addColorStop(1, "#5fb3ff");
     g.strokeStyle = grad;
-    g.beginPath(); g.arc(cx, cy, R, a0, a0 + (a1 - a0) * f); g.stroke();
-    g.fillStyle = "rgba(0,0,0,.85)"; g.beginPath(); g.arc(cx, cy, R - 5 * dpr, 0, 7); g.fill();
-    // velocidad y marcha
+    g.beginPath(); g.arc(cx, cy, R, a0, a0 + (a1 - a0) * Math.min(1, kmh / 360)); g.stroke();
+    g.fillStyle = "rgba(0,0,0,.88)"; g.beginPath(); g.arc(cx, cy, R - 5 * u, 0, 7); g.fill();
     g.textAlign = "center";
-    g.fillStyle = "#39ff6a"; g.font = `900 ${22 * dpr}px "Titillium Web", sans-serif`;
-    g.fillText(String(Math.round(kmh)), cx, cy - 4 * dpr);
-    g.fillStyle = "#aaa"; g.font = `700 ${7 * dpr}px "Titillium Web", sans-serif`;
-    g.fillText("km/h", cx, cy + 5 * dpr);
+    g.fillStyle = "#39ff6a"; g.font = `900 ${22 * u}px "Titillium Web", sans-serif`;
+    g.fillText(String(Math.round(kmh)), cx, cy - 4 * u);
+    g.fillStyle = "#aaa"; g.font = `700 ${7 * u}px "Titillium Web", sans-serif`;
+    g.fillText("km/h", cx, cy + 5 * u);
     const gears = [0, 85, 120, 155, 190, 225, 260, 295];
     let gear = 0;
     for (let i = 0; i < gears.length; i++) if (kmh >= gears[i]) gear = i + 1;
-    g.fillStyle = "#fff"; g.font = `900 ${15 * dpr}px "Titillium Web", sans-serif`;
-    g.fillText(kmh < 3 ? "N" : String(gear), cx, cy + 20 * dpr);
-    // acelerador / freno a partir del perfil de velocidad
+    g.fillStyle = "#fff"; g.font = `900 ${15 * u}px "Titillium Web", sans-serif`;
+    g.fillText(kmh < 3 ? "N" : String(gear), cx, cy + 20 * u);
     const L = track.length;
     const pos = ((c.s % L) + L) % L;
     const i = Math.min(track.vref.length - 2, Math.floor(pos / track.ds));
@@ -327,26 +342,18 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     const moving = kmh > 3 && c.loc === "track";
     const thr = moving ? (ax > -0.5 ? Math.min(1, 0.55 + ax / 8) : 0) : 0;
     const brk = moving ? Math.min(1, Math.max(0, -ax / 35)) : 0;
-    const bw = 30 * dpr, bh = 4 * dpr, by = cy + 26 * dpr;
-    g.fillStyle = "#333"; g.fillRect(cx - bw - 2 * dpr, by, bw, bh); g.fillRect(cx + 2 * dpr, by, bw, bh);
-    g.fillStyle = "#39ff6a"; g.fillRect(cx - bw - 2 * dpr, by, bw * thr, bh);
-    g.fillStyle = "#ff3b30"; g.fillRect(cx + 2 * dpr, by, bw * brk, bh);
-    // MO (modo adelantamiento) y batería
-    g.fillStyle = c.drs ? "#39ff6a" : "#444"; g.font = `900 ${8 * dpr}px "Titillium Web", sans-serif`;
+    const bw = 30 * u, bh = 4 * u, by = cy + 26 * u;
+    g.fillStyle = "#333"; g.fillRect(cx - bw - 2 * u, by, bw, bh); g.fillRect(cx + 2 * u, by, bw, bh);
+    g.fillStyle = "#39ff6a"; g.fillRect(cx - bw - 2 * u, by, bw * thr, bh);
+    g.fillStyle = "#ff3b30"; g.fillRect(cx + 2 * u, by, bw * brk, bh);
+    g.fillStyle = c.drs ? "#39ff6a" : "#444"; g.font = `900 ${8 * u}px "Titillium Web", sans-serif`;
     g.fillText("MO", cx + R * 0.72, cy + R * 0.95);
     const soc = c.soc / SOC_MAX;
-    g.fillStyle = "#333"; g.fillRect(cx - R * 0.98, cy + R * 0.45, 5 * dpr, 16 * dpr);
-    g.fillStyle = soc > 0.25 ? "#ff3b30" : "#802020"; g.fillRect(cx - R * 0.98, cy + R * 0.45 + 16 * dpr * (1 - soc), 5 * dpr, 16 * dpr * soc);
-    prevV = kmh;
+    g.fillStyle = "#333"; g.fillRect(cx - R * 0.98, cy + R * 0.45, 5 * u, 16 * u);
+    g.fillStyle = soc > 0.25 ? "#ff3b30" : "#802020"; g.fillRect(cx - R * 0.98, cy + R * 0.45 + 16 * u * (1 - soc), 5 * u, 16 * u * soc);
   }
-  function renderOnbTags() {
-    const c = sess.carById(onbId);
-    const others = mine().filter((x) => x.id !== onbId);
-    $("#onbtags").innerHTML = `<div class="bar">${tvName(c)}</div><div class="bar dim" style="text-transform:none">${esc(c.team.nombre)}</div>
-      <div class="bar small" style="text-transform:none">${c.tyres ? `${tyreHtml(c.tyres.c)} ${c.tyres.laps} v · ${Math.round((1 - setWear(c.tyres)) * 100)} %` : "En el garaje"}</div>
-      ${others.length ? `<button id="onbsw" style="padding:2px 4px;font-size:10px">Onboard ${others[0].d.abrev}</button>` : ""}`;
-    const b = document.getElementById("onbsw");
-    if (b) b.onclick = () => { onbId = others[0].id; renderOnbTags(); };
+  function drawGauges() {
+    drvEl.querySelectorAll<HTMLCanvasElement>("canvas.gauge").forEach((cv) => drawGauge(cv, sess.carById(Number(cv.dataset.id))));
   }
 
   // --------------------------------------------------------- tarjetas
@@ -361,50 +368,64 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     const ph = c.run?.phase;
     return ph === "out" ? "V. de salida" : ph === "push" ? "V. lanzada" : ph === "cool" ? "Enfriando" : ph === "in" ? "Entrando" : ph === "long" ? `Tanda ${c.run!.done}/${c.run!.pushLaps}` : PUSH_NAMES[c.push];
   }
-  function telRow(c: Car) {
+  function statsHtml(c: Car) {
     const t = c.tyres;
     const tc = (v: number) => { if (!t) return ""; const sp = COMPOUNDS[t.c]; const d = v - sp.opt; return Math.abs(d) < sp.window * 0.5 ? "green" : d < -sp.window ? "" : d > sp.window ? "redt" : "yellow"; };
-    const temps = t ? `<b class="${tc(t.F.tBulk)}">${t.F.tBulk.toFixed(0)}°</b>/<b class="${tc(t.R.tBulk)}">${t.R.tBulk.toFixed(0)}°</b>` : "—";
-    const third = race
-      ? (() => { const d = c.fuel / sess.fuelPerLap - (sess.laps - sess.lapsDone(c)); return `⛽<b class="${d < 0 ? "redt" : d < 0.4 ? "yellow" : ""}">${d >= 0 ? "+" : ""}${d.toFixed(1)}</b>`; })()
-      : [0, 1, 2].map((j) => { const v = isNaN(c.secCur[j]) ? c.secLast[j] : c.secCur[j]; return `<b class="${isNaN(c.secCur[j]) ? "dim" : tcls(v, c.secBest[j], sess.secBest[j])}">●</b>`; }).join("");
+    const cell = (k: string, v: string, cls = "") => `<div class="cl ${cls}"><i>${k}</i><b>${v}</b></div>`;
+    const lap1 = (x: number | undefined) => (x && isFinite(x) ? `${Math.floor(x / 60)}:${(x % 60).toFixed(1).padStart(4, "0")}` : "—");
     const lt = c.lapTimes[c.lapTimes.length - 1];
     const ltCls = !lt ? "dim" : !race && !c.lastLapValid ? "dim" : lt <= sess.bestLap + 1e-6 ? "purple" : lt <= c.best + 1e-6 ? "green" : "";
-    const ltTxt = lt ? `${Math.floor(lt / 60)}:${(lt % 60).toFixed(1).padStart(4, "0")}` : "—";
-    return `<div class="tel mono"><span>Últ <b class="${ltCls}">${ltTxt}</b></span><span>${temps}</span><span>${third}</span></div>`;
+    const best = quali ? c.bestByPart[c.eliminated ? c.elimPart! : sess.part] : c.best;
+    const temps = t ? `<span class="${tc(t.F.tBulk)}">${t.F.tBulk.toFixed(0)}</span>/<span class="${tc(t.R.tBulk)}">${t.R.tBulk.toFixed(0)}</span>` : "—";
+    const wear = t ? `${Math.round((1 - setWear(t)) * 100)} %` : "—";
+    if (race) {
+      const ord = sess.order();
+      const pos = ord.indexOf(c) + 1;
+      const ahead = ord[pos - 2], behind = ord[pos];
+      const ga = ahead && c.loc === "track" ? sess.gapBetween(ahead, c) : NaN;
+      const gb = behind && behind.loc === "track" ? sess.gapBetween(c, behind) : NaN;
+      const f = (g: number) => (!isFinite(g) ? "—" : g > sess.lapRefRace * 0.95 ? "1V+" : g.toFixed(1));
+      const d = c.fuel / sess.fuelPerLap - (sess.laps - sess.lapsDone(c));
+      return cell(`▲ ${ahead ? ahead.d.abrev : ""}`, f(ga), "gold") + cell(`▼ ${behind ? behind.d.abrev : ""}`, f(gb), "gold")
+        + cell("Última", lap1(lt), ltCls) + cell("Mejor", lap1(c.best))
+        + cell("Neum. °C", temps) + cell("Banda", wear)
+        + cell("Comb.", `${d >= 0 ? "+" : ""}${d.toFixed(1)} v`, d < 0 ? "redt" : d < 0.4 ? "yellow" : "") + cell("Ritmo", c.loc === "track" ? PUSH_NAMES[c.push] : phaseName(c));
+    }
+    const secs = [0, 1, 2].map((j) => { const cur = !isNaN(c.secCur[j]); const v = cur ? c.secCur[j] : c.secLast[j]; return `<span class="${tcls(v, c.secBest[j], sess.secBest[j])}" style="${cur ? "" : "opacity:.6"}">${isNaN(v) ? "–" : v.toFixed(1)}</span>`; }).join(" ");
+    return cell("Estado", phaseName(c)) + cell("Mejor", best && isFinite(best) ? fmtLap(best) : "—", "gold")
+      + cell("Última", lap1(lt), ltCls) + cell("Sectores", secs)
+      + cell("Neum. °C", temps) + cell("Banda", wear)
+      + cell("Vueltas", String(c.sessionLaps)) + cell("Comb.", `${c.fuel.toFixed(1)} kg`);
   }
   function renderDrivers() {
     const ord = sess.order();
     const redRace = race && sess.flag === "red";
-    drvEl.innerHTML = mine().map((c, i) => {
+    const cars = mine();
+    if (!drvEl.dataset.built) {
+      drvEl.dataset.built = "1";
+      drvEl.innerHTML = cars.map((c) => `<div class="dcard" data-card="${c.id}"><div class="h"></div><div class="wear"><i></i></div>
+        <div class="mid"><canvas class="gauge" data-id="${c.id}"></canvas><div class="stats"></div></div><div class="b"></div></div>`).join("");
+    }
+    cars.forEach((c, i) => {
+      const card = drvEl.querySelector<HTMLElement>(`[data-card="${c.id}"]`)!;
       const pos = ord.indexOf(c) + 1;
       const t = c.tyres;
       const wear = t ? setWear(t) : 0;
       const sp = t ? COMPOUNDS[t.c] : null;
       const col = !t || !sp ? "#444" : wear > sp.cliff ? "var(--red1)" : wear > sp.cliff - 0.12 ? "var(--gold1)" : "var(--green)";
-      let line2 = "";
-      if (race) {
-        const ahead = ord[pos - 2], behind = ord[pos];
-        const ga = ahead && c.loc === "track" ? sess.gapBetween(ahead, c) : NaN;
-        const gb = behind && behind.loc === "track" ? sess.gapBetween(c, behind) : NaN;
-        const f = (g: number) => (!isFinite(g) ? "—" : g > sess.lapRefRace * 0.95 ? "1V+" : g.toFixed(1));
-        line2 = `<span class="gold mono">▲${f(ga)}</span><span class="bar">${phaseName(c)}</span><span class="gold mono">▼${f(gb)}</span>`;
-      } else {
-        const b = quali ? c.bestByPart[sess.part] : c.best;
-        line2 = `<span class="bar">${phaseName(c)}</span><span class="gold mono">${fmtLap(b)}</span>`;
-      }
+      card.querySelector(".h")!.innerHTML = `<span class="posbox mono">${pos}</span><span class="nm">${tvName(c)}${t ? tyreHtml(t.c) + `<span class="small mono">${t.laps}</span>` : ""}</span>`;
+      const wi = card.querySelector<HTMLElement>(".wear i")!;
+      wi.style.width = `${(1 - wear) * 100}%`; wi.style.background = col;
+      card.querySelector(".stats")!.innerHTML = statsHtml(c);
       let btns = "";
       if (redRace) btns = `<button class="yellow" data-a="red" data-i="${i}" ${c.loc !== "track" ? "disabled" : ""}>Cambiar neumáticos</button>`;
-      else if (race) btns = `<button data-a="minus" data-i="${i}">−</button><button data-a="plus" data-i="${i}">+</button><button class="${c.pitRequest ? "yellow" : ""}" data-a="box" data-i="${i}" ${c.loc !== "track" ? "disabled" : ""}>${c.pitRequest ? "BOX ✓" : "BOX"}</button>`;
+      else if (race) btns = `<button data-a="minus" data-i="${i}">− Ritmo</button><button data-a="plus" data-i="${i}">+ Ritmo</button><button class="${c.pitRequest ? "yellow" : ""}" data-a="box" data-i="${i}" ${c.loc !== "track" ? "disabled" : ""}>${c.pitRequest ? "BOX ✓" : "BOX"}</button>`;
       else btns = `<button data-a="go" data-i="${i}" ${c.loc !== "garage" || c.eliminated || sess.remaining() <= 0 || sess.flag === "red" ? "disabled" : ""}>${quali ? "Salir" : "Tanda"}</button><button data-a="in" data-i="${i}" ${c.loc !== "track" ? "disabled" : ""}>Boxes</button><button class="${c.auto ? "on" : ""}" data-a="auto" data-i="${i}">Auto</button>`;
-      return `<div class="dcard"><div class="h"><span class="posbox mono">${pos}</span><span class="nm" data-onb="${c.id}">${tvName(c)}${t ? tyreHtml(t.c) + `<span class="small mono">${t.laps}</span>` : ""}</span></div>
-        <div class="wear"><i style="width:${(1 - wear) * 100}%;background:${col}"></i></div>
-        <div class="st">${line2}</div>${telRow(c)}<div class="b">${btns}</div></div>`;
-    }).join("");
+      const b = card.querySelector(".b")!;
+      if (b.innerHTML !== btns) b.innerHTML = btns;
+    });
   }
   drvEl.addEventListener("click", (e) => {
-    const nm = (e.target as HTMLElement).closest("[data-onb]") as HTMLElement | null;
-    if (nm) { onbId = Number(nm.dataset.onb); renderOnbTags(); return; }
     const b = (e.target as HTMLElement).closest("button") as HTMLButtonElement | null;
     if (!b || b.disabled) return;
     const c = mine()[Number(b.dataset.i)];
@@ -553,52 +574,110 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   }
   function weatherSheet() {
     const team = TEAMS.find((t) => t.id === wk.playerTeam)!;
-    const pts = track.ms.filter((_, i) => i % 3 === 0).map((m) => [m.x / 1000, m.y / 1000] as [number, number]);
-    const f = forecast(sess.weather, team.meteo, new Rng(Math.floor(sess.wall) + 7), 30, [0, 5, 10, 15, 20, 25, 30, 40, 50, 60], pts);
     const w = sess.weather;
-    open(`<b class="up">Radar · 40 km</b><canvas id="radar" class="radar"></canvas>
-      <div class="small dim" style="margin:4px 0">Viento en altura ${w.windSpeed.toFixed(0)} km/h hacia ${dirName(w.windDir)}. Punto blanco: el circuito.</div>
-      <b class="up">Radar · circuito</b><canvas id="radar2" class="radar"></canvas>
-      <div class="small dim">Lluvia sobre el trazado ahora mismo: puede llover en un sector y en otro no.</div>
+    const pts = track.ms.filter((_, i) => i % 3 === 0).map((m) => [m.x / 1000, m.y / 1000] as [number, number]);
+    const f = forecast(w, team.meteo, new Rng(Math.floor(sess.wall) + 7), 30, [0, 5, 10, 15, 20, 25, 30, 40, 50, 60], pts);
+    // fotogramas: los últimos 30 min (cada 3) + ahora
+    const now: RadarFrame = { clock: w.clock, cells: w.cells.map((c) => ({ ...c })), drizzle: w.drizzle };
+    const frames = [...w.history.filter((h) => w.clock - h.clock <= 30.5 && w.clock - h.clock > 0.5), now];
+    let minx = 1e9, maxx = -1e9, miny = 1e9, maxy = -1e9;
+    for (let i = 0; i < track.xs.length; i++) { minx = Math.min(minx, track.xs[i]); maxx = Math.max(maxx, track.xs[i]); miny = Math.min(miny, track.ys[i]); maxy = Math.max(maxy, track.ys[i]); }
+    const tcx = (minx + maxx) / 2000, tcy = (miny + maxy) / 2000;
+    const views = {
+      reg: { cx: 0, cy: 0, R: 40, rings: [10, 20, 30, 40], scale: 10 },
+      cir: { cx: tcx, cy: tcy, R: (Math.max(maxx - minx, maxy - miny) / 2000) * 1.7, rings: [] as number[], scale: 1 },
+    };
+    let view: keyof typeof views = "reg";
+    const cache: Record<string, HTMLCanvasElement> = {};
+    const frameCanvas = (k: number) => {
+      const key = `${view}-${k}`;
+      if (cache[key]) return cache[key];
+      const v = views[view];
+      const S = view === "reg" ? 240 : 160;
+      const field = renderField(frames[k], v.cx, v.cy, v.R, S);
+      const c = document.createElement("canvas");
+      c.width = S; c.height = S;
+      c.getContext("2d")!.putImageData(colorize(field, S, S, terrain(v.cx, v.cy, v.R, S)), 0, 0);
+      return (cache[key] = c);
+    };
+    let idx = frames.length - 1;
+    let playing = frames.length > 1;
+    let hold = 0;
+    const legend = RADAR_STEPS.map(([v, col]) => `<div style="background:${col}"><span>${v}</span></div>`).join("");
+    open(`<div class="row"><span class="tab">Radar meteorológico</span><span class="grow"></span><div class="seg" id="rv" style="margin:0"><button data-v="reg" class="on">40 km</button><button data-v="cir">Circuito</button></div></div>
+      <canvas id="radar" class="radar" style="margin-top:6px"></canvas>
+      <div class="row" style="margin-top:4px"><button id="rplay" style="min-width:44px">${playing ? "⏸" : "▶"}</button><input type="range" id="rslide" class="grow" min="0" max="${frames.length - 1}" value="${idx}"><span class="mono small" id="rlab"></span></div>
+      <div class="rlegend">${legend}<em>mm/h</em></div>
+      <div class="small dim" style="margin:4px 0">Últimos ${Math.round(w.clock - frames[0].clock)} min, un fotograma cada 3 min. Viento en altura ${w.windSpeed.toFixed(0)} km/h hacia ${dirName(w.windDir)}.</div>
       <h2>Previsión de tu meteorólogo (lluvia en algún punto del circuito)</h2>
       <div class="fc">${f.horizons.map((h, i) => `<div><span>${Math.round(f.prob[i] * 100)}%</span><i style="height:${Math.max(2, f.prob[i] * 46)}px;opacity:${0.4 + Math.min(0.6, f.p50[i] / 8)}"></i><span>${h === 0 ? "ya" : "+" + h}</span></div>`).join("")}</div>
-      <div class="small dim" style="margin:6px 0">Extrapola lo que ve el radar; no sabe qué chubascos nacerán ni cuándo se desharán. Referencia: lisos hasta ~0,15 mm de agua, intermedios ~0,15–1 mm, lluvia por encima.</div>
+      <div class="small dim" style="margin:6px 0">Extrapola lo que ve el radar; no sabe qué chubascos nacerán ni cuándo se desharán. Lisos hasta ~0,15 mm de agua en pista, intermedios ~0,15–1 mm, lluvia por encima.</div>
       <button data-close style="width:100%">Cerrar</button>`, (el) => {
-      drawRadar(el.querySelector<HTMLCanvasElement>("#radar")!, 40);
-      drawRadar(el.querySelector<HTMLCanvasElement>("#radar2")!, 3.5, true);
+      const cv = el.querySelector<HTMLCanvasElement>("#radar")!;
+      const slide = el.querySelector<HTMLInputElement>("#rslide")!;
+      const lab = el.querySelector<HTMLElement>("#rlab")!;
+      const playBtn = el.querySelector<HTMLButtonElement>("#rplay")!;
+      const draw = () => {
+        const dpr = window.devicePixelRatio || 1;
+        const W = cv.clientWidth * dpr;
+        if (cv.width !== W) { cv.width = W; cv.height = W; }
+        const g = cv.getContext("2d")!;
+        g.imageSmoothingEnabled = true;
+        g.drawImage(frameCanvas(idx), 0, 0, W, W);
+        const v = views[view];
+        const k = W / (2 * v.R); // px por km
+        const px = (x: number) => W / 2 + (x - v.cx) * k, py = (y: number) => W / 2 - (y - v.cy) * k;
+        // anillos de distancia
+        g.strokeStyle = "rgba(255,255,255,.22)"; g.lineWidth = 1 * dpr;
+        g.fillStyle = "rgba(255,255,255,.55)"; g.font = `600 ${10 * dpr}px "Titillium Web", sans-serif`;
+        for (const r of v.rings) { g.beginPath(); g.arc(px(0), py(0), r * k, 0, 7); g.stroke(); g.fillText(`${r} km`, px(0) + 3 * dpr, py(0) - r * k + 11 * dpr); }
+        // circuito
+        if (view === "cir") {
+          g.lineJoin = "round"; g.lineCap = "round";
+          for (const [col, lw] of [["rgba(0,0,0,.7)", 5], ["#fff", 2.2]] as const) {
+            g.strokeStyle = col; g.lineWidth = lw * dpr; g.beginPath();
+            for (let i = 0; i < track.xs.length; i += 3) { const x = px(track.xs[i] / 1000), y = py(track.ys[i] / 1000); if (i) g.lineTo(x, y); else g.moveTo(x, y); }
+            g.closePath(); g.stroke();
+          }
+        } else { g.fillStyle = "#fff"; g.strokeStyle = "#000"; g.lineWidth = 2 * dpr; g.beginPath(); g.arc(px(0), py(0), 4 * dpr, 0, 7); g.fill(); g.stroke(); }
+        // norte y escala
+        g.fillStyle = "#fff"; g.font = `900 ${11 * dpr}px "Titillium Web", sans-serif`; g.textAlign = "center";
+        g.beginPath(); g.moveTo(W - 18 * dpr, 10 * dpr); g.lineTo(W - 23 * dpr, 24 * dpr); g.lineTo(W - 13 * dpr, 24 * dpr); g.closePath(); g.fill();
+        g.fillText("N", W - 18 * dpr, 36 * dpr); g.textAlign = "left";
+        const sl = v.scale * k;
+        g.fillRect(10 * dpr, W - 14 * dpr, sl, 3 * dpr);
+        g.font = `700 ${10 * dpr}px "Titillium Web", sans-serif`; g.fillText(`${v.scale} km`, 10 * dpr, W - 19 * dpr);
+        // hora del fotograma (rótulo de tele)
+        const fr = frames[idx];
+        const live = idx === frames.length - 1;
+        const ago = Math.round(w.clock - fr.clock);
+        const tag = live ? "AHORA" : `−${ago} MIN`;
+        g.font = `900 ${13 * dpr}px "Titillium Web", sans-serif`;
+        const t1 = fmtHour(fr.clock), w1 = g.measureText(t1).width + 14 * dpr, w2 = g.measureText(tag).width + 14 * dpr;
+        g.fillStyle = "rgba(0,0,0,.85)"; g.fillRect(8 * dpr, 8 * dpr, w1, 22 * dpr);
+        g.fillStyle = live ? "#e3261c" : "#ffd84a"; g.fillRect(8 * dpr + w1, 8 * dpr, w2, 22 * dpr);
+        g.fillStyle = "#fff"; g.fillText(t1, 15 * dpr, 24 * dpr);
+        g.fillStyle = live ? "#fff" : "#000"; g.fillText(tag, 15 * dpr + w1, 24 * dpr);
+        slide.value = String(idx);
+        lab.textContent = fmtHour(fr.clock);
+      };
+      draw();
+      const timer = window.setInterval(() => {
+        if (!document.body.contains(cv)) { clearInterval(timer); return; }
+        if (!playing) return;
+        if (idx === frames.length - 1 && hold < 3) { hold++; return; }
+        hold = 0;
+        idx = (idx + 1) % frames.length;
+        draw();
+      }, 420);
+      playBtn.onclick = () => { playing = !playing; playBtn.textContent = playing ? "⏸" : "▶"; };
+      slide.oninput = () => { idx = Number(slide.value); playing = false; playBtn.textContent = "▶"; draw(); };
+      el.querySelectorAll<HTMLButtonElement>("#rv button").forEach((b) => (b.onclick = () => {
+        view = b.dataset.v as keyof typeof views;
+        el.querySelectorAll("#rv button").forEach((x) => x.classList.toggle("on", x === b));
+        draw();
+      }));
     });
-  }
-  function drawRadar(cv: HTMLCanvasElement, R: number, withTrack = false) {
-    const size = 220;
-    let cx = 0, cy = 0;
-    if (withTrack) {
-      let a = 1e9, b = -1e9, c2 = 1e9, d = -1e9;
-      for (let i = 0; i < track.xs.length; i++) { a = Math.min(a, track.xs[i]); b = Math.max(b, track.xs[i]); c2 = Math.min(c2, track.ys[i]); d = Math.max(d, track.ys[i]); }
-      cx = (a + b) / 2000; cy = (c2 + d) / 2000;
-      R = Math.max(b - a, d - c2) / 2000 * 1.6;
-    }
-    cv.width = size; cv.height = size;
-    const g = cv.getContext("2d")!;
-    const img = g.createImageData(size, size);
-    for (let py = 0; py < size; py++) for (let px = 0; px < size; px++) {
-      const x = cx + (px / size) * 2 * R - R, y = cy + R - (py / size) * 2 * R;
-      const r = rainAt(sess.weather, x, y);
-      const [cr, cg, cb, ca] = radarColor(r);
-      const o = (py * size + px) * 4;
-      img.data[o] = 16 + ((cr - 16) * ca) / 255; img.data[o + 1] = 20 + ((cg - 20) * ca) / 255; img.data[o + 2] = 18 + ((cb - 18) * ca) / 255; img.data[o + 3] = 255;
-    }
-    g.putImageData(img, 0, 0);
-    g.strokeStyle = "rgba(255,255,255,0.15)";
-    if (!withTrack) for (let k = 10; k <= R; k += 10) { g.beginPath(); g.arc(size / 2, size / 2, (k / R) * size / 2, 0, 7); g.stroke(); }
-    if (withTrack) {
-      g.strokeStyle = "#fff"; g.lineWidth = 2;
-      g.beginPath();
-      for (let i = 0; i < track.xs.length; i += 3) {
-        const x = ((track.xs[i] / 1000 - cx + R) / (2 * R)) * size, y = ((R - (track.ys[i] / 1000 - cy)) / (2 * R)) * size;
-        if (i) g.lineTo(x, y); else g.moveTo(x, y);
-      }
-      g.closePath(); g.stroke();
-    } else { g.fillStyle = "#fff"; g.beginPath(); g.arc(size / 2, size / 2, 3, 0, 7); g.fill(); }
   }
   function radioSheet() {
     const evs = sess.events.slice(-150).reverse();
@@ -662,7 +741,8 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   }
   sizeMap();
   window.onresize = sizeMap;
-  renderTower(); renderTop(); renderDrivers(); renderOnbTags();
+  renderTower(); renderTop(); renderDrivers();
+  new ResizeObserver(() => sizeMap()).observe(document.querySelector(".mapbox")!);
   updSpeed();
   let last = performance.now();
   const loop = (now: number) => {
@@ -678,11 +758,11 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
         if (paused) { leftover = 0; break; }
       }
     }
-    if (!skipping) { drawMap(); drawGauge(); }
+    if (!skipping) { drawMap(); drawGauges(); }
     if (now - lastUi > 250 && !skipping) {
       lastUi = now;
       renderTower(); renderTop();
-      if (!sheetOpen) { renderDrivers(); renderOnbTags(); }
+      if (!sheetOpen) renderDrivers();
     }
     if (sess.finished) return finish();
     raf = requestAnimationFrame(loop);

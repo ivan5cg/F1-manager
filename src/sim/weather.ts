@@ -1,6 +1,8 @@
 // Tiempo dinámico y localizado.
-// La lluvia son células gaussianas que nacen, crecen, se desplazan con el viento en altura y se
-// disipan. Hay células grandes (frentes, bandas) y pequeñas (chubascos de 0,3-1,2 km) que mojan
+// La lluvia son células que nacen, crecen, se desplazan con el viento en altura y se disipan.
+// Cada célula tiene forma elíptica (alargada por el viento o, en un frente, en banda), bordes
+// irregulares y núcleos internos (ruido fractal que se mueve con ella y cambia con la edad): lo
+// que ve el radar es exactamente lo que cae en cada punto del circuito. Hay células grandes (frentes, bandas) y pequeñas (chubascos de 0,3-1,2 km) que mojan
 // solo una parte del circuito. La temperatura sigue el ciclo del día según el clima del lugar y
 // la época, con sol y nubes. El radar ve el campo real; la previsión del equipo extrapola lo que
 // ve con errores y no sabe qué células nacerán: de ahí la incertidumbre.
@@ -29,10 +31,16 @@ export interface Climate {
 export interface Cell {
   x: number; y: number; // km respecto al circuito
   vx: number; vy: number; // km/min
-  sigma: number; // km
+  sigma: number; // km (eje corto)
+  ax: number; // alargamiento (eje largo / eje corto)
+  ang: number; // orientación del eje largo (rad)
   peak: number; // mm/h
   age: number; life: number; // min
+  seed: number; // textura propia
 }
+
+/** Fotograma del radar: las células en un momento dado. */
+export interface RadarFrame { clock: number; cells: Cell[]; drizzle: number }
 
 export interface WeatherState {
   scenario: Scenario;
@@ -52,6 +60,7 @@ export interface WeatherState {
   frontDist: number;
   climate: Climate;
   rng: Rng;
+  history: RadarFrame[]; // últimos 30 min, un fotograma cada 3 min
 }
 
 const envelope = (c: Cell) => {
@@ -62,16 +71,56 @@ const envelope = (c: Cell) => {
   return 1;
 };
 
+// ruido de valores 2D con varias octavas (determinista)
+function hash(ix: number, iy: number, s: number) {
+  let h = Math.imul(ix, 374761393) ^ Math.imul(iy, 668265263) ^ Math.imul(s, 1442695041);
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+function vnoise(x: number, y: number, s: number) {
+  const ix = Math.floor(x), iy = Math.floor(y);
+  const fx = x - ix, fy = y - iy;
+  const ux = fx * fx * (3 - 2 * fx), uy = fy * fy * (3 - 2 * fy);
+  const a = hash(ix, iy, s), b = hash(ix + 1, iy, s), c = hash(ix, iy + 1, s), d = hash(ix + 1, iy + 1, s);
+  return a + (b - a) * ux + (c - a) * uy + (a - b - c + d) * ux * uy;
+}
+export function fbm(x: number, y: number, s: number) {
+  return 0.5 * vnoise(x, y, s) + 0.3 * vnoise(x * 2.07 + 5.3, y * 2.07 + 1.7, s + 17) + 0.2 * vnoise(x * 4.3 + 9.1, y * 4.3 + 3.3, s + 31);
+}
+
+/** Lluvia (mm/h) que deja una célula en el punto (x, y). */
+export function cellRain(c: Cell, x: number, y: number): number {
+  const e = envelope(c);
+  if (e <= 0) return 0;
+  const dx = x - c.x, dy = y - c.y;
+  const ca = Math.cos(c.ang), sa = Math.sin(c.ang);
+  const u = (dx * ca + dy * sa) / (c.sigma * c.ax);
+  const v = (-dx * sa + dy * ca) / c.sigma;
+  const r2 = u * u + v * v;
+  if (r2 > 12) return 0;
+  // la textura va con la célula y cambia despacio con la edad
+  const n = fbm(u * 1.6 + c.seed, v * 1.6 + c.age * 0.025, (c.seed * 1000) | 0);
+  const rr = r2 * (0.5 + 0.95 * n); // bordes irregulares
+  // detalle de ~1 km que viaja con la célula: la lluvia cambia de una curva a otra
+  const n2 = fbm(dx * 0.9 + c.seed * 3.1, dy * 0.9 + c.age * 0.04, ((c.seed * 777) | 0) + 3);
+  return c.peak * e * Math.exp(-rr / 2) * (0.4 + 1.7 * n * n) * (0.45 + 1.1 * n2); // núcleos
+}
+
 export function rainAt(w: WeatherState, x: number, y: number): number {
-  let r = w.drizzle;
-  for (const c of w.cells) {
-    const dx = x - c.x, dy = y - c.y;
-    const d2 = dx * dx + dy * dy;
-    const s2 = c.sigma * c.sigma;
-    if (d2 > 16 * s2) continue;
-    r += c.peak * envelope(c) * Math.exp(-d2 / (2 * s2));
-  }
+  let r = w.drizzle > 0 ? w.drizzle * (0.4 + 1.2 * fbm(x * 0.15, y * 0.15 + w.clock * 0.01, 7)) : 0;
+  for (const c of w.cells) r += cellRain(c, x, y);
   return r;
+}
+
+/** Lluvia en un fotograma guardado del radar. */
+export function frameRainAt(f: RadarFrame, x: number, y: number): number {
+  let r = f.drizzle > 0 ? f.drizzle * (0.4 + 1.2 * fbm(x * 0.15, y * 0.15 + f.clock * 0.01, 7)) : 0;
+  for (const c of f.cells) r += cellRain(c, x, y);
+  return r;
+}
+
+function snapshot(w: WeatherState): RadarFrame {
+  return { clock: w.clock, cells: w.cells.map((c) => ({ ...c })), drizzle: w.drizzle };
 }
 
 function cloudAt(w: WeatherState, x: number, y: number): number {
@@ -116,6 +165,10 @@ function spawnCell(w: WeatherState, mode: "upwind" | "inplace" | "front", along 
   const dir = w.windDir + r.gauss(0, 0.15);
   const spd = sp * r.logn(0.15);
   let peak: number, sigma: number, life: number;
+  // forma: los chubascos se alargan un poco con el viento; los frentes forman bandas
+  let ax = mode === "front" ? r.range(1.8, 3.2) : small ? r.range(1, 1.5) : r.range(1.1, 1.9);
+  let ang = mode === "front" ? w.windDir + Math.PI / 2 + r.gauss(0, 0.15) : w.windDir + r.gauss(0, 0.4);
+  if (w.scenario === "llovizna" && !small) { ax = r.range(1.5, 3); ang = r.range(0, Math.PI); }
   if (small) {
     peak = clamp(r.logn(0.7) * 12, 1, 70);
     sigma = r.range(0.5, 1.6);
@@ -128,20 +181,32 @@ function spawnCell(w: WeatherState, mode: "upwind" | "inplace" | "front", along 
   return {
     x: -ux * dist + px * lat, y: -uy * dist + py * lat,
     vx: Math.cos(dir) * spd, vy: Math.sin(dir) * spd,
-    sigma, peak: clamp(peak, 0.4, 50),
+    sigma, ax, ang, peak: clamp(peak, 0.4, 50),
     age: mode === "inplace" ? 0 : r.range(0.1, 0.4) * life,
     life,
+    seed: r.range(0, 1000),
   };
 }
 
 function spawnFront(w: WeatherState) {
   const r = w.rng;
+  const ux = Math.cos(w.windDir), uy = Math.sin(w.windDir);
   for (let lat = -40; lat <= 40; lat += r.range(4, 8)) {
     const c = spawnCell(w, "front", lat);
     c.peak = clamp(r.logn(0.55) * 5, 0.8, 25);
     c.life = r.range(100, 170);
     c.age = r.range(15, 30);
     w.cells.push(c);
+    // detrás de la línea activa, lluvia estratiforme más débil y extensa
+    if (r.chance(0.6)) {
+      const b = spawnCell(w, "front", lat + r.range(-3, 3));
+      const back = r.range(8, 16);
+      b.x -= ux * back; b.y -= uy * back;
+      b.sigma = r.range(5, 9); b.ax = r.range(1.5, 2.5);
+      b.peak = clamp(r.logn(0.4) * 1.5, 0.3, 4);
+      b.life = r.range(120, 200); b.age = r.range(15, 40);
+      w.cells.push(b);
+    }
   }
 }
 
@@ -171,6 +236,7 @@ export function createDayWeather(rng: Rng, climate: Climate, scenario: Scenario,
     frontDist: 43,
     climate,
     rng,
+    history: [],
   };
   const n = scenario === "chubascos" ? rng.int(2, 6) : scenario === "seco" ? rng.int(0, 2) : scenario === "frente" ? rng.int(1, 3) : rng.int(2, 4);
   for (let i = 0; i < n; i++) {
@@ -186,6 +252,7 @@ export function createDayWeather(rng: Rng, climate: Climate, scenario: Scenario,
   w.cloud = cloudAt(w, 0, 0);
   w.airT = diurnal(w);
   w.trackT = w.airT + climate.sol * (1 - w.cloud) * sunFactor(w.clock) + 1;
+  w.history = [snapshot(w)];
   return w;
 }
 
@@ -231,11 +298,16 @@ export function stepWeather(w: WeatherState, dtMin: number): void {
   w.airT += ((airEq - w.airT) * dtMin) / 12;
   const trackEq = w.airT + cl.sol * (1 - w.cloud) * sunFactor(w.clock) + 1 - (rainHere > 0.2 ? 3 + 4 * Math.min(1, rainHere / 5) : 0);
   w.trackT += ((trackEq - w.trackT) * dtMin) / 9;
+  // radar: un fotograma cada 3 minutos, los últimos 30
+  if (Math.floor(prevClock / 3) !== Math.floor(w.clock / 3)) {
+    w.history.push(snapshot(w));
+    if (w.history.length > 11) w.history.shift();
+  }
 }
 
 /** Copia profunda (para previsiones que no alteran el estado real). */
 export function cloneWeather(w: WeatherState, rng: Rng): WeatherState {
-  return { ...w, cells: w.cells.map((c) => ({ ...c })), rng };
+  return { ...w, cells: w.cells.map((c) => ({ ...c })), rng, history: [...w.history] };
 }
 
 export interface Forecast {
@@ -255,7 +327,7 @@ export function forecast(w: WeatherState, quality: number, rng: Rng, members = 3
     const cells = w.cells.map((c) => {
       const ang = Math.atan2(c.vy, c.vx) + dDir;
       const sp = Math.hypot(c.vx, c.vy) * dSpd;
-      return { ...c, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp, peak: c.peak * envelope(c) * rng.logn(0.45 * err), remain: (c.life - c.age) * rng.logn(0.6) };
+      return { ...c, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp, peak: c.peak * rng.logn(0.45 * err), remain: (c.life - c.age) * rng.logn(0.6) };
     });
     horizons.forEach((h, k) => {
       let rmax = 0;
@@ -264,8 +336,7 @@ export function forecast(w: WeatherState, quality: number, rng: Rng, members = 3
         for (const c of cells) {
           if (h > c.remain + 10) continue;
           const fade = h > c.remain ? 1 - (h - c.remain) / 10 : 1;
-          const x = c.x + c.vx * h - px, y = c.y + c.vy * h - py;
-          r += c.peak * fade * Math.exp(-(x * x + y * y) / (2 * c.sigma * c.sigma));
+          r += fade * cellRain({ ...c, x: c.x + c.vx * h, y: c.y + c.vy * h }, px, py);
         }
         rmax = Math.max(rmax, r);
       }

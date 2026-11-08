@@ -7,7 +7,9 @@ Es una web para el móvil (se instala como aplicación desde el navegador) y fun
 - torre de tiempos con la posición en recuadro rojo, morado para el mejor tiempo y línea roja de corte en clasificación,
 - mensajes con pestaña blanca («RADIO DEL EQUIPO», «DIRECCIÓN DE CARRERA») sobre barra negra,
 - rótulos de piloto («C LECLERC») y diferencias en caja amarilla,
-- onboard con velocidad, marcha, acelerador, freno, batería y modo adelantamiento.
+- velocímetro de cada uno de tus pilotos con velocidad, marcha, acelerador, freno, batería y modo adelantamiento.
+
+El radar meteorológico enseña en bucle los últimos 30 minutos (un fotograma cada 3), con la paleta por bandas de los radares reales, vista de 40 km y vista ampliada del circuito. Las células de lluvia tienen forma irregular, núcleos y textura propia que viaja con ellas; los frentes llegan en banda con lluvia más débil detrás. Lo que se ve en el radar es exactamente lo que cae en cada tramo de pista.
 
 ## Jugar
 

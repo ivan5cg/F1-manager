@@ -144,6 +144,8 @@ export interface Car {
   secBest: number[]; // mejores sectores personales
   lastLapValid: boolean;
   passLog?: { a: number; until: number }; // adelantamiento en curso (se anuncia al completarse)
+  bestTyre?: Compound; // neumático de la mejor vuelta
+  bestTyreByPart: Compound[]; // en clasificación, por parte
 }
 
 export type FlagState = "green" | "vsc" | "sc" | "sc_in" | "red";
@@ -268,7 +270,7 @@ export class Session {
         wearMult: team.desgaste * (1.18 - d.neumaticos * 0.002),
         slowPuncture: false, autoPush: !e.player, autoErs: true, auto: true,
         queue: [], eliminated: false, sessionLaps: 0, stintW0: 0, stintL0: 0, learnedLap: -99, lastImpede: -1,
-        secCur: [NaN, NaN, NaN], secLast: [NaN, NaN, NaN], secBest: [Infinity, Infinity, Infinity], lastLapValid: true,
+        secCur: [NaN, NaN, NaN], secLast: [NaN, NaN, NaN], secBest: [Infinity, Infinity, Infinity], lastLapValid: true, bestTyreByPart: [],
       };
       this.cars.push(car);
     }
@@ -481,9 +483,11 @@ export class Session {
     if (now && !this.wasRaining && this.wall - this.lastRainMsg > 120) {
       this.lastRainMsg = this.wall;
       const wet = this.track.ms.filter((m) => rainAt(this.weather, m.x / 1000, m.y / 1000) > 0.3);
-      const secs = [...new Set(wet.map((m) => m.sector + 1))].join(" y ");
+      const secs = [...new Set(wet.map((m) => m.sector + 1))].sort();
       const all = wet.length > this.N * 0.8;
-      this.log({ kind: "weather", text: all ? `🌧️ Empieza a llover en todo el circuito (${r.toFixed(1)} mm/h)` : `🌧️ Lluvia en el sector ${secs}; el resto sigue seco`, pause: true, important: true });
+      const list = secs.length === 1 ? `el sector ${secs[0]}` : `los sectores ${secs.slice(0, -1).join(", ")} y ${secs[secs.length - 1]}`;
+      const txt = all ? `🌧️ Empieza a llover en todo el circuito (${r.toFixed(1)} mm/h)` : secs.length === 3 ? `🌧️ Lluvia en zonas de los tres sectores; hay tramos aún secos` : `🌧️ Lluvia en ${list}; el resto sigue seco`;
+      this.log({ kind: "weather", text: txt, pause: true, important: true });
     }
     if (!now && this.wasRaining && this.wall - this.lastRainMsg > 120) {
       this.lastRainMsg = this.wall;
@@ -781,7 +785,7 @@ export class Session {
     if (lap >= 1) {
       const lt = c.cross[k] - c.lapStart;
       c.lapTimes.push(lt);
-      if (lap > 1 && lt < c.best) c.best = lt;
+      if (lap > 1 && lt < c.best) { c.best = lt; c.bestTyre = c.tyres!.c; }
       if (lap > 1 && lt < this.bestLap) this.bestLap = lt;
       c.tyres!.laps++;
       c.lapStart = c.cross[k];
@@ -876,9 +880,9 @@ export class Session {
       if (c.lapValid) {
         const p = this.part;
         const prevBest = c.bestByPart[p] ?? Infinity;
-        if (lt < c.best) c.best = lt;
+        if (lt < c.best) { c.best = lt; c.bestTyre = c.tyres!.c; }
         if (lt < this.bestLap) this.bestLap = lt;
-        if (lt < prevBest) c.bestByPart[p] = lt;
+        if (lt < prevBest) { c.bestByPart[p] = lt; c.bestTyreByPart[p] = c.tyres!.c; }
         if (run.phase === "push") this.lapRadio(c, lt);
       } else if (c.player) {
         this.log({ kind: "info", text: `${c.d.abrev}: vuelta de ${fmt(lt)} anulada`, carId: c.id });

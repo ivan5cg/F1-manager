@@ -92,14 +92,16 @@ table.tv tr.me td { color: var(--gold1); }
 .lapc .s.red { background: linear-gradient(var(--red1), var(--red2)); border-color: var(--red2); }
 .lapc .s.chq { background: repeating-linear-gradient(90deg, #fff 0 8px, #000 8px 16px); color: #fff; text-shadow: 0 0 3px #000, 0 0 3px #000, 0 0 3px #000; }
 
-.main { flex: 1; display: grid; grid-template-columns: minmax(150px, 46%) 1fr; gap: 5px; padding: 4px; min-height: 0; }
+/* la torre tiene filas de altura fija; lo que sobra es para tus pilotos */
+#sess { --rowh: clamp(15px, calc((100dvh - 370px) / 23.5), 20px); }
+.main { flex: none; display: grid; grid-template-columns: minmax(150px, 46%) 1fr; gap: 5px; padding: 4px 4px 2px; }
 /* torre */
-.tower { display: flex; flex-direction: column; min-height: 0; overflow-y: auto; gap: 1px; }
+.tower { display: flex; flex-direction: column; gap: 1px; }
 .tower .th { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1px; }
-.tower .th .tab { font-size: 11px; }
+.tower .th .tab { font-size: 11px; white-space: nowrap; overflow: hidden; }
 .tower .th button { padding: 0 6px; font-size: 10px; height: 18px; }
 /* las filas se estiran para ocupar todo el alto disponible */
-.tr { display: flex; align-items: stretch; flex: 1 1 19px; min-height: 18px; max-height: 30px; font-size: 13px; font-weight: 700; }
+.tr { display: flex; align-items: stretch; height: var(--rowh); font-size: 13px; font-weight: 700; }
 .tr .p { width: 22px; display: flex; align-items: center; justify-content: center; background: linear-gradient(var(--red1), var(--red2)); font-weight: 900; font-size: 12px; }
 .tr .c { width: 3px; }
 .tr .body { flex: 1; display: flex; align-items: center; background: linear-gradient(#1f1f22, #050505); padding-left: 5px; }
@@ -117,19 +119,14 @@ table.tv tr.me td { color: var(--gold1); }
 .cut { height: 2px; background: var(--red1); margin: 1px 0; }
 
 .side { display: flex; flex-direction: column; gap: 4px; min-height: 0; }
-.mapbox { position: relative; background: #000; }
-#map { width: 100%; display: block; }
-/* onboard */
-.onb { display: flex; gap: 4px; align-items: stretch; }
-.onb canvas { width: 96px; height: 96px; flex: none; }
-.onb .tags { flex: 1; display: flex; flex-direction: column; gap: 2px; justify-content: center; min-width: 0; }
-.onb .tags > div { padding: 1px 6px; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mapbox { position: relative; background: #000; flex: 1 1 0; min-height: 90px; overflow: hidden; }
+#map { width: 100%; display: block; position: absolute; inset: 0; }
 .wxbox { display: grid; grid-template-columns: auto 1fr; gap: 1px 0; font-size: 12px; }
 .wxbox .tab { font-size: 10px; padding: 1px 5px; text-align: center; }
 .wxbox .bar { padding: 0 6px; display: flex; align-items: center; gap: 6px; }
 .wxsec { display: flex; gap: 2px; }
 .wxsec div { flex: 1; height: 7px; background: #26282d; }
-.ticker { flex: 1; overflow: hidden; display: flex; flex-direction: column; gap: 3px; min-height: 30px; }
+.ticker { flex: 0 1 auto; max-height: 36%; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 3px; }
 .rm .tab { font-size: 10px; padding: 0 6px; }
 .rm .bar { padding: 2px 6px; font-size: 12px; text-transform: none; font-weight: 600; letter-spacing: 0; line-height: 1.25; }
 .rm.ctl .tab { background: linear-gradient(var(--gold1), var(--gold2)); }
@@ -138,8 +135,17 @@ table.tv tr.me td { color: var(--gold1); }
 .sidebtns button { padding: 5px 2px; font-size: 11px; }
 
 /* tarjetas de tus pilotos (como el rótulo inferior de posiciones) */
-.drivers { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; padding: 4px 4px calc(4px + var(--safe-b)); background: #000; }
-.dcard { display: flex; flex-direction: column; gap: 1px; }
+.drivers { flex: 1 1 auto; min-height: 150px; display: grid; grid-template-columns: 1fr 1fr; gap: 5px; padding: 4px 4px calc(4px + var(--safe-b)); background: #000; }
+.dcard { display: flex; flex-direction: column; gap: 2px; min-height: 0; }
+.dcard .mid { flex: 1 1 0; min-height: 70px; display: flex; gap: 3px; align-items: stretch; }
+.dcard canvas.gauge { flex: none; align-self: center; }
+.dcard .stats { flex: 1; min-width: 0; display: grid; grid-template-columns: 1fr 1fr; grid-auto-rows: 1fr; gap: 1px; }
+.dcard .cl { background: linear-gradient(var(--bar1), var(--bar2)); display: flex; flex-direction: column; justify-content: center; padding: 0 4px; min-width: 0; overflow: hidden; }
+.dcard .cl i { font-style: normal; font-size: 9px; color: var(--dim); text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; line-height: 1.1; }
+.dcard .cl b { font-size: clamp(11px, 3.2vw, 13px); font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.dcard .cl.gold { background: linear-gradient(var(--gold1), var(--gold2)); }
+.dcard .cl.gold i { color: #3a2a00; } .dcard .cl.gold b { color: #000; }
+.dcard .cl.purple b { color: var(--purple); } .dcard .cl.green b { color: var(--green); } .dcard .cl.yellow b { color: var(--gold1); } .dcard .cl.redt b { color: #ff5a50; } .dcard .cl.dim b { color: var(--dim); }
 .dcard .h { display: flex; align-items: stretch; height: 24px; }
 .dcard .h .posbox { min-width: 30px; font-size: 15px; }
 .dcard .h .nm { flex: 1; display: flex; align-items: center; gap: 5px; padding: 0 6px; font-size: 14px; font-weight: 900; text-transform: uppercase; letter-spacing: .03em; background: linear-gradient(var(--bar1), var(--bar2)); white-space: nowrap; overflow: hidden; }
@@ -196,3 +202,9 @@ canvas.radar { width: 100%; max-width: 420px; display: block; margin: 0 auto; }
 .dcard .tel { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1px; font-size: 11px; }
 .dcard .tel > span { background: linear-gradient(var(--bar1), var(--bar2)); padding: 1px 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; }
 .dcard .tel b { font-weight: 900; }
+
+/* leyenda del radar por bandas */
+.rlegend { display: flex; align-items: stretch; margin: 4px 0 16px; height: 14px; }
+.rlegend > div { flex: 1; position: relative; }
+.rlegend > div span { position: absolute; left: 1px; bottom: -13px; font-size: 9px; color: var(--dim); }
+.rlegend em { font-style: normal; font-size: 10px; color: var(--dim); padding-left: 4px; align-self: center; }
