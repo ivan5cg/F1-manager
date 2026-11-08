@@ -107,6 +107,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     const cv = $<HTMLCanvasElement>("#map");
     if (!cv) return;
     const box = cv.parentElement!;
+    if (box.clientWidth < 20 || box.clientHeight < 20) return; // oculto: se mantiene el tamaño anterior
     const w = box.clientWidth, h = Math.max(80, box.clientHeight);
     const dpr = window.devicePixelRatio || 1;
     cv.width = w * dpr; cv.height = h * dpr;
@@ -125,6 +126,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   const rainLayer = document.createElement("canvas");
   let rainLayerT = -1, rainLayerOn = false;
   function updateRainLayer(cv: HTMLCanvasElement) {
+    if (cv.width < 20 || cv.height < 20) { rainLayerOn = false; return; }
     if (rainLayerT >= 0 && Math.abs(sess.wall - rainLayerT) < 4) return;
     rainLayerT = sess.wall;
     const S = 110, H = Math.max(8, Math.round((S * cv.height) / cv.width));
@@ -138,7 +140,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   }
   function drawMap() {
     const cv = $<HTMLCanvasElement>("#map");
-    if (!cv) return;
+    if (!cv || wide || cv.width < 20 || cv.height < 20) return;
     const g = cv.getContext("2d")!;
     const dpr = window.devicePixelRatio || 1;
     g.clearRect(0, 0, cv.width, cv.height);
@@ -182,7 +184,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   towerEl.addEventListener("click", (e) => {
     const b = (e.target as HTMLElement).closest(".th button") as HTMLButtonElement | null;
     if (!b) return;
-    if (b.dataset.w) { wide = !wide; document.querySelector(".main")!.classList.toggle("wide", wide); if (!wide) setTimeout(sizeMap, 0); }
+    if (b.dataset.w) { wide = !wide; document.querySelector(".main")!.classList.toggle("wide", wide); if (!wide) requestAnimationFrame(() => sizeMap()); }
     else { const order: TowerMode[] = ["int", "gap", "last", "tyre"]; mode = order[(order.indexOf(mode) + 1) % order.length]; }
     renderTower();
   });
@@ -307,7 +309,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     const dpr = window.devicePixelRatio || 1;
     // cuadrado exacto: lo que permita el alto de la tarjeta y como mucho el 44 % del ancho
     const mid = cv.parentElement!;
-    const side = Math.max(48, Math.floor(Math.min(mid.clientHeight, mid.clientWidth * 0.44)));
+    const side = Math.max(48, Math.floor(Math.min(mid.clientHeight, mid.clientWidth * 0.4)));
     if (cv.style.width !== side + "px") { cv.style.width = side + "px"; cv.style.height = side + "px"; }
     const S = side * dpr;
     if (cv.width !== S) { cv.width = S; cv.height = S; }
@@ -375,9 +377,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     const lap1 = (x: number | undefined) => (x && isFinite(x) ? `${Math.floor(x / 60)}:${(x % 60).toFixed(1).padStart(4, "0")}` : "—");
     const lt = c.lapTimes[c.lapTimes.length - 1];
     const ltCls = !lt ? "dim" : !race && !c.lastLapValid ? "dim" : lt <= sess.bestLap + 1e-6 ? "purple" : lt <= c.best + 1e-6 ? "green" : "";
-    const best = quali ? c.bestByPart[c.eliminated ? c.elimPart! : sess.part] : c.best;
     const temps = t ? `<span class="${tc(t.F.tBulk)}">${t.F.tBulk.toFixed(0)}</span>/<span class="${tc(t.R.tBulk)}">${t.R.tBulk.toFixed(0)}</span>` : "—";
-    const wear = t ? `${Math.round((1 - setWear(t)) * 100)} %` : "—";
     if (race) {
       const ord = sess.order();
       const pos = ord.indexOf(c) + 1;
@@ -386,16 +386,15 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       const gb = behind && behind.loc === "track" ? sess.gapBetween(c, behind) : NaN;
       const f = (g: number) => (!isFinite(g) ? "—" : g > sess.lapRefRace * 0.95 ? "1V+" : g.toFixed(1));
       const d = c.fuel / sess.fuelPerLap - (sess.laps - sess.lapsDone(c));
-      return cell(`▲ ${ahead ? ahead.d.abrev : ""}`, f(ga), "gold") + cell(`▼ ${behind ? behind.d.abrev : ""}`, f(gb), "gold")
-        + cell("Última", lap1(lt), ltCls) + cell("Mejor", lap1(c.best))
-        + cell("Neum. °C", temps) + cell("Banda", wear)
-        + cell("Comb.", `${d >= 0 ? "+" : ""}${d.toFixed(1)} v`, d < 0 ? "redt" : d < 0.4 ? "yellow" : "") + cell("Ritmo", c.loc === "track" ? PUSH_NAMES[c.push] : phaseName(c));
+      return cell(`▲${ahead ? ahead.d.abrev : ""}`, f(ga), "gold") + cell(`▼${behind ? behind.d.abrev : ""}`, f(gb), "gold")
+        + cell("Últ", lap1(lt), ltCls) + cell("Mej", lap1(c.best))
+        + cell("°C", temps) + cell("⛽", `${d >= 0 ? "+" : ""}${d.toFixed(1)}v`, d < 0 ? "redt" : d < 0.4 ? "yellow" : "");
     }
-    const secs = [0, 1, 2].map((j) => { const cur = !isNaN(c.secCur[j]); const v = cur ? c.secCur[j] : c.secLast[j]; return `<span class="${tcls(v, c.secBest[j], sess.secBest[j])}" style="${cur ? "" : "opacity:.6"}">${isNaN(v) ? "–" : v.toFixed(1)}</span>`; }).join(" ");
-    return cell("Estado", phaseName(c)) + cell("Mejor", best && isFinite(best) ? fmtLap(best) : "—", "gold")
-      + cell("Última", lap1(lt), ltCls) + cell("Sectores", secs)
-      + cell("Neum. °C", temps) + cell("Banda", wear)
-      + cell("Vueltas", String(c.sessionLaps)) + cell("Comb.", `${c.fuel.toFixed(1)} kg`);
+    const best = quali ? c.bestByPart[c.eliminated ? c.elimPart! : sess.part] : c.best;
+    const secs = [0, 1, 2].map((j) => { const cur = !isNaN(c.secCur[j]); const v = cur ? c.secCur[j] : c.secLast[j]; return `<span class="${tcls(v, c.secBest[j], sess.secBest[j])}" style="${cur ? "" : "opacity:.6"}">●</span>`; }).join("");
+    return cell("Mej", best && isFinite(best) ? fmtLap(best) : "—", "gold") + cell("Últ", lap1(lt), ltCls)
+      + cell("Sect", secs) + cell("V", String(c.sessionLaps))
+      + cell("°C", temps) + cell("⛽", `${c.fuel.toFixed(0)} kg`);
   }
   function renderDrivers() {
     const ord = sess.order();
@@ -413,13 +412,14 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       const wear = t ? setWear(t) : 0;
       const sp = t ? COMPOUNDS[t.c] : null;
       const col = !t || !sp ? "#444" : wear > sp.cliff ? "var(--red1)" : wear > sp.cliff - 0.12 ? "var(--gold1)" : "var(--green)";
-      card.querySelector(".h")!.innerHTML = `<span class="posbox mono">${pos}</span><span class="nm">${tvName(c)}${t ? tyreHtml(t.c) + `<span class="small mono">${t.laps}</span>` : ""}</span>`;
+      const tyreInfo = t ? `${tyreHtml(t.c)}<span class="small mono">${t.laps}v ${Math.round((1 - wear) * 100)}%</span>` : `<span class="small dim">${phaseName(c)}</span>`;
+      card.querySelector(".h")!.innerHTML = `<span class="posbox mono">${pos}</span><span class="nm">${tvName(c)}<span class="ti">${tyreInfo}</span></span>`;
       const wi = card.querySelector<HTMLElement>(".wear i")!;
       wi.style.width = `${(1 - wear) * 100}%`; wi.style.background = col;
       card.querySelector(".stats")!.innerHTML = statsHtml(c);
       let btns = "";
       if (redRace) btns = `<button class="yellow" data-a="red" data-i="${i}" ${c.loc !== "track" ? "disabled" : ""}>Cambiar neumáticos</button>`;
-      else if (race) btns = `<button data-a="minus" data-i="${i}">− Ritmo</button><button data-a="plus" data-i="${i}">+ Ritmo</button><button class="${c.pitRequest ? "yellow" : ""}" data-a="box" data-i="${i}" ${c.loc !== "track" ? "disabled" : ""}>${c.pitRequest ? "BOX ✓" : "BOX"}</button>`;
+      else if (race) btns = `<button data-a="minus" data-i="${i}" class="sq">−</button><span class="mode">${c.loc === "track" ? PUSH_NAMES[c.push] : phaseName(c)}</span><button data-a="plus" data-i="${i}" class="sq">+</button><button class="${c.pitRequest ? "yellow" : ""}" data-a="box" data-i="${i}" ${c.loc !== "track" ? "disabled" : ""}>${c.pitRequest ? "BOX ✓" : "BOX"}</button>`;
       else btns = `<button data-a="go" data-i="${i}" ${c.loc !== "garage" || c.eliminated || sess.remaining() <= 0 || sess.flag === "red" ? "disabled" : ""}>${quali ? "Salir" : "Tanda"}</button><button data-a="in" data-i="${i}" ${c.loc !== "track" ? "disabled" : ""}>Boxes</button><button class="${c.auto ? "on" : ""}" data-a="auto" data-i="${i}">Auto</button>`;
       const b = card.querySelector(".b")!;
       if (b.innerHTML !== btns) b.innerHTML = btns;
@@ -758,11 +758,15 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
         if (paused) { leftover = 0; break; }
       }
     }
-    if (!skipping) { drawMap(); drawGauges(); }
-    if (now - lastUi > 250 && !skipping) {
-      lastUi = now;
-      renderTower(); renderTop();
-      if (!sheetOpen) renderDrivers();
+    try {
+      if (!skipping) { drawMap(); drawGauges(); }
+      if (now - lastUi > 250 && !skipping) {
+        lastUi = now;
+        renderTower(); renderTop();
+        if (!sheetOpen) renderDrivers();
+      }
+    } catch (err) {
+      console.error(err); // un fallo de dibujo no puede parar la sesión
     }
     if (sess.finished) return finish();
     raf = requestAnimationFrame(loop);

@@ -92,16 +92,15 @@ table.tv tr.me td { color: var(--gold1); }
 .lapc .s.red { background: linear-gradient(var(--red1), var(--red2)); border-color: var(--red2); }
 .lapc .s.chq { background: repeating-linear-gradient(90deg, #fff 0 8px, #000 8px 16px); color: #fff; text-shadow: 0 0 3px #000, 0 0 3px #000, 0 0 3px #000; }
 
-/* la torre tiene filas de altura fija; lo que sobra es para tus pilotos */
-#sess { --rowh: clamp(15px, calc((100dvh - 370px) / 23.5), 20px); }
-.main { flex: none; display: grid; grid-template-columns: minmax(150px, 46%) 1fr; gap: 5px; padding: 4px 4px 2px; }
+/* la torre llena el alto que dejan las tarjetas (compactas, de alto fijo) */
+.main { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(150px, 46%) 1fr; gap: 5px; padding: 4px 4px 2px; }
 /* torre */
-.tower { display: flex; flex-direction: column; gap: 1px; }
+.tower { display: flex; flex-direction: column; gap: 1px; min-height: 0; overflow: hidden; }
 .tower .th { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1px; }
 .tower .th .tab { font-size: 11px; white-space: nowrap; overflow: hidden; }
 .tower .th button { padding: 0 6px; font-size: 10px; height: 18px; }
 /* las filas se estiran para ocupar todo el alto disponible */
-.tr { display: flex; align-items: stretch; height: var(--rowh); font-size: 13px; font-weight: 700; }
+.tr { display: flex; align-items: stretch; flex: 1 1 0; min-height: 15px; max-height: 25px; font-size: 13px; font-weight: 700; }
 .tr .p { width: 22px; display: flex; align-items: center; justify-content: center; background: linear-gradient(var(--red1), var(--red2)); font-weight: 900; font-size: 12px; }
 .tr .c { width: 3px; }
 .tr .body { flex: 1; display: flex; align-items: center; background: linear-gradient(#1f1f22, #050505); padding-left: 5px; }
@@ -135,16 +134,24 @@ table.tv tr.me td { color: var(--gold1); }
 .sidebtns button { padding: 5px 2px; font-size: 11px; }
 
 /* tarjetas de tus pilotos (como el rótulo inferior de posiciones) */
-.drivers { flex: 1 1 auto; min-height: 150px; display: grid; grid-template-columns: 1fr 1fr; gap: 5px; padding: 4px 4px calc(4px + var(--safe-b)); background: #000; }
-.dcard { display: flex; flex-direction: column; gap: 2px; min-height: 0; }
-.dcard .mid { flex: 1 1 0; min-height: 70px; display: flex; gap: 3px; align-items: stretch; }
+.drivers { flex: none; display: grid; grid-template-columns: 1fr 1fr; gap: 5px; padding: 4px 4px calc(4px + var(--safe-b)); background: #000; }
+.dcard { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.dcard .h { display: flex; align-items: stretch; height: 22px; }
+.dcard .h .posbox { min-width: 26px; font-size: 14px; }
+.dcard .h .nm { flex: 1; display: flex; align-items: center; gap: 4px; padding: 0 5px; font-size: 13px; font-weight: 900; text-transform: uppercase; letter-spacing: .02em; background: linear-gradient(var(--bar1), var(--bar2)); white-space: nowrap; overflow: hidden; min-width: 0; }
+.dcard .h .ti { margin-left: auto; display: flex; align-items: center; gap: 3px; }
+.dcard .mid { height: 66px; display: flex; gap: 2px; align-items: stretch; }
 .dcard canvas.gauge { flex: none; align-self: center; }
-.dcard .stats { flex: 1; min-width: 0; display: grid; grid-template-columns: 1fr 1fr; grid-auto-rows: 1fr; gap: 1px; }
-.dcard .cl { background: linear-gradient(var(--bar1), var(--bar2)); display: flex; flex-direction: column; justify-content: center; padding: 0 4px; min-width: 0; overflow: hidden; }
-.dcard .cl i { font-style: normal; font-size: 9px; color: var(--dim); text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; line-height: 1.1; }
-.dcard .cl b { font-size: clamp(11px, 3.2vw, 13px); font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.dcard .stats { flex: 1; min-width: 0; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: repeat(3, 1fr); gap: 1px; }
+.dcard .cl { background: linear-gradient(var(--bar1), var(--bar2)); display: flex; align-items: center; gap: 3px; padding: 0 3px; min-width: 0; overflow: hidden; }
+.dcard .cl i { font-style: normal; font-size: 8.5px; color: var(--dim); text-transform: uppercase; letter-spacing: .02em; white-space: nowrap; flex: none; }
+.dcard .cl b { flex: 1; text-align: right; font-size: clamp(10.5px, 3vw, 12.5px); font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: clip; font-variant-numeric: tabular-nums; }
 .dcard .cl.gold { background: linear-gradient(var(--gold1), var(--gold2)); }
 .dcard .cl.gold i { color: #3a2a00; } .dcard .cl.gold b { color: #000; }
+.dcard .b { display: flex; gap: 2px; align-items: stretch; }
+.dcard .b button { flex: 1; padding: 6px 2px; font-size: 11px; }
+.dcard .b button.sq { flex: 0 0 30px; font-size: 15px; padding: 2px 0; }
+.dcard .b .mode { flex: 1.3; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 900; text-transform: uppercase; background: linear-gradient(var(--bar1), var(--bar2)); white-space: nowrap; overflow: hidden; }
 .dcard .cl.purple b { color: var(--purple); } .dcard .cl.green b { color: var(--green); } .dcard .cl.yellow b { color: var(--gold1); } .dcard .cl.redt b { color: #ff5a50; } .dcard .cl.dim b { color: var(--dim); }
 .dcard .h { display: flex; align-items: stretch; height: 24px; }
 .dcard .h .posbox { min-width: 30px; font-size: 15px; }
