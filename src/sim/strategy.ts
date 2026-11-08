@@ -15,7 +15,8 @@ export interface TeamKnowledge {
   hidden: HiddenTyre; // su estimación de lo oculto
   noise: Record<Compound, number>; // error relativo de su estimación por compuesto
   measured: Partial<Record<Compound, { perLap: number; laps: number }>>;
-  profile: Partial<Record<Compound, { dt: number[]; wear: number[]; trackT: number }>>;
+  /** Caché de perfiles de tanda, por compuesto, coche y temperatura (es una función pura de esas claves). */
+  profile: Record<string, { dt: number[]; wear: number[]; trackT: number }>;
   wetIn: number;
   wetOut: number;
   quality: number; // meteorólogo
@@ -66,8 +67,11 @@ export function learnFromRun(sess: Session, car: Car, run: Run & { lapsData: num
 
 /** Simula un stint en seco con el modelo de neumáticos y devuelve pérdida por edad. */
 export function stintProfile(sess: Session, car: Car, k: TeamKnowledge, c: Compound) {
-  const cached = k.profile[c];
-  if (cached && Math.abs(cached.trackT - sess.weather.trackT) < 4) return cached;
+  // cada coche desgasta distinto: el perfil es de ESE coche (antes lo heredaba el compañero)
+  const trackT = Math.round(sess.weather.trackT / 3) * 3, airT = Math.round(sess.weather.airT / 3) * 3;
+  const key = `${c}:${car.id}:${trackT}:${airT}`;
+  const cached = k.profile[key];
+  if (cached) return cached;
   const tr = sess.track;
   const set = newSet(c);
   const dt: number[] = [], wear: number[] = [];
@@ -81,7 +85,7 @@ export function stintProfile(sess: Session, car: Car, k: TeamKnowledge, c: Compo
       const h = tm / steps;
       for (let s = 0; s < steps; s++) {
         updateSet(set, {
-          trackT: sess.weather.trackT, airT: sess.weather.airT, water: 0,
+          trackT, airT, water: 0,
           eF: (m.energyF / tm) * lapRef, eR: (m.energyR / tm) * lapRef,
           push: 1, carWear: car.wearMult, abrasiveness: tr.abrasiveness,
         }, h, lapRef, k.hidden);
@@ -93,8 +97,8 @@ export function stintProfile(sess: Session, car: Car, k: TeamKnowledge, c: Compo
     dt.push(-(g - 1) * 100 * spg);
     wear.push(setWear(set));
   }
-  const p = { dt, wear, trackT: sess.weather.trackT };
-  k.profile[c] = p;
+  const p = { dt, wear, trackT };
+  k.profile[key] = p;
   return p;
 }
 

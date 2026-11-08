@@ -147,7 +147,7 @@ export function weekendScreen(nav: Nav, s: SeasonState) {
   drawMini($<HTMLCanvasElement>("#mini"), track);
   $("#back").onclick = () => nav.season();
   if (next) $("#play").onclick = () => nav.session(next);
-  document.querySelectorAll<HTMLElement>("[data-res]").forEach((b) => (b.onclick = () => resultsSheet(b.dataset.res as SessionKind, st.results[b.dataset.res as SessionKind]!, s.playerTeam)));
+  document.querySelectorAll<HTMLElement>("[data-res]").forEach((b) => (b.onclick = () => resultsSheet(b.dataset.res as SessionKind, st.results[b.dataset.res as SessionKind]!, s.playerTeam, st.scoring?.[b.dataset.res as SessionKind])));
 }
 
 export function drawMini(cv: HTMLCanvasElement, track: ReturnType<typeof getTrack>) {
@@ -168,9 +168,9 @@ export function drawMini(cv: HTMLCanvasElement, track: ReturnType<typeof getTrac
 }
 
 // --------------------------------------------------------------- resultados
-export function resultsTable(kind: SessionKind, rows: ResultRow[], playerTeam: string): string {
+export function resultsTable(kind: SessionKind, rows: ResultRow[], playerTeam: string, table?: number[]): string {
   const race = isRaceKind(kind);
-  const pts = kind === "RACE" ? RACE_POINTS : kind === "SPRINT" ? SPRINT_POINTS : [];
+  const pts = table ?? (kind === "RACE" ? RACE_POINTS : kind === "SPRINT" ? SPRINT_POINTS : []);
   const lead = rows[0];
   const bestLap = rows.reduce((b, r) => Math.min(b, r.best ?? Infinity), Infinity);
   return `<table class="tv"><tr><th>#</th><th>Piloto</th><th>${race ? "Tiempo" : "Mejor"}</th>${race ? "<th>Par.</th><th>Pts</th>" : "<th>V</th>"}</tr>
@@ -184,13 +184,13 @@ export function resultsTable(kind: SessionKind, rows: ResultRow[], playerTeam: s
     }).join("")}</table>`;
 }
 
-export function resultsSheet(kind: SessionKind, rows: ResultRow[], playerTeam: string) {
-  sheet(`<div class="row"><h1 class="grow" style="font-size:18px">${SESSION_NAMES[kind]}</h1><button data-close>Cerrar</button></div>${resultsTable(kind, rows, playerTeam)}`);
+export function resultsSheet(kind: SessionKind, rows: ResultRow[], playerTeam: string, table?: number[]) {
+  sheet(`<div class="row"><h1 class="grow" style="font-size:18px">${SESSION_NAMES[kind]}</h1><button data-close>Cerrar</button></div>${resultsTable(kind, rows, playerTeam, table)}`);
 }
 
 export function resultsScreen(kind: SessionKind, rows: ResultRow[], s: SeasonState, gp: string, extra: string, onContinue: () => void) {
   app().innerHTML = `<div style="padding-bottom:16px">
-    <div class="panel"><div class="hd"><span class="t">🏁 ${SESSION_NAMES[kind]} · ${esc(gp)}</span></div><div class="bd" style="padding:0">${resultsTable(kind, rows, s.playerTeam)}</div></div>
+    <div class="panel"><div class="hd"><span class="t">🏁 ${SESSION_NAMES[kind]} · ${esc(gp)}</span></div><div class="bd" style="padding:0">${resultsTable(kind, rows, s.playerTeam, s.weekend?.scoring?.[kind] ?? (kind === "RACE" ? s.rounds[s.rounds.length - 1]?.raceTable : undefined))}</div></div>
     ${extra}
     <div style="padding:0 10px"><button class="red big-cta" id="cont">Continuar</button></div></div>`;
   $("#cont").onclick = onContinue;

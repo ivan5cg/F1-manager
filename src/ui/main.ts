@@ -31,11 +31,15 @@ const nav: Nav = {
       const gp = CIRCUITS[st.circuitId].gp;
       let extra = "";
       if (kind === "RACE") {
-        s.rounds.push({ round: st.round, circuitId: st.circuitId, q: st.results.Q, sprint: st.results.SPRINT, race: st.results.RACE });
+        s.rounds.push({ round: st.round, circuitId: st.circuitId, q: st.results.Q, sprint: st.results.SPRINT, race: st.results.RACE, raceTable: st.scoring?.RACE, sprintTable: st.scoring?.SPRINT });
         s.round++;
         s.weekend = null;
         const ds = driverStandings(s, DRIVERS.length).slice(0, 5);
         extra = `<div class="panel"><div class="hd"><span class="t">Mundial tras ${esc(gp)}</span></div><div class="bd">${ds.map((x, i) => `<div class="row"><span class="pos">${i + 1}</span><span class="grow">${esc(DRIVERS[x.id].d.nombre)}</span><b class="mono">${x.points}</b></div>`).join("")}</div></div>`;
+      }
+      if (sess.shortened) {
+        const t = sess.pointsTable();
+        extra = `<div class="panel"><div class="hd"><span class="t">Carrera acortada</span></div><div class="bd small">Suspendida y no reanudada: cuenta la clasificación al final de la vuelta ${sess.shortened.laps} de ${sess.laps} (${Math.round((100 * sess.shortened.laps) / sess.laps)} %). ${!t ? "Puntos completos (más del 75 %)." : t.length ? `Puntos reducidos: ${t.join("-")}.` : "Sin puntos: no se completaron dos vueltas en verde."}</div></div>` + extra;
       }
       saveSeason(s);
       resultsScreen(kind, sess.results(), s, gp, extra, () => (kind === "RACE" ? nav.season() : nav.weekend()));

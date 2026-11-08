@@ -43,6 +43,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   let leftover = 0;
   let raf = 0;
   let lastUi = 0;
+  let lastDraw = 0;
   let sheetOpen = false;
   let skipping = false;
   let ended = false;
@@ -55,7 +56,8 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     lastSave = performance.now();
     saveSession(snapshotSession(sess, wk.st));
   };
-  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") persist(); });
+  const onHide = () => { if (document.visibilityState === "hidden") persist(); };
+  document.addEventListener("visibilitychange", onHide);
   window.addEventListener("pagehide", persist);
   const mine = () => sess.cars.filter((c) => c.player).sort((a, b) => a.id - b.id);
   const tvName = (c: Car) => { const parts = c.d.nombre.split(" "); return `${parts[0][0]} ${parts.slice(1).join(" ")}`.toUpperCase(); };
@@ -149,8 +151,12 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     const items: string[] = [];
     if (pend.right) items.push(noteHtml(pend.right, true));
     else if (temp.right) items.push(noteHtml(temp.right, false));
-    const evs = sess.events.filter((e) => e.kind !== "control" && e.kind !== "weather" && isMineEv(e)).slice(-6).reverse();
-    for (const e of evs) { if (pend.right && e.text === pend.right.html) continue; items.push(rmHtml(TAB[e.kind], e.text, clsFor(e.text, e.kind))); }
+    const evs = sess.events.filter((e) => e.kind !== "control" && e.kind !== "weather" && isMineEv(e) && !staleAdvice(e)).slice(-6).reverse();
+    for (const e of evs) {
+      if (pend.right && e.text === pend.right.html) continue;
+      const age = race ? Math.max(0, sess.leaderLap + 1 - e.lap) : 0;
+      items.push(rmHtml(TAB[e.kind], e.text + (age >= 1 ? ` <span class="dim small">· hace ${age} v</span>` : ""), clsFor(e.text, e.kind)));
+    }
     const rh = items.join("") || `<div class="rm"><span class="tab">Tus pilotos</span><div class="bar dim">Sin novedades.</div></div>`;
     tk.classList.toggle("show", !!pend.right);
     if (rh !== lastRight) {
@@ -158,6 +164,14 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       tk.innerHTML = rh;
       while (tk.children.length > 1 && tk.scrollHeight > tk.clientHeight + 1) tk.lastElementChild!.remove();
     }
+  }
+
+  /** Un consejo del estratega ya no vale si el piloto ha parado desde entonces, hay otro más nuevo o han pasado 2 vueltas. */
+  function staleAdvice(e: RaceEvent) {
+    if (!/Estratega/.test(e.text) || e.carId === undefined) return false;
+    const c = sess.carById(e.carId);
+    const newer = sess.events.some((x) => x !== e && x.carId === e.carId && x.t > e.t && (/Estratega/.test(x.text) || /entra a boxes/.test(x.text)));
+    return newer || !c.advice || sess.leaderLap + 1 - e.lap >= 2 || c.loc === "out";
   }
 
   sess.onEvent = (e: RaceEvent) => {
@@ -273,6 +287,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   /** Color de un tiempo como en la tele: morado = mejor de la sesión, verde = mejor personal, amarillo = más lento. */
   const tcls = (t: number, own: number, all: number) => (!isFinite(t) ? "" : t <= all + 1e-6 ? "purple" : t <= own + 1e-6 ? "green" : "yellow");
   function sectorCells(c: Car) {
+    if (c.loc === "out") return [0, 1, 2].map(() => `<span class="s mono dim"></span>`).join("");
     return [0, 1, 2].map((j) => {
       const cur = c.secCur[j];
       if (!isNaN(cur)) return `<span class="s mono ${tcls(cur, c.secBest[j], sess.secBest[j])}">${cur.toFixed(1)}</span>`;
@@ -283,6 +298,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   function lastLap(c: Car) {
     const t = c.lapTimes[c.lapTimes.length - 1];
     if (!t) return `<span class="dim">—</span>`;
+    if (c.loc === "out") return `<span class="dim">${fmtLap(t)}</span>`;
     if (!race && !c.lastLapValid) return `<span class="dim" style="text-decoration:line-through">${fmtLap(t)}</span>`;
     return `<span class="${t <= sess.bestLap + 1e-6 ? "purple" : t <= c.best + 1e-6 ? "green" : ""}">${fmtLap(t)}</span>`;
   }
@@ -897,8 +913,10 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     const grid = sess.order();
     const html = () => `<b class="up">Parrilla · ${SESSION_NAMES[kind]}</b>
       <div class="small dim">${kind === "RACE" ? "En seco hay que usar dos compuestos distintos. " : "Sin parada obligatoria. "}Sin repostaje: el combustible que cargues es el que hay.</div>
+      ${sess.flag === "sc" ? `<div class="small yellow" style="margin-top:4px">🟨 Salida detrás del coche de seguridad: hay demasiada agua (${sess.avgWater().toFixed(1)} mm). Sigue en pista hasta que se pueda correr.</div>` : ""}
       ${me.map((c, i) => `<div class="panel" style="margin:6px 0"><div class="hd"><span class="t">P${grid.indexOf(c) + 1} · ${esc(c.d.nombre)}</span></div><div class="bd">
-        <div class="small dim">Plan recomendado: ${c.plan.stints.map((s, j, a) => `${tyreHtml(s.c)}${j < a.length - 1 ? ` v${s.endLap}` : ""}`).join(" → ")}</div>
+        ${(() => { const w = sess.startWater(c); const plan = c.plan.stints.map((s, j, a) => `${tyreHtml(s.c)}${j < a.length - 1 ? ` v${s.endLap}` : ""}`).join(" → ");
+          return w > WET.si ? `<div class="small">Con agua (${w.toFixed(2)} mm previstos al empezar): el equipo recomienda salir con ${tyreHtml(w > WET.iw * 1.05 ? "W" : "I")}. <span class="dim">Plan para cuando se seque: ${plan}</span></div>` : `<div class="small dim">Plan recomendado: ${plan}</div>`; })()}
         <h2>Neumático de salida</h2><div class="opts" data-start="${i}">${setButtons(c, (s) => true, c.tyres?.id)}</div>
         <h2>Combustible</h2><div class="seg" data-fuel="${i}">${[[-1.2, "Muy justo"], [-0.5, "Justo"], [0, "Exacto"], [0.6, "Con margen"]].map(([v, n]) => `<button data-v="${v}" class="${Math.abs(sess.fuelMargin(c) - (v as number)) < 0.05 ? "on" : ""}">${n}</button>`).join("")}</div>
       </div></div>`).join("")}
@@ -924,6 +942,8 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   function finish() {
     if (ended) return;
     ended = true;
+    document.removeEventListener("visibilitychange", onHide);
+    window.removeEventListener("pagehide", persist);
     cancelAnimationFrame(raf);
     window.onresize = null;
     setTimeout(() => onFinish(sess), skipping ? 0 : 1200);
@@ -967,8 +987,10 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       }
     }
     try {
-      if (!skipping) { drawMap(); drawGauges(); }
-      if (now - lastUi > 250 && !skipping) {
+      // en pausa no cambia casi nada: se redibuja 4 veces por segundo en vez de 60 (batería)
+      const busy = !paused;
+      if (!skipping && (busy || now - lastDraw > 250)) { lastDraw = now; drawMap(); drawGauges(); }
+      if (now - lastUi > (busy ? 250 : 500) && !skipping) {
         lastUi = now;
         renderTower(); renderTop(); renderMessages();
         if (!sheetOpen) renderDrivers();

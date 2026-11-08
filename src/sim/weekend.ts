@@ -22,6 +22,7 @@ export interface WeekendState {
   rubber: number;
   days: { scenario: Scenario; seed: number }[];
   anomaly: number;
+  scoring?: Partial<Record<SessionKind, number[]>>; // puntos de una carrera acortada (si no, los normales)
 }
 
 export const NORMAL_SESSIONS: SessionKind[] = ["FP1", "FP2", "FP3", "Q", "RACE"];
@@ -153,6 +154,8 @@ export class Weekend {
   /** Cierra una sesión: guarda resultados, goma y devuelve juegos tras los libres. */
   finish(sess: Session) {
     this.st.results[sess.kind] = sess.results();
+    const table = sess.pointsTable();
+    if (table) this.st.scoring = { ...this.st.scoring, [sess.kind]: table };
     this.st.rubber = sess.rubber;
     if (sess.kind.startsWith("FP")) {
       const n = sess.kind === "FP3" ? 2 : 1;

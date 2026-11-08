@@ -11,6 +11,8 @@ export interface RoundResult {
   q?: ResultRow[];
   sprint?: ResultRow[];
   race?: ResultRow[];
+  raceTable?: number[]; // carrera acortada: tabla de puntos reducida
+  sprintTable?: number[];
 }
 
 export interface SeasonState {
@@ -34,8 +36,8 @@ export interface Standing { id: number; points: number; wins: number; best: numb
 export function driverStandings(s: SeasonState, nDrivers: number): Standing[] {
   const out: Standing[] = Array.from({ length: nDrivers }, (_, id) => ({ id, points: 0, wins: 0, best: 99 }));
   for (const r of s.rounds) {
-    for (const [id, p] of pointsFor(r.race, RACE_POINTS)) out[id].points += p;
-    for (const [id, p] of pointsFor(r.sprint, SPRINT_POINTS)) out[id].points += p;
+    for (const [id, p] of pointsFor(r.race, r.raceTable ?? RACE_POINTS)) out[id].points += p;
+    for (const [id, p] of pointsFor(r.sprint, r.sprintTable ?? SPRINT_POINTS)) out[id].points += p;
     r.race?.forEach((row, i) => {
       if (i === 0 && row.status === "fin") out[row.id].wins++;
       if (row.status === "fin") out[row.id].best = Math.min(out[row.id].best, i + 1);

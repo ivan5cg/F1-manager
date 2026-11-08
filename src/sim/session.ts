@@ -7,7 +7,7 @@ import { Rng, clamp } from "./rng";
 import { Track, Minisector, msTimeAtGrip, MIN_MASS, REF_CAR } from "./track";
 import { Compound, COMPOUNDS, DRY, HiddenTyre, TyreSet, setGrip, updateSet, axleGrip, warmBlankets, setWear, bestWaterGrip, WET } from "./tyres";
 import { WeatherState, stepWeather, rainAt, evaporation, waterStep } from "./weather";
-import { Plan, planStrategy, aiDecide, aiErs, TeamKnowledge, practiceProgram, qualiTick, pickSet, learnFromRun, aiRedFlagTyres, practiceWeather, wrongTyresForWater } from "./strategy";
+import { Plan, planStrategy, aiDecide, aiErs, TeamKnowledge, practiceProgram, qualiTick, pickSet, learnFromRun, aiRedFlagTyres, practiceWeather, wrongTyresForWater, teamForecast } from "./strategy";
 
 export const PUSH_NAMES = ["Conservar", "Gestionar", "Normal", "Atacar", "Al límite"];
 export const ENGINE_NAMES = ["Ahorro", "Normal", "Potencia"];
@@ -31,6 +31,14 @@ const TOW = 16;
 let PASS_K = 0.7;
 export function setPassK(k: number) { PASS_K = k; }
 const tow = (gap: number) => (gap < 3 ? TOW * Math.exp(-gap * 1.6) : 0);
+/** Reglamento: 2 h de carrera, 3 h en total contando las suspensiones. */
+const RACE_MAX = 2 * 3600;
+/** Agua (mm) con la que la salida se hace tras el coche de seguridad, y con la que se retira. */
+const WET_SC_START = 1.35;
+const WET_SC_END = 1.15;
+const RACE_WINDOW = 3 * 3600;
+/** Sprint suspendida y no reanudada por debajo del 75 %: mitad de puntos. */
+const SPRINT_HALF = [4, 3.5, 3, 2.5, 2, 1.5, 1, 0.5];
 /** Fracción del agua de la trazada que aparta cada coche al pasar (a ritmo de carrera). */
 const CAR_DRY = 0.0035;
 const ENGINE_FAIL = [0.6, 1, 2.2];
@@ -222,6 +230,7 @@ export class Session {
   flag: FlagState = "green";
   flagTimer = 0;
   scLapsLeft = 0;
+  scWet = false; // coche de seguridad por agua: no se retira hasta que se pueda correr
   drsEnabledFromLap = 3;
   events: RaceEvent[] = [];
   hidden: HiddenTyre;
@@ -250,6 +259,11 @@ export class Session {
   private lastPitExit = -99;
   redReason: "rain" | "crash" | null = null;
   redWall = 0; // cuándo empezó la bandera roja (tiempo real simulado)
+  redLap = 0; // vuelta en la que se suspendió (la que iba haciendo el líder)
+  suspended = 0; // tiempo total con la carrera suspendida (s)
+  greenLeaderLaps = 0; // vueltas que el líder ha completado con bandera verde
+  /** Carrera suspendida y no reanudada: vueltas que cuentan para la clasificación. */
+  shortened: { laps: number; order: number[]; fin: number[] } | null = null;
   onEvent?: (e: RaceEvent) => void;
   private weatherAcc = 0;
   private lastRainMsg = -999;
@@ -347,7 +361,14 @@ export class Session {
 
   // ---------------------------------------------------------------- carrera
   private setupRace(grid: number[]) {
-    const wet = this.avgWater();
+    const now = this.avgWater();
+    // con mucha agua la carrera empieza detrás del coche de seguridad, hasta que se pueda correr
+    if (now > WET_SC_START) {
+      this.flag = "sc";
+      this.scLapsLeft = 2;
+      this.scWet = true;
+      this.log({ kind: "control", text: `🟨 Salida detrás del coche de seguridad: demasiada agua en pista (${now.toFixed(1)} mm)`, important: true });
+    }
     grid.forEach((id, i) => {
       const c = this.carById(id);
       c.loc = "track";
@@ -360,6 +381,8 @@ export class Session {
       if (!grid.includes(c.id)) { c.loc = "out"; c.retireReason = "no sale"; continue; }
       c.plan = planStrategy(this, c, c.e.knowledge, 0, null, 0, this.rng.fork());
       let start = c.plan.stints[0]?.c ?? "M";
+      // el muro no mira solo el agua de ahora: también hacia dónde va (radar y previsión)
+      const wet = this.startWater(c);
       if (wet > WET.iw * 1.05) start = "W"; else if (wet > WET.si && DRY.includes(start)) start = "I";
       const set = pickSet(c, start, true) ?? pickSet(c, start, false) ?? c.e.sets.find((s) => !s.returned && DRY.includes(s.c))!;
       this.mount(c, set);
@@ -374,6 +397,17 @@ export class Session {
     c.usedCompounds.add(set.c);
     c.stintW0 = setWear(set);
     c.stintL0 = set.laps;
+  }
+
+  /** Agua que espera el equipo de c para las primeras vueltas: la de ahora y la prevista en ~6 min. */
+  startWater(c: Car): number {
+    const now = this.avgWater();
+    const fc = teamForecast(this, c);
+    const rainSoon = (fc.p50[0] + fc.p50[1]) / 2;
+    let w = now;
+    const evap = evaporation(this.weather);
+    for (let i = 0; i < 6; i++) w = waterStep(w * (1 - CAR_DRY * 0.19 * 60), rainSoon, 60, evap);
+    return 0.5 * now + 0.5 * w;
   }
 
   /** Cambia el neumático de salida (antes de la salida). */
@@ -466,11 +500,22 @@ export class Session {
       return;
     }
     if (this.flag === "red") {
+      const race = isRaceKind(this.kind);
+      if (race) this.suspended += dt;
       this.flagTimer -= dt;
       if (this.flagTimer <= 0) {
-        // con lluvia, no se reanuda hasta que la pista lo permita (máximo 45 min)
-        const tooWet = this.redReason === "rain" && (this.avgWater() > 1.5 || Math.max(...this.sectorWater()) > 1.7 || this.maxRainOnTrack() > 8) && this.wall - this.redWall < 45 * 60;
-        if (tooWet) { this.flagTimer = 60; return; }
+        // con lluvia, no se reanuda hasta que la pista lo permita
+        const tooWet = this.redReason === "rain" && (this.avgWater() > 1.5 || Math.max(...this.sectorWater()) > 1.7 || this.maxRainOnTrack() > 8);
+        if (race) {
+          // reglamento: la carrera no puede pasar de 3 h contando las suspensiones; si no queda
+          // tiempo para reanudar con garantías, se da por terminada con lo corrido
+          if (this.wall > RACE_WINDOW - 10 * 60) return this.abandon(tooWet ? "la pista sigue impracticable" : "no queda tiempo para reanudar");
+          if (tooWet) {
+            this.flagTimer = 60;
+            if (this.wall - this.redWall > 60 && Math.floor((this.wall - this.redWall) / 1200) !== Math.floor((this.wall - this.redWall - 60) / 1200)) this.log({ kind: "control", text: `🟥 La carrera sigue suspendida: la pista no está en condiciones (agua ${this.avgWater().toFixed(1)} mm). Límite: 3 h desde la salida.`, important: true });
+            return;
+          }
+        } else if (tooWet && this.wall - this.redWall < 45 * 60) { this.flagTimer = 60; return; }
         this.resumeFromRed();
       }
       return;
@@ -561,6 +606,7 @@ export class Session {
     this.flag = "red";
     this.redReason = rain ? "rain" : "crash";
     this.redWall = this.wall;
+    this.redLap = this.leaderLap + 1;
     if (!isRaceKind(this.kind)) {
       this.flagTimer = rain ? this.rng.range(300, 600) : this.rng.range(240, 600);
       this.log({ kind: "control", text: `🟥 BANDERA ROJA — ${why}. Todos a boxes.`, pause: true, important: true });
@@ -599,6 +645,42 @@ export class Session {
     return true;
   }
 
+  /** Suspendida y no reanudada: clasificación al final de la penúltima vuelta antes de la suspensión. */
+  private abandon(why: string) {
+    const L = Math.max(0, this.redLap - 2);
+    const k = L * this.N;
+    const ran = this.cars.filter((c) => c.retireReason !== "no sale");
+    // orden: más vueltas completadas en L y, a igualdad, quien cruzó antes la línea
+    const done = (c: Car) => { let n = Math.min(L, Math.floor(Math.max(0, c.msK) / this.N)); while (n > 0 && c.cross[n * this.N] === undefined) n--; return n; };
+    const order = [...ran].sort((a, b) => {
+      const na = done(a), nb = done(b);
+      if (na !== nb) return nb - na;
+      return (a.cross[na * this.N] ?? Infinity) - (b.cross[nb * this.N] ?? Infinity);
+    });
+    // clasificados: los que seguían en carrera en esa vuelta (aunque abandonaran después)
+    const fin = order.filter((c) => c.loc !== "out" || done(c) >= L);
+    this.shortened = { laps: L, order: order.map((c) => c.id), fin: fin.map((c) => c.id) };
+    for (const c of fin) { c.finishT = c.cross[done(c) * this.N] ?? c.finishT; if (c.loc !== "out") c.loc = "fin"; }
+    void k;
+    const pct = this.laps ? L / this.laps : 0;
+    const table = this.pointsTable();
+    this.chequered = true;
+    this.finished = true;
+    this.log({ kind: "control", text: `🏁 La carrera no se reanudará (${why}). Cuenta la clasificación al final de la vuelta ${L} (${Math.round(pct * 100)} % de la distancia): ${!table ? "puntos completos" : table.length ? "puntos reducidos" : "sin puntos"}.`, important: true, pause: true });
+  }
+
+  /** Puntos de una carrera suspendida y no reanudada (null: los normales). */
+  pointsTable(): number[] | null {
+    if (!this.shortened) return null;
+    if (this.greenLeaderLaps < 2 || this.shortened.laps < 2) return [];
+    const pct = this.shortened.laps / this.laps;
+    if (this.kind === "SPRINT") return pct < 0.75 ? SPRINT_HALF : null;
+    if (pct < 0.25) return [6, 4, 3, 2, 1];
+    if (pct < 0.5) return [13, 10, 8, 6, 5, 4, 3, 2, 1];
+    if (pct < 0.75) return [19, 14, 12, 9, 8, 6, 5, 3, 2, 1];
+    return null;
+  }
+
   private resumeFromRed() {
     this.flag = "green";
     const rain = this.redReason === "rain";
@@ -609,6 +691,7 @@ export class Session {
     }
     this.flag = "sc";
     this.scLapsLeft = rain ? 2 : 1;
+    this.scWet = rain;
     this.drsEnabledFromLap = this.leaderLap + 4;
     this.log({ kind: "control", text: "🟨 Se reanuda la carrera detrás del coche de seguridad", important: true, pause: true });
   }
@@ -851,12 +934,22 @@ export class Session {
   }
 
   private onLeaderLap(lap: number) {
+    if (this.flag === "green") this.greenLeaderLaps++;
+    // reglamento: 2 h de carrera (sin contar las suspensiones) y 3 h en total; al cumplirse, bandera
+    // a cuadros al final de la vuelta en la que se agota el tiempo
+    if (!this.chequered && lap < this.laps && (this.wall - this.suspended >= RACE_MAX || this.wall >= RACE_WINDOW)) {
+      this.laps = lap;
+      this.log({ kind: "control", text: `⏱️ Se cumple el tiempo máximo de carrera: bandera a cuadros en la vuelta ${lap}`, important: true });
+    }
     if (lap >= this.laps && !this.chequered) {
       this.chequered = true;
       this.log({ kind: "control", text: "🏁 Bandera a cuadros", important: true });
       return;
     }
-    if (this.flag === "sc") {
+    if (this.flag === "sc" && this.scWet && this.avgWater() > WET_SC_END) {
+      // sigue demasiado mojado: el coche de seguridad no se retira
+      if (lap % 2 === 0) this.log({ kind: "control", text: `🟨 Sigue el coche de seguridad: agua ${this.avgWater().toFixed(1)} mm`, important: false });
+    } else if (this.flag === "sc") {
       this.scLapsLeft--;
       if (this.scLapsLeft <= 0) {
         this.flag = "sc_in";
@@ -864,11 +957,12 @@ export class Session {
       }
     } else if (this.flag === "sc_in") {
       this.flag = "green";
+      this.scWet = false;
       this.drsEnabledFromLap = lap + 3;
       this.log({ kind: "control", text: "🟢 ¡Relanzada! Bandera verde.", important: true, pause: true });
     }
     // mucha agua pero sin llegar a bandera roja: coche de seguridad
-    if (this.avgWater() > 1.8 && this.flag === "green") this.deploy("sc", "demasiada agua en pista");
+    if (this.avgWater() > 1.8 && this.flag === "green") { this.deploy("sc", "demasiada agua en pista"); this.scWet = true; }
     for (const c of this.cars) {
       if (c.loc !== "track") continue;
       const hz = (1 / 2600) * c.team.fiabilidad * ENGINE_FAIL[c.engine] * (1 + c.floor * 5);
@@ -1378,14 +1472,15 @@ export class Session {
 
   /** Resultado final de la sesión. */
   results(): ResultRow[] {
-    const ord = this.order();
+    const sh = this.shortened;
+    const ord = sh ? [...sh.order.map((id) => this.carById(id)), ...this.cars.filter((c) => !sh.order.includes(c.id))] : this.order();
     return ord.map((c, i) => ({
       id: c.id,
       pos: i + 1,
       best: this.parts.length ? (c.bestByPart[c.eliminated ? c.elimPart! : this.part] ?? Infinity) : c.best,
       time: c.finishT,
-      laps: isRaceKind(this.kind) ? this.lapsDone(c) : c.sessionLaps,
-      status: c.loc === "out" ? (c.retireReason === "no sale" ? "dns" : "out") : isRaceKind(this.kind) ? "fin" : "ok",
+      laps: isRaceKind(this.kind) ? (sh ? Math.min(sh.laps, this.lapsDone(c)) : this.lapsDone(c)) : c.sessionLaps,
+      status: sh?.fin.includes(c.id) ? "fin" : c.loc === "out" ? (c.retireReason === "no sale" ? "dns" : "out") : isRaceKind(this.kind) ? "fin" : "ok",
       reason: c.retireReason,
       stops: c.stops,
       part: this.parts.length ? this.parts[c.eliminated ? c.elimPart! : this.part]?.name : undefined,

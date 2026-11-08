@@ -27,9 +27,15 @@ const setRngState = (r: Rng, s: number) => { (r as unknown as { s: number }).s =
 const replacer = (_k: string, v: unknown) => (typeof v === "number" && !Number.isFinite(v) ? (Number.isNaN(v) ? "__NaN" : v > 0 ? "__Inf" : "__-Inf") : v);
 const reviver = (_k: string, v: unknown) => (v === "__NaN" ? NaN : v === "__Inf" ? Infinity : v === "__-Inf" ? -Infinity : v);
 
+// el historial del radar solo se dibuja: se guarda compacto (redondeado y sin lo que cae fuera de la vista)
+const CELL_KEYS = ["x", "y", "vx", "vy", "sigma", "ax", "ang", "peak", "age", "life", "seed"] as const;
 function weatherOut(w: WeatherState) {
-  const { rng, ...rest } = w;
-  return { ...rest, rngS: rngState(rng) };
+  const { rng, history, ...rest } = w;
+  const hist = history.map((f) => ({
+    clock: f.clock, drizzle: f.drizzle,
+    c: f.cells.filter((c) => Math.hypot(c.x, c.y) < 75).map((c) => CELL_KEYS.map((k) => Math.round(c[k] * 1000) / 1000)),
+  }));
+  return { ...rest, hist, rngS: rngState(rng) };
 }
 
 function carOut(c: Car, N: number) {
@@ -52,7 +58,9 @@ export function snapshotSession(sess: Session, st: WeekendState): string {
   s.water = Array.from(sess.water);
   s.waterOff = Array.from(sess.waterOff);
   s.cars = sess.cars.map((c) => carOut(c, sess.N));
-  const snap: SessionSnapshot = { v: 1, kind: sess.kind, savedAt: Date.now(), weekend: st, sess: s };
+  // la caché de perfiles de neumático se recalcula igual al volver (es una función pura): no se guarda
+  const knowledge = Object.fromEntries(Object.entries(st.knowledge).map(([id, k]) => [id, { ...k, profile: {} }]));
+  const snap: SessionSnapshot = { v: 1, kind: sess.kind, savedAt: Date.now(), weekend: { ...st, knowledge }, sess: s };
   return JSON.stringify(snap, replacer);
 }
 
@@ -67,12 +75,13 @@ export function parseSnapshot(raw: string): SessionSnapshot | null {
 
 /** Tiempo y agua guardados, listos para crear la sesión. */
 export function snapshotConditions(snap: SessionSnapshot): { weather: WeatherState; water: number[]; waterOff: number[] } {
-  const w = snap.sess.weather as WeatherState & { rngS: number };
+  const w = snap.sess.weather as WeatherState & { rngS: number; hist?: { clock: number; drizzle: number; c: number[][] }[] };
   const rng = new Rng(1);
   setRngState(rng, w.rngS);
-  const { rngS: _drop, ...rest } = w;
+  const { rngS: _drop, hist, ...rest } = w;
   void _drop;
-  return { weather: { ...rest, rng } as WeatherState, water: snap.sess.water as number[], waterOff: snap.sess.waterOff as number[] };
+  const history = hist ? hist.map((f) => ({ clock: f.clock, drizzle: f.drizzle, cells: f.c.map((a) => Object.fromEntries(CELL_KEYS.map((k, i) => [k, a[i]])) as unknown as WeatherState["cells"][number]) })) : w.history;
+  return { weather: { ...rest, history, rng } as WeatherState, water: snap.sess.water as number[], waterOff: snap.sess.waterOff as number[] };
 }
 
 /** Vuelca la instantánea sobre una sesión recién creada (con los mismos inscritos). */
