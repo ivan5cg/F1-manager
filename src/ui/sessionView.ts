@@ -226,6 +226,9 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     rainLayer.width = S; rainLayer.height = H;
     rainLayer.getContext("2d")!.putImageData(colorize(field, S, H, null, 105), 0, 0);
   }
+  const themeVar = (name: string, fallback: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
+  const MAP = { track: themeVar("--map-track", "#6a6d74"), label: themeVar("--map-label", "#ffffff") };
+  const GAUGE_BG = themeVar("--gauge-bg", "rgba(0,0,0,.88)");
   function drawMap() {
     const cv = $<HTMLCanvasElement>("#map");
     if (!cv || wide || cv.width < 20 || cv.height < 20) return;
@@ -238,7 +241,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     for (const m of track.ms) {
       const i0 = Math.floor(m.s0 / track.ds), i1 = Math.min(track.xs.length - 1, Math.floor(m.s1 / track.ds));
       const w = sess.water[m.i];
-      g.strokeStyle = w > 0.05 ? `rgba(120,190,255,${Math.min(1, 0.45 + w * 0.5)})` : "#6a6d74";
+      g.strokeStyle = w > 0.05 ? `rgba(70,150,240,${Math.min(1, 0.55 + w * 0.45)})` : MAP.track;
       g.lineWidth = 5 * dpr;
       g.beginPath();
       g.moveTo(mx(track.xs[i0]), my(track.ys[i0]));
@@ -246,7 +249,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       if (m.i === track.ms.length - 1) g.lineTo(mx(track.xs[0]), my(track.ys[0]));
       g.stroke();
     }
-    g.strokeStyle = "#fff"; g.lineWidth = 2 * dpr;
+    g.strokeStyle = MAP.label; g.lineWidth = 2 * dpr;
     g.beginPath(); g.moveTo(mx(track.xs[0]), my(track.ys[0]) - 6 * dpr); g.lineTo(mx(track.xs[0]), my(track.ys[0]) + 6 * dpr); g.stroke();
     const L = track.length;
     const cars = [...sess.cars].sort((a, b) => Number(a.player) - Number(b.player));
@@ -260,8 +263,8 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       g.fillStyle = c.team.color;
       g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
       if (c.player) {
-        g.strokeStyle = "#fff"; g.lineWidth = 1.5 * dpr; g.stroke();
-        g.fillStyle = "#fff"; g.font = `900 ${9 * dpr}px "Titillium Web", sans-serif`;
+        g.strokeStyle = MAP.label; g.lineWidth = 1.5 * dpr; g.stroke();
+        g.fillStyle = MAP.label; g.font = `900 ${9 * dpr}px "Titillium Web", sans-serif`;
         g.fillText(c.d.abrev, x + 6 * dpr, y - 5 * dpr);
       }
     }
@@ -414,7 +417,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     grad.addColorStop(0, "#1f6fd1"); grad.addColorStop(1, "#5fb3ff");
     g.strokeStyle = grad;
     g.beginPath(); g.arc(cx, cy, R, a0, a0 + (a1 - a0) * Math.min(1, kmh / 360)); g.stroke();
-    g.fillStyle = "rgba(0,0,0,.88)"; g.beginPath(); g.arc(cx, cy, R - 5 * u, 0, 7); g.fill();
+    g.fillStyle = GAUGE_BG; g.beginPath(); g.arc(cx, cy, R - 5 * u, 0, 7); g.fill();
     g.textAlign = "center";
     g.fillStyle = "#39ff6a"; g.font = `900 ${22 * u}px "Titillium Web", sans-serif`;
     g.fillText(String(Math.round(kmh)), cx, cy - 4 * u);
@@ -756,7 +759,8 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   function optionLine(o: StopOption) {
     const gain = Number.isFinite(o.lapGain) ? `<span class="${o.lapGain > 0 ? "green" : "redt"}">${signed(o.lapGain)} s/v</span>` : `<span class="dim">—</span>`;
     const cat = !o.ahead ? "" : o.catchLaps !== null ? `<span class="green">alcanza a ${o.ahead.car.d.abrev} en ${o.catchLaps} v</span>` : Number.isFinite(o.lapGain) ? `<span class="dim">no le alcanza en 15 v</span>` : "";
-    return `<div class="mw-row"><span class="mw-t">${tyreHtml(o.c)}<span class="dim small">${o.setLaps ? `usado ${o.setLaps} v` : "nuevo"}</span></span><span class="mw-w">ritmo ${gain} <span class="dim small">frente a seguir</span><br>${cat}</span><button data-stop="${o.setId}">Parar</button></div>`;
+    const pace = Number.isFinite(o.lapGain) ? `ritmo ${gain} <span class="dim small">frente a seguir</span>` : `<span class="dim small">sin estimación de ritmo con la pista mojada</span>`;
+    return `<div class="mw-row"><span class="mw-t">${tyreHtml(o.c)}<span class="dim small">${o.setLaps ? `usado ${o.setLaps} v` : "nuevo"}</span></span><span class="mw-w">${pace}${cat ? `<br>${cat}` : ""}</span><button data-stop="${o.setId}">Parar</button></div>`;
   }
   function muroBody() {
     return mine().map((c, idx) => {
@@ -806,7 +810,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     cv.width = W * dpr; cv.height = H * dpr; cv.style.height = `${H}px`;
     const g = cv.getContext("2d")!;
     g.scale(dpr, dpr);
-    g.fillStyle = "#0b0b0d"; g.fillRect(0, 0, W, H);
+    g.fillStyle = "#161b22"; g.fillRect(0, 0, W, H);
     if (hist.length < 2) { g.fillStyle = "#9da3ad"; g.font = '600 12px "Titillium Web", sans-serif'; g.fillText("Hacen falta al menos dos vueltas.", 10, H / 2); return; }
     const vals = hist.flatMap((h) => h.gaps.filter((x): x is number => x !== null && Math.abs(x) < 120));
     let lim = Math.max(2, ...vals.map(Math.abs)) * 1.15;
@@ -818,7 +822,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     // rejilla discreta: el 0 (tu piloto) y dos marcas por lado
     g.font = FONT(600, 11); g.textAlign = "right"; g.textBaseline = "middle";
     for (const v of [-lim, -lim / 2, 0, lim / 2, lim]) {
-      g.strokeStyle = v === 0 ? "#6a6d74" : "#1f2024"; g.lineWidth = 1;
+      g.strokeStyle = v === 0 ? "#6b7583" : "#252c36"; g.lineWidth = 1;
       g.beginPath(); g.moveTo(padL, y(v)); g.lineTo(W - padR, y(v)); g.stroke();
       g.fillStyle = "#9da3ad"; g.fillText(v === 0 ? me.d.abrev : `${v > 0 ? "+" : "−"}${Math.abs(v).toFixed(0)}`, padL - 4, y(v));
     }

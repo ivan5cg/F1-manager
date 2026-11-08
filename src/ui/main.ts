@@ -1,4 +1,7 @@
 import "./style.css";
+
+// tema visual (las fichas de color están en style.css)
+document.documentElement.dataset.tema = "grafito";
 import { TEAMS, CIRCUITS, ROUNDS, DRIVERS, getTrack } from "./data";
 import { loadSeason, saveSeason, loadSession, clearSession } from "./store";
 import type { SessionSnapshot } from "../sim/snapshot";
