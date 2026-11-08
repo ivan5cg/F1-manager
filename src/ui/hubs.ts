@@ -24,12 +24,12 @@ export function startScreen(nav: Nav, saved: SeasonState | null, onNew: (team: s
   const render = () => {
     app().innerHTML = `
     <div style="padding-bottom:16px">
-      <div class="panel"><div class="hd">Muro de Boxes · Temporada 2026</div><div class="bd">
+      <div class="panel"><div class="hd"><span class="t">Muro de Boxes · Temporada 2026</span></div><div class="bd">
         <h1>Muro de Boxes</h1>
         <div class="dim">Minitemporada de ${ROUNDS.length} grandes premios. Tú decides en el muro; el coche y los pilotos son los que son.</div>
         ${saved ? `<div style="margin-top:10px"><button class="red big-cta" id="cont">Continuar temporada · ${esc(TEAMS.find((t) => t.id === saved.playerTeam)!.nombre)} · ronda ${Math.min(saved.round + 1, ROUNDS.length)}/${ROUNDS.length}</button></div>` : ""}
       </div></div>
-      <div class="panel"><div class="hd">${saved ? "O empieza una nueva con" : "Elige tu equipo"}</div><div class="bd" style="padding:0">
+      <div class="panel"><div class="hd"><span class="t">${saved ? "O empieza una nueva con" : "Elige tu equipo"}</span></div><div class="bd" style="padding:0">
         ${TEAMS.map((t) => `<div class="list-item" data-team="${t.id}" style="cursor:pointer;${pick === t.id ? "background:rgba(225,6,0,.22)" : ""}">
           <span class="teamdot" style="background:${t.color};height:28px;width:6px"></span>
           <div class="grow"><b class="up">${esc(t.nombre)}</b> <span class="dim small">· motor ${esc(t.motor)}</span><br><span class="small">${t.pilotos.map((p) => `#${p.numero} ${esc(p.nombre)}`).join(" · ")}</span></div>
@@ -52,10 +52,10 @@ export function seasonScreen(nav: Nav, s: SeasonState) {
   const champ = done ? DRIVERS[ds[0].id] : null;
   app().innerHTML = `
   <div style="padding-bottom:16px">
-    <div class="panel"><div class="hd">Temporada 2026 · ${esc(TEAMS.find((t) => t.id === s.playerTeam)!.nombre)}<span class="grow"></span><button id="home">Inicio</button></div><div class="bd">
+    <div class="panel"><div class="hd"><span class="t">Temporada 2026 · ${esc(TEAMS.find((t) => t.id === s.playerTeam)!.nombre)}</span><button id="home">Inicio</button></div><div class="bd">
       ${done ? `<h1>🏆 ${esc(champ!.d.nombre)}</h1><div class="dim">Campeón de la minitemporada con ${ds[0].points} puntos</div>` : `<button class="red big-cta" id="go">${flagOf(ROUNDS[s.round])} Ir al ${esc(CIRCUITS[ROUNDS[s.round]].gp)}</button>`}
     </div></div>
-    <div class="panel"><div class="hd">Calendario</div><div class="bd" style="padding:0">
+    <div class="panel"><div class="hd"><span class="t">Calendario</span></div><div class="bd" style="padding:0">
       ${ROUNDS.map((id, i) => {
         const c = CIRCUITS[id];
         const r = s.rounds.find((x) => x.round === i + 1);
@@ -64,10 +64,10 @@ export function seasonScreen(nav: Nav, s: SeasonState) {
           <span class="small">${win ? `🏁 ${esc(DRIVERS[win.id].d.abrev)}` : i === s.round ? '<span class="yellow">SIGUIENTE</span>' : ""}</span></div>`;
       }).join("")}
     </div></div>
-    <div class="panel"><div class="hd">Mundial de pilotos</div><div class="bd" style="padding:0">
+    <div class="panel"><div class="hd"><span class="t">Mundial de pilotos</span></div><div class="bd" style="padding:0">
       <table class="tv">${ds.map((x, i) => { const d = DRIVERS[x.id]; return `<tr class="${d.team.id === s.playerTeam ? "me" : ""}"><td class="mono"><span class="pos">${i + 1}</span></td><td><span class="teamdot" style="background:${d.team.color}"></span>${esc(d.d.nombre)}</td><td class="dim small">${esc(d.team.nombre)}</td><td class="mono" style="text-align:right"><b>${x.points}</b></td></tr>`; }).join("")}</table>
     </div></div>
-    <div class="panel"><div class="hd">Mundial de constructores</div><div class="bd" style="padding:0">
+    <div class="panel"><div class="hd"><span class="t">Mundial de constructores</span></div><div class="bd" style="padding:0">
       <table class="tv">${ts.map((x, i) => `<tr class="${x.team.id === s.playerTeam ? "me" : ""}"><td><span class="pos">${i + 1}</span></td><td><span class="teamdot" style="background:${x.team.color}"></span>${esc(x.team.nombre)}</td><td class="mono" style="text-align:right"><b>${x.points}</b></td></tr>`).join("")}</table>
     </div></div>
     ${done ? `<div style="padding:0 10px"><button class="red big-cta" id="again">Nueva temporada</button></div>` : ""}
@@ -110,12 +110,12 @@ export function weekendScreen(nav: Nav, s: SeasonState) {
   const sessions = wk.sessions();
   app().innerHTML = `
   <div style="padding-bottom:16px">
-    <div class="panel"><div class="hd">Ronda ${st.round} · ${def.bandera} ${esc(def.pais)}<span class="grow"></span><button id="back">Temporada</button></div><div class="bd">
+    <div class="panel"><div class="hd"><span class="t">Ronda ${st.round} · ${def.bandera} ${esc(def.pais)}</span><button id="back">Temporada</button></div><div class="bd">
       <h1>${esc(def.gp)}</h1>
       <div class="dim">${esc(def.nombre)} · ${(track.length / 1000).toFixed(3)} km · ${def.vueltas} vueltas${def.formato === "sprint" ? ` · <span class="yellow">fin de semana sprint (${def.vueltasSprint} v)</span>` : ""} · ${fmtDate(def.fecha)}</div>
       <canvas id="mini" style="width:100%;height:150px;margin-top:6px"></canvas>
     </div></div>
-    <div class="panel"><div class="hd">Programa</div><div class="bd" style="padding:0">
+    <div class="panel"><div class="hd"><span class="t">Programa</span></div><div class="bd" style="padding:0">
       ${sessions.map((kind, i) => {
         const w = wk.when(kind);
         const res = st.results[kind];
@@ -129,19 +129,19 @@ export function weekendScreen(nav: Nav, s: SeasonState) {
         </div>`;
       }).join("")}
     </div></div>
-    <div class="panel"><div class="hd">Previsión del meteorólogo <span class="dim small">(fiabilidad ${team.meteo}/100)</span></div><div class="bd small">
+    <div class="panel"><div class="hd"><span class="t">Previsión del meteorólogo <span class="dim small">(fiabilidad ${team.meteo}/100)</span></span></div><div class="bd small">
       ${outlook.length ? outlook.map((o) => `<div class="row"><span class="grow up">${SESSION_NAMES[o.kind]}</span><span class="mono">lluvia ${Math.round(o.rain * 100)} %</span><span class="mono dim">${o.air[0].toFixed(0)}–${o.air[1].toFixed(0)} °C · asfalto ~${o.track.toFixed(0)} °C</span></div>`).join("") : "—"}
       <div class="dim" style="margin-top:6px">Clima típico: ${esc(def.clima.fuente)}.</div>
     </div></div>
-    <div class="panel"><div class="hd">Lo que saben tus ingenieros</div><div class="bd" style="padding:0">
+    <div class="panel"><div class="hd"><span class="t">Lo que saben tus ingenieros</span></div><div class="bd" style="padding:0">
       <table class="tv"><tr><th>Compuesto</th><th>Nuevo</th><th>Pierde/v</th><th>Vida</th><th>Error</th></tr>${knowRows}</table>
       <div class="small dim" style="padding:6px 10px">Cada tanda larga en libres mide el desgaste real y reduce el error (📊 = ya medido). El desgaste puede salir mayor o menor de lo previsto.</div>
     </div></div>
-    <div class="panel"><div class="hd">Tus juegos de neumáticos</div><div class="bd">
+    <div class="panel"><div class="hd"><span class="t">Tus juegos de neumáticos</span></div><div class="bd">
       ${mine.map((e) => `<div style="margin-bottom:6px"><b>${esc(e.d.nombre)}</b><div class="row wrap small" style="gap:4px;margin-top:3px">${e.sets.map((x) => `<span class="pill" style="${x.returned ? "opacity:.3;text-decoration:line-through" : ""}">${tyreHtml(x.c)} ${x.laps ? `${x.laps}v ${Math.round(setWear(x) * 100)}%` : "nuevo"}</span>`).join("")}</div></div>`).join("")}
       <div class="small dim">${st.sprint ? "Sprint: 12 de seco (6 blandos, 4 medios, 2 duros), 6 intermedios y 3 de lluvia." : "13 de seco (8 blandos, 3 medios, 2 duros), 4 intermedios y 3 de lluvia."} Tras cada libre se devuelven los más gastados. En carrera en seco hay que usar dos compuestos.</div>
     </div></div>
-    <div class="panel"><div class="hd">Días</div><div class="bd small dim">${st.days.map((d, i) => `${DAY_NAMES[i]}: ${i < (wk.when(sessions[st.next] ?? "RACE").day) ? SCENARIO_NAMES[d.scenario] : "?"}`).join(" · ")}</div></div>
+    <div class="panel"><div class="hd"><span class="t">Días</span></div><div class="bd small dim">${st.days.map((d, i) => `${DAY_NAMES[i]}: ${i < (wk.when(sessions[st.next] ?? "RACE").day) ? SCENARIO_NAMES[d.scenario] : "?"}`).join(" · ")}</div></div>
   </div>`;
   drawMini($<HTMLCanvasElement>("#mini"), track);
   $("#back").onclick = () => nav.season();
@@ -189,7 +189,7 @@ export function resultsSheet(kind: SessionKind, rows: ResultRow[], playerTeam: s
 
 export function resultsScreen(kind: SessionKind, rows: ResultRow[], s: SeasonState, gp: string, extra: string, onContinue: () => void) {
   app().innerHTML = `<div style="padding-bottom:16px">
-    <div class="panel"><div class="hd">🏁 ${SESSION_NAMES[kind]} · ${esc(gp)}</div><div class="bd" style="padding:0">${resultsTable(kind, rows, s.playerTeam)}</div></div>
+    <div class="panel"><div class="hd"><span class="t">🏁 ${SESSION_NAMES[kind]} · ${esc(gp)}</span></div><div class="bd" style="padding:0">${resultsTable(kind, rows, s.playerTeam)}</div></div>
     ${extra}
     <div style="padding:0 10px"><button class="red big-cta" id="cont">Continuar</button></div></div>`;
   $("#cont").onclick = onContinue;

@@ -28,22 +28,24 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   let ended = false;
   let toastTimer = 0;
   const mine = () => sess.cars.filter((c) => c.player).sort((a, b) => a.id - b.id);
+  let onbId = mine()[0].id; // piloto de la cámara onboard
+  const tvName = (c: Car) => { const parts = c.d.nombre.split(" "); return `${parts[0][0]} ${parts.slice(1).join(" ")}`.toUpperCase(); };
+  const clean = (t: string) => t.replace(/^[\p{Extended_Pictographic}\u{1F1E6}-\u{1F1FF}\uFE0F\u200D\s]+/u, "");
+  const TAB: Record<RaceEvent["kind"], string> = { radio: "Radio del equipo", control: "Dirección de carrera", pit: "Boxes", info: "Carrera", weather: "Meteo", incident: "Incidente" };
+  const rmHtml = (tab: string, text: string, cls = "") => `<div class="rm ${cls}"><span class="tab">${tab}</span><div class="bar">${clean(text)}</div></div>`;
 
   app.innerHTML = `
   <div id="sess">
-    <div class="topbar">
-      <div class="brand">${def.bandera}</div>
-      <div class="title"><b>${esc(SESSION_NAMES[kind])}</b><span>${esc(def.nombre)}</span></div>
-      <div class="clock mono" id="clock"></div>
-      <div class="speed" id="speed"></div>
-    </div>
-    <div class="flagbar" id="flag"></div>
+    <div class="ctrl"><span>${def.bandera}</span><span class="gp">${esc(SESSION_NAMES[kind])} · ${esc(def.nombre)}</span><div class="speed" id="speed"></div></div>
+    <div class="lapc mono" id="lapc"></div>
     <div class="main">
       <div class="tower" id="tower"></div>
       <div class="side">
         <div class="mapbox"><canvas id="map"></canvas></div>
+        <div class="onb" id="onb"><canvas id="gauge"></canvas><div class="tags" id="onbtags"></div></div>
         <div class="wxbox" id="wx"></div>
         <div class="sidebtns"><button data-s="pilotos">Pilotos</button><button data-s="tiempo">Tiempo</button><button data-s="radio">Radio</button></div>
+        <div id="lapban"></div>
         <div class="ticker" id="ticker"></div>
       </div>
     </div>
@@ -77,10 +79,11 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       b.classList.toggle("on", v === "0" ? paused : v === "skip" ? skipping : !paused && Number(v) === speed);
     });
   }
-  function showToast(html: string, ms = 0) {
+  function showToast(html: string, ms = 0, tab = "Muro") {
     const t = $("#toast");
     if (!t) return;
-    t.innerHTML = html;
+    const cls = /BANDERA ROJA/.test(html) ? "red" : /SEGURIDAD|Empieza|lluv|Lluvia/i.test(html) ? "ctl" : "";
+    t.innerHTML = `<div class="rm ${cls}"><span class="tab">${tab}</span><div class="bar" style="font-size:14px;padding:7px 9px">${clean(html)}</div></div>`;
     t.classList.add("show");
     clearTimeout(toastTimer);
     if (ms) toastTimer = window.setTimeout(hideToast, ms);
@@ -93,9 +96,9 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     if (e.pause && autoPause && (isMine || e.kind === "control" || e.kind === "weather")) {
       paused = true;
       leftover = 0;
-      showToast(e.text + "<div class='small dim' style='margin-top:4px'>Toca para seguir</div>");
+      showToast(e.text + "<div class='small dim' style='margin-top:4px'>Toca para seguir</div>", 0, TAB[e.kind]);
       updSpeed();
-    } else if (isMine && e.important) showToast(e.text, 3500);
+    } else if (isMine && e.important) showToast(e.text, 3500, TAB[e.kind]);
   };
 
   // ---------------------------------------------------------------- mapa
@@ -103,7 +106,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   function sizeMap() {
     const cv = $<HTMLCanvasElement>("#map");
     const w = cv.parentElement!.clientWidth;
-    const h = Math.round(w * 0.9);
+    const h = Math.round(w * 0.72);
     const dpr = window.devicePixelRatio || 1;
     cv.width = w * dpr; cv.height = h * dpr;
     cv.style.height = h + "px";
@@ -169,10 +172,10 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     }
   });
   function statusFlag(c: Car): string {
-    if (c.loc === "out") return `<span class="flag" style="background:#555">OUT</span>`;
+    if (c.loc === "out") return `<span class="flag outl">OUT</span>`;
     if (c.loc === "pit" || c.loc === "lane_in" || c.loc === "lane_out") return `<span class="flag pit">PIT</span>`;
     if (!race && c.loc === "garage") return "";
-    if (!race && c.run?.phase === "out") return `<span class="flag" style="background:#333">OUT</span>`;
+    if (!race && c.run?.phase === "out") return `<span class="flag outl">OUT LAP</span>`;
     if (c.drs) return `<span class="flag mo">MO</span>`;
     return "";
   }
@@ -185,17 +188,17 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     if (race) head = `Vuelta ${Math.min(sess.laps, sess.leaderLap + 1)}/${sess.laps}`;
     else if (quali) head = `${part?.name ?? ""}`;
     else head = SESSION_NAMES[kind];
-    let html = `<div class="th"><span>${head}</span><button>${modeName}</button></div>`;
+    let html = `<div class="th"><span class="tab">${head}</span><button>${modeName}</button></div>`;
     const cutAt = quali && part?.advance ? part.advance : -1;
     rows.forEach(({ car: c, gap, interval, lapsDown }, i) => {
-      if (i === cutAt) html += `<div class="cut"><span>ELIM.</span></div>`;
+      if (i === cutAt) html += `<div class="cut"></div>`;
       let g = "";
       if (race) {
         if (c.loc === "out") g = "OUT";
         else if (mode === "tyre") g = `${c.tyres ? c.tyres.laps : ""}`;
-        else if (i === 0) g = c.loc === "fin" ? "🏁" : "Líder";
+        else if (i === 0) g = c.loc === "fin" ? "🏁" : mode === "int" ? "Intervalo" : "Líder";
         else if (lapsDown > 0) g = `+${lapsDown} V`;
-        else g = `+${(mode === "int" ? interval : gap).toFixed(1)}`;
+        else g = `+${Math.max(0, mode === "int" ? interval : gap).toFixed(1)}`;
       } else {
         const b = quali ? c.bestByPart[c.eliminated ? c.elimPart! : sess.part] : c.best;
         if (mode === "tyre") g = c.tyres ? `${c.tyres.laps}` : "";
@@ -205,34 +208,107 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
         if (c.eliminated) g = `<span class="dim">${g}</span>`;
       }
       const tyre = c.tyres && (race || c.loc !== "garage") ? tyreHtml(c.tyres.c) : "";
-      html += `<div class="tr${c.player ? " me" : ""}${c.loc === "out" || c.eliminated ? " out" : ""}"><span class="p">${i + 1}</span><span class="c" style="background:${c.team.color}"></span><span class="n">${c.d.abrev}</span>${statusFlag(c)}<span class="g mono">${g}</span><span class="t">${mode === "tyre" || race ? tyre : ""}</span></div>`;
+      html += `<div class="tr${c.player ? " me" : ""}${c.loc === "out" || c.eliminated ? " out" : ""}"><span class="p">${i + 1}</span><span class="c" style="background:${c.team.color}"></span><span class="body"><span class="n">${c.d.abrev}</span>${statusFlag(c)}<span class="g mono">${g}</span><span class="t">${mode === "tyre" || race ? tyre : ""}</span></span></div>`;
     });
     towerEl.innerHTML = html;
   }
 
   // ------------------------------------------------------------ cabecera
   function renderTop() {
-    const clock = $("#clock");
-    if (race) clock.textContent = `${Math.min(sess.laps, sess.leaderLap + 1)}/${sess.laps}`;
-    else if (sess.inBreak > 0) clock.textContent = fmtClock(sess.inBreak);
-    else clock.textContent = fmtClock(sess.remaining());
-    const f = $("#flag");
-    const names: Record<string, string> = { vsc: "COCHE DE SEGURIDAD VIRTUAL", sc: "COCHE DE SEGURIDAD", sc_in: "EL COCHE DE SEGURIDAD ENTRA", red: "BANDERA ROJA" };
-    let cls = "", txt = "";
-    if (sess.inBreak > 0) { cls = "brk"; txt = `${sess.parts[sess.part].name} EMPIEZA EN ${fmtClock(sess.inBreak)}`; }
-    else if (sess.flag !== "green") { cls = sess.flag; txt = names[sess.flag]; }
-    else if (sess.chequered) { cls = "chq"; txt = "BANDERA A CUADROS"; }
-    f.className = "flagbar" + (cls ? ` show ${cls}` : "");
-    f.textContent = txt;
+    // contador al estilo TV: [VUELTA][28/71][ESTADO]
+    let k = "", v = "", st = "", cls = "";
+    if (race) { k = "Vuelta"; v = `${Math.min(sess.laps, sess.leaderLap + 1)}/${sess.laps}`; }
+    else if (quali) { k = sess.parts[sess.part]?.name ?? ""; v = fmtClock(sess.inBreak > 0 ? sess.inBreak : sess.remaining()); }
+    else { k = SESSION_NAMES[kind]; v = fmtClock(sess.remaining()); }
+    const names: Record<string, string> = { vsc: "Coche de seguridad virtual", sc: "Coche de seguridad", sc_in: "El coche de seguridad entra", red: "Bandera roja" };
+    if (sess.inBreak > 0) { st = `Empieza en ${fmtClock(sess.inBreak)}`; }
+    else if (sess.flag !== "green") { st = names[sess.flag]; cls = sess.flag === "red" ? "red" : "sc"; }
+    else if (sess.chequered) { st = "Bandera a cuadros"; cls = "chq"; }
+    $("#lapc").innerHTML = `<span class="k">${k}</span><span class="v">${v}</span>${st ? `<span class="s ${cls}">${st}</span>` : ""}`;
     const w = sess.weather;
     const rMax = sess.maxRainOnTrack();
     const sw = sess.sectorWater();
-    $("#wx").innerHTML = `<div class="row"><span class="big mono">${w.airT.toFixed(0)}°</span><span class="dim small">aire</span><span class="big mono">${w.trackT.toFixed(0)}°</span><span class="dim small">pista</span></div>
-      <div class="small">${rMax > 0.15 ? `🌧️ ${rMax.toFixed(1)} mm/h` : w.cloud > 0.6 ? "☁️ Cubierto" : w.cloud > 0.3 ? "⛅ Nubes" : "☀️ Sol"} · viento ${w.surfaceWind.toFixed(0)} km/h</div>
-      <div class="wxbar">${sw.map((x, i) => `<div title="S${i + 1}" style="background:${x > 0.05 ? `rgba(58,139,232,${Math.min(1, 0.3 + x)})` : "#2a2d33"}"></div>`).join("")}</div>
-      <div class="small dim">Agua S1·S2·S3: ${sw.map((x) => x.toFixed(2)).join(" · ")} mm</div>`;
-    const evs = sess.events.filter((e) => e.kind !== "info" || e.important || (e.carId !== undefined && sess.carById(e.carId).player)).slice(-5).reverse();
-    $("#ticker").innerHTML = evs.map((e) => `<div class="msg ${e.kind === "control" || e.kind === "weather" ? "ctl" : e.important ? "imp" : ""}">${e.text}</div>`).join("");
+    $("#wx").innerHTML = `<span class="tab">Aire</span><span class="bar mono">${w.airT.toFixed(0)}° <span class="dim">pista</span> ${w.trackT.toFixed(0)}°</span>
+      <span class="tab">Cielo</span><span class="bar" style="white-space:nowrap">${rMax > 0.15 ? `Lluvia ${rMax.toFixed(rMax < 10 ? 1 : 0)}<span class="small" style="text-transform:none">&nbsp;mm/h</span>` : w.cloud > 0.6 ? "Cubierto" : w.cloud > 0.3 ? "Nubes" : "Sol"}</span>
+      <span class="tab">Agua</span><span class="bar"><span class="wxsec grow">${sw.map((x) => `<div title="${x.toFixed(2)} mm" style="background:${x > 0.05 ? `rgba(58,139,232,${Math.min(1, 0.35 + x)})` : "#26282d"}"></div>`).join("")}</span><span class="mono small">${Math.max(...sw).toFixed(2)}</span></span>`;
+    const evs = sess.events.filter((e) => e.kind !== "info" || e.important || (e.carId !== undefined && sess.carById(e.carId).player)).slice(-4).reverse();
+    $("#ticker").innerHTML = evs.map((e) => rmHtml(TAB[e.kind], e.text, e.kind === "control" && /ROJA/.test(e.text) ? "red" : e.kind === "control" || e.kind === "weather" ? "ctl" : "")).join("");
+    // última vuelta de tu piloto (libres/clasificación): [P][NOMBRE][TIEMPO][+DIF]
+    const lb = $("#lapban");
+    if (!race) {
+      const c = sess.carById(onbId);
+      const last = c.lapTimes[c.lapTimes.length - 1];
+      const ord = sess.timingOrder();
+      const pos = ord.indexOf(c) + 1;
+      const ref = quali ? ord[0].bestByPart[sess.part] : ord[0].best;
+      const mineBest = quali ? c.bestByPart[sess.part] : c.best;
+      lb.innerHTML = last ? `<div class="lapbanner"><span class="posbox">${pos}</span><span class="bar grow">${tvName(c)}</span><span class="bar mono">${mineBest && isFinite(mineBest) ? fmtLap(mineBest) : "Sin tiempo"}</span>${ref && mineBest && ord[0] !== c ? `<span class="gold mono">+${(mineBest - ref).toFixed(3)}</span>` : ""}</div>` : "";
+    } else lb.innerHTML = "";
+  }
+
+  // ------------------------------------------------------------ onboard
+  let prevV = 0;
+  function drawGauge() {
+    const cv = $<HTMLCanvasElement>("#gauge");
+    if (!cv) return;
+    const c = sess.carById(onbId);
+    const dpr = window.devicePixelRatio || 1;
+    const S = 96 * dpr;
+    if (cv.width !== S) { cv.width = S; cv.height = S; }
+    const g = cv.getContext("2d")!;
+    g.clearRect(0, 0, S, S);
+    const cx = S / 2, cy = S / 2, R = S * 0.44;
+    const kmh = c.loc === "track" || c.loc === "pit" ? c.v * 3.6 : 0;
+    // arco de velocidad (0-360 km/h)
+    const a0 = Math.PI * 0.75, a1 = Math.PI * 2.25;
+    g.lineWidth = 5 * dpr; g.lineCap = "butt";
+    g.strokeStyle = "rgba(255,255,255,.15)";
+    g.beginPath(); g.arc(cx, cy, R, a0, a1); g.stroke();
+    const f = Math.min(1, kmh / 360);
+    const grad = g.createLinearGradient(0, S, S, 0);
+    grad.addColorStop(0, "#1f6fd1"); grad.addColorStop(1, "#5fb3ff");
+    g.strokeStyle = grad;
+    g.beginPath(); g.arc(cx, cy, R, a0, a0 + (a1 - a0) * f); g.stroke();
+    g.fillStyle = "rgba(0,0,0,.85)"; g.beginPath(); g.arc(cx, cy, R - 5 * dpr, 0, 7); g.fill();
+    // velocidad y marcha
+    g.textAlign = "center";
+    g.fillStyle = "#39ff6a"; g.font = `900 ${22 * dpr}px "Titillium Web", sans-serif`;
+    g.fillText(String(Math.round(kmh)), cx, cy - 4 * dpr);
+    g.fillStyle = "#aaa"; g.font = `700 ${7 * dpr}px "Titillium Web", sans-serif`;
+    g.fillText("km/h", cx, cy + 5 * dpr);
+    const gears = [0, 85, 120, 155, 190, 225, 260, 295];
+    let gear = 0;
+    for (let i = 0; i < gears.length; i++) if (kmh >= gears[i]) gear = i + 1;
+    g.fillStyle = "#fff"; g.font = `900 ${15 * dpr}px "Titillium Web", sans-serif`;
+    g.fillText(kmh < 3 ? "N" : String(gear), cx, cy + 20 * dpr);
+    // acelerador / freno a partir del perfil de velocidad
+    const L = track.length;
+    const pos = ((c.s % L) + L) % L;
+    const i = Math.min(track.vref.length - 2, Math.floor(pos / track.ds));
+    const ax = (track.vref[i + 1] ** 2 - track.vref[i] ** 2) / (2 * track.ds);
+    const moving = kmh > 3 && c.loc === "track";
+    const thr = moving ? (ax > -0.5 ? Math.min(1, 0.55 + ax / 8) : 0) : 0;
+    const brk = moving ? Math.min(1, Math.max(0, -ax / 35)) : 0;
+    const bw = 30 * dpr, bh = 4 * dpr, by = cy + 26 * dpr;
+    g.fillStyle = "#333"; g.fillRect(cx - bw - 2 * dpr, by, bw, bh); g.fillRect(cx + 2 * dpr, by, bw, bh);
+    g.fillStyle = "#39ff6a"; g.fillRect(cx - bw - 2 * dpr, by, bw * thr, bh);
+    g.fillStyle = "#ff3b30"; g.fillRect(cx + 2 * dpr, by, bw * brk, bh);
+    // MO (modo adelantamiento) y batería
+    g.fillStyle = c.drs ? "#39ff6a" : "#444"; g.font = `900 ${8 * dpr}px "Titillium Web", sans-serif`;
+    g.fillText("MO", cx + R * 0.72, cy + R * 0.95);
+    const soc = c.soc / SOC_MAX;
+    g.fillStyle = "#333"; g.fillRect(cx - R * 0.98, cy + R * 0.45, 5 * dpr, 16 * dpr);
+    g.fillStyle = soc > 0.25 ? "#ff3b30" : "#802020"; g.fillRect(cx - R * 0.98, cy + R * 0.45 + 16 * dpr * (1 - soc), 5 * dpr, 16 * dpr * soc);
+    prevV = kmh;
+  }
+  function renderOnbTags() {
+    const c = sess.carById(onbId);
+    const others = mine().filter((x) => x.id !== onbId);
+    $("#onbtags").innerHTML = `<div class="bar">${tvName(c)}</div><div class="bar dim" style="text-transform:none">${esc(c.team.nombre)}</div>
+      <div class="bar small" style="text-transform:none">${c.tyres ? `${tyreHtml(c.tyres.c)} ${c.tyres.laps} v · ${Math.round((1 - setWear(c.tyres)) * 100)} %` : "En el garaje"}</div>
+      ${others.length ? `<button id="onbsw" style="padding:2px 4px;font-size:10px">Onboard ${others[0].d.abrev}</button>` : ""}`;
+    const b = document.getElementById("onbsw");
+    if (b) b.onclick = () => { onbId = others[0].id; renderOnbTags(); };
   }
 
   // --------------------------------------------------------- tarjetas
@@ -249,32 +325,36 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   }
   function renderDrivers() {
     const ord = sess.order();
+    const redRace = race && sess.flag === "red";
     drvEl.innerHTML = mine().map((c, i) => {
       const pos = ord.indexOf(c) + 1;
       const t = c.tyres;
       const wear = t ? setWear(t) : 0;
       const sp = t ? COMPOUNDS[t.c] : null;
-      const col = !t || !sp ? "#444" : wear > sp.cliff ? "var(--red)" : wear > sp.cliff - 0.12 ? "var(--yellow)" : "var(--green)";
+      const col = !t || !sp ? "#444" : wear > sp.cliff ? "var(--red1)" : wear > sp.cliff - 0.12 ? "var(--gold1)" : "var(--green)";
       let line2 = "";
       if (race) {
         const ahead = ord[pos - 2], behind = ord[pos];
         const ga = ahead && c.loc === "track" ? sess.gapBetween(ahead, c) : NaN;
         const gb = behind && behind.loc === "track" ? sess.gapBetween(c, behind) : NaN;
         const f = (g: number) => (!isFinite(g) ? "—" : g > sess.lapRefRace * 0.95 ? "1V+" : g.toFixed(1));
-        line2 = `<span>▲${f(ga)}</span><span>${phaseName(c)}</span><span>▼${f(gb)}</span>`;
+        line2 = `<span class="gold mono">▲${f(ga)}</span><span class="bar">${phaseName(c)}</span><span class="gold mono">▼${f(gb)}</span>`;
       } else {
         const b = quali ? c.bestByPart[sess.part] : c.best;
-        line2 = `<span>${phaseName(c)}</span><span class="mono">${fmtLap(b)}</span>`;
+        line2 = `<span class="bar">${phaseName(c)}</span><span class="gold mono">${fmtLap(b)}</span>`;
       }
       let btns = "";
-      if (race) btns = `<button data-a="minus" data-i="${i}">−</button><button data-a="plus" data-i="${i}">+</button><button class="${c.pitRequest ? "yellow" : ""}" data-a="box" data-i="${i}" ${c.loc !== "track" ? "disabled" : ""}>${c.pitRequest ? "BOX ✓" : "BOX"}</button>`;
+      if (redRace) btns = `<button class="yellow" data-a="red" data-i="${i}" ${c.loc !== "track" ? "disabled" : ""}>Cambiar neumáticos</button>`;
+      else if (race) btns = `<button data-a="minus" data-i="${i}">−</button><button data-a="plus" data-i="${i}">+</button><button class="${c.pitRequest ? "yellow" : ""}" data-a="box" data-i="${i}" ${c.loc !== "track" ? "disabled" : ""}>${c.pitRequest ? "BOX ✓" : "BOX"}</button>`;
       else btns = `<button data-a="go" data-i="${i}" ${c.loc !== "garage" || c.eliminated || sess.remaining() <= 0 || sess.flag === "red" ? "disabled" : ""}>${quali ? "Salir" : "Tanda"}</button><button data-a="in" data-i="${i}" ${c.loc !== "track" ? "disabled" : ""}>Boxes</button><button class="${c.auto ? "on" : ""}" data-a="auto" data-i="${i}">Auto</button>`;
-      return `<div class="dcard"><div class="h"><span class="pp mono">P${pos}</span><span class="nm">${c.d.abrev}</span><span class="grow"></span>${t ? tyreHtml(t.c) + `<span class="small mono">${t.laps}</span>` : ""}</div>
-        <div class="bar"><i style="width:${(1 - wear) * 100}%;background:${col}"></i></div>
-        <div class="st mono">${line2}</div><div class="b">${btns}</div></div>`;
+      return `<div class="dcard"><div class="h"><span class="posbox mono">${pos}</span><span class="nm" data-onb="${c.id}">${tvName(c)}${t ? tyreHtml(t.c) + `<span class="small mono">${t.laps}</span>` : ""}</span></div>
+        <div class="wear"><i style="width:${(1 - wear) * 100}%;background:${col}"></i></div>
+        <div class="st">${line2}</div><div class="b">${btns}</div></div>`;
     }).join("");
   }
   drvEl.addEventListener("click", (e) => {
+    const nm = (e.target as HTMLElement).closest("[data-onb]") as HTMLElement | null;
+    if (nm) { onbId = Number(nm.dataset.onb); renderOnbTags(); return; }
     const b = (e.target as HTMLElement).closest("button") as HTMLButtonElement | null;
     if (!b || b.disabled) return;
     const c = mine()[Number(b.dataset.i)];
@@ -282,6 +362,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     if (a === "minus") c.push = Math.max(0, c.push - 1);
     if (a === "plus") c.push = Math.min(4, c.push + 1);
     if (a === "box") boxSheet(c);
+    if (a === "red") redSheet(c);
     if (a === "go") quali ? qualiSheet(c) : practiceSheet(c);
     if (a === "in") { sess.abortRun(c); showToast(`📻 ${c.d.abrev}: "Entendido, entro a boxes."`, 2500); }
     if (a === "auto") { c.auto = !c.auto; if (!c.auto) c.queue = []; showToast(c.auto ? `🤖 El equipo lleva el programa de ${c.d.abrev}` : `🎮 Tú llevas a ${c.d.abrev}`, 2500); }
@@ -313,6 +394,18 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       }));
       const cb = el.querySelector<HTMLButtonElement>("#cancel");
       if (cb) cb.onclick = () => { c.pitRequest = null; close(); };
+    });
+  }
+  function redSheet(c: Car) {
+    const sw = sess.sectorWater();
+    open(`<div class="row"><span class="tab">Bandera roja</span><b class="up grow">${esc(c.d.nombre)}</b></div>
+      <div class="small dim" style="margin-top:4px">Con la carrera parada se pueden cambiar los neumáticos sin perder tiempo. Agua S1·S2·S3: ${sw.map((x) => x.toFixed(2)).join(" · ")} mm. Lisos hasta ~0,15 mm, intermedios hasta ~1 mm.</div>
+      <div class="opts">${setButtons(c, (s) => !s.punctured, c.tyres?.id)}</div>
+      <button data-close style="width:100%">Cerrar</button>`, (el, close) => {
+      el.querySelectorAll<HTMLButtonElement>("[data-set]").forEach((b) => (b.onclick = () => {
+        if (sess.redFlagChange(c, b.dataset.set!)) showToast(`${c.d.abrev}: neumáticos cambiados.`, 2500, "Boxes");
+        close();
+      }));
     });
   }
   function qualiSheet(c: Car) {
@@ -371,14 +464,14 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     });
   }
   function pilotsSheet() {
-    const tempColor = (c: Compound, t: number) => { const sp = COMPOUNDS[c]; const d = t - sp.opt; return Math.abs(d) < sp.window * 0.5 ? "var(--green)" : d < -sp.window ? "var(--blue)" : d > sp.window ? "var(--red)" : "var(--yellow)"; };
+    const tempColor = (c: Compound, t: number) => { const sp = COMPOUNDS[c]; const d = t - sp.opt; return Math.abs(d) < sp.window * 0.5 ? "var(--green)" : d < -sp.window ? "var(--blue)" : d > sp.window ? "var(--red1)" : "var(--gold1)"; };
     const body = () => mine().map((c, idx) => {
       const t = c.tyres;
       const axle = (name: string, a: TyreSet["F"]) => !t ? "" : `<div style="border-color:${tempColor(t.c, a.tBulk)}"><div class="small dim up">${name}</div><div class="t mono" style="color:${tempColor(t.c, a.tBulk)}">${a.tBulk.toFixed(0)}°</div><div class="small dim mono">sup. ${a.tSurf.toFixed(0)}°</div><div class="small mono">${Math.round((1 - a.wear) * 100)} % banda</div>${a.grain > 0.05 ? `<div class="small yellow">graining ${Math.round(a.grain * 100)} %</div>` : ""}${a.blister > 0.05 ? `<div class="small redt">ampollas ${Math.round(a.blister * 100)} %</div>` : ""}</div>`;
       const seg = (key: string, names: string[], cur: number, auto?: boolean) => `<div class="seg" data-k="${key}" data-i="${idx}">${auto !== undefined ? `<button data-v="auto" class="${auto ? "on" : ""}">Auto</button>` : ""}${names.map((n, i) => `<button data-v="${i}" class="${!auto && cur === i ? "on" : ""}">${n}</button>`).join("")}</div>`;
       const fuelDelta = race ? c.fuel / sess.fuelPerLap - (sess.laps - sess.lapsDone(c)) : 0;
       const plan = race ? c.plan.stints.slice(c.stops).map((s, i, arr) => `${tyreHtml(s.c)}${i < arr.length - 1 ? ` v${s.endLap}` : ""}`).join(" → ") : "";
-      return `<div class="panel" style="margin:6px 0"><div class="hd"><span class="teamdot" style="background:${c.team.color}"></span>${esc(c.d.nombre)}<span class="grow"></span>${t ? tyreHtml(t.c, true) : ""}</div><div class="bd">
+      return `<div class="panel" style="margin:6px 0"><div class="hd"><span class="t"><span class="teamdot" style="background:${c.team.color}"></span>${esc(c.d.nombre)}</span>${t ? tyreHtml(t.c, true) : ""}</div><div class="bd">
         ${t ? `<div class="small dim">${COMPOUNDS[t.c].name} · ${t.laps} v · ventana ${COMPOUNDS[t.c].opt - COMPOUNDS[t.c].window}–${COMPOUNDS[t.c].opt + COMPOUNDS[t.c].window} °C${c.wing > 0 ? ` · <span class="yellow">alerón dañado</span>` : ""}</div><div class="temp">${axle("Delanteros", t.F)}${axle("Traseros", t.R)}</div>` : `<div class="dim">En el garaje.</div>`}
         <div class="kv"><span>Última / mejor</span><b class="mono">${fmtLap(c.lapTimes[c.lapTimes.length - 1])} / ${fmtLap(c.best)}</b>
         ${t ? `<span>Ritmo posible ahora</span><b class="mono">${fmtLap(sess.estLap(c))}</b>` : ""}
@@ -459,7 +552,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   }
   function radioSheet() {
     const evs = sess.events.slice(-150).reverse();
-    open(`<b class="up">Radio y dirección de carrera</b><div style="margin:6px 0">${evs.map((e) => `<div class="msg ${e.kind === "control" || e.kind === "weather" ? "ctl" : e.important ? "imp" : ""}" style="margin-bottom:2px"><span class="dim small">${race ? "V" + e.lap : fmtClock(e.t)}</span> ${e.text}</div>`).join("") || "<div class='dim'>Sin mensajes.</div>"}</div><button data-close style="width:100%">Cerrar</button>`, () => {});
+    open(`<span class="tab">Radio y dirección de carrera</span><div style="margin:6px 0;display:flex;flex-direction:column;gap:3px">${evs.map((e) => rmHtml(`${race ? "V" + e.lap : fmtClock(e.t)} · ${TAB[e.kind]}`, e.text, e.kind === "control" && /ROJA/.test(e.text) ? "red" : e.kind === "control" || e.kind === "weather" ? "ctl" : "")).join("") || "<div class='dim'>Sin mensajes.</div>"}</div><button data-close style="width:100%">Cerrar</button>`, () => {});
   }
 
   // -------------------------------------------------- previa de carrera
@@ -468,7 +561,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     const grid = sess.order();
     const html = () => `<b class="up">Parrilla · ${SESSION_NAMES[kind]}</b>
       <div class="small dim">${kind === "RACE" ? "En seco hay que usar dos compuestos distintos. " : "Sin parada obligatoria. "}Sin repostaje: el combustible que cargues es el que hay.</div>
-      ${me.map((c, i) => `<div class="panel" style="margin:6px 0"><div class="hd">P${grid.indexOf(c) + 1} · ${esc(c.d.nombre)}</div><div class="bd">
+      ${me.map((c, i) => `<div class="panel" style="margin:6px 0"><div class="hd"><span class="t">P${grid.indexOf(c) + 1} · ${esc(c.d.nombre)}</span></div><div class="bd">
         <div class="small dim">Plan recomendado: ${c.plan.stints.map((s, j, a) => `${tyreHtml(s.c)}${j < a.length - 1 ? ` v${s.endLap}` : ""}`).join(" → ")}</div>
         <h2>Neumático de salida</h2><div class="opts" data-start="${i}">${setButtons(c, (s) => true, c.tyres?.id)}</div>
         <h2>Combustible</h2><div class="seg" data-fuel="${i}">${[[-1.2, "Muy justo"], [-0.5, "Justo"], [0, "Exacto"], [0.6, "Con margen"]].map(([v, n]) => `<button data-v="${v}" class="${Math.abs(sess.fuelMargin(c) - (v as number)) < 0.05 ? "on" : ""}">${n}</button>`).join("")}</div>
@@ -519,7 +612,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   }
   sizeMap();
   window.onresize = sizeMap;
-  renderTower(); renderTop(); renderDrivers();
+  renderTower(); renderTop(); renderDrivers(); renderOnbTags();
   updSpeed();
   let last = performance.now();
   const loop = (now: number) => {
@@ -535,11 +628,11 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
         if (paused) { leftover = 0; break; }
       }
     }
-    if (!skipping) drawMap();
+    if (!skipping) { drawMap(); drawGauge(); }
     if (now - lastUi > 250 && !skipping) {
       lastUi = now;
       renderTower(); renderTop();
-      if (!sheetOpen) renderDrivers();
+      if (!sheetOpen) { renderDrivers(); renderOnbTags(); }
     }
     if (sess.finished) return finish();
     raf = requestAnimationFrame(loop);

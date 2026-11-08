@@ -111,16 +111,17 @@ function spawnCell(w: WeatherState, mode: "upwind" | "inplace" | "front", along 
   let dist: number, lat: number;
   if (mode === "upwind") { dist = r.range(20, 50); lat = r.range(-28, 28); }
   else if (mode === "front") { dist = w.frontDist + r.range(-4, 4); lat = along; }
+  else if (small) { dist = r.range(-9, 9); lat = r.range(-9, 9); } // la convección local nace cerca
   else { dist = r.range(-18, 18); lat = r.range(-18, 18); }
   const dir = w.windDir + r.gauss(0, 0.15);
   const spd = sp * r.logn(0.15);
   let peak: number, sigma: number, life: number;
   if (small) {
-    peak = clamp(r.logn(0.6) * 8, 1, 45);
-    sigma = r.range(0.3, 1.2);
-    life = r.range(18, 50);
+    peak = clamp(r.logn(0.7) * 12, 1, 70);
+    sigma = r.range(0.5, 1.6);
+    life = r.range(20, 55);
   } else {
-    peak = w.scenario === "chubascos" ? r.logn(0.6) * 6 : w.scenario === "frente" ? r.logn(0.5) * 5 : r.logn(0.4) * 2;
+    peak = w.scenario === "chubascos" ? r.logn(0.7) * 9 : w.scenario === "frente" ? r.logn(0.5) * 7 : r.logn(0.4) * 2;
     sigma = mode === "front" ? r.range(3, 6) : r.range(1.5, 4.5);
     life = r.range(40, 120);
   }
@@ -203,7 +204,7 @@ export function stepWeather(w: WeatherState, dtMin: number): void {
   w.cells = w.cells.filter((c) => c.age < c.life && Math.hypot(c.x, c.y) < 90);
   // nacimientos: los chubascos dependen de la hora (convección de tarde)
   const conv = 1 - cl.tardeConvectiva + cl.tardeConvectiva * 1.8 * convection(w.clock);
-  const base = { seco: 0.01, chubascos: 0.1, frente: 0.03, llovizna: 0.04 }[w.scenario];
+  const base = { seco: 0.01, chubascos: 0.2, frente: 0.04, llovizna: 0.05 }[w.scenario];
   if (r.chance(base * conv * dtMin)) {
     const small = r.chance(cl.pequenas);
     w.cells.push(spawnCell(w, small || r.chance(0.5) ? "inplace" : "upwind", 0, small));

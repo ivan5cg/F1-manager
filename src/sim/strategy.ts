@@ -474,3 +474,24 @@ export function qualiTick(sess: Session, car: Car) {
   const pushLaps = water > 0.18 ? 3 : (freshLeft <= 1 && part.advance === null) || lastChance ? 2 : 1;
   sess.startRun(car, { kind: "quali", setId: set.id, pushLaps, fuel: QUALI_FUEL + pushLaps * 2 * sess.fuelPerLap });
 }
+
+/** Neumáticos de la IA durante una bandera roja en carrera (cambio gratis). */
+export function aiRedFlagTyres(sess: Session, car: Car) {
+  if (!car.tyres) return;
+  const water = sess.avgWater();
+  const cur = car.tyres.c;
+  let want: Compound | null = null;
+  if (water > 1.1) want = "W";
+  else if (water > 0.2) want = cur === "W" && water > 0.8 ? null : "I";
+  else if (!DRY.includes(cur)) want = car.plan.stints.find((s) => DRY.includes(s.c))?.c ?? "M";
+  else if (setWear(car.tyres) > 0.25) {
+    // gratis: juego más fresco del compuesto que mejor encaja con lo que queda
+    const left = sess.laps - sess.lapsDone(car);
+    const avail = availableSets(car);
+    const opts: Compound[] = left < 18 ? ["S", "M", "H"] : left < 32 ? ["M", "H", "S"] : ["H", "M", "S"];
+    want = opts.find((c) => avail[c].length && (ruleSatisfied(car) || c !== cur)) ?? null;
+  }
+  if (!want || want === cur && setWear(car.tyres) < 0.25) return;
+  const set = sess.bestSetFor(car, want) ?? (want === "W" ? sess.bestSetFor(car, "I") : undefined);
+  if (set) sess.redFlagChange(car, set.id);
+}

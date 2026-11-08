@@ -7,7 +7,7 @@ import { Rng, clamp } from "./rng";
 import { Track, Minisector, msTimeAtGrip, MIN_MASS, REF_CAR } from "./track";
 import { Compound, COMPOUNDS, DRY, HiddenTyre, TyreSet, setGrip, updateSet, axleGrip, warmBlankets, setWear } from "./tyres";
 import { WeatherState, stepWeather, rainAt } from "./weather";
-import { Plan, planStrategy, aiDecide, aiErs, TeamKnowledge, practiceProgram, qualiTick, pickSet, learnFromRun } from "./strategy";
+import { Plan, planStrategy, aiDecide, aiErs, TeamKnowledge, practiceProgram, qualiTick, pickSet, learnFromRun, aiRedFlagTyres } from "./strategy";
 
 export const PUSH_NAMES = ["Conservar", "Gestionar", "Normal", "Atacar", "Al límite"];
 export const ENGINE_NAMES = ["Ahorro", "Normal", "Potencia"];
@@ -213,6 +213,8 @@ export class Session {
   inBreak = 0; // segundos de descanso entre partes
   sprintWeekend: boolean;
   leaderId = -1;
+  redReason: "rain" | "crash" | null = null;
+  redWall = 0; // cuándo empezó la bandera roja (tiempo real simulado)
   onEvent?: (e: RaceEvent) => void;
   private weatherAcc = 0;
   private lastRainMsg = -999;
@@ -408,6 +410,7 @@ export class Session {
       this.updateWater(this.weatherAcc);
       this.weatherAcc = 0;
       this.weatherRadio();
+      this.torrentialCheck();
     }
     if (this.inBreak > 0) {
       this.inBreak -= dt;
@@ -417,8 +420,10 @@ export class Session {
     if (this.flag === "red") {
       this.flagTimer -= dt;
       if (this.flagTimer <= 0) {
-        this.flag = "green";
-        this.log({ kind: "control", text: "🟢 Se reanuda la sesión. Pit-lane abierto.", important: true, pause: true });
+        // con lluvia, no se reanuda hasta que la pista lo permita (máximo 45 min)
+        const tooWet = this.redReason === "rain" && (this.avgWater() > 1.4 || Math.max(...this.sectorWater()) > 1.5 || this.maxRainOnTrack() > 8) && this.wall - this.redWall < 45 * 60;
+        if (tooWet) { this.flagTimer = 60; return; }
+        this.resumeFromRed();
       }
       return;
     }
@@ -500,12 +505,76 @@ export class Session {
     }
   }
 
-  private redFlag(why: string) {
-    if (this.flag === "red" || this.remaining() <= 0) return;
+  /** Bandera roja. En libres/clasificación todos al garaje; en carrera, se para con cambio libre de neumáticos. */
+  redFlag(why: string, rain = false) {
+    if (this.flag === "red" || this.chequered) return;
+    if (!isRaceKind(this.kind) && this.remaining() <= 0) return;
     this.flag = "red";
-    this.flagTimer = this.rng.range(240, 600);
-    this.log({ kind: "control", text: `🟥 BANDERA ROJA — ${why}. Todos a boxes.`, pause: true, important: true });
-    for (const c of this.cars) if (c.loc === "track" || c.loc === "lane_out" || c.loc === "lane_in") this.toGarage(c);
+    this.redReason = rain ? "rain" : "crash";
+    this.redWall = this.wall;
+    if (!isRaceKind(this.kind)) {
+      this.flagTimer = rain ? this.rng.range(300, 600) : this.rng.range(240, 600);
+      this.log({ kind: "control", text: `🟥 BANDERA ROJA — ${why}. Todos a boxes.`, pause: true, important: true });
+      for (const c of this.cars) if (c.loc === "track" || c.loc === "lane_out" || c.loc === "lane_in") this.toGarage(c);
+      return;
+    }
+    this.flagTimer = rain ? this.rng.range(600, 900) : this.rng.range(900, 1800);
+    this.log({ kind: "control", text: `🟥 BANDERA ROJA — ${why}. Carrera suspendida: todos al pit-lane. Se pueden cambiar neumáticos.`, pause: true, important: true });
+    for (const c of this.cars) {
+      if (c.loc === "pit" && c.pit) {
+        // la parada en curso se completa
+        const set = c.e.sets.find((x) => x.id === c.pit!.setId);
+        if (set && !c.pit.changed) { this.mount(c, set); c.stops++; c.lastPitLap = this.lapsDone(c); }
+        c.s = c.pit.entryS + c.pit.dist;
+        c.pit = undefined;
+        c.loc = "track";
+      }
+      if (c.loc !== "track") continue;
+      c.pitRequest = null;
+      c.slowPuncture = false;
+      if (c.tyres) c.tyres.punctured = false;
+      c.v = 0;
+      if (!c.player) aiRedFlagTyres(this, c);
+    }
+  }
+
+  /** Cambio de neumáticos durante la bandera roja (no cuenta como parada). */
+  redFlagChange(c: Car, setId: string) {
+    if (this.flag !== "red" || !isRaceKind(this.kind) || c.loc !== "track") return false;
+    const set = c.e.sets.find((x) => x.id === setId && !x.returned);
+    if (!set || set === c.tyres) return false;
+    this.mount(c, set);
+    c.wing = 0;
+    c.plan = { stints: [...c.plan.stints.slice(0, c.stops), ...planStrategy(this, c, c.e.knowledge, this.lapsDone(c), set.c, 0, null).stints] };
+    this.log({ kind: "pit", carId: c.id, text: `🔧 ${c.d.abrev} cambia a ${COMPOUNDS[set.c].name.toLowerCase()} durante la bandera roja`, important: c.player });
+    return true;
+  }
+
+  private resumeFromRed() {
+    this.flag = "green";
+    const rain = this.redReason === "rain";
+    this.redReason = null;
+    if (!isRaceKind(this.kind)) {
+      this.log({ kind: "control", text: "🟢 Se reanuda la sesión. Pit-lane abierto.", important: true, pause: true });
+      return;
+    }
+    this.flag = "sc";
+    this.scLapsLeft = rain ? 2 : 1;
+    this.drsEnabledFromLap = this.leaderLap + 4;
+    this.log({ kind: "control", text: "🟨 Se reanuda la carrera detrás del coche de seguridad", important: true, pause: true });
+  }
+
+  /** Lluvia torrencial: bandera roja. */
+  private torrentialCheck() {
+    if (this.flag === "red" || this.chequered || this.inBreak > 0) return;
+    const w = this.avgWater();
+    const worstSector = Math.max(...this.sectorWater());
+    let worstMs = 0;
+    for (let i = 0; i < this.N; i++) worstMs = Math.max(worstMs, this.water[i]);
+    if (w > 1.9 || worstSector > 1.8 || (worstMs > 2.4 && w > 0.8) || (w > 1.3 && this.maxRainOnTrack() > 25)) {
+      const where = this.track.ms.reduce((b, m) => (this.water[m.i] > this.water[b.i] ? m : b));
+      this.redFlag(`lluvia torrencial, agua estancada en el sector ${where.sector + 1}`, true);
+    }
   }
 
   private incident(c: Car, why: string, severity: number) {
@@ -514,6 +583,8 @@ export class Session {
       else this.log({ kind: "control", text: `⚠️ Bandera amarilla: ${why}` });
       return;
     }
+    // un accidente fuerte (barreras dañadas) puede parar la carrera
+    if (severity >= 0.7 && this.rng.chance(0.12 * severity)) { this.redFlag(`accidente de ${c.d.abrev}, reparación de barreras`); return; }
     const r = this.rng.next();
     if (r < 0.25 + 0.4 * severity) this.deploy("sc", why);
     else if (r < 0.55 + 0.35 * severity) this.deploy("vsc", why);
@@ -709,8 +780,8 @@ export class Session {
       this.drsEnabledFromLap = lap + 3;
       this.log({ kind: "control", text: "🟢 ¡Relanzada! Bandera verde.", important: true, pause: true });
     }
-    // lluvia torrencial: coche de seguridad
-    if (this.avgWater() > 2.3 && this.flag === "green") this.deploy("sc", "lluvia torrencial");
+    // mucha agua pero sin llegar a bandera roja: coche de seguridad
+    if (this.avgWater() > 1.7 && this.flag === "green") this.deploy("sc", "demasiada agua en pista");
     for (const c of this.cars) {
       if (c.loc !== "track") continue;
       const hz = (1 / 2600) * c.team.fiabilidad * ENGINE_FAIL[c.engine] * (1 + c.floor * 5);

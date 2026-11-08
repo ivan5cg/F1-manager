@@ -2,7 +2,12 @@
 
 Juego de estrategia de Fórmula 1 centrado en el **fin de semana de carrera**. No hay gestión de equipo: eres el muro de boxes de tus dos pilotos en una minitemporada de 5 grandes premios con la parrilla real de 2026.
 
-Es una web para el móvil (se instala como aplicación desde el navegador) y funciona sin conexión. La pantalla de sesión imita el grafismo de las retransmisiones de 2010-2013: torre de tiempos a la izquierda, barras negras, posiciones en recuadro gris, morado para el mejor tiempo y amarillo para boxes.
+Es una web para el móvil (se instala como aplicación desde el navegador) y funciona sin conexión. La pantalla de sesión imita el grafismo de las retransmisiones de 2010-2013, en rectángulos apilados en vez de diagonales:
+- contador «VUELTA [28/71] COCHE DE SEGURIDAD» con el número sobre amarillo,
+- torre de tiempos con la posición en recuadro rojo, morado para el mejor tiempo y línea roja de corte en clasificación,
+- mensajes con pestaña blanca («RADIO DEL EQUIPO», «DIRECCIÓN DE CARRERA») sobre barra negra,
+- rótulos de piloto («C LECLERC») y diferencias en caja amarilla,
+- onboard con velocidad, marcha, acelerador, freno, batería y modo adelantamiento.
 
 ## Jugar
 
@@ -47,7 +52,9 @@ Todo es determinista a partir de la semilla de la temporada.
 
 **Tiempo** (`src/sim/weather.ts`). Siempre dinámico y localizado. Hay células de lluvia grandes (frentes) y pequeñas (chubascos de 0,3-1,2 km) que mojan solo una parte del circuito. Nacen, crecen, se mueven con el viento y mueren. El clima de cada circuito corresponde a su lugar y fecha: temperaturas medias, días de lluvia y tormentas de tarde en Interlagos y Spa. Hay ciclo diario de temperatura y sol, y cada día es continuo: la clasificación hereda el agua y las nubes de la mañana. El agua se calcula por tramo de pista; los coches abren trazada seca. El radar ve el campo real; la previsión de tu meteorólogo extrapola lo que ve, con su error.
 
-**Carrera** (`src/sim/session.ts`). Aire sucio, rebufo, modo adelantamiento, tapones, adelantamientos según diferencia de ritmo y habilidad, banderas azules, toques, errores, pinchazos, averías, coche de seguridad, VSC y banderas rojas en libres y clasificación. En clasificación hay tráfico (coches en vuelta de salida que estorban) y vueltas anuladas por límites de pista.
+**Carrera** (`src/sim/session.ts`). Aire sucio, rebufo, modo adelantamiento, tapones, adelantamientos según diferencia de ritmo y habilidad, banderas azules, toques, errores, pinchazos, averías, coche de seguridad y VSC.
+
+**Banderas rojas** en todas las sesiones, por accidente fuerte (barreras dañadas) o por lluvia torrencial (agua estancada en algún sector o chaparrón muy fuerte). En carrera se para todo, se pueden cambiar los neumáticos sin perder tiempo y se reanuda detrás del coche de seguridad; con lluvia no se reanuda hasta que la pista lo permite. En clasificación hay tráfico (coches en vuelta de salida que estorban) y vueltas anuladas por límites de pista.
 
 **Estrategia** (`src/sim/strategy.ts`). La IA simula stints con el mismo modelo de neumáticos (con su error) y busca la mejor combinación de 0, 1 o 2 paradas **con los juegos que le quedan**, valorando la posición en pista. En carrera reacciona a coches de seguridad, undercuts y lluvia.
 
