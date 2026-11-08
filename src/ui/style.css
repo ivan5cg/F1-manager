@@ -98,7 +98,8 @@ table.tv tr.me td { color: var(--gold1); }
 .tower .th { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1px; }
 .tower .th .tab { font-size: 11px; }
 .tower .th button { padding: 0 6px; font-size: 10px; height: 18px; }
-.tr { display: flex; align-items: stretch; height: 20px; font-size: 13px; font-weight: 700; }
+/* las filas se estiran para ocupar todo el alto disponible */
+.tr { display: flex; align-items: stretch; flex: 1 1 19px; min-height: 18px; max-height: 30px; font-size: 13px; font-weight: 700; }
 .tr .p { width: 22px; display: flex; align-items: center; justify-content: center; background: linear-gradient(var(--red1), var(--red2)); font-weight: 900; font-size: 12px; }
 .tr .c { width: 3px; }
 .tr .body { flex: 1; display: flex; align-items: center; background: linear-gradient(#1f1f22, #050505); padding-left: 5px; }
@@ -171,3 +172,27 @@ canvas.radar { width: 100%; max-width: 420px; display: block; margin: 0 auto; }
 .fc i { display: block; width: 100%; background: var(--blue); min-height: 2px; }
 .progress { height: 4px; background: #222; margin: 6px 0; }
 .progress i { display: block; height: 100%; background: var(--gold1); }
+
+/* torre a pantalla completa: tiempos y sectores */
+.main.wide { grid-template-columns: 1fr; }
+.main.wide .side { display: none; }
+.trh { display: flex; align-items: center; height: 16px; font-size: 10px; font-weight: 900; color: #000; text-transform: uppercase; letter-spacing: .03em; }
+.trh > span { background: linear-gradient(#fff, #d4d4d4); height: 100%; display: flex; align-items: center; justify-content: flex-end; padding-right: 3px; border-right: 1px solid #999; }
+.trh .p { width: 25px; } .trh .n { width: 44px; justify-content: flex-start; padding-left: 4px; }
+.tr.wide { font-size: 12px; }
+.tr.wide .body { padding-left: 4px; }
+.tr.wide .n { width: 34px; }
+.tr.wide .flag { display: none; }
+.tr .w, .trh .w { width: 46px; text-align: right; padding-right: 3px; }
+.tr .l, .trh .l { width: 60px; text-align: right; padding-right: 3px; }
+.tr .s, .trh .s { flex: 1; min-width: 30px; text-align: right; padding-right: 3px; }
+.tr.wide .t, .trh .t { width: 40px; display: flex; justify-content: flex-end; align-items: center; gap: 2px; padding-right: 2px; }
+.tr .k, .trh .k { width: 20px; text-align: right; padding-right: 3px; }
+.tr.wide .w, .tr.wide .l, .tr.wide .s, .tr.wide .k { font-weight: 600; }
+.tr.wide .w:not(:empty), .tr.wide .l { }
+.trh .s, .trh .k, .trh .w, .trh .l, .trh .t { justify-content: flex-end; }
+
+/* telemetría en las tarjetas */
+.dcard .tel { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1px; font-size: 11px; }
+.dcard .tel > span { background: linear-gradient(var(--bar1), var(--bar2)); padding: 1px 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center; }
+.dcard .tel b { font-weight: 900; }

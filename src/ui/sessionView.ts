@@ -7,7 +7,7 @@ import { rainAt, forecast } from "../sim/weather";
 import { makeRun, availableSets, stintProfile } from "../sim/strategy";
 import { Rng } from "../sim/rng";
 
-type TowerMode = "int" | "gap" | "tyre";
+type TowerMode = "int" | "gap" | "last" | "tyre";
 
 export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Session) => void) {
   const app = document.getElementById("app")!;
@@ -20,6 +20,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   let paused = true;
   let autoPause = localStorage.getItem("autopausa") !== "0";
   let mode: TowerMode = "int";
+  let wide = false; // torre a pantalla completa con sectores
   let leftover = 0;
   let raf = 0;
   let lastUi = 0;
@@ -166,10 +167,11 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   // --------------------------------------------------------------- torre
   const towerEl = $("#tower");
   towerEl.addEventListener("click", (e) => {
-    if ((e.target as HTMLElement).closest(".th button")) {
-      mode = race ? (mode === "int" ? "gap" : mode === "gap" ? "tyre" : "int") : mode === "int" ? "gap" : mode === "gap" ? "tyre" : "int";
-      renderTower();
-    }
+    const b = (e.target as HTMLElement).closest(".th button") as HTMLButtonElement | null;
+    if (!b) return;
+    if (b.dataset.w) { wide = !wide; document.querySelector(".main")!.classList.toggle("wide", wide); if (!wide) setTimeout(sizeMap, 0); }
+    else { const order: TowerMode[] = ["int", "gap", "last", "tyre"]; mode = order[(order.indexOf(mode) + 1) % order.length]; }
+    renderTower();
   });
   function statusFlag(c: Car): string {
     if (c.loc === "out") return `<span class="flag outl">OUT</span>`;
@@ -179,21 +181,58 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     if (c.drs) return `<span class="flag mo">MO</span>`;
     return "";
   }
+  /** Color de un tiempo como en la tele: morado = mejor de la sesión, verde = mejor personal, amarillo = más lento. */
+  const tcls = (t: number, own: number, all: number) => (!isFinite(t) ? "" : t <= all + 1e-6 ? "purple" : t <= own + 1e-6 ? "green" : "yellow");
+  function sectorCells(c: Car) {
+    return [0, 1, 2].map((j) => {
+      const cur = c.secCur[j];
+      if (!isNaN(cur)) return `<span class="s mono ${tcls(cur, c.secBest[j], sess.secBest[j])}">${cur.toFixed(1)}</span>`;
+      const last = c.secLast[j];
+      return `<span class="s mono ${tcls(last, c.secBest[j], sess.secBest[j])}" style="opacity:.75">${isNaN(last) ? "" : last.toFixed(1)}</span>`;
+    }).join("");
+  }
+  function lastLap(c: Car) {
+    const t = c.lapTimes[c.lapTimes.length - 1];
+    if (!t) return `<span class="dim">—</span>`;
+    if (!race && !c.lastLapValid) return `<span class="dim" style="text-decoration:line-through">${fmtLap(t)}</span>`;
+    return `<span class="${t <= sess.bestLap + 1e-6 ? "purple" : t <= c.best + 1e-6 ? "green" : ""}">${fmtLap(t)}</span>`;
+  }
   function renderTower() {
     const rows = sess.intervals();
     const part = sess.parts[sess.part];
     const sessBest = Math.min(...sess.cars.map((c) => (quali ? c.bestByPart[sess.part] ?? Infinity : c.best)));
-    const modeName = race ? { int: "Intervalo", gap: "Líder", tyre: "Neumático" }[mode] : { int: "Tiempo", gap: "Dif.", tyre: "Neumático" }[mode];
+    const names = race ? { int: "Intervalo", gap: "Líder", last: "Última", tyre: "Neumático" } : { int: "Tiempo", gap: "Dif.", last: "Última", tyre: "Neumático" };
     let head = "";
     if (race) head = `Vuelta ${Math.min(sess.laps, sess.leaderLap + 1)}/${sess.laps}`;
     else if (quali) head = `${part?.name ?? ""}`;
     else head = SESSION_NAMES[kind];
-    let html = `<div class="th"><span class="tab">${head}</span><button>${modeName}</button></div>`;
+    let html = `<div class="th"><span class="tab">${head}</span><span class="grow"></span>${wide ? "" : `<button>${names[mode]}</button>`}<button data-w="1">${wide ? "⤡ Mapa" : "⤢"}</button></div>`;
+    if (wide) html += race
+      ? `<div class="trh"><span class="p"></span><span class="n">Piloto</span><span class="w">Int.</span><span class="w">Líder</span><span class="l">Última</span><span class="s">S1</span><span class="s">S2</span><span class="s">S3</span><span class="t">Neu</span><span class="k">P</span></div>`
+      : `<div class="trh"><span class="p"></span><span class="n">Piloto</span><span class="l">Mejor</span><span class="w">Dif.</span><span class="l">Última</span><span class="s">S1</span><span class="s">S2</span><span class="s">S3</span><span class="t">Neu</span><span class="k">V</span></div>`;
     const cutAt = quali && part?.advance ? part.advance : -1;
     rows.forEach(({ car: c, gap, interval, lapsDown }, i) => {
       if (i === cutAt) html += `<div class="cut"></div>`;
+      const tyre = c.tyres && (race || c.loc !== "garage") ? tyreHtml(c.tyres.c) : "";
+      const cls = `tr${c.player ? " me" : ""}${c.loc === "out" || c.eliminated ? " out" : ""}${wide ? " wide" : ""}`;
+      const pre = `<span class="p">${i + 1}</span><span class="c" style="background:${c.team.color}"></span><span class="body"><span class="n">${c.d.abrev}</span>${statusFlag(c)}`;
+      if (wide) {
+        let cells = "";
+        if (race) {
+          const iv = c.loc === "out" ? "OUT" : i === 0 ? "—" : lapsDown > 0 ? `+${lapsDown}V` : `+${Math.max(0, interval).toFixed(1)}`;
+          const gp = c.loc === "out" || i === 0 ? "" : lapsDown > 0 ? `+${lapsDown}V` : `+${Math.max(0, gap).toFixed(1)}`;
+          cells = `<span class="w mono">${iv}</span><span class="w mono">${gp}</span><span class="l mono">${lastLap(c)}</span>${sectorCells(c)}<span class="t">${tyre}<span class="small mono">${c.tyres ? c.tyres.laps : ""}</span></span><span class="k mono">${c.stops}</span>`;
+        } else {
+          const b = quali ? c.bestByPart[c.eliminated ? c.elimPart! : sess.part] : c.best;
+          const has = b !== undefined && isFinite(b);
+          cells = `<span class="l mono ${has && b === sessBest ? "purple" : ""}">${has ? fmtLap(b) : "—"}</span><span class="w mono">${has && i > 0 && isFinite(gap) ? `+${gap.toFixed(3)}` : ""}</span><span class="l mono">${lastLap(c)}</span>${sectorCells(c)}<span class="t">${tyre}<span class="small mono">${c.tyres ? c.tyres.laps : ""}</span></span><span class="k mono">${c.sessionLaps}</span>`;
+        }
+        html += `<div class="${cls}">${pre}${cells}</span></div>`;
+        return;
+      }
       let g = "";
-      if (race) {
+      if (mode === "last") g = lastLap(c);
+      else if (race) {
         if (c.loc === "out") g = "OUT";
         else if (mode === "tyre") g = `${c.tyres ? c.tyres.laps : ""}`;
         else if (i === 0) g = c.loc === "fin" ? "🏁" : mode === "int" ? "Intervalo" : "Líder";
@@ -207,8 +246,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
         else g = `<span class="${b === sessBest ? "purple" : ""}">${fmtLap(b)}</span>`;
         if (c.eliminated) g = `<span class="dim">${g}</span>`;
       }
-      const tyre = c.tyres && (race || c.loc !== "garage") ? tyreHtml(c.tyres.c) : "";
-      html += `<div class="tr${c.player ? " me" : ""}${c.loc === "out" || c.eliminated ? " out" : ""}"><span class="p">${i + 1}</span><span class="c" style="background:${c.team.color}"></span><span class="body"><span class="n">${c.d.abrev}</span>${statusFlag(c)}<span class="g mono">${g}</span><span class="t">${mode === "tyre" || race ? tyre : ""}</span></span></div>`;
+      html += `<div class="${cls}">${pre}<span class="g mono">${g}</span><span class="t">${mode === "tyre" || race ? tyre : ""}</span></span></div>`;
     });
     towerEl.innerHTML = html;
   }
@@ -323,6 +361,18 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     const ph = c.run?.phase;
     return ph === "out" ? "V. de salida" : ph === "push" ? "V. lanzada" : ph === "cool" ? "Enfriando" : ph === "in" ? "Entrando" : ph === "long" ? `Tanda ${c.run!.done}/${c.run!.pushLaps}` : PUSH_NAMES[c.push];
   }
+  function telRow(c: Car) {
+    const t = c.tyres;
+    const tc = (v: number) => { if (!t) return ""; const sp = COMPOUNDS[t.c]; const d = v - sp.opt; return Math.abs(d) < sp.window * 0.5 ? "green" : d < -sp.window ? "" : d > sp.window ? "redt" : "yellow"; };
+    const temps = t ? `<b class="${tc(t.F.tBulk)}">${t.F.tBulk.toFixed(0)}°</b>/<b class="${tc(t.R.tBulk)}">${t.R.tBulk.toFixed(0)}°</b>` : "—";
+    const third = race
+      ? (() => { const d = c.fuel / sess.fuelPerLap - (sess.laps - sess.lapsDone(c)); return `⛽<b class="${d < 0 ? "redt" : d < 0.4 ? "yellow" : ""}">${d >= 0 ? "+" : ""}${d.toFixed(1)}</b>`; })()
+      : [0, 1, 2].map((j) => { const v = isNaN(c.secCur[j]) ? c.secLast[j] : c.secCur[j]; return `<b class="${isNaN(c.secCur[j]) ? "dim" : tcls(v, c.secBest[j], sess.secBest[j])}">●</b>`; }).join("");
+    const lt = c.lapTimes[c.lapTimes.length - 1];
+    const ltCls = !lt ? "dim" : !race && !c.lastLapValid ? "dim" : lt <= sess.bestLap + 1e-6 ? "purple" : lt <= c.best + 1e-6 ? "green" : "";
+    const ltTxt = lt ? `${Math.floor(lt / 60)}:${(lt % 60).toFixed(1).padStart(4, "0")}` : "—";
+    return `<div class="tel mono"><span>Últ <b class="${ltCls}">${ltTxt}</b></span><span>${temps}</span><span>${third}</span></div>`;
+  }
   function renderDrivers() {
     const ord = sess.order();
     const redRace = race && sess.flag === "red";
@@ -349,7 +399,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       else btns = `<button data-a="go" data-i="${i}" ${c.loc !== "garage" || c.eliminated || sess.remaining() <= 0 || sess.flag === "red" ? "disabled" : ""}>${quali ? "Salir" : "Tanda"}</button><button data-a="in" data-i="${i}" ${c.loc !== "track" ? "disabled" : ""}>Boxes</button><button class="${c.auto ? "on" : ""}" data-a="auto" data-i="${i}">Auto</button>`;
       return `<div class="dcard"><div class="h"><span class="posbox mono">${pos}</span><span class="nm" data-onb="${c.id}">${tvName(c)}${t ? tyreHtml(t.c) + `<span class="small mono">${t.laps}</span>` : ""}</span></div>
         <div class="wear"><i style="width:${(1 - wear) * 100}%;background:${col}"></i></div>
-        <div class="st">${line2}</div><div class="b">${btns}</div></div>`;
+        <div class="st">${line2}</div>${telRow(c)}<div class="b">${btns}</div></div>`;
     }).join("");
   }
   drvEl.addEventListener("click", (e) => {

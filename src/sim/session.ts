@@ -139,6 +139,11 @@ export interface Car {
   stintL0: number; // vueltas que llevaba
   learnedLap: number;
   lastImpede: number; // id del último coche lento con el que se ha cruzado en vuelta rápida
+  secCur: number[]; // sectores de la vuelta en curso
+  secLast: number[]; // sectores de la última vuelta
+  secBest: number[]; // mejores sectores personales
+  lastLapValid: boolean;
+  passLog?: { a: number; until: number }; // adelantamiento en curso (se anuncia al completarse)
 }
 
 export type FlagState = "green" | "vsc" | "sc" | "sc_in" | "red";
@@ -213,6 +218,9 @@ export class Session {
   inBreak = 0; // segundos de descanso entre partes
   sprintWeekend: boolean;
   leaderId = -1;
+  secStart: number[]; // primer minisector de cada sector
+  secBest = [Infinity, Infinity, Infinity]; // mejores sectores de la sesión
+  bestLap = Infinity;
   redReason: "rain" | "crash" | null = null;
   redWall = 0; // cuándo empezó la bandera roja (tiempo real simulado)
   onEvent?: (e: RaceEvent) => void;
@@ -233,6 +241,7 @@ export class Session {
     this.sprintWeekend = opt.sprintWeekend;
     this.lapRefRace = this.track.refLap;
     this.tRef = this.track.ms.map((m) => msTimeAtGrip(m, 1));
+    this.secStart = [0, this.track.ms.findIndex((m) => m.sector === 1), this.track.ms.findIndex((m) => m.sector === 2)];
     let t0 = 0, t1 = 0;
     for (const m of this.track.ms) { t0 += msTimeAtGrip(m, 1); t1 += msTimeAtGrip(m, 0.99); }
     this.secPerGrip = t1 - t0;
@@ -259,6 +268,7 @@ export class Session {
         wearMult: team.desgaste * (1.18 - d.neumaticos * 0.002),
         slowPuncture: false, autoPush: !e.player, autoErs: true, auto: true,
         queue: [], eliminated: false, sessionLaps: 0, stintW0: 0, stintL0: 0, learnedLap: -99, lastImpede: -1,
+        secCur: [NaN, NaN, NaN], secLast: [NaN, NaN, NaN], secBest: [Infinity, Infinity, Infinity], lastLapValid: true,
       };
       this.cars.push(car);
     }
@@ -705,11 +715,36 @@ export class Session {
     return this.track.msOfPoint[pi];
   }
 
+  /** Cronometraje por sectores (como en las pantallas de tiempos). */
+  private sectorTiming(c: Car, k: number, ms: number) {
+    const j = ms === this.secStart[1] ? 0 : ms === this.secStart[2] ? 1 : ms === 0 ? 2 : -1;
+    if (j < 0) return;
+    const back = j === 0 ? this.secStart[1] : j === 1 ? this.secStart[2] - this.secStart[1] : this.N - this.secStart[2];
+    const t0 = c.cross[k - back];
+    if (t0 === undefined || k - back < 0) { if (j === 2) { c.secLast = c.secCur; c.secCur = [NaN, NaN, NaN]; } return; }
+    const st = c.cross[k] - t0;
+    // solo cuentan las vueltas de verdad (no salida, enfriamiento ni entrada)
+    const race = isRaceKind(this.kind);
+    const counts = race ? this.lapsDone(c) >= 1 || j > 0 : (c.run?.phase === "push" || c.run?.phase === "long") && c.lapValid;
+    if (race || counts) c.secCur[j] = st;
+    if (counts) {
+      if (st < c.secBest[j]) c.secBest[j] = st;
+      if (st < this.secBest[j]) this.secBest[j] = st;
+    }
+    if (j === 2) {
+      if (race || counts) c.secLast = c.secCur;
+      if (race) c.lastLapValid = true;
+      else if (c.run?.phase === "push" || c.run?.phase === "long") c.lastLapValid = c.lapValid;
+      c.secCur = [NaN, NaN, NaN];
+    }
+  }
+
   private onMsEnter(c: Car, k: number) {
     const ms = k % this.N;
     const m = this.track.ms[ms];
     const sigma = 0.0035 * (1.25 - c.d.regularidad / 100) * (1 + this.water[ms] * 0.6);
     c.noise = this.rng.gauss(0, sigma);
+    this.sectorTiming(c, k, ms);
 
     if (ms === 0) {
       const lap = k / this.N;
@@ -747,6 +782,7 @@ export class Session {
       const lt = c.cross[k] - c.lapStart;
       c.lapTimes.push(lt);
       if (lap > 1 && lt < c.best) c.best = lt;
+      if (lap > 1 && lt < this.bestLap) this.bestLap = lt;
       c.tyres!.laps++;
       c.lapStart = c.cross[k];
     }
@@ -841,6 +877,7 @@ export class Session {
         const p = this.part;
         const prevBest = c.bestByPart[p] ?? Infinity;
         if (lt < c.best) c.best = lt;
+        if (lt < this.bestLap) this.bestLap = lt;
         if (lt < prevBest) c.bestByPart[p] = lt;
         if (run.phase === "push") this.lapRadio(c, lt);
       } else if (c.player) {
@@ -1059,8 +1096,7 @@ export class Session {
     const contactP = 0.01 * (0.5 + c.d.agresividad / 100) * (0.5 + a.d.agresividad / 120) * (lap1 ? 2.5 : 1) * (1 + Math.min(1, water) * 1.5);
     if (this.rng.chance(contactP)) return this.contact(c, a);
     this.grantPass(c, a, this.rng.range(0.1, 0.35));
-    const pos = this.order().indexOf(c) + 1;
-    if (c.player || a.player || pos <= 3) this.log({ kind: "info", text: `⚔️ ${c.d.abrev} adelanta a ${a.d.abrev} por la P${Math.max(1, pos - 1)}`, carId: c.id });
+    c.passLog = { a: a.id, until: this.t + 10 };
   }
 
   /** Permiso para pasar: el de delante cede (pierde algo de tiempo) y el otro pasa por velocidad. */
@@ -1120,6 +1156,8 @@ export class Session {
         continue;
       }
       const minGap = 7;
+      const slowAhead = race && this.flag === "green" && (a.delay > 0.05 || a.slowPuncture || !!a.tyres?.punctured || (this.lapsDone(b) > 0 && a.v < b.v * 0.8));
+      if (gapM < minGap + 25 && slowAhead) { this.grantPass(b, a, 0); continue; }
       if (gapM < minGap && !(b.grant === a.id && this.t < b.grantUntil)) {
         if (!race && this.isFlying(b) === this.isFlying(a) && b.v > a.v * 1.05) { this.grantPass(b, a, 0.1); continue; }
         const back = minGap - gapM;
@@ -1130,6 +1168,18 @@ export class Session {
       }
     }
     for (const c of this.cars) if (c.grant >= 0 && this.t > c.grantUntil) c.grant = -1;
+    // anuncia los adelantamientos que ya se han completado
+    for (const c of on) {
+      if (!c.passLog) continue;
+      const a = this.carById(c.passLog.a);
+      let ahead = posOf(c) - posOf(a);
+      if (ahead < 0) ahead += L;
+      if (a.loc === "track" && ahead > 0 && ahead < 150) {
+        const pos = this.order().indexOf(c) + 1;
+        if (c.player || a.player || pos <= 3) this.log({ kind: "info", text: `⚔️ ${c.d.abrev} adelanta a ${a.d.abrev} por la P${pos}`, carId: c.id });
+        c.passLog = undefined;
+      } else if (this.t > c.passLog.until) c.passLog = undefined;
+    }
   }
 
   private isFlying(c: Car) { return c.run?.phase === "push" || c.run?.phase === "long"; }
