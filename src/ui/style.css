@@ -313,3 +313,18 @@ button.yellow { background: var(--gl-gold); text-shadow: none; }
 canvas.gapchart { width: 100%; height: 150px; display: block; margin: 2px 0 4px; }
 .mw-exit { font-size: 13px; margin: 2px 0 4px; line-height: 1.35; }
 .mw-row { grid-template-columns: 96px 1fr auto; }
+
+/* vuelta lanzada: rótulo como en la tele, sobre el mapa */
+.flyov { position: absolute; left: 4px; bottom: 4px; display: flex; flex-direction: column; gap: 4px; pointer-events: none; z-index: 2; }
+.fly { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, .7)); }
+.fly .fn { background: var(--gl); color: #fff; font-weight: 700; font-size: 12px; letter-spacing: .05em; padding: 1px 16px 1px 8px; clip-path: polygon(0 0, 100% 0, calc(100% - 7px) 100%, 0 100%); text-shadow: 0 1px 1px #000; }
+.fly .ft { display: flex; align-items: stretch; }
+.fly .ft .mono { background: var(--gl); color: #fff; font-weight: 700; font-size: 16px; padding: 0 16px 0 10px; min-width: 92px; text-align: center; clip-path: polygon(0 0, 100% 0, calc(100% - 7px) 100%, 0 100%); text-shadow: 0 1px 1px #000; }
+.fly .fpos { background: var(--gl-pos); color: #fff; font-weight: 700; font-size: 15px; padding: 0 12px 0 10px; margin-left: -4px; clip-path: polygon(7px 0, 100% 0, calc(100% - 7px) 100%, 0 100%); display: flex; align-items: center; }
+.fly .fr { display: flex; align-items: stretch; height: 18px; }
+.fly .fp { background: var(--gl-pos); color: #fff; font-weight: 700; font-size: 12px; min-width: 24px; padding: 0 9px 0 6px; display: flex; align-items: center; justify-content: center; clip-path: polygon(0 0, 100% 0, calc(100% - 6px) 100%, 0 100%); }
+.fly .fp.p1 { background: var(--gl-red); }
+.fly .fd { background: var(--gl); color: #fff; font-weight: 700; font-size: 12.5px; padding: 0 14px 0 9px; margin-left: -3px; display: flex; align-items: center; clip-path: polygon(6px 0, 100% 0, calc(100% - 6px) 100%, 0 100%); text-shadow: 0 1px 1px #000; }
+.fly .fd.fast { background: linear-gradient(180deg, #7be58f 0%, #2fb350 46%, #1d8c3a 54%, #23a044 100%); color: #fff; }
+.fly .fd.slow { background: var(--gl-gold); color: #000; text-shadow: none; }
+.fly .fd.bad { background: var(--gl-red); color: #fff; }

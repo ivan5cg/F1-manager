@@ -172,6 +172,8 @@ export interface Car {
   passedBy?: { id: number; t: number }; // quién le acaba de pasar: sin inercia para devolvérsela en la siguiente frenada
   bestTyre?: Compound; // neumático de la mejor vuelta
   bestTyreByPart: Compound[]; // en clasificación, por parte
+  bestSecs: number[]; // sectores de su mejor vuelta (para comparar parciales)
+  bestSecsByPart: number[][]; // en clasificación, por parte
 }
 
 export type FlagState = "green" | "vsc" | "sc" | "sc_in" | "red";
@@ -319,7 +321,7 @@ export class Session {
         wearMult: team.desgaste * (1.18 - d.neumaticos * 0.002),
         slowPuncture: false, autoPush: !e.player, autoErs: true, auto: true, gapWant: 2.5,
         queue: [], eliminated: false, sessionLaps: 0, stintW0: 0, stintL0: 0, learnedLap: -99, lastImpede: -1,
-        secCur: [NaN, NaN, NaN], secLast: [NaN, NaN, NaN], secBest: [Infinity, Infinity, Infinity], lastLapValid: true, bestTyreByPart: [],
+        secCur: [NaN, NaN, NaN], secLast: [NaN, NaN, NaN], secBest: [Infinity, Infinity, Infinity], lastLapValid: true, bestTyreByPart: [], bestSecs: [], bestSecsByPart: [],
       };
       this.cars.push(car);
     }
@@ -1021,9 +1023,9 @@ export class Session {
       if (c.lapValid) {
         const p = this.part;
         const prevBest = c.bestByPart[p] ?? Infinity;
-        if (lt < c.best) { c.best = lt; c.bestTyre = c.tyres!.c; }
+        if (lt < c.best) { c.best = lt; c.bestTyre = c.tyres!.c; c.bestSecs = [...c.secLast]; }
         if (lt < this.bestLap) this.bestLap = lt;
-        if (lt < prevBest) { c.bestByPart[p] = lt; c.bestTyreByPart[p] = c.tyres!.c; }
+        if (lt < prevBest) { c.bestByPart[p] = lt; c.bestTyreByPart[p] = c.tyres!.c; c.bestSecsByPart[p] = [...c.secLast]; }
         if (run.phase === "push") this.lapRadio(c, lt);
       } else if (c.player) {
         this.log({ kind: "info", text: `${c.d.abrev}: vuelta de ${fmt(lt)} anulada`, carId: c.id });

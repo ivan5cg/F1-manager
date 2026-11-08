@@ -72,7 +72,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     <div class="main">
       <div class="leftcol"><div class="tower" id="tower"></div><div class="toast" id="toast" title="Dirección de carrera y meteo"></div></div>
       <div class="side">
-        <div class="mapbox"><canvas id="map"></canvas></div>
+        <div class="mapbox"><canvas id="map"></canvas><div class="flyov" id="flyov"></div></div>
         <div class="wxbox" id="wx"></div>
         <div id="lapban"></div>
         <div class="ticker" id="ticker"></div>
@@ -661,6 +661,85 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       wire();
     });
   }
+  // ----------------------------------------- vuelta lanzada (como en la tele)
+  // Tiempo corriendo, parciales por sector comparados con una referencia y resultado al cruzar la
+  // meta. La referencia es el primero; si tu piloto está fuera del corte, el último que se salva.
+  type FlyRef = { car: Car; pos: number; time: number; splits: number[] } | null;
+  type FlyState = { lapStart: number; laps: number; active: boolean; ref: FlyRef; splitN: number; splitReal: number; splitT: number; result?: { time: number; pos: number; ref: FlyRef; valid: boolean; real: number; t: number } };
+  const fly = new Map<number, FlyState>();
+  const bestOf = (c: Car) => (sess.parts.length ? c.bestByPart[sess.part] : c.best);
+  const splitsOf = (c: Car) => (sess.parts.length ? c.bestSecsByPart[sess.part] : c.bestSecs) ?? [];
+  const cum = (a: number[], j: number) => { let x = 0; for (let i = 0; i <= j; i++) x += a[i]; return x; };
+  const fmtRun = (t: number) => `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, "0")}`;
+  const fmtSplit = (t: number) => (t >= 60 ? `${Math.floor(t / 60)}:${(t % 60).toFixed(3).padStart(6, "0")}` : t.toFixed(3));
+  function flyRef(c: Car): FlyRef {
+    const ord = sess.timingOrder().filter((x) => !x.eliminated && Number.isFinite(bestOf(x) ?? Infinity));
+    const others = ord.filter((x) => x !== c);
+    const cut = sess.parts.length ? sess.parts[sess.part]?.advance ?? null : null;
+    const myPos = ord.indexOf(c);
+    let ref: Car | undefined, pos = 1;
+    if (cut && (myPos < 0 || myPos >= cut) && others.length >= cut) { ref = others[cut - 1]; pos = cut; }
+    else ref = ord[0];
+    if (!ref) return null;
+    return { car: ref, pos, time: bestOf(ref)!, splits: splitsOf(ref).slice() };
+  }
+  const refBox = (r: FlyRef) => (r ? `<span class="fp ${r.pos === 1 ? "p1" : ""}">${r.pos}</span>` : "");
+  const deltaBox = (d: number) => `<span class="fd mono ${d <= 0 ? "fast" : "slow"}">${d <= 0 ? "−" : "+"}${Math.abs(d).toFixed(3)}</span>`;
+  function renderFly() {
+    const box = document.getElementById("flyov");
+    if (!box) return;
+    if (race) { if (box.innerHTML) box.innerHTML = ""; return; }
+    const now = performance.now();
+    const out: string[] = [];
+    for (const c of mine()) {
+      let st = fly.get(c.id);
+      if (!st) { st = { lapStart: -1, laps: c.lapTimes.length, active: false, ref: null, splitN: 0, splitReal: 0, splitT: 0 }; fly.set(c.id, st); }
+      // vuelta terminada: tiempo, posición que logra y diferencia con la referencia
+      if (c.lapTimes.length > st.laps) {
+        if (st.active) {
+          const ord = sess.timingOrder().filter((x) => !x.eliminated);
+          // sin referencia al empezar (nadie tenía tiempo): se compara con el primero de ahora
+          st.result = { time: c.lapTimes[c.lapTimes.length - 1], pos: ord.indexOf(c) + 1, ref: st.ref ?? flyRef(c), valid: c.lastLapValid, real: now, t: sess.t };
+        }
+        st.laps = c.lapTimes.length;
+        st.active = false;
+      }
+      const pushing = c.run?.phase === "push" && c.loc === "track" && c.lapStart > 0;
+      if (pushing && st.lapStart !== c.lapStart) { st.lapStart = c.lapStart; st.active = true; st.ref = flyRef(c); st.splitN = 0; }
+      if (!pushing) st.active = false;
+      if (st.active && !st.ref) st.ref = flyRef(c); // alguien ha marcado tiempo mientras tanto
+      const r = st.result;
+      const showResult = r && (now - r.real < 4000 || sess.t - r.t < 10);
+      const name = `<div class="fn">${tvName(c)}</div>`;
+      if (showResult && r) {
+        const d = r.valid && r.ref ? r.time - r.ref.time : null;
+        out.push(`<div class="fly">${name}<div class="ft"><span class="mono">${fmtLap(r.time)}</span>${r.valid ? `<span class="fpos">${r.pos}</span>` : ""}</div>
+          <div class="fr">${!r.valid ? `<span class="fd bad">Vuelta anulada</span>` : r.pos === 1 ? `<span class="fd fast">Mejor tiempo</span>` : r.ref && r.ref.car !== c ? `${refBox(r.ref)}${deltaBox(d!)}` : ""}</div></div>`);
+        continue;
+      }
+      if (!st.active) continue;
+      const done = c.secCur.filter((x) => !Number.isNaN(x)).length;
+      if (done > st.splitN) { st.splitN = done; st.splitReal = now; st.splitT = sess.t; }
+      const showSplit = st.splitN > 0 && st.splitN < 3 && (now - st.splitReal < 2500 || sess.t - st.splitT < 7);
+      const ref = st.ref;
+      let time: string, row: string;
+      if (!c.lapValid) { time = fmtRun(Math.max(0, sess.t - c.lapStart)); row = `<span class="fd bad">Vuelta anulada</span>`; }
+      else if (showSplit) {
+        const j = st.splitN - 1;
+        const mine = cum(c.secCur, j);
+        time = fmtSplit(mine);
+        const rs = ref && ref.splits.length === 3 && ref.splits.every((x) => Number.isFinite(x)) ? cum(ref.splits, j) : null;
+        row = ref && rs !== null ? `${refBox(ref)}${deltaBox(mine - rs)}` : ref ? `${refBox(ref)}<span class="fd mono">${fmtLap(ref.time)}</span>` : "";
+      } else {
+        time = fmtRun(Math.max(0, sess.t - c.lapStart));
+        row = ref ? `${refBox(ref)}<span class="fd mono">${fmtLap(ref.time)}</span>` : "";
+      }
+      out.push(`<div class="fly">${name}<div class="ft"><span class="mono">${time}</span></div><div class="fr">${row}</div></div>`);
+    }
+    const html = out.join("");
+    if (box.innerHTML !== html) box.innerHTML = html;
+  }
+
   // ------------------------------------------------------- muro de boxes
   const SERIES = { ahead: "#bd860e", behind: "#3a8be8", mate: "#e94f8a" }; // validados para fondo oscuro y daltonismo
   const signed = (x: number) => `${x >= 0 ? "+" : "−"}${Math.abs(x).toFixed(1)}`;
@@ -989,7 +1068,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     try {
       // en pausa no cambia casi nada: se redibuja 4 veces por segundo en vez de 60 (batería)
       const busy = !paused;
-      if (!skipping && (busy || now - lastDraw > 250)) { lastDraw = now; drawMap(); drawGauges(); }
+      if (!skipping && (busy || now - lastDraw > 250)) { lastDraw = now; drawMap(); drawGauges(); renderFly(); }
       if (now - lastUi > (busy ? 250 : 500) && !skipping) {
         lastUi = now;
         renderTower(); renderTop(); renderMessages();
