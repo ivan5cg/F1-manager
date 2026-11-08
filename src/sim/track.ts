@@ -12,7 +12,9 @@ export interface CarParams {
   rho: number; // densidad del aire
 }
 
-export const REF_CAR: CarParams = { mass: 850, power: 760000, cdA: 1.45, clA: 3.7, mu: 1.75, rho: 1.18 };
+// Coche de referencia 2026: 768 kg mínimos + ~22 kg de combustible. Mitad de potencia eléctrica.
+export const REF_CAR: CarParams = { mass: 790, power: 740000, cdA: 1.4, clA: 3.3, mu: 1.75, rho: 1.18 };
+export const MIN_MASS = 768;
 
 export interface Minisector {
   i: number;
@@ -35,7 +37,10 @@ export interface Minisector {
 }
 
 export interface Track {
+  id: string;
   name: string;
+  car: CarParams; // coche de referencia calibrado para este circuito
+  def: any;
   laps: number;
   length: number;
   ds: number;
@@ -95,10 +100,10 @@ function resample(pts: number[][], ds: number) {
   return { xs, ys, length: total, ds: step };
 }
 
-function curvature(xs: Float64Array, ys: Float64Array, ds: number): Float64Array {
+function curvature(xs: Float64Array, ys: Float64Array, ds: number, smoothM = 16): Float64Array {
   const n = xs.length;
   const k = new Float64Array(n);
-  const w = 3; // puntos a cada lado
+  const w = Math.max(2, Math.round(9 / ds)); // ~9 m a cada lado
   for (let i = 0; i < n; i++) {
     const a = (i - w + n) % n, b = (i + w) % n;
     const h1 = Math.atan2(ys[i] - ys[a], xs[i] - xs[a]);
@@ -109,8 +114,9 @@ function curvature(xs: Float64Array, ys: Float64Array, ds: number): Float64Array
     k[i] = dh / (w * ds);
   }
   // suavizado
+  // suavizado: aproxima la trazada de carrera, más abierta que la línea central
   const out = new Float64Array(n);
-  const sw = 4;
+  const sw = Math.max(2, Math.round(smoothM / ds));
   for (let i = 0; i < n; i++) {
     let s = 0;
     for (let j = -sw; j <= sw; j++) s += k[(i + j + n) % n];
@@ -193,13 +199,29 @@ export function lapSim(curv: Float64Array, ds: number, car: CarParams, gripScale
 }
 
 export function buildTrack(def: any): Track {
-  const pts: number[][] = def.puntos.map((p: number[]) => [p[0] * def.escala, p[1] * def.escala]);
-  const dense = catmullRom(pts, 40);
-  const { xs, ys, length, ds } = resample(dense, 4);
-  const curv = curvature(xs, ys, ds);
+  const raw: number[][] = def.puntos.map((p: number[]) => [p[0] * (def.escala ?? 1), p[1] * (def.escala ?? 1)]);
+  // trazados densos (datos reales): sin spline; los ligeros (a mano) se suavizan con Catmull-Rom
+  let spacing = 0;
+  for (let i = 1; i < raw.length; i++) spacing += Math.hypot(raw[i][0] - raw[i - 1][0], raw[i][1] - raw[i - 1][1]);
+  spacing /= raw.length;
+  const dense = spacing < 15 ? raw : catmullRom(raw, 40);
+  const { xs, ys, length, ds } = resample(dense, 3);
+  const curv = curvature(xs, ys, ds, spacing < 15 ? 22 : 12);
   const n = xs.length;
-  const base = lapSim(curv, ds, REF_CAR);
-
+  const aero = def.aero ?? { cl: 1, cd: 1 };
+  // calibración: la adherencia del coche de referencia se ajusta para que la vuelta ideal
+  // (mejor coche, neumático blando nuevo, poco combustible) se acerque a la pole real
+  const target = (def.poleObjetivo ?? 80) + 0.9;
+  let lo = 1.0, hi = 3.0;
+  let car: CarParams = { ...REF_CAR, clA: REF_CAR.clA * aero.cl, cdA: REF_CAR.cdA * aero.cd };
+  for (let it = 0; it < 22; it++) {
+    const mid = (lo + hi) / 2;
+    const t = lapSim(curv, ds, { ...car, mu: mid }).time;
+    if (t > target) lo = mid; else hi = mid;
+  }
+  car = { ...car, mu: (lo + hi) / 2 };
+  const base = lapSim(curv, ds, car);
+  def.minisectores = Math.max(18, Math.round(length / 150));
   const N = def.minisectores as number;
   const msOfPoint = new Int32Array(n);
   const bounds: number[] = [];
@@ -211,12 +233,12 @@ export function buildTrack(def: any): Track {
     for (let i = 0; i < n; i++) out[msOfPoint[i]] += dt[i];
     return out;
   };
-  const tGrid = GRIP_GRID.map((gs) => sumMs(lapSim(curv, ds, REF_CAR, () => gs).dt));
+  const tGrid = GRIP_GRID.map((gs) => sumMs(lapSim(curv, ds, car, () => gs).dt));
   const t0 = tGrid[GRIP_GRID.indexOf(1.0)];
-  const tPow = sumMs(lapSim(curv, ds, { ...REF_CAR, power: REF_CAR.power * 1.01 }).dt);
-  const tDrag = sumMs(lapSim(curv, ds, { ...REF_CAR, cdA: REF_CAR.cdA * 0.99 }).dt);
-  const tMass = sumMs(lapSim(curv, ds, { ...REF_CAR, mass: REF_CAR.mass + 10 }).dt);
-  const tG = sumMs(lapSim(curv, ds, REF_CAR, () => 1.01).dt);
+  const tPow = sumMs(lapSim(curv, ds, { ...car, power: car.power * 1.01 }).dt);
+  const tDrag = sumMs(lapSim(curv, ds, { ...car, cdA: car.cdA * 0.99 }).dt);
+  const tMass = sumMs(lapSim(curv, ds, { ...car, mass: car.mass + 10 }).dt);
+  const tG = sumMs(lapSim(curv, ds, car, () => 1.01).dt);
 
   // energía de neumáticos: delantero ~ lateral + frenada, trasero ~ lateral + tracción
   const eF = new Array(N).fill(0), eR = new Array(N).fill(0), thr = new Array(N).fill(0);
@@ -269,7 +291,7 @@ export function buildTrack(def: any): Track {
     const prev = ms[(k - 1 + N) % N], prev2 = ms[(k - 2 + N) % N];
     const straight = (prev.throttle + prev2.throttle) / 2;
     const drop = (vmax - vmin) * 3.6;
-    if (drop > 90 && straight > 0.6) ms[k].overtake = Math.min(1, (drop - 60) / 180) * straight;
+    if (drop > 80 && straight > 0.55) ms[k].overtake = Math.min(1, (drop - 60) / 180) * straight;
   }
   // DRS: los dos tramos más largos a fondo
   const runs: { start: number; len: number }[] = [];
@@ -293,7 +315,18 @@ export function buildTrack(def: any): Track {
     ms[(r.start - 1 + N) % N].drsDetect = true;
   }
 
+  // calle de boxes: longitud para que la pérdida (sin la parada) sea la real del circuito
+  const pitLim = def.boxes.limite / 3.6;
+  let tPortion = 0;
+  for (let i = 0; i < n; i++) {
+    const s = i * ds;
+    if (s >= length - def.boxes.entrada || s < def.boxes.salida) tPortion += base.dt[i];
+  }
+  const laneLength = (def.boxes.perdida - 2.4 - 1.0 + tPortion) * pitLim;
   return {
+    id: def.id,
+    car,
+    def,
     name: def.nombre,
     laps: def.vueltas,
     length,
@@ -303,7 +336,7 @@ export function buildTrack(def: any): Track {
     curv,
     ms,
     msOfPoint,
-    pit: { entry: length - def.boxes.entrada, exit: def.boxes.salida, laneLength: def.boxes.longitudCalle, limit: def.boxes.limite / 3.6 },
+    pit: { entry: length - def.boxes.entrada, exit: def.boxes.salida, laneLength, limit: pitLim },
     abrasiveness: def.abrasividad,
     refLap: base.time,
   };

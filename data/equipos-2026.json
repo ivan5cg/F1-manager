@@ -1,0 +1,467 @@
+{
+ "_nota": "Parrilla real 2026 (lista de inscritos FIA). agarre/potencia/resistencia en % respecto a la referencia; desgaste <1 cuida neumáticos; boxes: segundos parado; fiabilidad: multiplicador de averías; estrategia/meteo 0-100. Los valores de rendimiento son una estimación a partir del mundial de constructores 2026.",
+ "equipos": [
+  {
+   "id": "mercedes",
+   "nombre": "Mercedes",
+   "motor": "Mercedes",
+   "color": "#00D7B6",
+   "agarre": 1.6,
+   "potencia": 1.2,
+   "resistencia": 0.2,
+   "desgaste": 0.97,
+   "boxes": 2.3,
+   "fiabilidad": 0.9,
+   "estrategia": 90,
+   "meteo": 85,
+   "pilotos": [
+    {
+     "nombre": "George Russell",
+     "abrev": "RUS",
+     "numero": 63,
+     "ritmo": 93,
+     "regularidad": 91,
+     "neumaticos": 86,
+     "lluvia": 88,
+     "ataque": 86,
+     "defensa": 90,
+     "agresividad": 62,
+     "salida": 85
+    },
+    {
+     "nombre": "Kimi Antonelli",
+     "abrev": "ANT",
+     "numero": 12,
+     "ritmo": 93,
+     "regularidad": 86,
+     "neumaticos": 84,
+     "lluvia": 86,
+     "ataque": 90,
+     "defensa": 84,
+     "agresividad": 74,
+     "salida": 86
+    }
+   ]
+  },
+  {
+   "id": "ferrari",
+   "nombre": "Ferrari",
+   "motor": "Ferrari",
+   "color": "#E8002D",
+   "agarre": 1.4,
+   "potencia": 0.8,
+   "resistencia": 0.0,
+   "desgaste": 0.99,
+   "boxes": 2.3,
+   "fiabilidad": 1.0,
+   "estrategia": 78,
+   "meteo": 78,
+   "pilotos": [
+    {
+     "nombre": "Charles Leclerc",
+     "abrev": "LEC",
+     "numero": 16,
+     "ritmo": 94,
+     "regularidad": 87,
+     "neumaticos": 85,
+     "lluvia": 87,
+     "ataque": 90,
+     "defensa": 87,
+     "agresividad": 70,
+     "salida": 82
+    },
+    {
+     "nombre": "Lewis Hamilton",
+     "abrev": "HAM",
+     "numero": 44,
+     "ritmo": 91,
+     "regularidad": 90,
+     "neumaticos": 90,
+     "lluvia": 93,
+     "ataque": 88,
+     "defensa": 90,
+     "agresividad": 62,
+     "salida": 84
+    }
+   ]
+  },
+  {
+   "id": "redbull",
+   "nombre": "Red Bull Racing",
+   "motor": "Red Bull Ford",
+   "color": "#3671C6",
+   "agarre": 1.0,
+   "potencia": 0.5,
+   "resistencia": -0.4,
+   "desgaste": 1.0,
+   "boxes": 2.2,
+   "fiabilidad": 1.1,
+   "estrategia": 88,
+   "meteo": 85,
+   "pilotos": [
+    {
+     "nombre": "Max Verstappen",
+     "abrev": "VER",
+     "numero": 3,
+     "ritmo": 97,
+     "regularidad": 93,
+     "neumaticos": 90,
+     "lluvia": 96,
+     "ataque": 94,
+     "defensa": 93,
+     "agresividad": 78,
+     "salida": 88
+    },
+    {
+     "nombre": "Isack Hadjar",
+     "abrev": "HAD",
+     "numero": 6,
+     "ritmo": 86,
+     "regularidad": 82,
+     "neumaticos": 80,
+     "lluvia": 82,
+     "ataque": 84,
+     "defensa": 80,
+     "agresividad": 72,
+     "salida": 80
+    }
+   ]
+  },
+  {
+   "id": "mclaren",
+   "nombre": "McLaren",
+   "motor": "Mercedes",
+   "color": "#FF8000",
+   "agarre": 0.8,
+   "potencia": 1.2,
+   "resistencia": 0.0,
+   "desgaste": 0.96,
+   "boxes": 2.25,
+   "fiabilidad": 0.95,
+   "estrategia": 82,
+   "meteo": 80,
+   "pilotos": [
+    {
+     "nombre": "Lando Norris",
+     "abrev": "NOR",
+     "numero": 1,
+     "ritmo": 94,
+     "regularidad": 88,
+     "neumaticos": 87,
+     "lluvia": 88,
+     "ataque": 86,
+     "defensa": 85,
+     "agresividad": 60,
+     "salida": 80
+    },
+    {
+     "nombre": "Oscar Piastri",
+     "abrev": "PIA",
+     "numero": 81,
+     "ritmo": 92,
+     "regularidad": 90,
+     "neumaticos": 88,
+     "lluvia": 84,
+     "ataque": 87,
+     "defensa": 88,
+     "agresividad": 64,
+     "salida": 83
+    }
+   ]
+  },
+  {
+   "id": "racingbulls",
+   "nombre": "Racing Bulls",
+   "motor": "Red Bull Ford",
+   "color": "#6C98FF",
+   "agarre": -0.1,
+   "potencia": 0.5,
+   "resistencia": 0.0,
+   "desgaste": 1.0,
+   "boxes": 2.4,
+   "fiabilidad": 1.1,
+   "estrategia": 75,
+   "meteo": 74,
+   "pilotos": [
+    {
+     "nombre": "Liam Lawson",
+     "abrev": "LAW",
+     "numero": 30,
+     "ritmo": 84,
+     "regularidad": 82,
+     "neumaticos": 80,
+     "lluvia": 82,
+     "ataque": 84,
+     "defensa": 84,
+     "agresividad": 78,
+     "salida": 80
+    },
+    {
+     "nombre": "Arvid Lindblad",
+     "abrev": "LIN",
+     "numero": 41,
+     "ritmo": 83,
+     "regularidad": 79,
+     "neumaticos": 78,
+     "lluvia": 80,
+     "ataque": 83,
+     "defensa": 78,
+     "agresividad": 74,
+     "salida": 82
+    }
+   ]
+  },
+  {
+   "id": "alpine",
+   "nombre": "Alpine",
+   "motor": "Mercedes",
+   "color": "#2293D1",
+   "agarre": -0.2,
+   "potencia": 1.2,
+   "resistencia": 0.3,
+   "desgaste": 1.0,
+   "boxes": 2.45,
+   "fiabilidad": 1.0,
+   "estrategia": 72,
+   "meteo": 72,
+   "pilotos": [
+    {
+     "nombre": "Pierre Gasly",
+     "abrev": "GAS",
+     "numero": 10,
+     "ritmo": 87,
+     "regularidad": 86,
+     "neumaticos": 84,
+     "lluvia": 85,
+     "ataque": 84,
+     "defensa": 85,
+     "agresividad": 64,
+     "salida": 82
+    },
+    {
+     "nombre": "Franco Colapinto",
+     "abrev": "COL",
+     "numero": 43,
+     "ritmo": 81,
+     "regularidad": 78,
+     "neumaticos": 78,
+     "lluvia": 78,
+     "ataque": 80,
+     "defensa": 78,
+     "agresividad": 76,
+     "salida": 78
+    }
+   ]
+  },
+  {
+   "id": "haas",
+   "nombre": "Haas",
+   "motor": "Ferrari",
+   "color": "#9AA0A6",
+   "agarre": -0.5,
+   "potencia": 0.8,
+   "resistencia": 0.0,
+   "desgaste": 1.03,
+   "boxes": 2.5,
+   "fiabilidad": 1.1,
+   "estrategia": 70,
+   "meteo": 70,
+   "pilotos": [
+    {
+     "nombre": "Esteban Ocon",
+     "abrev": "OCO",
+     "numero": 31,
+     "ritmo": 85,
+     "regularidad": 85,
+     "neumaticos": 84,
+     "lluvia": 85,
+     "ataque": 80,
+     "defensa": 86,
+     "agresividad": 66,
+     "salida": 82
+    },
+    {
+     "nombre": "Oliver Bearman",
+     "abrev": "BEA",
+     "numero": 87,
+     "ritmo": 85,
+     "regularidad": 81,
+     "neumaticos": 80,
+     "lluvia": 80,
+     "ataque": 86,
+     "defensa": 80,
+     "agresividad": 74,
+     "salida": 80
+    }
+   ]
+  },
+  {
+   "id": "audi",
+   "nombre": "Audi",
+   "motor": "Audi",
+   "color": "#C8102E",
+   "agarre": -0.4,
+   "potencia": 0.0,
+   "resistencia": 0.2,
+   "desgaste": 1.0,
+   "boxes": 2.45,
+   "fiabilidad": 1.25,
+   "estrategia": 72,
+   "meteo": 72,
+   "pilotos": [
+    {
+     "nombre": "Nico Hülkenberg",
+     "abrev": "HUL",
+     "numero": 27,
+     "ritmo": 86,
+     "regularidad": 88,
+     "neumaticos": 85,
+     "lluvia": 86,
+     "ataque": 82,
+     "defensa": 86,
+     "agresividad": 58,
+     "salida": 82
+    },
+    {
+     "nombre": "Gabriel Bortoleto",
+     "abrev": "BOR",
+     "numero": 5,
+     "ritmo": 84,
+     "regularidad": 83,
+     "neumaticos": 81,
+     "lluvia": 80,
+     "ataque": 82,
+     "defensa": 80,
+     "agresividad": 68,
+     "salida": 80
+    }
+   ]
+  },
+  {
+   "id": "williams",
+   "nombre": "Williams",
+   "motor": "Mercedes",
+   "color": "#64C4FF",
+   "agarre": -0.9,
+   "potencia": 1.2,
+   "resistencia": -0.3,
+   "desgaste": 1.02,
+   "boxes": 2.4,
+   "fiabilidad": 1.05,
+   "estrategia": 76,
+   "meteo": 74,
+   "pilotos": [
+    {
+     "nombre": "Carlos Sainz",
+     "abrev": "SAI",
+     "numero": 55,
+     "ritmo": 90,
+     "regularidad": 90,
+     "neumaticos": 88,
+     "lluvia": 86,
+     "ataque": 86,
+     "defensa": 90,
+     "agresividad": 60,
+     "salida": 84
+    },
+    {
+     "nombre": "Alexander Albon",
+     "abrev": "ALB",
+     "numero": 23,
+     "ritmo": 88,
+     "regularidad": 88,
+     "neumaticos": 86,
+     "lluvia": 84,
+     "ataque": 84,
+     "defensa": 86,
+     "agresividad": 60,
+     "salida": 82
+    }
+   ]
+  },
+  {
+   "id": "astonmartin",
+   "nombre": "Aston Martin",
+   "motor": "Honda",
+   "color": "#229971",
+   "agarre": -0.8,
+   "potencia": -1.2,
+   "resistencia": 0.3,
+   "desgaste": 1.0,
+   "boxes": 2.4,
+   "fiabilidad": 1.5,
+   "estrategia": 76,
+   "meteo": 78,
+   "pilotos": [
+    {
+     "nombre": "Fernando Alonso",
+     "abrev": "ALO",
+     "numero": 14,
+     "ritmo": 91,
+     "regularidad": 92,
+     "neumaticos": 92,
+     "lluvia": 92,
+     "ataque": 88,
+     "defensa": 94,
+     "agresividad": 66,
+     "salida": 90
+    },
+    {
+     "nombre": "Lance Stroll",
+     "abrev": "STR",
+     "numero": 18,
+     "ritmo": 80,
+     "regularidad": 78,
+     "neumaticos": 80,
+     "lluvia": 84,
+     "ataque": 78,
+     "defensa": 78,
+     "agresividad": 64,
+     "salida": 82
+    }
+   ]
+  },
+  {
+   "id": "cadillac",
+   "nombre": "Cadillac",
+   "motor": "Ferrari",
+   "color": "#E6E6E6",
+   "agarre": -1.6,
+   "potencia": 0.8,
+   "resistencia": 0.4,
+   "desgaste": 1.05,
+   "boxes": 2.6,
+   "fiabilidad": 1.4,
+   "estrategia": 68,
+   "meteo": 68,
+   "pilotos": [
+    {
+     "nombre": "Sergio Pérez",
+     "abrev": "PER",
+     "numero": 11,
+     "ritmo": 85,
+     "regularidad": 84,
+     "neumaticos": 90,
+     "lluvia": 84,
+     "ataque": 84,
+     "defensa": 86,
+     "agresividad": 62,
+     "salida": 82
+    },
+    {
+     "nombre": "Valtteri Bottas",
+     "abrev": "BOT",
+     "numero": 77,
+     "ritmo": 85,
+     "regularidad": 88,
+     "neumaticos": 84,
+     "lluvia": 82,
+     "ataque": 78,
+     "defensa": 84,
+     "agresividad": 52,
+     "salida": 84
+    }
+   ]
+  }
+ ]
+}
