@@ -1,0 +1,45 @@
+{
+  "_nota": "Rendimiento en % respecto a la referencia. agarre: aerodinámica y mecánica; potencia: unidad de potencia; resistencia: menor es mejor; desgaste: <1 cuida los neumáticos. boxes: tiempo medio parado (s). estrategia/meteo: 0-100, calidad de sus estimaciones.",
+  "equipos": [
+    { "id": "aurora", "nombre": "Aurora GP", "color": "#e8452c", "agarre": 1.2, "potencia": 0.6, "resistencia": 0.0, "desgaste": 0.97, "boxes": 2.35, "fiabilidad": 0.9, "estrategia": 82, "meteo": 75,
+      "pilotos": [
+        { "nombre": "Leo Varga", "abrev": "VAR", "numero": 7, "ritmo": 93, "regularidad": 88, "neumaticos": 84, "lluvia": 90, "ataque": 89, "defensa": 85, "agresividad": 70, "salida": 82 },
+        { "nombre": "Tomás Ibarra", "abrev": "IBA", "numero": 21, "ritmo": 87, "regularidad": 85, "neumaticos": 86, "lluvia": 80, "ataque": 80, "defensa": 82, "agresividad": 55, "salida": 78 } ] },
+    { "id": "nordwind", "nombre": "Nordwind Racing", "color": "#2fb6d9", "agarre": 1.0, "potencia": 1.0, "resistencia": -1.0, "desgaste": 1.03, "boxes": 2.3, "fiabilidad": 1.0, "estrategia": 88, "meteo": 85,
+      "pilotos": [
+        { "nombre": "Erik Holm", "abrev": "HOL", "numero": 4, "ritmo": 91, "regularidad": 92, "neumaticos": 80, "lluvia": 84, "ataque": 85, "defensa": 90, "agresividad": 60, "salida": 85 },
+        { "nombre": "Jules Marchand", "abrev": "MAR", "numero": 16, "ritmo": 89, "regularidad": 83, "neumaticos": 78, "lluvia": 86, "ataque": 88, "defensa": 78, "agresividad": 78, "salida": 80 } ] },
+    { "id": "solano", "nombre": "Solano Motorsport", "color": "#f0a020", "agarre": 0.8, "potencia": 0.4, "resistencia": 0.5, "desgaste": 0.94, "boxes": 2.45, "fiabilidad": 1.1, "estrategia": 75, "meteo": 70,
+      "pilotos": [
+        { "nombre": "Mateo Solís", "abrev": "SOL", "numero": 11, "ritmo": 90, "regularidad": 86, "neumaticos": 92, "lluvia": 82, "ataque": 84, "defensa": 87, "agresividad": 62, "salida": 75 },
+        { "nombre": "Kenji Arata", "abrev": "ARA", "numero": 22, "ritmo": 84, "regularidad": 87, "neumaticos": 85, "lluvia": 78, "ataque": 76, "defensa": 80, "agresividad": 50, "salida": 83 } ] },
+    { "id": "vektor", "nombre": "Vektor F1 Team", "color": "#8a5cf0", "agarre": 0.5, "potencia": 0.9, "resistencia": -0.5, "desgaste": 1.05, "boxes": 2.5, "fiabilidad": 1.25, "estrategia": 70, "meteo": 65,
+      "pilotos": [
+        { "nombre": "Aleksander Nowak", "abrev": "NOW", "numero": 33, "ritmo": 88, "regularidad": 80, "neumaticos": 75, "lluvia": 88, "ataque": 90, "defensa": 76, "agresividad": 85, "salida": 88 },
+        { "nombre": "Pierre Lacombe", "abrev": "LAC", "numero": 9, "ritmo": 82, "regularidad": 84, "neumaticos": 80, "lluvia": 75, "ataque": 78, "defensa": 79, "agresividad": 60, "salida": 76 } ] },
+    { "id": "halcon", "nombre": "Halcón Racing", "color": "#d23c6e", "agarre": 0.2, "potencia": 0.3, "resistencia": 0.0, "desgaste": 0.98, "boxes": 2.4, "fiabilidad": 1.0, "estrategia": 78, "meteo": 80,
+      "pilotos": [
+        { "nombre": "Diego Ferrán", "abrev": "FER", "numero": 14, "ritmo": 87, "regularidad": 89, "neumaticos": 88, "lluvia": 91, "ataque": 83, "defensa": 88, "agresividad": 58, "salida": 84 },
+        { "nombre": "Noah Brandt", "abrev": "BRA", "numero": 27, "ritmo": 83, "regularidad": 81, "neumaticos": 79, "lluvia": 77, "ataque": 82, "defensa": 75, "agresividad": 72, "salida": 79 } ] },
+    { "id": "oceanic", "nombre": "Oceanic Motorsport", "color": "#1f8f6a", "agarre": 0.0, "potencia": 0.0, "resistencia": 0.5, "desgaste": 1.0, "boxes": 2.45, "fiabilidad": 1.0, "estrategia": 72, "meteo": 70,
+      "pilotos": [
+        { "nombre": "Liam Carter", "abrev": "CAR", "numero": 3, "ritmo": 85, "regularidad": 83, "neumaticos": 82, "lluvia": 80, "ataque": 81, "defensa": 80, "agresividad": 66, "salida": 80 },
+        { "nombre": "Rafael Moura", "abrev": "MOU", "numero": 30, "ritmo": 81, "regularidad": 79, "neumaticos": 77, "lluvia": 83, "ataque": 77, "defensa": 74, "agresividad": 70, "salida": 74 } ] },
+    { "id": "kestrel", "nombre": "Kestrel Engineering", "color": "#9aa4b0", "agarre": -0.3, "potencia": 0.6, "resistencia": -1.2, "desgaste": 1.04, "boxes": 2.55, "fiabilidad": 1.15, "estrategia": 68, "meteo": 62,
+      "pilotos": [
+        { "nombre": "Oskar Lind", "abrev": "LIN", "numero": 18, "ritmo": 84, "regularidad": 85, "neumaticos": 80, "lluvia": 79, "ataque": 79, "defensa": 83, "agresividad": 55, "salida": 81 },
+        { "nombre": "Sami Haddad", "abrev": "HAD", "numero": 25, "ritmo": 80, "regularidad": 78, "neumaticos": 81, "lluvia": 76, "ataque": 75, "defensa": 77, "agresividad": 74, "salida": 77 } ] },
+    { "id": "riviera", "nombre": "Riviera Corse", "color": "#e8d13a", "agarre": -0.5, "potencia": -0.3, "resistencia": 0.0, "desgaste": 0.95, "boxes": 2.5, "fiabilidad": 1.05, "estrategia": 74, "meteo": 72,
+      "pilotos": [
+        { "nombre": "Marco Bellini", "abrev": "BEL", "numero": 5, "ritmo": 83, "regularidad": 86, "neumaticos": 87, "lluvia": 81, "ataque": 76, "defensa": 84, "agresividad": 52, "salida": 79 },
+        { "nombre": "Yuto Mori", "abrev": "MOR", "numero": 12, "ritmo": 79, "regularidad": 82, "neumaticos": 84, "lluvia": 74, "ataque": 72, "defensa": 76, "agresividad": 48, "salida": 75 } ] },
+    { "id": "tundra", "nombre": "Tundra Racing", "color": "#3a6ee8", "agarre": -0.8, "potencia": -0.2, "resistencia": 0.3, "desgaste": 1.02, "boxes": 2.6, "fiabilidad": 1.3, "estrategia": 62, "meteo": 60,
+      "pilotos": [
+        { "nombre": "Ville Rantanen", "abrev": "RAN", "numero": 44, "ritmo": 82, "regularidad": 80, "neumaticos": 78, "lluvia": 87, "ataque": 80, "defensa": 78, "agresividad": 68, "salida": 82 },
+        { "nombre": "Chris Okafor", "abrev": "OKA", "numero": 8, "ritmo": 78, "regularidad": 77, "neumaticos": 76, "lluvia": 72, "ataque": 74, "defensa": 73, "agresividad": 75, "salida": 76 } ] },
+    { "id": "ferrum", "nombre": "Ferrum Team", "color": "#b06a3a", "agarre": -1.1, "potencia": -0.6, "resistencia": 0.6, "desgaste": 1.06, "boxes": 2.7, "fiabilidad": 1.4, "estrategia": 60, "meteo": 58,
+      "pilotos": [
+        { "nombre": "Bruno Albuquerque", "abrev": "ALB", "numero": 31, "ritmo": 79, "regularidad": 79, "neumaticos": 80, "lluvia": 78, "ataque": 76, "defensa": 77, "agresividad": 64, "salida": 78 },
+        { "nombre": "Tim Becker", "abrev": "BEC", "numero": 2, "ritmo": 76, "regularidad": 76, "neumaticos": 74, "lluvia": 73, "ataque": 71, "defensa": 72, "agresividad": 70, "salida": 72 } ] }
+  ]
+}
