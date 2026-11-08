@@ -45,7 +45,8 @@ export function buildKnowledge(truth: HiddenTyre, team: TeamDef, rng: Rng): Team
 /** Lo que aprende un equipo de una tanda: mide el desgaste real del compuesto. */
 export function learnFromRun(sess: Session, car: Car, run: Run & { lapsData: number[] }) {
   const set = car.tyres;
-  if (!set || sess.avgWater() > 0.15) return;
+  // con agua el desgaste no se parece al de seco: no sirve para afinar la estrategia
+  if (!set || sess.avgWater() > 0.15 || !DRY.includes(set.c)) return;
   const k = car.e.knowledge;
   const c = set.c;
   const laps = run.lapsData.length;
@@ -434,6 +435,46 @@ export function practiceProgram(sess: Session, car: Car): Run[] {
   }
   for (let i = 1; i < runs.length; i++) runs[i].at = Math.max(runs[i].at ?? 0, (runs[i - 1].at ?? 0) + 60);
   return runs;
+}
+
+/**
+ * Antes de salir a una tanda programada, el equipo mira la pista y el radar: con pista mojada
+ * no sale con slicks. Con mucha agua, o si va a escampar pronto, espera en el garaje; si no,
+ * sale unas vueltas con intermedios o de lluvia (sin gastar juegos nuevos a la ligera).
+ * Devuelve la tanda a hacer, o cuántos segundos esperar, o null para saltársela.
+ */
+export function practiceWeather(sess: Session, car: Car, run: Run): { run: Run } | { wait: number } | null {
+  const set = car.e.sets.find((s) => s.id === run.setId);
+  const water = sess.avgWater() * sess.rng.logn(0.12);
+  const rain = sess.maxRainOnTrack();
+  const left = sess.remaining();
+  const dryRun = !!set && DRY.includes(set.c);
+  if (water < WET.si && rain < 1.5) return dryRun ? { run } : null;
+  if (!dryRun && water > WET.si * 0.6) return { run };
+  if (left < 8 * 60) return null;
+  const fc = teamForecast(sess, car);
+  const heavy = water > WET.iw * 1.4 || rain > 10;
+  const clearingSoon = fc.prob[3] < 0.3 && rain < 1;
+  // chaparrón o claro a la vista: mejor esperar (sin pasarse del final de la sesión)
+  if ((heavy || (clearingSoon && water < WET.iw)) && sess.rng.chance(heavy ? 0.85 : 0.6) && left > 14 * 60) return { wait: sess.rng.range(180, 420) };
+  if (water < WET.si && rain >= 1.5) return { wait: sess.rng.range(120, 240) }; // empieza a llover: a ver cómo queda
+  const c: Compound = water > WET.iw * 1.05 ? "W" : "I";
+  const sets = car.e.sets.filter((s) => s.c === c && !s.returned && !s.punctured);
+  const used = sets.filter((s) => s.laps > 0 && setWear(s) < 0.6).sort((a, b) => setWear(a) - setWear(b))[0];
+  const fresh = sets.filter((s) => s.laps === 0);
+  // un juego nuevo solo si quedan de sobra para la clasificación y la carrera
+  const pick = used ?? (fresh.length > 2 ? fresh[0] : undefined);
+  if (!pick) return sess.rng.chance(0.7) ? { wait: sess.rng.range(240, 480) } : null;
+  const laps = sess.rng.int(3, 6);
+  return { run: { kind: "long", setId: pick.id, pushLaps: laps, fuel: Math.min(60, 12 + laps * sess.fuelPerLap * 1.1 + 15), at: run.at } };
+}
+
+/** En pista durante libres o clasificación: ¿hay que volver a boxes por el agua? */
+export function wrongTyresForWater(sess: Session, car: Car): boolean {
+  if (!car.tyres) return false;
+  const water = sess.avgWater();
+  if (DRY.includes(car.tyres.c)) return water > WET.si * 1.25;
+  return water < WET.si * 0.5 && sess.maxRainOnTrack() < 0.5;
 }
 
 // ------------------------------------------------------------- clasificación

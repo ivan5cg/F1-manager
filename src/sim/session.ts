@@ -7,7 +7,7 @@ import { Rng, clamp } from "./rng";
 import { Track, Minisector, msTimeAtGrip, MIN_MASS, REF_CAR } from "./track";
 import { Compound, COMPOUNDS, DRY, HiddenTyre, TyreSet, setGrip, updateSet, axleGrip, warmBlankets, setWear, bestWaterGrip, WET } from "./tyres";
 import { WeatherState, stepWeather, rainAt, evaporation, waterStep } from "./weather";
-import { Plan, planStrategy, aiDecide, aiErs, TeamKnowledge, practiceProgram, qualiTick, pickSet, learnFromRun, aiRedFlagTyres } from "./strategy";
+import { Plan, planStrategy, aiDecide, aiErs, TeamKnowledge, practiceProgram, qualiTick, pickSet, learnFromRun, aiRedFlagTyres, practiceWeather, wrongTyresForWater } from "./strategy";
 
 export const PUSH_NAMES = ["Conservar", "Gestionar", "Normal", "Atacar", "Al límite"];
 export const ENGINE_NAMES = ["Ahorro", "Normal", "Potencia"];
@@ -129,6 +129,7 @@ export interface Car {
   autoPush: boolean;
   autoErs: boolean;
   auto: boolean; // en libres/clasificación: la IA lleva el programa
+  wetWarned?: boolean; // ya se avisó al jugador de que va con el neumático equivocado
   letPass?: number;
   advice?: { lap: number; setId: string };
   // libres / clasificación
@@ -906,6 +907,18 @@ export class Session {
       else run.phase = run.kind === "quali" && run.pushLaps > 1 && this.rng.chance(0.5) ? "push" : "cool";
     } else if (run.phase === "cool") run.phase = this.remaining() > 0 ? "push" : "in";
     else if (run.phase === "long" && (run.done >= run.pushLaps || this.remaining() <= 0)) run.phase = "in";
+    // con slicks y pista mojada (o con neumáticos de lluvia en seco) no tiene sentido seguir
+    if (run.phase !== "in" && wrongTyresForWater(this, c)) {
+      if (c.auto) {
+        run.phase = "in";
+        if (c.player) this.log({ kind: "radio", carId: c.id, text: `📻 Ingeniero: ${c.d.abrev}, entra; con ${DRY.includes(c.tyres!.c) ? "esta agua los slicks no sirven" : "la pista seca los de lluvia se destrozan"}.`, important: true });
+        // en clasificación, vuelve a salir en cuanto pueda con el neumático adecuado
+        if (this.parts.length && c.qPlan) c.qPlan.deps.unshift(this.remaining() - 20);
+      } else if (!c.wetWarned) {
+        c.wetWarned = true;
+        this.log({ kind: "radio", carId: c.id, text: `📻 Ingeniero: ${c.d.abrev}, ${DRY.includes(c.tyres!.c) ? "la pista está mojada para slicks" : "la pista se está secando"}. ¿Entramos?`, important: true, pause: true });
+      }
+    }
     // la vuelta lanzada que empieza con el reloj a cero no cuenta
     if ((run.phase === "push" || run.phase === "long") && this.remaining() <= 0) run.phase = "in";
     if (run.phase === "push") c.push = 4;
@@ -933,7 +946,16 @@ export class Session {
         const next = c.queue[0];
         if ((next.at ?? 0) <= this.partT) {
           c.queue.shift();
-          this.startRun(c, next);
+          if (!c.auto) { this.startRun(c, next); continue; }
+          // el equipo mira la pista antes de salir
+          const d = practiceWeather(this, c, next);
+          if (!d) continue;
+          if ("wait" in d) {
+            c.queue.unshift({ ...next, at: this.partT + d.wait });
+            for (let i = 1; i < c.queue.length; i++) c.queue[i].at = Math.max(c.queue[i].at ?? 0, (c.queue[i - 1].at ?? 0) + 60);
+            continue;
+          }
+          this.startRun(c, d.run);
         }
       }
     }
@@ -958,6 +980,7 @@ export class Session {
     this.mount(c, set);
     c.fuel = run.fuel;
     c.run = { ...run, phase: "out", done: 0, startT: this.t, lapsData: [] };
+    c.wetWarned = false;
     c.loc = "lane_out";
     c.lane = { t: 0, total: this.track.pit.laneLength / 2 / this.track.pit.limit };
     c.push = 2;

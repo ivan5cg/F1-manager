@@ -226,3 +226,75 @@ canvas.radar { width: 100%; max-width: 420px; display: block; margin: 0 auto; }
 .rlegend em { font-style: normal; font-size: 10px; color: var(--dim); padding-left: 4px; align-self: center; }
 .leftcol > .tower { flex: 1 1 auto; }
 .main.wide .toast { display: none; }
+
+/* ===================================================================================
+   Acabado "TV 2010": barras con brillo (luz arriba, corte a media altura), extremos en
+   diagonal pero apiladas en vertical, texto blanco con sombra, el líder en rojo, cajas
+   amarillas para diferencias y rojas para posiciones.
+   =================================================================================== */
+:root {
+  --gl: linear-gradient(180deg, #55585f 0%, #33363b 46%, #1b1c20 54%, #0d0e10 100%);
+  --gl-pos: linear-gradient(180deg, #73767d 0%, #4a4d53 46%, #2c2e33 54%, #1d1e22 100%);
+  --gl-red: linear-gradient(180deg, #ff7a6c 0%, #e8372b 46%, #c0170d 54%, #96100a 100%);
+  --gl-gold: linear-gradient(180deg, #fff3a8 0%, #ffd84a 46%, #f2b300 54%, #f7c51f 100%);
+  --gl-white: linear-gradient(180deg, #ffffff 0%, #e9eaed 46%, #c6c9cf 54%, #dfe1e5 100%);
+  --sl: 7px;
+}
+.bar { background: var(--gl); text-shadow: 0 1px 1px rgba(0, 0, 0, .85); }
+.tab { background: var(--gl-white); clip-path: polygon(0 0, 100% 0, calc(100% - var(--sl)) 100%, 0 100%); padding-right: calc(8px + var(--sl)); text-shadow: none; }
+.gold { background: var(--gl-gold); text-shadow: none; }
+.posbox, .pos { background: var(--gl-red); text-shadow: 0 1px 1px rgba(0, 0, 0, .6); }
+.pos.grey, .posbox.grey { background: var(--gl-pos); }
+button { background: var(--gl); text-shadow: 0 1px 1px rgba(0, 0, 0, .8); }
+button.on { background: var(--gl-white); text-shadow: none; }
+button.red { background: var(--gl-red); }
+button.yellow { background: var(--gl-gold); text-shadow: none; }
+.panel > .hd > .t { background: var(--gl-white); clip-path: polygon(0 0, 100% 0, calc(100% - var(--sl)) 100%, 0 100%); padding-right: calc(10px + var(--sl)); }
+.panel > .bd { background: var(--gl); }
+
+/* contador: [Vuelta 22/26] en caja oscura con diagonales y el estado al lado */
+.lapc > span { font-weight: 700; }
+.lapc .k { background: var(--gl); border: 0; text-transform: none; font-size: 13px; font-weight: 600; padding-left: 16px; clip-path: polygon(var(--sl) 0, 100% 0, 100% 100%, 0 100%); display: flex; align-items: center; }
+.lapc .v { background: var(--gl); color: #fff; padding-left: 2px; text-shadow: 0 1px 1px #000; }
+.lapc .v:last-child { padding-right: 16px; clip-path: polygon(0 0, 100% 0, calc(100% - var(--sl)) 100%, 0 100%); }
+.lapc .s { background: var(--gl-gold); color: #000; border: 0; margin-left: 3px; padding-right: 16px; clip-path: polygon(var(--sl) 0, 100% 0, calc(100% - var(--sl)) 100%, 0 100%); padding-left: 14px; }
+.lapc .s.sc { color: #000; }
+.lapc .s.red { background: var(--gl-red); color: #fff; }
+
+/* torre: filas oscuras con brillo y corte en diagonal; posición en gris, líder en rojo */
+.tower { gap: 1px; }
+.tr .p { background: var(--gl-pos); font-weight: 700; font-size: 12.5px; text-shadow: 0 1px 1px #000; }
+.tr .c { width: 3px; }
+.tr .body { background: var(--gl); clip-path: polygon(0 0, 100% 0, calc(100% - var(--sl)) 100%, 0 100%); padding-right: calc(var(--sl) - 2px); text-shadow: 0 1px 1px rgba(0, 0, 0, .85); }
+.tr .n { font-weight: 700; letter-spacing: .07em; }
+.tr.lead .p, .tr.lead .body { background: var(--gl-red); }
+.tr.me .body { box-shadow: none; background: linear-gradient(180deg, #6d6448 0%, #463f28 46%, #26220f 54%, #141206 100%); }
+.tr.lead.me .body { background: var(--gl-red); }
+.tr.out .p { background: linear-gradient(#55575c, #2a2b2f); }
+.tr.out .body { background: linear-gradient(#26272b, #111214); }
+.tr.wide .body { clip-path: none; }
+.trh > span { background: var(--gl-white); }
+.cut { background: var(--gl-red); }
+
+/* mensajes y avisos: pestaña blanca en diagonal sobre barra oscura */
+.rm .tab, .toast .tab { padding-right: calc(6px + var(--sl)); }
+.rm.ctl .tab { background: var(--gl-gold); }
+.rm.red .tab { background: var(--gl-red); }
+
+/* tiempo: pestañas a la izquierda y caja de hora local con icono */
+.wxbox .tab { clip-path: polygon(0 0, 100% 0, calc(100% - 5px) 100%, 0 100%); padding-right: 9px; text-align: left; }
+.wxbox .sky { display: inline-flex; align-items: center; gap: 5px; }
+.wxbox .sky svg { width: 22px; height: 15px; flex: none; }
+
+/* tarjetas de pilotos: rótulo [posición roja][NOMBRE] con diagonal, celdas con brillo */
+.dcard .h .posbox { clip-path: polygon(0 0, 100% 0, calc(100% - 6px) 100%, 0 100%); padding-right: 5px; margin-right: -3px; position: relative; z-index: 1; }
+.dcard .h .nm { background: var(--gl); padding-left: 8px; clip-path: polygon(0 0, 100% 0, calc(100% - var(--sl)) 100%, 0 100%); padding-right: calc(4px + var(--sl)); text-shadow: 0 1px 1px #000; }
+.dcard .cl { background: var(--gl); text-shadow: 0 1px 1px rgba(0, 0, 0, .8); }
+.dcard .cl.gold { background: var(--gl-gold); text-shadow: none; }
+.dcard .b .mode { background: var(--gl); }
+.lapbanner .posbox { clip-path: polygon(0 0, 100% 0, calc(100% - 6px) 100%, 0 100%); padding-right: 9px; margin-right: -3px; }
+.lapbanner .gold { clip-path: polygon(var(--sl) 0, 100% 0, calc(100% - var(--sl)) 100%, 0 100%); padding: 0 12px; margin-left: -3px; }
+.sheet { background: linear-gradient(#25272b, #0b0b0d 120px, #050505); }
+.tr.lead .purple, .tr.lead .green { color: #fff; }
+.lapbanner > span { white-space: nowrap; overflow: hidden; }
+.lapbanner .bar.grow { min-width: 0; text-overflow: ellipsis; }

@@ -5,6 +5,21 @@ import { Session, Car, RaceEvent, SESSION_NAMES, SessionKind, isRaceKind, isQual
 import { COMPOUNDS, Compound, DRY, ALL, setWear, TyreSet, WET } from "../sim/tyres";
 import { rainAt, forecast, RadarFrame } from "../sim/weather";
 import { renderField, colorize, terrain, RADAR_STEPS, fmtHour } from "./radar";
+
+/** Icono del cielo para la caja de hora local (sol, nubes, lluvia, chaparrón). */
+function skyIcon(cloud: number, rain: number, clock: number): string {
+  const day = clock > 7 * 60 && clock < 20.5 * 60;
+  const sun = day ? `<circle cx="7" cy="6" r="4" fill="#ffd84a"/>` : `<path d="M9 2a5 5 0 1 0 3 8 4 4 0 1 1-3-8z" fill="#e8e8ef"/>`;
+  const cl = (x: number, y: number, s: number, c: string) => `<path transform="translate(${x} ${y}) scale(${s})" d="M4 10h11a3.5 3.5 0 0 0 0-7 5 5 0 0 0-9.5 1A3 3 0 0 0 4 10z" fill="${c}"/>`;
+  if (rain > 0.15) {
+    const n = rain > 6 ? 4 : rain > 1.5 ? 3 : 2;
+    const drops = Array.from({ length: n }, (_, i) => `<path d="M${7 + i * 3.5} 11.5l-1.2 3" stroke="#5aa8ff" stroke-width="1.6" stroke-linecap="round"/>`).join("");
+    return `<svg viewBox="0 0 22 15">${cl(1, -1.5, 1, rain > 6 ? "#7d828c" : "#c9ccd2")}${drops}</svg>`;
+  }
+  if (cloud > 0.6) return `<svg viewBox="0 0 22 15">${cl(0, 1, 0.75, "#8d9199")}${cl(4, 2, 0.85, "#d4d7dc")}</svg>`;
+  if (cloud > 0.3) return `<svg viewBox="0 0 22 15">${sun}${cl(5, 3, 0.8, "#e6e8eb")}</svg>`;
+  return `<svg viewBox="0 0 22 15">${sun}</svg>`;
+}
 import { makeRun, availableSets, stintProfile } from "../sim/strategy";
 import { Rng } from "../sim/rng";
 
@@ -272,7 +287,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     rows.forEach(({ car: c, gap, interval, lapsDown }, i) => {
       if (i === cutAt) html += `<div class="cut"></div>`;
       const tyre = c.tyres && (race || c.loc !== "garage") ? tyreHtml(c.tyres.c) : "";
-      const cls = `tr${c.player ? " me" : ""}${c.loc === "out" || c.eliminated ? " out" : ""}${wide ? " wide" : ""}`;
+      const cls = `tr${i === 0 ? " lead" : ""}${c.player ? " me" : ""}${c.loc === "out" || c.eliminated ? " out" : ""}${wide ? " wide" : ""}`;
       const pre = `<span class="p">${i + 1}</span><span class="c" style="background:${c.team.color}"></span><span class="body"><span class="n">${c.d.abrev}</span>${statusFlag(c)}`;
       if (wide) {
         let cells = "";
@@ -328,7 +343,8 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     const rAvg = sess.rainOnTrack();
     const sw = sess.sectorWater();
     const f1 = (x: number) => x.toFixed(x < 10 ? 1 : 0);
-    $("#wx").innerHTML = `<span class="tab">Aire</span><span class="bar mono">${w.airT.toFixed(0)}° <span class="dim">pista</span> ${w.trackT.toFixed(0)}°</span>
+    $("#wx").innerHTML = `<span class="tab">Hora</span><span class="bar mono"><span class="sky">${fmtHour(w.clock)}${skyIcon(w.cloud, rAvg, w.clock)}</span></span>
+      <span class="tab">Aire</span><span class="bar mono">${w.airT.toFixed(0)}° <span class="dim">pista</span> ${w.trackT.toFixed(0)}°</span>
       <span class="tab">Cielo</span><span class="bar" style="white-space:nowrap">${rMax > 0.15 ? `Lluvia ${f1(rAvg)}<span class="small dim">&nbsp;máx</span>&nbsp;${f1(rMax)}<span class="small" style="text-transform:none">&nbsp;mm/h</span>` : w.cloud > 0.6 ? "Cubierto" : w.cloud > 0.3 ? "Nubes" : "Sol"}</span>
       <span class="tab">Agua</span><span class="bar"><span class="wxsec grow">${sw.map((x) => `<div title="${x.toFixed(2)} mm" style="background:${x > 0.05 ? `rgba(58,139,232,${Math.min(1, 0.35 + x)})` : "#26282d"}"></div>`).join("")}</span><span class="mono small">${Math.max(...sw).toFixed(2)}</span></span>`;
     // última vuelta de tu piloto (libres/clasificación): [P][NOMBRE][TIEMPO][+DIF]
