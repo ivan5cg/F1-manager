@@ -3,7 +3,7 @@
 // en libres. Con lo que sabe simula stints con el mismo modelo de neumáticos que la carrera y
 // busca la mejor combinación de paradas con los juegos que le quedan.
 import { Rng } from "./rng";
-import { Compound, COMPOUNDS, DRY, HiddenTyre, TyreSet, newSet, updateSet, setGrip, setWear } from "./tyres";
+import { Compound, COMPOUNDS, DRY, HiddenTyre, TyreSet, newSet, updateSet, setGrip, setWear, WET } from "./tyres";
 import { msTimeAtGrip } from "./track";
 import { forecast, Forecast } from "./weather";
 import type { Session, Car, TeamDef, Run } from "./session";
@@ -36,7 +36,8 @@ export function buildKnowledge(truth: HiddenTyre, team: TeamDef, rng: Rng): Team
       grainProne: truth.grainProne * rng.logn(n0 * 2),
     },
     noise, measured: {}, profile: {},
-    wetIn: rng.range(0.14, 0.3), wetOut: rng.range(0.1, 0.2),
+    // cuándo pasa cada equipo de slicks a intermedios y vuelve: alrededor del punto de cruce, unos antes y otros tarde
+    wetIn: WET.si * rng.range(0.9, 1.4), wetOut: WET.si * rng.range(0.6, 0.9),
     quality: team.meteo, strategy: team.estrategia, fc: null, fcT: -999,
   };
 }
@@ -232,12 +233,13 @@ function weatherCall(sess: Session, car: Car): Compound | null {
   const soonWet = fc.prob[1] > 0.6 && fc.p50[1] > 2;
   const left = sess.laps - sess.lapsDone(car);
   if (isDry) {
-    if (water > k.wetIn && water < 0.5 && soonDry && left > 5 && sess.rng.chance(0.6)) return null;
-    if (water > k.wetIn || (soonWet && water > k.wetIn * 0.5)) return water > 1.1 ? "W" : "I";
+    if (water > k.wetIn && water < WET.si * 2.5 && soonDry && left > 5 && sess.rng.chance(0.6)) return null;
+    if (water > k.wetIn || (soonWet && water > k.wetIn * 0.5)) return water > WET.iw * 1.05 ? "W" : "I";
     return null;
   }
-  if (cur === "I" && water > 1.25) return "W";
-  if (cur === "W" && water < 0.75 && rainNow < 4) return "I";
+  // intermedio ↔ lluvia alrededor del cruce, con margen para no cambiar por una vuelta
+  if (cur === "I" && water > WET.iw * 1.1) return "W";
+  if (cur === "W" && water < WET.iw * 0.8 && rainNow < 4) return "I";
   if (cur === "I" && water < k.wetOut && rainNow < 0.4 && fc.prob[2] < 0.5) {
     const avail = availableSets(car);
     const pref: Compound[] = left < 18 ? ["S", "M", "H"] : left < 32 ? ["M", "S", "H"] : ["H", "M", "S"];
@@ -440,7 +442,8 @@ export function qualiTick(sess: Session, car: Car) {
   const part = sess.parts[sess.part];
   if (!part) return;
   const R = sess.remaining();
-  const lap = sess.track.refLap * (1.03 + sess.avgWater() * 0.15);
+  const aw = sess.avgWater();
+  const lap = sess.track.refLap * (1.03 + (aw > 0.03 ? Math.min(0.32, 0.06 + aw * 0.14) : 0));
   const outLap = sess.track.pit.laneLength / 2 / sess.track.pit.limit + lap / 0.86;
   if (!car.qPlan || car.qPlan.part !== sess.part) {
     const r = sess.rng;
@@ -464,14 +467,14 @@ export function qualiTick(sess: Session, car: Car) {
   if (safe) return;
   if (R < outLap + lap * 0.95) return;
   const water = sess.avgWater();
-  let c: Compound = water > 1.0 ? "W" : water > 0.18 ? "I" : (part.compound ?? "S");
+  let c: Compound = water > WET.iw * 1.05 ? "W" : water > WET.si ? "I" : (part.compound ?? "S");
   let set = pickSet(car, c, true);
   if (!set && c === "W") { c = "I"; set = pickSet(car, c, true); }
   if (!set) return;
   const freshLeft = car.e.sets.filter((s) => s.c === c && s.laps === 0 && !s.returned).length;
   // si no habrá otra salida, dos vueltas lanzadas para tener un margen ante un error o una vuelta anulada
   const lastChance = plan.deps.length === 0 && R < outLap + lap * 3.2 + 60;
-  const pushLaps = water > 0.18 ? 3 : (freshLeft <= 1 && part.advance === null) || lastChance ? 2 : 1;
+  const pushLaps = water > WET.si ? 3 : (freshLeft <= 1 && part.advance === null) || lastChance ? 2 : 1;
   sess.startRun(car, { kind: "quali", setId: set.id, pushLaps, fuel: QUALI_FUEL + pushLaps * 2 * sess.fuelPerLap });
 }
 
@@ -481,8 +484,8 @@ export function aiRedFlagTyres(sess: Session, car: Car) {
   const water = sess.avgWater();
   const cur = car.tyres.c;
   let want: Compound | null = null;
-  if (water > 1.1) want = "W";
-  else if (water > 0.2) want = cur === "W" && water > 0.8 ? null : "I";
+  if (water > WET.iw * 1.1) want = "W";
+  else if (water > WET.si) want = cur === "W" && water > WET.iw * 0.8 ? null : "I";
   else if (!DRY.includes(cur)) want = car.plan.stints.find((s) => DRY.includes(s.c))?.c ?? "M";
   else if (setWear(car.tyres) > 0.25) {
     // gratis: juego más fresco del compuesto que mejor encaja con lo que queda

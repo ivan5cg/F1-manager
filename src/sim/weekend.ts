@@ -4,7 +4,7 @@
 import { Rng, clamp } from "./rng";
 import { Track } from "./track";
 import { HiddenTyre, TyreSet, allocation, setWear, DRY } from "./tyres";
-import { Climate, Scenario, WeatherState, createDayWeather, stepWeather, rainAt, pickScenario } from "./weather";
+import { Climate, Scenario, WeatherState, createDayWeather, stepWeather, rainAt, pickScenario, evaporation, waterStep } from "./weather";
 import { Session, SessionKind, Entrant, TeamDef, ResultRow, isRaceKind } from "./session";
 import { TeamKnowledge, buildKnowledge } from "./strategy";
 
@@ -87,13 +87,12 @@ export class Weekend {
     let rubberLoss = 0;
     while (w.clock < clock) {
       stepWeather(w, 1);
-      const evap = 2.2e-5 * (1 + (w.trackT - 20) / 15) * (1 + w.surfaceWind / 20) * (1 - 0.5 * w.cloud);
+      const evap = evaporation(w);
       let rsum = 0;
       for (let i = 0; i < ms.length; i++) {
         const r = rainAt(w, ms[i].x / 1000, ms[i].y / 1000);
         rsum += r;
-        const x = water[i];
-        water[i] = clamp(x + 60 * (r / 3600 - 9e-4 * x * (1 + x / 2) - (x > 0 ? evap : 0)), 0, 4);
+        for (let k = 0; k < 4; k++) water[i] = waterStep(water[i], r, 15, evap);
       }
       if (rsum / ms.length > 0.5) rubberLoss += 0.02 * (rsum / ms.length);
     }

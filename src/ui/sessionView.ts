@@ -2,7 +2,7 @@ import { $, esc, fmtLap, fmtClock, tyreHtml, setLabel, sheet, radarColor, dirNam
 import { CIRCUITS, TEAMS } from "./data";
 import { Weekend } from "../sim/weekend";
 import { Session, Car, RaceEvent, SESSION_NAMES, SessionKind, isRaceKind, isQualiKind, PUSH_NAMES, ENGINE_NAMES, ERS_NAMES, SOC_MAX } from "../sim/session";
-import { COMPOUNDS, Compound, DRY, ALL, setWear, TyreSet } from "../sim/tyres";
+import { COMPOUNDS, Compound, DRY, ALL, setWear, TyreSet, WET } from "../sim/tyres";
 import { rainAt, forecast, RadarFrame } from "../sim/weather";
 import { renderField, colorize, terrain, RADAR_STEPS, fmtHour } from "./radar";
 import { makeRun, availableSets, stintProfile } from "../sim/strategy";
@@ -325,9 +325,11 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     $("#lapc").innerHTML = `<span class="k">${k}</span><span class="v">${v}</span>${st ? `<span class="s ${cls}">${st}</span>` : ""}`;
     const w = sess.weather;
     const rMax = sess.maxRainOnTrack();
+    const rAvg = sess.rainOnTrack();
     const sw = sess.sectorWater();
+    const f1 = (x: number) => x.toFixed(x < 10 ? 1 : 0);
     $("#wx").innerHTML = `<span class="tab">Aire</span><span class="bar mono">${w.airT.toFixed(0)}° <span class="dim">pista</span> ${w.trackT.toFixed(0)}°</span>
-      <span class="tab">Cielo</span><span class="bar" style="white-space:nowrap">${rMax > 0.15 ? `Lluvia ${rMax.toFixed(rMax < 10 ? 1 : 0)}<span class="small" style="text-transform:none">&nbsp;mm/h</span>` : w.cloud > 0.6 ? "Cubierto" : w.cloud > 0.3 ? "Nubes" : "Sol"}</span>
+      <span class="tab">Cielo</span><span class="bar" style="white-space:nowrap">${rMax > 0.15 ? `Lluvia ${f1(rAvg)}<span class="small dim">&nbsp;máx</span>&nbsp;${f1(rMax)}<span class="small" style="text-transform:none">&nbsp;mm/h</span>` : w.cloud > 0.6 ? "Cubierto" : w.cloud > 0.3 ? "Nubes" : "Sol"}</span>
       <span class="tab">Agua</span><span class="bar"><span class="wxsec grow">${sw.map((x) => `<div title="${x.toFixed(2)} mm" style="background:${x > 0.05 ? `rgba(58,139,232,${Math.min(1, 0.35 + x)})` : "#26282d"}"></div>`).join("")}</span><span class="mono small">${Math.max(...sw).toFixed(2)}</span></span>`;
     // última vuelta de tu piloto (libres/clasificación): [P][NOMBRE][TIEMPO][+DIF]
     const lb = $("#lapban");
@@ -524,7 +526,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     const water = sess.avgWater();
     open(`<b class="up">${esc(c.d.nombre)} · ${part.name}</b>
       <div class="small dim">${part.compound ? `Obligatorio: ${COMPOUNDS[part.compound].name.toLowerCase()} (salvo en mojado). ` : ""}Agua en pista ${water.toFixed(2)} mm. Quedan ${fmtClock(sess.remaining())}.</div>
-      <div class="opts">${setButtons(c, (s) => !part.compound || water > 0.2 || s.c === part.compound)}</div>
+      <div class="opts">${setButtons(c, (s) => !part.compound || water > WET.si || s.c === part.compound)}</div>
       <h2>Vueltas lanzadas</h2><div class="seg" id="laps">${[1, 2, 3].map((n) => `<button data-n="${n}" class="${n === laps ? "on" : ""}">${n}</button>`).join("")}</div>
       <div class="btnrow" style="padding:0"><button data-close>Cancelar</button><button class="red" id="go" disabled>Salir ahora</button></div>`, (el, close) => {
       el.querySelectorAll<HTMLButtonElement>("[data-set]").forEach((b) => (b.onclick = () => {

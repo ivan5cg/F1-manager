@@ -22,7 +22,11 @@ export interface CompoundSpec {
   cooling: number; // cuánto le enfría el agua
 }
 
-const SLICK_WATER = [[0, 1], [0.08, 0.955], [0.2, 0.875], [0.4, 0.77], [0.7, 0.66], [1.2, 0.54], [2, 0.42], [3, 0.35]] as const;
+// Agarre según el agua en la trazada (mm). Calibrado con las referencias de Pirelli: el
+// intermedio pasa a ser mejor cuando la vuelta con slicks llega al 110-112 % de la de seco, y un
+// intermedio en pista seca pierde ~6 %; con mucha agua el intermedio va un ~20 % más lento
+// (pole en mojado de Interlagos 2024, 1:23.405, frente a 1:08.899 en seco el mismo fin de semana).
+const SLICK_WATER = [[0, 1], [0.05, 0.945], [0.1, 0.895], [0.2, 0.825], [0.3, 0.765], [0.5, 0.665], [0.8, 0.565], [1.2, 0.48], [2, 0.39], [3, 0.33]] as const;
 
 // ~2,5 % de agarre entre compuestos = ~1 s por vuelta en un circuito como Silverstone
 export const COMPOUNDS: Record<Compound, CompoundSpec> = {
@@ -30,9 +34,9 @@ export const COMPOUNDS: Record<Compound, CompoundSpec> = {
   M: { name: "Medio", short: "M", color: "#F2D23C", base: 0.973, opt: 103, window: 13, slope: 0.036, wear: 0.0175, cliff: 0.74, water: SLICK_WATER, cooling: 1 },
   H: { name: "Duro", short: "H", color: "#F2F2F2", base: 0.955, opt: 111, window: 14, slope: 0.026, wear: 0.0118, cliff: 0.76, water: SLICK_WATER, cooling: 1 },
   I: { name: "Intermedio", short: "I", color: "#3CC35A", base: 1.0, opt: 88, window: 16, slope: 0.035, wear: 0.03, cliff: 0.75,
-    water: [[0, 0.905], [0.1, 0.9], [0.25, 0.885], [0.5, 0.845], [1, 0.765], [2, 0.61], [3, 0.5]], cooling: 0.55 },
+    water: [[0, 0.875], [0.1, 0.835], [0.2, 0.8], [0.35, 0.77], [0.5, 0.748], [0.8, 0.718], [1.2, 0.675], [1.8, 0.605], [2.5, 0.535], [3, 0.485]], cooling: 0.55 },
   W: { name: "Lluvia", short: "W", color: "#3A7BE8", base: 1.0, opt: 80, window: 18, slope: 0.03, wear: 0.026, cliff: 0.78,
-    water: [[0, 0.85], [0.25, 0.835], [0.5, 0.815], [1, 0.785], [2, 0.72], [3, 0.66]], cooling: 0.35 },
+    water: [[0, 0.79], [0.3, 0.755], [0.6, 0.725], [1, 0.695], [1.5, 0.667], [2, 0.638], [2.5, 0.605], [3, 0.575]], cooling: 0.35 },
 };
 
 export interface Axle {
@@ -105,6 +109,36 @@ export function setGrip(t: TyreSet, water: number): number {
   const punct = t.punctured ? 0.55 : 1;
   return g * waterGrip(t.c, water) * (1 - 0.006 * t.flatSpot) * punct;
 }
+
+/** Mejor agarre posible con esa agua (el del compuesto adecuado), para medir si se va con el neumático equivocado. */
+export function bestWaterGrip(water: number): number {
+  return Math.max(waterGrip("S", water), waterGrip("I", water), waterGrip("W", water));
+}
+
+/** Agarre estimado de un juego nuevo a su temperatura de equilibrio con esa agua y ese asfalto. */
+export function steadyGrip(c: Compound, water: number, trackT = 22): number {
+  const sp = COMPOUNDS[c];
+  const wet = Math.min(1, water / 0.8);
+  const t = newSet(c);
+  // energía media por eje en una vuelta típica: delante 0,9, detrás 1,1
+  for (const [a, side, e] of [[t.F, 11, 0.9], [t.R, -2, 1.1]] as const) {
+    a.tBulk = 0.45 * trackT + 0.15 * (trackT - 5) + 79 * e + side - 34 * wet * sp.cooling;
+    a.tSurf = a.tBulk - 12 * wet * sp.cooling;
+  }
+  return setGrip(t, water);
+}
+
+function crossover(a: Compound, b: Compound): number {
+  let lo = 0, hi = 3;
+  for (let i = 0; i < 40; i++) {
+    const m = (lo + hi) / 2;
+    if (steadyGrip(a, m) > steadyGrip(b, m)) lo = m; else hi = m;
+  }
+  return (lo + hi) / 2;
+}
+
+/** Agua (mm) a partir de la cual compensa el intermedio frente al slick (si) y el de lluvia frente al intermedio (iw). */
+export const WET = { si: crossover("M", "I"), iw: crossover("I", "W") };
 
 export interface TyreEnv {
   trackT: number;

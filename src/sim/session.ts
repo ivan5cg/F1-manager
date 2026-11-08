@@ -5,8 +5,8 @@
 // distancias reales entre coches.
 import { Rng, clamp } from "./rng";
 import { Track, Minisector, msTimeAtGrip, MIN_MASS, REF_CAR } from "./track";
-import { Compound, COMPOUNDS, DRY, HiddenTyre, TyreSet, setGrip, updateSet, axleGrip, warmBlankets, setWear } from "./tyres";
-import { WeatherState, stepWeather, rainAt } from "./weather";
+import { Compound, COMPOUNDS, DRY, HiddenTyre, TyreSet, setGrip, updateSet, axleGrip, warmBlankets, setWear, bestWaterGrip, WET } from "./tyres";
+import { WeatherState, stepWeather, rainAt, evaporation, waterStep } from "./weather";
 import { Plan, planStrategy, aiDecide, aiErs, TeamKnowledge, practiceProgram, qualiTick, pickSet, learnFromRun, aiRedFlagTyres } from "./strategy";
 
 export const PUSH_NAMES = ["Conservar", "Gestionar", "Normal", "Atacar", "Al límite"];
@@ -18,6 +18,10 @@ const PUSH_ERR = [0.45, 0.7, 1, 1.7, 2.8];
 const PUSH_FUEL = [0.96, 0.98, 1, 1.015, 1.03];
 const ENGINE_POWER = [-1.6, 0, 0.9];
 const ENGINE_FUEL = [0.93, 1, 1.05];
+/** Resistencia extra por apartar agua (% por mm): con pista empapada se pierde velocidad punta. */
+const WATER_DRAG = 12;
+/** Fracción del agua de la trazada que aparta cada coche al pasar (a ritmo de carrera). */
+const CAR_DRY = 0.0035;
 const ENGINE_FAIL = [0.6, 1, 2.2];
 const ERS_POWER = [-3.5, 0, 2.0, 4.5];
 const ERS_NET = [1.1, 0, -0.9, -2.4];
@@ -168,6 +172,7 @@ export interface SessionOptions {
   hidden: HiddenTyre;
   weather: WeatherState;
   water: number[];
+  waterOff?: number[]; // fuera de la trazada (si no se da, igual que la trazada)
   rubber: number;
   grid?: number[]; // ids de inscritos en orden de parrilla (carreras)
   minutes?: number; // libres
@@ -196,7 +201,8 @@ export class Session {
   cars: Car[] = [];
   rng: Rng;
   weather: WeatherState;
-  water: Float64Array;
+  water: Float64Array; // agua en la trazada (mm por minisector): la secan los coches
+  waterOff: Float64Array; // agua fuera de la trazada: solo drenaje y evaporación
   rubber: number;
   flag: FlagState = "green";
   flagTimer = 0;
@@ -238,6 +244,7 @@ export class Session {
     this.rng = new Rng(opt.seed);
     this.weather = opt.weather;
     this.water = Float64Array.from(opt.water.length === this.N ? opt.water : new Array(this.N).fill(0));
+    this.waterOff = Float64Array.from(opt.waterOff?.length === this.N ? opt.waterOff : this.water);
     this.rubber = opt.rubber;
     this.hidden = opt.hidden;
     this.sprintWeekend = opt.sprintWeekend;
@@ -324,7 +331,7 @@ export class Session {
       if (!grid.includes(c.id)) { c.loc = "out"; c.retireReason = "no sale"; continue; }
       c.plan = planStrategy(this, c, c.e.knowledge, 0, null, 0, this.rng.fork());
       let start = c.plan.stints[0]?.c ?? "M";
-      if (wet > 0.9) start = "W"; else if (wet > 0.2 && DRY.includes(start)) start = "I";
+      if (wet > WET.iw * 1.05) start = "W"; else if (wet > WET.si && DRY.includes(start)) start = "I";
       const set = pickSet(c, start, true) ?? pickSet(c, start, false) ?? c.e.sets.find((s) => !s.returned && DRY.includes(s.c))!;
       this.mount(c, set);
     }
@@ -433,7 +440,7 @@ export class Session {
       this.flagTimer -= dt;
       if (this.flagTimer <= 0) {
         // con lluvia, no se reanuda hasta que la pista lo permita (máximo 45 min)
-        const tooWet = this.redReason === "rain" && (this.avgWater() > 1.4 || Math.max(...this.sectorWater()) > 1.5 || this.maxRainOnTrack() > 8) && this.wall - this.redWall < 45 * 60;
+        const tooWet = this.redReason === "rain" && (this.avgWater() > 1.5 || Math.max(...this.sectorWater()) > 1.7 || this.maxRainOnTrack() > 8) && this.wall - this.redWall < 45 * 60;
         if (tooWet) { this.flagTimer = 60; return; }
         this.resumeFromRed();
       }
@@ -463,15 +470,14 @@ export class Session {
 
   private updateWater(dtS: number) {
     const w = this.weather;
-    const evap = 2.2e-5 * (1 + (w.trackT - 20) / 15) * (1 + w.surfaceWind / 20) * (1 - 0.5 * w.cloud);
+    const evap = evaporation(w);
     let raining = 0;
     for (let i = 0; i < this.N; i++) {
       const m = this.track.ms[i];
       const r = rainAt(w, m.x / 1000, m.y / 1000);
       raining += r;
-      const d = this.water[i];
-      const dd = r / 3600 - 9e-4 * d * (1 + d / 2) - (d > 0 ? evap : 0);
-      this.water[i] = clamp(d + dd * dtS, 0, 4);
+      this.water[i] = waterStep(this.water[i], r, dtS, evap);
+      this.waterOff[i] = Math.max(this.water[i], waterStep(this.waterOff[i], r, dtS, evap));
     }
     raining /= this.N;
     if (raining > 0.5) this.rubber = Math.max(0, this.rubber - 0.0004 * raining * dtS);
@@ -585,7 +591,7 @@ export class Session {
     const worstSector = Math.max(...this.sectorWater());
     let worstMs = 0;
     for (let i = 0; i < this.N; i++) worstMs = Math.max(worstMs, this.water[i]);
-    if (w > 1.9 || worstSector > 1.8 || (worstMs > 2.4 && w > 0.8) || (w > 1.3 && this.maxRainOnTrack() > 25)) {
+    if (w > 2.1 || worstSector > 2.2 || (worstMs > 2.6 && w > 1.0) || (w > 1.5 && this.maxRainOnTrack() > 25)) {
       const where = this.track.ms.reduce((b, m) => (this.water[m.i] > this.water[b.i] ? m : b));
       this.redFlag(`lluvia torrencial, agua estancada en el sector ${where.sector + 1}`, true);
     }
@@ -618,14 +624,14 @@ export class Session {
   /** Tiempo objetivo del coche en un minisector, con su estado actual. */
   msTime(c: Car, m: Minisector, water: number): { t: number; grip: number } {
     const tyres = c.tyres!;
-    const wetSkill = water > 0.1 ? 1 + (c.d.lluvia - 80) * 0.0009 * Math.min(1, water / 0.6) : 1;
+    const wetSkill = water > 0.05 ? 1 + (c.d.lluvia - 80) * 0.0012 * Math.min(1, water / 0.6) : 1;
     let grip = setGrip(tyres, water) * c.pace * wetSkill * PUSH_GRIP[c.push] * (1 + 0.018 * this.rubber) * (1 - c.wing - c.floor);
     if (c.followGap < 1.6 && c.aheadId >= 0) grip *= 1 - 0.045 * (1 - c.followGap / 1.6) * m.cornerSens;
     let t = msTimeAtGrip(m, grip);
     const scale = t / this.tRef[m.i];
     let power = c.team.potencia * 0.6 + ENGINE_POWER[c.engine] + (c.soc > 0.05 || c.ers === 0 ? ERS_POWER[c.ers] : -3.5);
     if (c.drs && m.drs) power += MO_POWER;
-    let dragCut = -c.team.resistencia;
+    let dragCut = -c.team.resistencia - WATER_DRAG * Math.min(3, water);
     if (c.followGap < 1.2) dragCut += 7 * (1 - c.followGap / 1.2) * m.throttle;
     t -= scale * (m.dPower * power + m.dDrag * dragCut);
     t += m.dMass * (MIN_MASS + c.fuel - REF_CAR.mass);
@@ -688,7 +694,7 @@ export class Session {
     const wmax = setWear(c.tyres!);
     if (!c.tyres!.punctured && wmax > 0.96 && this.rng.chance(dt * 0.02 * (wmax - 0.95) * 20)) {
       c.tyres!.punctured = true;
-      if (isRaceKind(this.kind) && !c.pitRequest) c.pitRequest = this.bestSetFor(c, this.avgWater() > 0.9 ? "W" : this.avgWater() > 0.2 ? "I" : "M")?.id ?? null;
+      if (isRaceKind(this.kind) && !c.pitRequest) c.pitRequest = this.bestSetFor(c, this.avgWater() > WET.iw ? "W" : this.avgWater() > WET.si ? "I" : "M")?.id ?? null;
       if (c.run) c.run.phase = "in";
       this.log({ kind: "incident", text: `💥 ¡Pinchazo de ${c.d.abrev}! Vuelve a boxes.`, carId: c.id, important: true, pause: c.player });
     }
@@ -747,6 +753,8 @@ export class Session {
     const ms = k % this.N;
     const m = this.track.ms[ms];
     const sigma = 0.0035 * (1.25 - c.d.regularidad / 100) * (1 + this.water[ms] * 0.6);
+    // cada coche aparta agua de la trazada: así se abre la línea seca
+    if (this.water[ms] > 0) this.water[ms] *= 1 - CAR_DRY * Math.min(1, c.v / 60);
     c.noise = this.rng.gauss(0, sigma);
     this.sectorTiming(c, k, ms);
 
@@ -821,7 +829,7 @@ export class Session {
       this.log({ kind: "control", text: "🟢 ¡Relanzada! Bandera verde.", important: true, pause: true });
     }
     // mucha agua pero sin llegar a bandera roja: coche de seguridad
-    if (this.avgWater() > 1.7 && this.flag === "green") this.deploy("sc", "demasiada agua en pista");
+    if (this.avgWater() > 1.8 && this.flag === "green") this.deploy("sc", "demasiada agua en pista");
     for (const c of this.cars) {
       if (c.loc !== "track") continue;
       const hz = (1 / 2600) * c.team.fiabilidad * ENGINE_FAIL[c.engine] * (1 + c.floor * 5);
@@ -946,7 +954,7 @@ export class Session {
     const set = c.e.sets.find((s) => s.id === run.setId && !s.returned);
     if (!set) return false;
     const part = this.parts[this.part];
-    if (part?.compound && set.c !== part.compound && this.avgWater() < 0.2) return false;
+    if (part?.compound && set.c !== part.compound && this.avgWater() < WET.si) return false;
     this.mount(c, set);
     c.fuel = run.fuel;
     c.run = { ...run, phase: "out", done: 0, startT: this.t, lapsData: [] };
@@ -1039,9 +1047,10 @@ export class Session {
     const tyres = c.tyres!;
     const sp = COMPOUNDS[tyres.c];
     const coldF = Math.max(0, sp.opt - 20 - tyres.F.tBulk) / 20;
-    const deficit = Math.max(0, 0.9 - setGrip(tyres, water) / sp.base) * 5;
+    // agarre frente al que daría el neumático adecuado para esa agua (slicks en mojado, gastados...)
+    const deficit = Math.max(0, 0.9 - setGrip(tyres, water) / (sp.base * bestWaterGrip(water))) * 5;
     let p = 1.1e-4 * PUSH_ERR[c.push] * (1 + (85 - c.d.regularidad) / 25) * (1 + deficit + coldF);
-    p *= 1 + 3.5 * Math.min(1, water) * (1.3 - c.d.lluvia / 100);
+    p *= 1 + 5 * Math.min(1.2, water) * (1.3 - c.d.lluvia / 100);
     if (isRaceKind(this.kind) && this.lapsDone(c) === 0) p *= 2;
     if (!this.rng.chance(p * m.cornerSens * 2)) return;
     const r = this.rng.next();
@@ -1084,7 +1093,9 @@ export class Session {
     const lap1 = this.lapsDone(c) === 0;
     const zone = m.overtake > 0 ? m.overtake : lap1 ? 0.12 : 0.025;
     const water = this.water[m.i];
-    const tc = this.msTime(c, m, water).t, ta = this.msTime(a, m, water).t;
+    // el que ataca sale de la trazada: si se ha abierto línea seca, pisa más agua
+    const wAtt = water + 0.6 * Math.max(0, this.waterOff[m.i] - water);
+    const tc = this.msTime(c, m, wAtt).t, ta = this.msTime(a, m, water).t;
     const prev = this.track.ms[(m.i - 1 + this.N) % this.N];
     const tcp = this.msTime(c, prev, this.water[prev.i]).t;
     const saved = { fg: a.followGap, drs: a.drs };
@@ -1097,7 +1108,7 @@ export class Session {
     const x = delta * 9 + skill * 1.5 + ersEdge - 1.6 + zone * 2.2 - (1 - zone) * 0.4;
     const p = zone * (1 / (1 + Math.exp(-x)));
     if (!this.rng.chance(Math.min(0.85, p * 2.2))) return;
-    const contactP = 0.01 * (0.5 + c.d.agresividad / 100) * (0.5 + a.d.agresividad / 120) * (lap1 ? 2.5 : 1) * (1 + Math.min(1, water) * 1.5);
+    const contactP = 0.01 * (0.5 + c.d.agresividad / 100) * (0.5 + a.d.agresividad / 120) * (lap1 ? 2.5 : 1) * (1 + Math.min(1, wAtt) * 1.5);
     if (this.rng.chance(contactP)) return this.contact(c, a);
     this.grantPass(c, a, this.rng.range(0.1, 0.35));
     c.passLog = { a: a.id, until: this.t + 10 };
@@ -1120,7 +1131,7 @@ export class Session {
     } else if (r < 0.62) {
       const victim = this.rng.chance(0.5) ? a : c;
       victim.slowPuncture = true;
-      victim.pitRequest = victim.pitRequest ?? this.bestSetFor(victim, this.avgWater() > 0.3 ? "I" : "M")?.id ?? null;
+      victim.pitRequest = victim.pitRequest ?? this.bestSetFor(victim, this.avgWater() > WET.iw ? "W" : this.avgWater() > WET.si ? "I" : "M")?.id ?? null;
       this.log({ kind: "incident", text: `💥 Toque ${c.d.abrev}–${a.d.abrev}: pinchazo para ${victim.d.abrev}`, carId: victim.id, important: true, pause: victim.player });
     } else if (r < 0.93) {
       c.delay += this.rng.range(2, 5);

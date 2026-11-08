@@ -305,6 +305,23 @@ export function stepWeather(w: WeatherState, dtMin: number): void {
   }
 }
 
+/** Evaporación (mm/s): más con asfalto caliente, viento y sol. */
+export function evaporation(w: WeatherState): number {
+  return 2.2e-5 * (1 + (w.trackT - 20) / 15) * (1 + w.surfaceWind / 20) * (1 - 0.5 * w.cloud);
+}
+
+/**
+ * Agua en un tramo de pista (mm). La lluvia la sube; el drenaje la baja, deprisa cuando hay agua
+ * estancada y despacio con la pista solo húmeda (el agua que queda en la textura del asfalto),
+ * y la evaporación remata el secado. Equilibrio con lluvia sostenida: 1 mm/h → 0,38 mm,
+ * 3,6 mm/h → 0,93 mm, 10 mm/h → 1,75 mm, 20 mm/h → 2,6 mm. Con 4 mm/h la pista pasa de seca a
+ * "de intermedios" en un par de minutos.
+ */
+export function waterStep(d: number, rain: number, dtS: number, evap: number): number {
+  const dd = (1.62 * rain) / 3600 - 8e-4 * d - 1e-3 * d * d - (d > 0 ? evap : 0);
+  return clamp(d + dd * dtS, 0, 4);
+}
+
 /** Copia profunda (para previsiones que no alteran el estado real). */
 export function cloneWeather(w: WeatherState, rng: Rng): WeatherState {
   return { ...w, cells: w.cells.map((c) => ({ ...c })), rng, history: [...w.history] };
