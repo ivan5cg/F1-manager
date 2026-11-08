@@ -83,6 +83,7 @@ export interface Car {
   autoPush: boolean;
   autoErs: boolean;
   letPass?: number;
+  advice?: { lap: number; c: Compound };
 }
 
 export type FlagState = "green" | "vsc" | "sc" | "sc_in" | "red";
@@ -179,6 +180,7 @@ export class Race {
         };
         // combustible: el equipo apuesta por un margen (algunos van justos)
         car.fuel = this.fuelPerLap * this.track.laps * this.rng.range(0.975, 1.005) + 1.0;
+        if (player) car.fuel = this.fuelPerLap * this.track.laps + 0.5;
         this.cars.push(car);
       }
     }
@@ -556,7 +558,11 @@ export class Race {
   private playerAdvice(c: Car) {
     if (c.pitRequest || c.boxThisLapNotified) return;
     const sugg = aiDecide(this, c, true);
+    const lap = this.lapsDone(c);
+    // no insiste: repite solo si cambia la recomendación o han pasado 3 vueltas
+    if (sugg && c.advice && c.advice.c === sugg && lap - c.advice.lap < 3) return;
     if (sugg) {
+      c.advice = { lap, c: sugg };
       c.boxThisLapNotified = true;
       this.log({ kind: "radio", carId: c.id, text: `🧠 Estratega: para ${c.d.abrev}, recomendaría parar ESTA vuelta y montar ${COMPOUNDS[sugg].name}. (${sugg === c.plan.stints[c.stops + 1]?.c ? "según el plan" : "cambio de plan"})`, pause: true, important: true });
     }
@@ -789,6 +795,25 @@ export class Race {
     for (const m of this.track.ms) t += this.msTime(c, m, this.water[m.i]).t;
     c.followGap = saved.fg; c.aheadId = saved.ah; c.drs = saved.drs; c.noise = saved.n;
     return t;
+  }
+
+  /** Cambia el neumático de salida (antes de la salida). */
+  setStartTyre(c: Car, comp: Compound) {
+    if (this.t > 0) return;
+    c.tyres = newSet(comp);
+    c.usedCompounds = new Set([comp]);
+    const plan = planStrategy(this, c, c.knowledge, 0, comp, 0, new Set([comp]));
+    c.plan = plan;
+  }
+
+  /** Carga de combustible en vueltas de margen sobre lo necesario (antes de la salida). */
+  setFuel(c: Car, marginLaps: number) {
+    if (this.t > 0) return;
+    c.fuel = this.fuelPerLap * (this.track.laps + marginLaps) + 0.5;
+  }
+
+  fuelMargin(c: Car) {
+    return (c.fuel - 0.5) / this.fuelPerLap - this.track.laps;
   }
 
   /** Orden de equipo: el coche delantero deja pasar al compañero. */

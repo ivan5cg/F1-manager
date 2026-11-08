@@ -4,7 +4,12 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "vite --host",
+    "build": "vite build",
+    "sim": "tsx scripts/carrera.ts",
+    "lote": "tsx scripts/lote.ts",
+    "check": "tsc --noEmit -p ."
   },
   "keywords": [],
   "author": "",
