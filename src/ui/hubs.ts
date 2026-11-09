@@ -1,8 +1,9 @@
 import type { SessionSnapshot } from "../sim/snapshot";
-import { TEAMS, CIRCUITS, ROUNDS, DRIVERS, getTrack, calendarOf } from "./data";
+import { TEAMS, BASE_TEAMS, CIRCUITS, ROUNDS, DRIVERS, GRID_CHANGES, getTrack, calendarOf } from "./data";
+import { myTeamPanel, puSummary, puPanel, wirePu, PLAYER_TEAM_ID } from "./teamBuilder";
 import { $, esc, fmtLap, fmtRace, tyreHtml, fmtDate, sheet, setLabel, groupSets, flagHtml, setBack } from "./common";
 import { SeasonState, RoundResult, RaceSummary, driverStandings, teamStandings, RACE_POINTS, SPRINT_POINTS } from "../sim/season";
-import { Weekend, WeekendState, newWeekend, DAY_NAMES } from "../sim/weekend";
+import { Weekend, WeekendState, newWeekend, preparePu, DAY_NAMES } from "../sim/weekend";
 import { SESSION_NAMES, SessionKind, ResultRow, isRaceKind, isQualiKind, Car, Session, LongRun, TeamDef, DriverDef } from "../sim/session";
 import { COMPOUNDS, DRY, ALL, setWear, Compound, TyreSet } from "../sim/tyres";
 import { stintProfile } from "../sim/strategy";
@@ -16,6 +17,8 @@ export interface Nav {
   season(): void;
   weekend(): void;
   session(kind: SessionKind, snap?: SessionSnapshot): void;
+  /** Pantalla de fichajes del modo «crear equipo». */
+  build(): void;
   /** Simula la sesión entera sin entrar en ella (el equipo lleva a tus pilotos). */
   simulate(kind: SessionKind): void;
 }
@@ -26,21 +29,27 @@ const ord = (n: number) => `${n}.º`;
 
 // ------------------------------------------------------------------ inicio
 export function startScreen(nav: Nav, saved: SeasonState | null, onNew: (team: string) => void) {
-  let pick = saved?.playerTeam ?? "williams";
+  let pick = saved && !saved.equipo ? saved.playerTeam : "williams";
+  const BT = BASE_TEAMS;
   // lo competitivo que es cada coche: puesto por chasis (agarre) y por motor entre los 11 equipos
-  const rank = (key: "agarre" | "potencia", t: TeamDef) => 1 + TEAMS.filter((o) => o[key] > t[key]).length;
-  const gMin = Math.min(...TEAMS.map((t) => t.agarre)), gMax = Math.max(...TEAMS.map((t) => t.agarre));
+  const rank = (key: "agarre" | "potencia", t: TeamDef) => 1 + BT.filter((o) => o[key] > t[key]).length;
+  const gMin = Math.min(...BT.map((t) => t.agarre)), gMax = Math.max(...BT.map((t) => t.agarre));
+  const savedName = saved ? (saved.equipo ? saved.equipo.nombre : BT.find((t) => t.id === saved.playerTeam)?.nombre ?? "") : "";
   const level = (t: TeamDef) => { const r = rank("agarre", t); return r <= 2 ? "Aspira a ganar" : r <= 4 ? "Podios a tiro" : r <= 7 ? "Zona de puntos" : r <= 9 ? "Puntuar es un premio" : "Farolillo rojo"; };
   const render = () => {
     app().innerHTML = `
     <div style="padding-bottom:16px">
       <div class="panel"><div class="hd"><span class="t">Muro de Boxes · Temporada 2026</span></div><div class="bd">
         <h1>Muro de Boxes</h1>
-        <div class="dim">Temporada de ${ROUNDS.length} grandes premios. Tú decides en el muro; el coche y los pilotos son los que son.</div>
-        ${saved ? `<div style="margin-top:10px"><button class="red big-cta" id="cont">Continuar temporada · ${esc(TEAMS.find((t) => t.id === saved.playerTeam)!.nombre)} · ronda ${Math.min(saved.round + 1, calendarOf(saved).length)}/${calendarOf(saved).length}</button></div>` : ""}
+        <div class="dim">Temporada de ${ROUNDS.length} grandes premios. Tú decides en el muro.</div>
+        ${saved ? `<div style="margin-top:10px"><button class="red big-cta" id="cont">Continuar temporada · ${esc(savedName)} · ronda ${Math.min(saved.round + 1, calendarOf(saved).length)}/${calendarOf(saved).length}</button></div>` : ""}
       </div></div>
-      <div class="panel"><div class="hd"><span class="t">${saved ? "O empieza una nueva con" : "Elige tu equipo"}</span></div><div class="bd" style="padding:0">
-        ${TEAMS.map((t) => `<div class="list-item" data-team="${t.id}" style="cursor:pointer;${pick === t.id ? "background:rgba(225,6,0,.22)" : ""}">
+      <div class="panel"><div class="hd"><span class="t">Nuevo · crea tu equipo</span></div><div class="bd">
+        <div class="small">Un equipo nuevo en la parrilla: ficha a dos pilotos, un jefe de equipo, un director técnico y un motor con un techo de gasto de 100 millones. Los informes tienen incertidumbre y el precio no dice lo que rinde cada uno. A lo largo del año gestionas las unidades de potencia: dos por piloto; con más, sanción en la parrilla.</div>
+        <button class="${saved ? "" : "yellow "}big-cta" id="build" style="margin-top:8px">Crear equipo</button>
+      </div></div>
+      <div class="panel"><div class="hd"><span class="t">${saved ? "O empieza una nueva con un equipo real" : "O elige un equipo real"}</span></div><div class="bd" style="padding:0">
+        ${BT.map((t) => `<div class="list-item" data-team="${t.id}" style="cursor:pointer;${pick === t.id ? "background:rgba(225,6,0,.22)" : ""}">
           <span class="teamdot" style="background:${t.color};height:40px;width:6px"></span>
           <div class="grow"><b class="up">${esc(t.nombre)}</b> <span class="dim small">· motor ${esc(t.motor)}</span><br><span class="small">${t.pilotos.map((p) => `#${p.numero} ${esc(p.nombre)}`).join(" · ")}</span>
             <div class="row small" style="gap:6px;margin-top:3px"><span class="lvl"><i style="width:${Math.round(12 + (88 * (t.agarre - gMin)) / (gMax - gMin))}%"></i></span><span class="dim">coche ${ord(rank("agarre", t))} · motor ${ord(rank("potencia", t))} · <span class="${rank("agarre", t) <= 4 ? "green" : rank("agarre", t) >= 8 ? "yellow" : ""}">${level(t)}</span></span></div></div>
@@ -51,6 +60,7 @@ export function startScreen(nav: Nav, saved: SeasonState | null, onNew: (team: s
     document.querySelectorAll<HTMLElement>("[data-team]").forEach((el) => (el.onclick = () => { pick = el.dataset.team!; render(); }));
     $("#new").onclick = () => { if (!saved || confirm("¿Borrar la temporada guardada?")) { clearSeason(); onNew(pick); } };
     if (saved) $("#cont").onclick = () => nav.season();
+    $("#build").onclick = () => nav.build();
   };
   setBack(saved ? () => nav.season() : null);
   render();
@@ -72,6 +82,9 @@ export function seasonScreen(nav: Nav, s: SeasonState) {
       ${done ? `<h1>🏆 ${esc(champ!.d.nombre)}</h1><div class="dim">Campeón de la minitemporada con ${ds[0].points} puntos</div>` : `<button class="red big-cta" id="go">${flagOf(ROUNDS_S[s.round])} ${s.weekend && s.weekend.round === s.round + 1 && s.weekend.next > 0 ? "Seguir en el" : "Ir al"} ${esc(CIRCUITS[ROUNDS_S[s.round]].gp)}</button>`}
       ${s.rounds.length ? `<div class="small" style="margin-top:8px">${esc(myTeam.nombre)}: <b>${ord(myPos)}</b> de constructores con ${ts[myPos - 1].points} pts · ${mine.map(({ x, i }) => `${esc(DRIVERS[x.id].d.abrev)} ${ord(i + 1)} (${x.points})`).join(" · ")}</div>` : ""}
     </div></div>
+    ${s.equipo ? myTeamPanel(s, TEAMS) : ""}
+    ${s.equipo && s.pu ? `<div class="panel"><div class="hd"><span class="t">Unidades de potencia</span></div><div class="bd">${puSummary(s.pu, DRIVERS.filter((d) => d.team.id === PLAYER_TEAM_ID).map((d) => d.id), DRIVERS.filter((d) => d.team.id === PLAYER_TEAM_ID).map((d) => d.d.abrev))}<div class="small dim" style="margin-top:4px">Porcentaje de vida gastada de cada unidad (en amarillo, la montada; tachadas, las rotas).</div></div></div>` : ""}
+    ${s.equipo && GRID_CHANGES.length ? `<div class="panel"><div class="hd"><span class="t">La parrilla tras tus fichajes</span></div><div class="bd small">${GRID_CHANGES.map((c) => `${esc(c.team)}: ${c.what === "piloto" ? `${esc(c.in)} por ${esc(c.out)}` : `interino por ${esc(c.out)}`}`).join("<br>")}</div></div>` : ""}
     <div class="panel"><div class="hd"><span class="t">Calendario</span></div><div class="bd" style="padding:0">
       ${ROUNDS_S.map((id, i) => {
         const c = CIRCUITS[id];
@@ -96,6 +109,7 @@ export function seasonScreen(nav: Nav, s: SeasonState) {
   if (!done) $("#go").onclick = () => {
     if (!s.weekend || s.weekend.round !== s.round + 1) {
       s.weekend = newWeekend(s.round + 1, CIRCUITS[ROUNDS_S[s.round]], TEAMS, s.seed * 1000 + s.round * 97 + 1);
+      if (s.equipo) preparePu(s.weekend, s.pu, DRIVERS.length);
       saveSeason(s);
     }
     nav.weekend();
@@ -186,6 +200,7 @@ export function weekendScreen(nav: Nav, s: SeasonState, pending: SessionSnapshot
       }).join("")}
       <div class="small dim" style="padding:6px 10px">${next ? `Previsión de tu meteorólogo (fiabilidad ${team.meteo}/100): probabilidad de lluvia durante la sesión y temperaturas. ` : ""}Clima típico: ${esc(def.clima.fuente)}.${past.length ? ` Hasta ahora: ${past.map(({ d, i }) => `${DAY_NAMES[i].toLowerCase()}, ${SCENARIO_NAMES[d.scenario].toLowerCase()}`).join("; ")}.` : ""}${pending ? ` <span class="yellow">Tienes ${SESSION_NAMES[pending.kind].toLowerCase()} a medias: «Reanudar» la retoma donde la dejaste.</span>` : ""}</div>
     </div></div>
+    ${puPanel(st, mine.map((e) => e.id), mine.map((e) => e.d.nombre), team, def.vueltas, track.length / 1000)}
     ${longRunsPanel(weekendLongRuns(st), s.playerTeam)}
     <div class="panel"><div class="hd"><span class="t">Lo que saben tus ingenieros</span></div><div class="bd" style="padding:0">
       ${knowledgeTable(st, track, team, mine[0].d, outlook[0]?.track ?? 30, outlook[0]?.air[1] ?? 20)}
@@ -196,6 +211,7 @@ export function weekendScreen(nav: Nav, s: SeasonState, pending: SessionSnapshot
     </div></div>
   </div>`;
   drawMini($<HTMLCanvasElement>("#mini"), track);
+  wirePu(st, () => { saveSeason(s); const y = window.scrollY; weekendScreen(nav, s, pending); window.scrollTo(0, y); });
   setBack(() => nav.season());
   $("#back").onclick = () => nav.season();
   if (next && pending) $("#resume").onclick = () => nav.session(pending.kind, pending);

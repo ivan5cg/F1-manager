@@ -1,14 +1,15 @@
 // Simula una sesión hasta el final en segundo plano (Web Worker), sin bloquear la pantalla.
 // Recibe la instantánea de la sesión, la retoma, la corre hasta la bandera y devuelve la final.
-import { TEAMS, getTrack } from "./data";
+import { getTrack } from "./data";
 import { Weekend } from "../sim/weekend";
 import { parseSnapshot, snapshotSession } from "../sim/snapshot";
-import { isRaceKind } from "../sim/session";
+import { isRaceKind, TeamDef } from "../sim/session";
 
-self.onmessage = (ev: MessageEvent<{ raw: string; playerTeam: string }>) => {
+self.onmessage = (ev: MessageEvent<{ raw: string; playerTeam: string; teams: TeamDef[] }>) => {
   const snap = parseSnapshot(ev.data.raw);
   if (!snap) { (self as unknown as Worker).postMessage({ type: "error" }); return; }
-  const wk = new Weekend(snap.weekend, getTrack(snap.weekend.circuitId), TEAMS, ev.data.playerTeam);
+  // la parrilla llega con el mensaje: en el modo «crear equipo» no es la de los datos
+  const wk = new Weekend(snap.weekend, getTrack(snap.weekend.circuitId), ev.data.teams, ev.data.playerTeam);
   const sess = wk.restore(snap);
   const race = isRaceKind(sess.kind);
   const t0 = sess.wall;

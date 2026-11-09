@@ -2,12 +2,13 @@
  "temporada": 2026,
  "rondas": [
   "suzuka",
+  "bahrein",
   "monaco",
   "silverstone",
   "spa",
   "monza",
+  "sepang",
   "singapur",
-  "sierra-norte",
   "interlagos"
  ],
  "rondasV1": [

@@ -49,7 +49,7 @@ export function runToEnd(sess: Session, wk: Weekend, onProgress: (p: number) => 
         } else { worker.terminate(); chunk(); }
       };
       worker.onerror = () => { worker.terminate(); chunk(); };
-      worker.postMessage({ raw: snapshotSession(sess, wk.st), playerTeam: wk.playerTeam });
+      worker.postMessage({ raw: snapshotSession(sess, wk.st), playerTeam: wk.playerTeam, teams: wk.teams });
       return;
     } catch { /* sin workers: por trozos */ }
   }

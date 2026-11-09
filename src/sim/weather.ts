@@ -31,6 +31,7 @@ export interface Climate {
   pequenas: number; // fracción de chubascos pequeños (muy localizados)
   pesos: Record<Scenario, number>;
   tardeConvectiva: number; // 0..1: cuánto se concentran las tormentas por la tarde
+  celulasSeco?: number; // multiplica las células sueltas de un día seco (desierto: casi ninguna); 1 si no se da
 }
 
 export interface Cell {
@@ -293,7 +294,9 @@ export function createDayWeather(rng: Rng, climate: Climate, scenario: Scenario,
     history: [],
   };
   const n = scenario === "chubascos" ? rng.int(2, 6) : scenario === "seco" ? rng.int(0, 2) : scenario === "frente" ? rng.int(1, 3) : rng.int(2, 4);
+  const dryCells = climate.celulasSeco ?? 1;
   for (let i = 0; i < n; i++) {
+    if (scenario === "seco" && dryCells < 1 && !rng.chance(dryCells)) continue;
     const up = rng.chance(0.5);
     const c = spawnCell(w, up ? "upwind" : "inplace", 0, rng.chance(climate.pequenas * 0.5));
     if (scenario === "seco") { c.peak *= 0.4; c.x *= 1.8; c.y *= 1.8; }
@@ -325,7 +328,7 @@ export function stepWeather(w: WeatherState, dtMin: number): void {
   w.cells = w.cells.filter((c) => c.age < c.life && Math.hypot(c.x, c.y) < 140);
   // nacimientos: los chubascos dependen de la hora (convección de tarde)
   const conv = 1 - cl.tardeConvectiva + cl.tardeConvectiva * 1.8 * convection(w.clock);
-  const base = { seco: 0.014, chubascos: 0.42, frente: 0.03, llovizna: 0.07 }[w.scenario];
+  const base = { seco: 0.014 * (cl.celulasSeco ?? 1), chubascos: 0.42, frente: 0.03, llovizna: 0.07 }[w.scenario];
   if (r.chance(base * conv * dtMin)) {
     const small = r.chance(cl.pequenas);
     // la mayoría brota junto a una célula que ya llueve (frente de racha); si no, nace sola

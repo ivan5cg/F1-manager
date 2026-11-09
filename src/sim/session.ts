@@ -7,6 +7,7 @@ import { Rng, clamp } from "./rng";
 import { Track, Minisector, msTimeAtGrip, MIN_MASS, REF_CAR } from "./track";
 import { Compound, COMPOUNDS, DRY, HiddenTyre, TyreSet, setGrip, updateSet, axleGrip, warmBlankets, setWear, bestWaterGrip, WET } from "./tyres";
 import { WeatherState, stepWeather, rainAt, evaporation, waterStep, windNow } from "./weather";
+import { PU_WEAR, puLife, puPowerLoss, puHazard } from "./powerunit";
 import { Plan, planStrategy, aiDecide, aiErs, TeamKnowledge, practiceProgram, qualiTick, pickSet, learnFromRun, aiRedFlagTyres, practiceWeather, wrongTyresForWater, teamForecast } from "./strategy";
 
 export const PUSH_NAMES = ["Conservar", "Gestionar", "Normal", "Atacar", "Al límite"];
@@ -60,6 +61,11 @@ export const Q_PARTS: QPart[] = [
   { name: "Q2", minutes: 15, advance: 10 },
   { name: "Q3", minutes: 12, advance: null },
 ];
+/** Con más de 22 coches (modo «crear equipo»: 24) caen más en la primera parte; a la última pasan 10. */
+function partsFor(base: QPart[], n: number): QPart[] {
+  if (n === 22) return base;
+  return base.map((p, i) => (i === 0 ? { ...p, advance: Math.min(n, 10 + Math.floor((n - 10) / 2)) } : p));
+}
 export const SQ_PARTS: QPart[] = [
   { name: "SQ1", minutes: 12, advance: 16, compound: "M" },
   { name: "SQ2", minutes: 10, advance: 10, compound: "M" },
@@ -88,6 +94,8 @@ export interface Entrant {
   player: boolean;
   sets: TyreSet[];
   knowledge: TeamKnowledge;
+  /** Modo «crear equipo»: kilómetros que lleva la unidad de potencia montada al empezar la sesión. */
+  pu?: { km0: number };
 }
 
 export type Loc = "garage" | "lane_out" | "track" | "lane_in" | "pit" | "out" | "fin";
@@ -176,6 +184,8 @@ export interface Car {
   bestSecs: number[]; // sectores de su mejor vuelta (para comparar parciales)
   bestSecsByPart: number[][]; // en clasificación, por parte
   stintLog: { c: Compound; from: number; used: boolean }[]; // carrera: neumáticos montados y desde qué vuelta
+  puKm: number; // km de desgaste que suma a su unidad de potencia en esta sesión (ponderados por el modo de motor)
+  puBroken?: boolean; // la unidad de potencia se ha roto
 }
 
 export type FlagState = "green" | "vsc" | "sc" | "sc_in" | "red";
@@ -314,8 +324,8 @@ export class Session {
     this.fuelPerLap = (72 * this.track.length) / 305000;
     this.laps = opt.laps ?? this.track.laps;
     this.durationS = (opt.minutes ?? 60) * 60;
-    if (this.kind === "Q") { this.parts = Q_PARTS; this.breaks = Q_BREAKS; }
-    if (this.kind === "SQ") { this.parts = SQ_PARTS; this.breaks = SQ_BREAKS; }
+    if (this.kind === "Q") { this.parts = partsFor(Q_PARTS, opt.entrants.length); this.breaks = Q_BREAKS; }
+    if (this.kind === "SQ") { this.parts = partsFor(SQ_PARTS, opt.entrants.length); this.breaks = SQ_BREAKS; }
     if (this.parts.length) this.durationS = this.parts[0].minutes * 60;
 
     for (const e of opt.entrants) {
@@ -333,7 +343,7 @@ export class Session {
         wearMult: team.desgaste * (1.18 - d.neumaticos * 0.002),
         slowPuncture: false, autoPush: !e.player, autoErs: true, auto: true, gapWant: 2.5,
         queue: [], eliminated: false, sessionLaps: 0, stintW0: 0, stintL0: 0, learnedLap: -99, lastImpede: -1,
-        secCur: [NaN, NaN, NaN], secLast: [NaN, NaN, NaN], secBest: [Infinity, Infinity, Infinity], lastLapValid: true, bestTyreByPart: [], bestSecs: [], bestSecsByPart: [], stintLog: [],
+        secCur: [NaN, NaN, NaN], secLast: [NaN, NaN, NaN], secBest: [Infinity, Infinity, Infinity], lastLapValid: true, bestTyreByPart: [], bestSecs: [], bestSecsByPart: [], stintLog: [], puKm: 0,
       };
       this.cars.push(car);
     }
@@ -555,9 +565,11 @@ export class Session {
     this.leaderId = leader ? leader.id : -1;
 
     for (const c of this.cars) {
+      const s0 = c.s;
       if (c.loc === "track") this.moveCar(c, dt);
       else if (c.loc === "pit") this.pitStep(c, dt);
       else if (c.loc === "lane_out" || c.loc === "lane_in") this.laneStep(c, dt);
+      if (c.e.pu && c.s > s0) c.puKm += ((c.s - s0) / 1000) * PU_WEAR[c.engine];
     }
     this.interactions();
     if (!isRaceKind(this.kind)) this.sessionTick();
@@ -784,6 +796,7 @@ export class Session {
     let t = msTimeAtGrip(m, grip);
     const scale = t / this.tRef[m.i];
     let power = c.team.potencia * 0.6 + ENGINE_POWER[c.engine] + (c.soc > 0.05 || c.ers === 0 ? ERS_POWER[c.ers] : -3.5);
+    if (c.e.pu) power -= puPowerLoss(puLife(c.e.pu.km0 + c.puKm));
     if (c.drs && m.drs) power += MO_POWER;
     let dragCut = -c.team.resistencia - WATER_DRAG * Math.min(3, water);
     if (c.aheadId >= 0) dragCut += tow(c.followGap) * m.throttle;
@@ -1011,7 +1024,15 @@ export class Session {
     for (const c of this.cars) {
       if (c.loc !== "track") continue;
       const hz = (1 / 2600) * c.team.fiabilidad * ENGINE_FAIL[c.engine] * (1 + c.floor * 5);
-      if (this.rng.chance(hz)) {
+      if (c.e.pu) {
+        // con unidades de potencia: la mitad de las averías son del motor y crecen con su desgaste
+        if (this.rng.chance(hz * 0.5 * puHazard(puLife(c.e.pu.km0 + c.puKm)))) {
+          c.puBroken = true;
+          this.retire(c, `avería (${this.rng.pick(["motor", "unidad de potencia", "MGU-K", "batería"])})`, this.rng.range(0, 0.6));
+        } else if (this.rng.chance(hz * 0.5)) {
+          this.retire(c, `avería (${this.rng.pick(["caja de cambios", "hidráulica", "fallo eléctrico", "frenos"])})`, this.rng.range(0, 0.6));
+        }
+      } else if (this.rng.chance(hz)) {
         const what = this.rng.pick(["motor", "caja de cambios", "hidráulica", "fallo eléctrico", "frenos", "batería"]);
         this.retire(c, `avería (${what})`, this.rng.range(0, 0.6));
       }

@@ -1,5 +1,6 @@
 import { $, esc, fmtLap, fmtClock, tyreHtml, setLabel, sheet, dirName, flagHtml, lifeLeft, wearColor, groupSets, keepAwake, setBack, closeTopSheet, closeAllSheets, anySheetOpen } from "./common";
-import { CIRCUITS, TEAMS } from "./data";
+import { CIRCUITS } from "./data";
+import { puLife } from "../sim/powerunit";
 import { knowledgeTable, longRunsPanel, weekendLongRuns, setPills } from "./hubs";
 import { runToEnd } from "./simulate";
 import { Weekend } from "../sim/weekend";
@@ -747,6 +748,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
         ${t ? `<span>Ritmo posible ahora</span><b class="mono">${fmtLap(sess.estLap(c))}</b>` : ""}
         <span>Combustible</span><b class="mono">${c.fuel.toFixed(1)} kg${race ? ` (${fuelDelta >= 0 ? "+" : ""}${fuelDelta.toFixed(1)} v)` : ""}</b>
         <span>Batería</span><b class="mono">${Math.round((c.soc / SOC_MAX) * 100)} %</b>
+        ${c.e.pu ? `<span>Unidad de potencia</span><b class="mono">${Math.round(puLife(c.e.pu.km0 + c.puKm) * 100)} % de vida</b>` : ""}
         ${race ? `<span>Plan</span><b>${plan}</b>` : ""}</div>
         ${race ? `<h2>Ritmo</h2>${seg("push", PUSH_NAMES, c.push)}<h2>Motor</h2>${seg("engine", ENGINE_NAMES, c.engine)}<h2>Batería</h2>${seg("ers", ERS_NAMES, c.ers, c.autoErs)}<button data-let="${idx}" style="width:100%">Dejar pasar al compañero</button>` : ""}
       </div></div>`;
@@ -987,7 +989,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   }
 
   function weatherSheet() {
-    const team = TEAMS.find((t) => t.id === wk.playerTeam)!;
+    const team = wk.teams.find((t) => t.id === wk.playerTeam)!;
     const w = sess.weather;
     const pts = track.ms.filter((_, i) => i % 3 === 0).map((m) => [m.x / 1000, m.y / 1000] as [number, number]);
     const f = forecast(w, team.meteo, new Rng(Math.floor(sess.wall) + 7), 30, [0, 5, 10, 15, 20, 25, 30, 40, 50, 60], pts);
@@ -1101,7 +1103,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   // ------------------------------------------------- menú, datos y ajustes
   /** Datos del fin de semana, a mano dentro de la sesión (y en la parrilla, que es cuando hacen falta). */
   function dataSheet() {
-    const team = TEAMS.find((t) => t.id === wk.playerTeam)!;
+    const team = wk.teams.find((t) => t.id === wk.playerTeam)!;
     const me = mine();
     const runs = weekendLongRuns(wk.st).concat(sess.longRuns.map((r) => ({ kind, r })));
     open(`<div class="row"><span class="tab">Datos del fin de semana</span><span class="grow"></span><button data-close>Cerrar</button></div>

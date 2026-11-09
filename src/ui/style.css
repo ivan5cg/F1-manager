@@ -497,3 +497,27 @@ table.tv td.nm { max-width: 46vw; overflow: hidden; text-overflow: ellipsis; }
 .sidebtns button { min-width: 0; padding-left: 0; padding-right: 0; }
 .sidebtns.four button { font-size: 11px; }
 .tower .th .tab { min-width: 0; flex: 0 1 auto; text-overflow: clip; }
+
+/* --- modo «crear equipo»: fichajes, informes con horquilla y unidades de potencia --- */
+.mk { padding: 8px 10px; border-bottom: 1px solid var(--line, #2c3440); cursor: pointer; }
+.mk:last-child { border-bottom: 0; }
+.mk.on { background: rgba(255, 216, 74, .09); box-shadow: inset 3px 0 0 var(--gold1); }
+.mkh { display: flex; align-items: center; gap: 8px; }
+.chk { flex: none; width: 18px; color: var(--gold1); font-weight: 900; }
+.price { flex: none; display: flex; flex-direction: column; align-items: flex-end; text-align: right; min-width: 74px; }
+.price b { font-size: 15px; }
+.bandrow { display: flex; align-items: center; gap: 6px; margin-top: 3px; font-size: 11px; }
+.bandrow .bl { flex: none; width: 70px; color: var(--dim); }
+.bandbar { position: relative; flex: 1; min-width: 40px; height: 6px; background: rgba(255, 255, 255, .08); }
+.bandbar i { position: absolute; top: 0; bottom: 0; background: var(--gold1); opacity: .85; }
+.bandrow .bv { flex: none; width: 96px; text-align: right; }
+.swatch { width: 30px; height: 30px; min-height: 0; padding: 0; border: 2px solid transparent; }
+.swatch.on { border-color: #fff; box-shadow: 0 0 0 2px #000 inset; }
+.budget { margin-top: 10px; padding: 8px; background: rgba(0, 0, 0, .2); border: 1px solid var(--line, #2c3440); }
+.budget.over { border-color: #ff5a50; }
+.budget.over .progress i { background: #ff5a50; }
+.tabs4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px; padding: 0 10px; margin-top: 8px; position: sticky; top: 0; z-index: 2; }
+.tabs4 button { padding: 10px 2px; min-height: 42px; }
+.puopt { display: flex; align-items: center; gap: 6px; padding: 7px 6px; margin-top: 3px; border: 1px solid var(--line, #2c3440); }
+.puopt[data-pu] { cursor: pointer; }
+.puopt.on { border-color: var(--gold1); background: rgba(255, 216, 74, .08); }

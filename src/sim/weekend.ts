@@ -9,6 +9,7 @@ import { Session, SessionKind, Entrant, TeamDef, ResultRow, isRaceKind, LongRun 
 import { TeamKnowledge, buildKnowledge } from "./strategy";
 import { SessionSnapshot, snapshotConditions, applySnapshot } from "./snapshot";
 import type { RaceSummary } from "./season";
+import { PuState, autoFit, bestSpare, clonePu, fitUnit, newPu, puPenalty } from "./powerunit";
 
 export interface WeekendState {
   round: number;
@@ -26,6 +27,21 @@ export interface WeekendState {
   scoring?: Partial<Record<SessionKind, number[]>>; // puntos de una carrera acortada (si no, los normales)
   longRuns?: Partial<Record<SessionKind, LongRun[]>>; // tandas largas de cada libre
   summaries?: Partial<Record<SessionKind, RaceSummary>>; // resumen de las carreras ya corridas (para volver a verlas)
+  pu?: Record<number, PuState>; // modo «crear equipo»: unidades de potencia de cada piloto
+}
+
+/**
+ * Unidades de potencia al empezar un fin de semana (modo «crear equipo»): las que traía cada piloto de
+ * la carrera anterior; el equipo decide si cambia (la de tus pilotos es una propuesta que puedes cambiar).
+ */
+export function preparePu(st: WeekendState, prev: Record<number, PuState> | undefined, nCars: number) {
+  const pu = prev ? clonePu(prev) : {};
+  for (let id = 0; id < nCars; id++) {
+    const p = (pu[id] ??= newPu());
+    p.base = p.units.length;
+    autoFit(p);
+  }
+  st.pu = pu;
 }
 
 export const NORMAL_SESSIONS: SessionKind[] = ["FP1", "FP2", "FP3", "Q", "RACE"];
@@ -77,7 +93,8 @@ export class Weekend {
     const out: Entrant[] = [];
     let id = 0;
     for (const t of this.teams) for (const d of t.pilotos) {
-      out.push({ id, d, team: t, player: t.id === this.playerTeam, sets: this.st.sets[id], knowledge: this.st.knowledge[t.id] });
+      const pu = this.st.pu?.[id];
+      out.push({ id, d, team: t, player: t.id === this.playerTeam, sets: this.st.sets[id], knowledge: this.st.knowledge[t.id], pu: pu ? { km0: pu.units[pu.cur].km } : undefined });
       id++;
     }
     return out;
@@ -107,7 +124,18 @@ export class Weekend {
   /** Parrilla de una carrera: resultado de su clasificación. */
   grid(kind: SessionKind): number[] {
     const q = kind === "SPRINT" ? this.st.results.SQ : this.st.results.Q;
-    return q ? q.map((r) => r.id) : this.entrants().map((e) => e.id);
+    const ids = q ? q.map((r) => r.id) : this.entrants().map((e) => e.id);
+    const pen = kind === "RACE" ? this.penalties() : {};
+    if (!Object.keys(pen).length) return ids;
+    // los sancionados retroceden sus puestos; a igualdad, detrás del que no lo está
+    return ids.map((id, i) => ({ id, k: i + (pen[id] ?? 0) + (pen[id] ? 0.5 : 0) })).sort((a, b) => a.k - b.k).map((x) => x.id);
+  }
+
+  /** Puestos de sanción en la parrilla de la carrera por unidades de potencia fuera del cupo. */
+  penalties(): Record<number, number> {
+    const out: Record<number, number> = {};
+    for (const [id, p] of Object.entries(this.st.pu ?? {})) { const n = puPenalty(p); if (n) out[Number(id)] = n; }
+    return out;
   }
 
   build(kind: SessionKind, seedOffset = 0): Session {
@@ -128,6 +156,12 @@ export class Weekend {
       laps: kind === "SPRINT" ? this.def.vueltasSprint : this.def.vueltas,
       sprintWeekend: this.st.sprint,
     });
+    if (kind === "RACE") {
+      for (const [id, n] of Object.entries(this.penalties())) {
+        const c = sess.carById(Number(id));
+        sess.log({ kind: "control", carId: c.id, important: c.player, text: `🔧 ${c.d.abrev} sale ${n} puestos atrás: unidad de potencia fuera del cupo` });
+      }
+    }
     return sess;
   }
 
@@ -157,6 +191,19 @@ export class Weekend {
   /** Cierra una sesión: guarda resultados, goma y devuelve juegos tras los libres. */
   finish(sess: Session) {
     this.st.results[sess.kind] = sess.results();
+    if (this.st.pu) {
+      for (const c of sess.cars) {
+        const p = this.st.pu[c.id];
+        if (!p) continue;
+        const u = p.units[p.cur];
+        u.km += c.puKm;
+        if (c.puBroken) {
+          u.broken = true;
+          // rota antes de la carrera (en la sprint): otra usada si queda, si no una nueva
+          if (sess.kind !== "RACE") { const spare = bestSpare(p); fitUnit(p, spare >= 0 ? spare : "new"); }
+        }
+      }
+    }
     if (sess.longRuns.length) this.st.longRuns = { ...this.st.longRuns, [sess.kind]: sess.longRuns };
     const table = sess.pointsTable();
     if (table) this.st.scoring = { ...this.st.scoring, [sess.kind]: table };
