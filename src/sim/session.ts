@@ -457,7 +457,11 @@ export class Session {
       if (fa !== fb) {
         const la = this.lapsDone(a), lb = this.lapsDone(b);
         if (la !== lb) return lb - la;
-        return fa ? -1 : 1;
+        // mismas vueltas: el que sigue en pista ya cruzó esa línea antes de la bandera y
+        // terminará con una vuelta más (va delante); un retirado, en cambio, va detrás
+        const other = fa ? b : a;
+        if (other.loc === "out") return fa ? -1 : 1;
+        return fa ? 1 : -1;
       }
       const oa = a.loc === "out", ob = b.loc === "out";
       if (oa !== ob) return oa ? 1 : -1;
@@ -1521,11 +1525,14 @@ export class Session {
         return { car: c, gap: b !== undefined && isFinite(b) && ref ? b - ref : NaN, interval: b !== undefined && isFinite(b) && pb ? b - pb : NaN, lapsDown: 0 };
       });
     }
+    // tras la bandera a cuadros: vueltas con las que acabará cada uno (quien sigue en pista
+    // completa una más) frente a las del ganador
+    const finalLaps = (c: Car) => this.lapsDone(c) + (c.loc === "fin" ? 0 : 1);
     return ord.map((c, i) => {
-      const lapsDown = Math.floor((leader.s - c.s) / this.L);
+      const lapsDown = leader.loc === "fin" ? Math.max(0, finalLaps(leader) - finalLaps(c)) : Math.floor((leader.s - c.s) / this.L);
       const gap = i === 0 ? 0 : this.gapBetween(leader, c);
       const interval = i === 0 ? 0 : this.gapBetween(ord[i - 1], c);
-      return { car: c, gap, interval, lapsDown: c.loc === "fin" || leader.loc === "fin" ? 0 : lapsDown };
+      return { car: c, gap, interval, lapsDown: c.loc === "fin" && leader.loc !== "fin" ? 0 : lapsDown };
     });
   }
 

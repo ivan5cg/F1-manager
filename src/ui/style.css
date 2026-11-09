@@ -90,7 +90,6 @@ table.tv tr.me td { color: var(--gold1); }
 .lapc .s { background: linear-gradient(var(--bar1), var(--bar2)); border: 1px solid #333; border-left: 0; }
 .lapc .s.sc { color: var(--gold1); }
 .lapc .s.red { background: linear-gradient(var(--red1), var(--red2)); border-color: var(--red2); }
-.lapc .s.chq { background: repeating-linear-gradient(90deg, #fff 0 8px, #000 8px 16px); color: #fff; text-shadow: 0 0 3px #000, 0 0 3px #000, 0 0 3px #000; }
 
 /* la torre llena el alto que dejan las tarjetas (compactas, de alto fijo) */
 .main { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(150px, 46%) 1fr; gap: 5px; padding: 4px 4px 2px; }
@@ -391,6 +390,11 @@ html[data-tema] .wxsec div { background: var(--line); }
 html[data-tema] .mw-row { border-bottom-color: var(--line); }
 html[data-tema] .dcard .cl.gold, html[data-tema] .gold, html[data-tema] .lapc .s { background: var(--gl-gold); color: #000; }
 html[data-tema] .lapc .s.red { background: var(--gl-red); color: #fff; }
+/* bandera a cuadros: franja de cuadros a la izquierda y texto negro nítido sobre blanco */
+.lapc .s.chq, html[data-tema] .lapc .s.chq {
+  background: linear-gradient(90deg, transparent 0 24px, #f4f4f4 24px), conic-gradient(#111 25%, #f4f4f4 0 50%, #111 0 75%, #f4f4f4 0) 0 0 / 8px 8px;
+  color: #000; text-shadow: none; padding-left: 32px;
+}
 html[data-tema] .posbox, html[data-tema] .pos { background: var(--gl-red); color: #fff; }
 html[data-tema] .tr .flag.outl { background: var(--gl-pos); }
 html[data-tema] .bar, html[data-tema] .tr .body, html[data-tema] .tr .p, html[data-tema] .dcard .cl, html[data-tema] .dcard .h .nm { text-shadow: none; }
