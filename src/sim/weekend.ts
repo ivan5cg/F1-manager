@@ -8,6 +8,7 @@ import { Climate, Scenario, WeatherState, createDayWeather, stepWeather, rainAt,
 import { Session, SessionKind, Entrant, TeamDef, ResultRow, isRaceKind, LongRun } from "./session";
 import { TeamKnowledge, buildKnowledge } from "./strategy";
 import { SessionSnapshot, snapshotConditions, applySnapshot } from "./snapshot";
+import type { RaceSummary } from "./season";
 
 export interface WeekendState {
   round: number;
@@ -24,6 +25,7 @@ export interface WeekendState {
   anomaly: number;
   scoring?: Partial<Record<SessionKind, number[]>>; // puntos de una carrera acortada (si no, los normales)
   longRuns?: Partial<Record<SessionKind, LongRun[]>>; // tandas largas de cada libre
+  summaries?: Partial<Record<SessionKind, RaceSummary>>; // resumen de las carreras ya corridas (para volver a verlas)
 }
 
 export const NORMAL_SESSIONS: SessionKind[] = ["FP1", "FP2", "FP3", "Q", "RACE"];

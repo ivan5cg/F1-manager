@@ -1,5 +1,7 @@
-import { $, esc, fmtLap, fmtClock, tyreHtml, setLabel, sheet, radarColor, dirName } from "./common";
+import { $, esc, fmtLap, fmtClock, tyreHtml, setLabel, sheet, dirName, flagHtml, lifeLeft, wearColor, groupSets, keepAwake, setBack, closeTopSheet, closeAllSheets, anySheetOpen } from "./common";
 import { CIRCUITS, TEAMS } from "./data";
+import { knowledgeTable, longRunsPanel, weekendLongRuns, setPills } from "./hubs";
+import { runToEnd } from "./simulate";
 import { Weekend } from "../sim/weekend";
 import { Session, Car, RaceEvent, SESSION_NAMES, SessionKind, isRaceKind, isQualiKind, PUSH_NAMES, ENGINE_NAMES, ERS_NAMES, SOC_MAX } from "../sim/session";
 import { COMPOUNDS, Compound, DRY, ALL, setWear, TyreSet, WET } from "../sim/tyres";
@@ -20,24 +22,28 @@ function skyIcon(cloud: number, rain: number, clock: number): string {
   if (cloud > 0.3) return `<svg viewBox="0 0 22 15">${sun}${cl(5, 3, 0.8, "#e6e8eb")}</svg>`;
   return `<svg viewBox="0 0 22 15">${sun}</svg>`;
 }
-import { makeRun, availableSets, stintProfile, planOptions } from "../sim/strategy";
+import { makeRun, planOptions, teamTakesOver } from "../sim/strategy";
 import { Rng } from "../sim/rng";
-import { snapshotSession, SessionSnapshot, parseSnapshot, applySnapshot, snapshotConditions } from "../sim/snapshot";
+import { snapshotSession, SessionSnapshot } from "../sim/snapshot";
 import { stopOptions, undercut, gapHistory, pitLoss, StopOption } from "../sim/pitwall";
-import { saveSession } from "./store";
+import { saveSession, loadPrefs, savePrefs, setParked, PausePrefs } from "./store";
 
 type TowerMode = "int" | "gap" | "last" | "tyre";
 
-export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Session) => void, snap?: SessionSnapshot) {
+/**
+ * Pantalla de una sesión. `onFinish` se llama al terminar; `onExit`, si el jugador sale a medias
+ * (la sesión queda guardada y se retoma después).
+ */
+export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Session) => void, snap?: SessionSnapshot, onExit?: () => void) {
   const app = document.getElementById("app")!;
   const def = CIRCUITS[wk.st.circuitId];
   const track = wk.track;
   const sess = snap ? wk.restore(snap) : wk.build(kind);
   const race = isRaceKind(kind);
   const quali = isQualiKind(kind);
-  let speed = race ? 4 : 16;
+  const prefs = loadPrefs();
+  let speed = race ? prefs.velCarrera : prefs.velSesion;
   let paused = true;
-  let autoPause = localStorage.getItem("autopausa") !== "0";
   let mode: TowerMode = "int";
   let wide = false; // torre a pantalla completa con sectores
   let leftover = 0;
@@ -56,6 +62,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     lastSave = performance.now();
     saveSession(snapshotSession(sess, wk.st));
   };
+  setParked(false); // está dentro de la sesión: si se cierra la app, al volver se retoma sola
   const onHide = () => { if (document.visibilityState === "hidden") persist(); };
   document.addEventListener("visibilitychange", onHide);
   window.addEventListener("pagehide", persist);
@@ -67,7 +74,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
 
   app.innerHTML = `
   <div id="sess">
-    <div class="ctrl"><span>${def.bandera}</span><span class="gp">${esc(SESSION_NAMES[kind])} · ${esc(def.nombre)}</span><div class="speed" id="speed"></div></div>
+    <div class="ctrl"><button id="menu" class="menu" title="Menú: simular hasta el final, datos, ajustes, salir" aria-label="Menú">☰</button><span class="gp">${flagHtml(def.bandera)} ${esc(SESSION_NAMES[kind])} · ${esc(def.nombre)}</span><div class="speed" id="speed"></div></div>
     <div class="lapc mono" id="lapc"></div>
     <div class="main">
       <div class="leftcol"><div class="tower" id="tower"></div><div class="toast" id="toast" title="Dirección de carrera y meteo"></div></div>
@@ -84,19 +91,27 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
 
   // ------------------------------------------------------------- controles
   const spEl = $("#speed");
-  spEl.innerHTML = `<button data-v="0">⏸</button>` + [1, 4, 16, 64].map((s) => `<button data-v="${s}">${s}×</button>`).join("") + `<button data-v="skip" title="Simular hasta el final">⏭</button>`;
-  spEl.onclick = (e) => {
-    const b = (e.target as HTMLElement).closest("button");
-    if (!b) return;
-    if (b.dataset.v === "skip") return skipToEnd();
-    const s = Number(b.dataset.v);
+  // ⏭ (simular hasta el final) ya no está pegado a 64×: vive en el menú ☰, donde no se pulsa sin querer
+  spEl.innerHTML = `<button data-v="0" title="Pausa (espacio)">⏸</button>` + [1, 4, 16, 64].map((s, i) => `<button data-v="${s}" title="Tecla ${i + 1}">${s}×</button>`).join("");
+  /** Cambia la velocidad (0 = pausar o reanudar). La elegida se recuerda para la próxima sesión del mismo tipo. */
+  function setSpeed(s: number) {
+    if (skipping || ended) return;
     if (s === 0) paused = !paused;
-    else { speed = s; paused = false; }
+    else {
+      speed = s; paused = false;
+      if (race) prefs.velCarrera = s; else prefs.velSesion = s;
+      savePrefs(prefs);
+    }
     started = true;
     hideToast();
     updSpeed();
     if (paused) persist();
+  }
+  spEl.onclick = (e) => {
+    const b = (e.target as HTMLElement).closest("button");
+    if (b) setSpeed(Number(b.dataset.v));
   };
+  $("#menu").onclick = () => menuSheet();
   document.querySelectorAll<HTMLElement>(".sidebtns button").forEach((b) => (b.onclick = () => {
     const w = b.dataset.s;
     if (w === "pilotos") pilotsSheet();
@@ -105,15 +120,40 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     if (w === "radio") radioSheet();
   }));
   // tocar un aviso pendiente reanuda la sesión
-  const resume = () => { hideToast(); paused = false; updSpeed(); renderMessages(); };
+  const resume = () => { hideToast(); paused = false; started = true; updSpeed(); renderMessages(); };
   $("#toast").onclick = () => { if (pend.left) resume(); };
   $("#ticker").onclick = () => { if (pend.right) resume(); };
   function updSpeed() {
     spEl.querySelectorAll<HTMLButtonElement>("button").forEach((b) => {
       const v = b.dataset.v;
-      b.classList.toggle("on", v === "0" ? paused : v === "skip" ? skipping : !paused && Number(v) === speed);
+      b.classList.toggle("on", v === "0" ? paused : !paused && Number(v) === speed);
+      b.disabled = skipping;
     });
+    // con la sesión corriendo, que el móvil no apague la pantalla
+    keepAwake(!paused && !ended && !skipping);
   }
+  // ----------------------------------------------------------------- teclado (escritorio)
+  // espacio: pausa · 1-4: velocidad · P/M/R/D: pilotos, muro, radar, radio · Esc: cierra la hoja
+  const onKey = (e: KeyboardEvent) => {
+    if (ended || e.ctrlKey || e.metaKey || e.altKey) return;
+    const tag = (e.target as HTMLElement | null)?.tagName;
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+    if (e.key === "Escape") { if (closeTopSheet()) e.preventDefault(); return; }
+    if (anySheetOpen()) return;
+    const k = e.key.toLowerCase();
+    if (k === " ") {
+      e.preventDefault();
+      (document.activeElement as HTMLElement | null)?.blur?.(); // que el espacio no pulse además el botón con el foco
+      if (pend.left || pend.right) resume(); else setSpeed(0);
+    }
+    else if (k >= "1" && k <= "4") setSpeed([1, 4, 16, 64][Number(k) - 1]);
+    else if (k === "p") pilotsSheet();
+    else if (k === "m" && race) muroSheet();
+    else if (k === "r") weatherSheet();
+    else if (k === "d") radioSheet();
+    else if (k === "t") { mode = (["int", "gap", "last", "tyre"] as TowerMode[])[((["int", "gap", "last", "tyre"] as TowerMode[]).indexOf(mode) + 1) % 4]; renderTower(); }
+  };
+  document.addEventListener("keydown", onKey);
   // Avisos. Izquierda: dirección de carrera y meteo. Derecha: lo de tus pilotos.
   // Un aviso «pendiente» ha parado la sesión y se reanuda al tocarlo; uno «temporal» se va solo.
   type Note = { html: string; tab: string; cls: string; until: number };
@@ -177,8 +217,11 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   sess.onEvent = (e: RaceEvent) => {
     if (skipping) return;
     const mineEv = isMineEv(e) && e.kind !== "control" && e.kind !== "weather";
-    // la meteo informa pero no para; dirección de carrera y lo de tus pilotos, sí (si la pausa automática está activa)
-    if (e.pause && autoPause && e.kind !== "weather" && (mineEv || e.kind === "control")) {
+    // la meteo informa pero no para; dirección de carrera y lo de tus pilotos, sí, según lo que
+    // el jugador haya dejado activado en Ajustes (cada tipo de aviso por separado)
+    const cat: keyof PausePrefs = e.kind === "control" ? (/Empieza la|Eliminados en|POLE para/.test(e.text) ? "partes" : "control") : /Estratega/.test(e.text) ? "estratega" : "radio";
+    const always = e.kind === "control" && /terminada|no se reanudará/.test(e.text); // el final siempre se enseña
+    if (e.pause && (always || prefs.pausas[cat]) && e.kind !== "weather" && (mineEv || e.kind === "control")) {
       paused = true;
       leftover = 0;
       const n: Note = { html: e.text, tab: TAB[e.kind], cls: clsFor(e.text, e.kind), until: Infinity };
@@ -311,7 +354,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     const sessBest = Math.min(...sess.cars.map((c) => (quali ? c.bestByPart[sess.part] ?? Infinity : c.best)));
     const names = race ? { int: "Intervalo", gap: "Líder", last: "Última", tyre: "Neumático" } : { int: "Tiempo", gap: "Dif.", last: "Última", tyre: "Neumático" };
     let head = "";
-    if (race) head = `Vuelta ${Math.min(sess.laps, sess.leaderLap + 1)}/${sess.laps}`;
+    if (race) head = `V${Math.min(sess.laps, sess.leaderLap + 1)}/${sess.laps}`; // corto: el contador grande ya está arriba
     else if (quali) head = `${part?.name ?? ""}`;
     else head = SESSION_NAMES[kind];
     let html = `<div class="th"><span class="tab">${head}</span><span class="grow"></span>${wide ? "" : `<button>${names[mode]}</button>`}<button data-w="1">${wide ? "⤡ Mapa" : "⤢"}</button></div>`;
@@ -394,7 +437,20 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       const pos = ord.indexOf(c) + 1;
       const ref = quali ? ord[0].bestByPart[sess.part] : ord[0].best;
       const mineBest = quali ? c.bestByPart[sess.part] : c.best;
-      lb.innerHTML = last ? `<div class="lapbanner"><span class="posbox">${pos}</span><span class="bar grow">${tvName(c)}</span><span class="bar mono">${mineBest && isFinite(mineBest) ? fmtLap(mineBest) : "Sin tiempo"}</span>${ref && mineBest && ord[0] !== c ? `<span class="gold mono">+${(mineBest - ref).toFixed(3)}</span>` : ""}</div>` : "";
+      const has = mineBest !== undefined && isFinite(mineBest);
+      // en Q1 y Q2 lo que importa no es el primero sino el corte: margen sobre el primer eliminado
+      // (verde) o lo que falta para alcanzar al último que se salva (rojo)
+      const adv = quali ? sess.parts[sess.part]?.advance ?? null : null;
+      const alive = ord.filter((x) => !x.eliminated);
+      let box = "", short = false;
+      if (has && adv && !c.eliminated && alive.length > adv) {
+        const inside = alive.indexOf(c) < adv;
+        const ot = (inside ? alive[adv] : alive[adv - 1])?.bestByPart[sess.part];
+        short = true;
+        if (ot !== undefined && isFinite(ot)) box = `<span class="cutbox mono ${inside ? "in" : "out"}" title="${inside ? "Margen sobre el primer eliminado" : `Lo que falta para el P${adv}, el último que pasa`}"><i>corte</i>${inside ? "−" : "+"}${Math.abs(mineBest - ot).toFixed(3)}</span>`;
+        else box = `<span class="cutbox in"><i>corte</i>dentro</span>`;
+      } else if (ref && has && ord[0] !== c) box = `<span class="gold mono">+${(mineBest - ref).toFixed(3)}</span>`;
+      lb.innerHTML = last ? `<div class="lapbanner"><span class="posbox">${pos}</span><span class="bar grow">${short ? c.d.abrev : tvName(c)}</span><span class="bar mono">${has ? fmtLap(mineBest) : "Sin tiempo"}</span>${box}</div>` : "";
     } else lb.innerHTML = "";
   }
 
@@ -454,8 +510,19 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
 
   // --------------------------------------------------------- tarjetas
   const drvEl = $("#drivers");
+  /** Carrera: lo que toca según el plan, a la vista en la tarjeta (antes solo estaba en «Pilotos»). */
+  function planLine(c: Car): string {
+    if (c.loc === "out") return `<span class="dim">Fuera de carrera</span>`;
+    if (c.loc === "fin") return `<span class="dim">En meta</span>`;
+    if (c.pitRequest) { const set = c.e.sets.find((x) => x.id === c.pitRequest); return set ? `<span class="yellow">Box esta vuelta →</span> ${tyreHtml(set.c)}` : ""; }
+    if (c.tyres && !DRY.includes(c.tyres.c)) return `<span class="dim">Con ${COMPOUNDS[c.tyres.c].name.toLowerCase()}: parada según la pista</span>`;
+    const rest = c.plan.stints.slice(c.stops);
+    if (rest.length < 2) return `<span class="dim">Plan: hasta el final sin parar</span>`;
+    const inLaps = rest[0].endLap - sess.lapsDone(c) - 1;
+    return `<span title="Próxima parada según el plan">v${rest[0].endLap}</span> <span class="${inLaps <= 2 ? "yellow" : "dim"}">(${inLaps > 0 ? `en ${inLaps}` : "ya"})</span> → ${tyreHtml(rest[1].c)}${rest[2] ? ` <span class="dim">· v${rest[1].endLap} →</span> ${tyreHtml(rest[2].c)}` : ""}`;
+  }
   function phaseName(c: Car) {
-    if (c.loc === "garage") return c.eliminated ? "Eliminado" : "Garaje";
+    if (c.loc === "garage") return c.eliminated ? "Eliminado" : !quali && !c.auto && c.queue.length ? `Garaje · sale ya` : "Garaje";
     if (c.loc === "lane_out") return "Saliendo";
     if (c.loc === "lane_in") return "Entrando";
     if (c.loc === "out") return "Fuera";
@@ -496,7 +563,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     const cars = mine();
     if (!drvEl.dataset.built) {
       drvEl.dataset.built = "1";
-      drvEl.innerHTML = cars.map((c) => `<div class="dcard" data-card="${c.id}"><div class="h"></div><div class="wear"><i></i></div>
+      drvEl.innerHTML = cars.map((c) => `<div class="dcard" data-card="${c.id}"><div class="h"></div><div class="wear"><i></i></div>${race ? `<div class="planl"></div>` : ""}
         <div class="mid"><canvas class="gauge" data-id="${c.id}"></canvas><div class="stats"></div></div><div class="b"></div></div>`).join("");
     }
     cars.forEach((c, i) => {
@@ -504,17 +571,24 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       const pos = ord.indexOf(c) + 1;
       const t = c.tyres;
       const wear = t ? setWear(t) : 0;
-      const sp = t ? COMPOUNDS[t.c] : null;
-      const col = !t || !sp ? "#444" : wear > sp.cliff ? "var(--red1)" : wear > sp.cliff - 0.12 ? "var(--gold1)" : "var(--green)";
-      const tyreInfo = t ? `${tyreHtml(t.c)}<span class="small mono">${t.laps}v ${Math.round((1 - wear) * 100)}%</span>` : `<span class="small dim">${phaseName(c)}</span>`;
+      const col = t ? wearColor(t) : "#444";
+      const tyreInfo = t ? `${tyreHtml(t.c)}<span class="small mono">${t.laps}v ${lifeLeft(t)}%</span>` : `<span class="small dim">${phaseName(c)}</span>`;
       card.querySelector(".h")!.innerHTML = `<span class="posbox mono">${pos}</span><span class="nm">${tvName(c)}<span class="ti">${tyreInfo}</span></span>`;
       const wi = card.querySelector<HTMLElement>(".wear i")!;
       wi.style.width = `${(1 - wear) * 100}%`; wi.style.background = col;
+      const pl = card.querySelector<HTMLElement>(".planl");
+      if (pl) { const h = planLine(c); if (pl.innerHTML !== h) pl.innerHTML = h; }
       card.querySelector(".stats")!.innerHTML = statsHtml(c);
       let btns = "";
       if (redRace) btns = `<button class="yellow" data-a="red" data-i="${i}" ${c.loc !== "track" ? "disabled" : ""}>Cambiar neumáticos</button>`;
       else if (race) btns = `<button data-a="minus" data-i="${i}" class="sq">−</button><span class="mode">${c.loc === "track" ? PUSH_NAMES[c.push] : phaseName(c)}</span><button data-a="plus" data-i="${i}" class="sq">+</button><button class="${c.pitRequest ? "yellow" : ""}" data-a="box" data-i="${i}" ${c.loc !== "track" ? "disabled" : ""}>${c.pitRequest ? "BOX ✓" : "BOX"}</button>`;
-      else btns = `<button data-a="go" data-i="${i}" ${c.loc !== "garage" || c.eliminated || sess.remaining() <= 0 || sess.flag === "red" ? "disabled" : ""}>${quali ? "Salir" : "Tanda"}</button><button data-a="in" data-i="${i}" ${c.loc !== "track" ? "disabled" : ""}>Boxes</button><button class="${c.auto ? "on" : ""}" data-a="auto" data-i="${i}">Auto</button>`;
+      else {
+        // en libres se puede dejar programada la siguiente tanda con el coche en pista
+        const canGo = !c.eliminated && sess.remaining() > 0 && sess.flag !== "red" && (c.loc === "garage" || (!quali && c.loc !== "out"));
+        const queued = !quali && !c.auto ? c.queue.length : 0;
+        const goLabel = quali ? "Salir" : c.loc === "garage" ? "Tanda" : queued ? `Después ✓` : "Después";
+        btns = `<button data-a="go" data-i="${i}" class="${queued && c.loc !== "garage" ? "yellow" : ""}" ${canGo ? "" : "disabled"}>${goLabel}</button><button data-a="in" data-i="${i}" ${c.loc !== "track" ? "disabled" : ""}>Boxes</button><button class="${c.auto ? "on" : ""}" data-a="auto" data-i="${i}">Auto</button>`;
+      }
       const b = card.querySelector(".b")!;
       if (b.innerHTML !== btns) b.innerHTML = btns;
     });
@@ -530,14 +604,36 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     if (a === "red") redSheet(c);
     if (a === "go") quali ? qualiSheet(c) : practiceSheet(c);
     if (a === "in") { sess.abortRun(c); showToast(`📻 ${c.d.abrev}: "Entendido, entro a boxes."`, 2500); }
-    if (a === "auto") { c.auto = !c.auto; if (!c.auto) c.queue = []; showToast(c.auto ? `🤖 El equipo lleva el programa de ${c.d.abrev}` : `🎮 Tú llevas a ${c.d.abrev}`, 2500); }
+    if (a === "auto") {
+      // al devolverle el programa al equipo, este lo rehace con lo que aún cabe en la sesión
+      if (c.auto) { c.auto = false; c.queue = []; } else teamTakesOver(sess, c);
+      showToast(c.auto ? `🤖 El equipo lleva el programa de ${c.d.abrev}` : `🎮 Tú llevas a ${c.d.abrev}`, 2500);
+    }
     renderDrivers();
   });
 
   // --------------------------------------------------------------- hojas
+  /** ¿Tiene sentido ahora un neumático de agua? Si no, intermedios y lluvia van plegados. */
+  const wetNow = () => sess.avgWater() > WET.si * 0.4 || sess.maxRainOnTrack() > 0.3;
+  /**
+   * Juegos para elegir, agrupados: los iguales son un solo botón con su número (ocho blandos
+   * nuevos no son ocho botones). Debajo de cada uno, la barra de goma que le queda, como en la
+   * tarjeta del piloto. Con pista seca, los de agua quedan plegados al final.
+   */
   function setButtons(c: Car, filter: (s: TyreSet) => boolean, selected?: string) {
     const sets = c.e.sets.filter((s) => !s.returned && filter(s)).sort((a, b) => ALL.indexOf(a.c) - ALL.indexOf(b.c) || setWear(a) - setWear(b));
-    return sets.map((s) => `<button data-set="${s.id}" class="${selected === s.id ? "on" : ""}">${tyreHtml(s.c, true)}<span>${COMPOUNDS[s.c].name}</span><span class="dim">${setLabel(s)}</span></button>`).join("") || `<div class="dim small">No quedan juegos.</div>`;
+    if (!sets.length) return `<div class="dim small" style="margin:8px 0">No quedan juegos.</div>`;
+    const groups = groupSets(sets);
+    const btn = (g: (typeof groups)[number]) => {
+      const sel = g.sets.find((s) => s.id === selected);
+      const s = sel ?? g.sets[0];
+      return `<button data-set="${s.id}" class="${sel ? "on" : ""}">${tyreHtml(g.c, true)}<span>${COMPOUNDS[g.c].name}</span><span class="dim">${setLabel(s)}</span>${g.sets.length > 1 ? `<span class="cnt">×${g.sets.length}</span>` : ""}<i class="lifebar"><i style="width:${lifeLeft(s)}%;background:${wearColor(s)}"></i></i></button>`;
+    };
+    const fold = !wetNow();
+    const main = groups.filter((g) => !fold || DRY.includes(g.c) || g.sets.some((s) => s.id === selected));
+    const rest = groups.filter((g) => !main.includes(g));
+    const nRest = rest.reduce((a, g) => a + g.sets.length, 0);
+    return `<div class="opts">${main.map(btn).join("")}</div>${rest.length ? `<details class="fold"><summary>Intermedios y lluvia · ${nRest} juegos (la pista está seca)</summary><div class="opts">${rest.map(btn).join("")}</div></details>` : ""}`;
   }
   function open(html: string, wire: (el: HTMLElement, close: () => void) => void) {
     sheetOpen = true;
@@ -548,8 +644,8 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     const left = sess.laps - sess.lapsDone(c);
     const used = [...c.usedCompounds].map((x) => COMPOUNDS[x].name).join(", ");
     open(`<div class="row"><b class="up grow">Parada de ${esc(c.d.nombre)}</b><span class="dim small">quedan ${left} v</span></div>
-      <div class="small dim">Para al final de esta vuelta. Usados: ${used}.${kind === "RACE" ? " En seco hay que usar dos compuestos." : ""}</div>
-      <div class="opts">${setButtons(c, (s) => s !== c.tyres && !s.punctured, c.pitRequest ?? undefined)}</div>
+      <div class="small dim">Para al final de esta vuelta. Usados: ${used}.${kind === "RACE" ? " En seco hay que usar dos compuestos." : ""} El % es la goma que queda.</div>
+      ${setButtons(c, (s) => s !== c.tyres && !s.punctured, c.pitRequest ?? undefined)}
       ${race ? (() => { const os = stopOptions(sess, c).filter((o) => fitsWater(o.c)); if (!os.length) return ""; const catches = os.filter((o) => o.catchLaps !== null); return `<div style="margin:-2px 0 8px">${exitLine(os[0])}${catches.length ? `<div class="small">${catches.map((o) => `${tyreHtml(o.c)} alcanza a ${o.ahead!.car.d.abrev} en ${o.catchLaps} v`).join(" · ")}</div>` : ""}<div class="small dim">Más detalle en «Muro».</div></div>`; })() : ""}
       <div class="btnrow" style="padding:0"><button data-close>${c.pitRequest ? "Mantener" : "Cerrar"}</button>${c.pitRequest ? `<button class="red" id="cancel">Anular parada</button>` : ""}</div>`, (el, close) => {
       el.querySelectorAll<HTMLButtonElement>("[data-set]").forEach((b) => (b.onclick = () => {
@@ -566,7 +662,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     const sw = sess.sectorWater();
     open(`<div class="row"><span class="tab">Bandera roja</span><b class="up grow">${esc(c.d.nombre)}</b></div>
       <div class="small dim" style="margin-top:4px">Con la carrera parada se pueden cambiar los neumáticos sin perder tiempo. Agua S1·S2·S3: ${sw.map((x) => x.toFixed(2)).join(" · ")} mm. Lisos hasta ~0,15 mm, intermedios hasta ~1 mm.</div>
-      <div class="opts">${setButtons(c, (s) => !s.punctured, c.tyres?.id)}</div>
+      ${setButtons(c, (s) => !s.punctured, c.tyres?.id)}
       <button data-close style="width:100%">Cerrar</button>`, (el, close) => {
       el.querySelectorAll<HTMLButtonElement>("[data-set]").forEach((b) => (b.onclick = () => {
         if (sess.redFlagChange(c, b.dataset.set!)) showToast(`${c.d.abrev}: neumáticos cambiados.`, 2500, "Boxes");
@@ -581,7 +677,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     const water = sess.avgWater();
     open(`<b class="up">${esc(c.d.nombre)} · ${part.name}</b>
       <div class="small dim">${part.compound ? `Obligatorio: ${COMPOUNDS[part.compound].name.toLowerCase()} (salvo en mojado). ` : ""}Agua en pista ${water.toFixed(2)} mm. Quedan ${fmtClock(sess.remaining())}.</div>
-      <div class="opts">${setButtons(c, (s) => !part.compound || water > WET.si || s.c === part.compound)}</div>
+      ${setButtons(c, (s) => !part.compound || water > WET.si || s.c === part.compound)}
       <h2>Vueltas lanzadas</h2><div class="seg" id="laps">${[1, 2, 3].map((n) => `<button data-n="${n}" class="${n === laps ? "on" : ""}">${n}</button>`).join("")}</div>
       <div class="btnrow" style="padding:0"><button data-close>Cancelar</button><button class="red" id="go" disabled>Salir ahora</button></div>`, (el, close) => {
       el.querySelectorAll<HTMLButtonElement>("[data-set]").forEach((b) => (b.onclick = () => {
@@ -601,17 +697,24 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     let type: "inst" | "qsim" | "long" = "long";
     let laps = 8;
     let setId: string | undefined;
+    const inGarage = c.loc === "garage";
     const draw = (el: HTMLElement) => {
       el.querySelector("#types")!.querySelectorAll("button").forEach((x) => x.classList.toggle("on", x.getAttribute("data-t") === type));
       el.querySelector<HTMLElement>("#lapsbox")!.style.display = type === "long" ? "" : "none";
     };
+    const runName = (r: { kind: string; pushLaps: number }) => (r.kind === "long" ? `tanda de ${r.pushLaps} v` : r.kind === "qsim" ? "sim. de clasificación" : "instalación");
+    // lo que ya está programado para después (solo si el programa lo llevas tú)
+    const queueHtml = () => (!c.auto && c.queue.length ? `<div class="small" style="margin:6px 0">Programado para después: ${c.queue.map((r, j) => { const st = c.e.sets.find((x) => x.id === r.setId); return `<span class="pill">${st ? tyreHtml(st.c) : ""} ${runName(r)} <button data-unq="${j}" class="x" title="Quitar">✕</button></span>`; }).join(" ")}</div>` : "");
     open(`<b class="up">Tanda de ${esc(c.d.nombre)}</b>
-      <div class="small dim">Una tanda larga mide el desgaste real del compuesto y reduce el error de tus ingenieros. Gasta neumáticos: los juegos usados se pueden devolver tras la sesión.</div>
+      <div class="small dim">Una tanda larga mide el desgaste real del compuesto y reduce el error de tus ingenieros. Gasta neumáticos: los juegos usados se pueden devolver tras la sesión.${inGarage ? "" : ` <span class="yellow">${esc(c.d.abrev)} está en pista: lo que elijas saldrá en cuanto vuelva al garaje.</span>`}${c.auto ? " Al programarla, el programa pasa a llevarlo tú." : ""}</div>
+      <div id="qbox">${queueHtml()}</div>
       <div class="seg" id="types"><button data-t="inst">Instalación</button><button data-t="qsim">Simulación de clasificación</button><button data-t="long">Tanda larga</button></div>
       <div id="lapsbox"><h2>Vueltas</h2><div class="seg" id="laps">${[5, 8, 12, 16].map((n) => `<button data-n="${n}" class="${n === laps ? "on" : ""}">${n}</button>`).join("")}</div></div>
-      <h2>Juego</h2><div class="opts">${setButtons(c, () => true)}</div>
-      <div class="btnrow" style="padding:0"><button data-close>Cancelar</button><button class="red" id="go" disabled>Salir</button></div>`, (el, close) => {
+      <h2>Juego <span class="dim small" style="text-transform:none">· el % es la goma que queda</span></h2>${setButtons(c, () => true)}
+      <div class="btnrow" style="padding:0"><button data-close>Cancelar</button><button class="red" id="go" disabled>${inGarage ? "Salir" : "Programar"}</button></div>`, (el, close) => {
       draw(el);
+      const wireQueue = () => el.querySelectorAll<HTMLButtonElement>("[data-unq]").forEach((b) => (b.onclick = () => { c.queue.splice(Number(b.dataset.unq), 1); el.querySelector("#qbox")!.innerHTML = queueHtml(); wireQueue(); }));
+      wireQueue();
       el.querySelectorAll<HTMLButtonElement>("#types button").forEach((b) => (b.onclick = () => { type = b.dataset.t as typeof type; draw(el); }));
       el.querySelectorAll<HTMLButtonElement>("#laps button").forEach((b) => (b.onclick = () => { laps = Number(b.dataset.n); el.querySelectorAll("#laps button").forEach((x) => x.classList.toggle("on", x === b)); }));
       el.querySelectorAll<HTMLButtonElement>("[data-set]").forEach((b) => (b.onclick = () => {
@@ -621,10 +724,11 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       el.querySelector<HTMLButtonElement>("#go")!.onclick = () => {
         const set = c.e.sets.find((s) => s.id === setId)!;
         const run = makeRun(sess, c, type, set.c, type === "long" ? laps : type === "qsim" ? 2 : 1, 0, setId);
-        c.auto = false;
-        c.queue = [];
-        const ok = run ? sess.startRun(c, run) : false;
-        showToast(ok ? `📻 ${c.d.abrev} sale a pista.` : "No puede salir ahora.", 2500);
+        // al coger tú el programa se descarta el que tenía preparado el equipo
+        if (c.auto) { c.auto = false; c.queue = []; }
+        if (!run) showToast("No puede salir ahora.", 2500);
+        else if (c.loc === "garage" && !c.queue.length) showToast(sess.startRun(c, run) ? `📻 ${c.d.abrev} sale a pista.` : "No puede salir ahora.", 2500);
+        else { c.queue.push(run); showToast(`📋 ${c.d.abrev}: ${runName(run)} programada para cuando vuelva.`, 3000); }
         close();
       };
     });
@@ -646,8 +750,8 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
         ${race ? `<span>Plan</span><b>${plan}</b>` : ""}</div>
         ${race ? `<h2>Ritmo</h2>${seg("push", PUSH_NAMES, c.push)}<h2>Motor</h2>${seg("engine", ENGINE_NAMES, c.engine)}<h2>Batería</h2>${seg("ers", ERS_NAMES, c.ers, c.autoErs)}<button data-let="${idx}" style="width:100%">Dejar pasar al compañero</button>` : ""}
       </div></div>`;
-    }).join("") + `<label class="row small" style="margin:8px 0"><input type="checkbox" id="ap" ${autoPause ? "checked" : ""}> Pausar sola en los momentos clave</label><button data-close style="width:100%">Cerrar</button>`;
-    open(`<div id="pbody">${body()}</div>`, (el) => {
+    }).join("") + `<button data-close style="width:100%">Cerrar</button>`;
+    open(`<div id="pbody">${body()}</div>`, (el, close) => {
       const wire = () => {
         el.querySelectorAll<HTMLElement>(".seg").forEach((sg) => (sg.onclick = (e) => {
           const b = (e.target as HTMLElement).closest("button") as HTMLButtonElement;
@@ -660,9 +764,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
           el.querySelector("#pbody")!.innerHTML = body(); wire();
         }));
         el.querySelectorAll<HTMLButtonElement>("[data-let]").forEach((b) => (b.onclick = () => { const c = mine()[Number(b.dataset.let)]; sess.letTeammatePass(c); showToast(`📻 ${c.d.abrev}: "Entendido, dejo pasar a mi compañero."`, 2500); }));
-        const ap = el.querySelector<HTMLInputElement>("#ap");
-        if (ap) ap.onchange = () => { autoPause = ap.checked; localStorage.setItem("autopausa", autoPause ? "1" : "0"); };
-        el.querySelectorAll<HTMLElement>("[data-close]").forEach((b) => (b.onclick = () => { el.remove(); sheetOpen = false; }));
+        el.querySelectorAll<HTMLElement>("[data-close]").forEach((b) => (b.onclick = () => close()));
       };
       wire();
     });
@@ -996,6 +1098,63 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     open(`<span class="tab">Radio y dirección de carrera</span><div style="margin:6px 0;display:flex;flex-direction:column;gap:3px">${evs.map((e) => rmHtml(`${race ? "V" + e.lap : fmtClock(e.t)} · ${TAB[e.kind]}`, e.text, e.kind === "control" && /ROJA/.test(e.text) ? "red" : e.kind === "control" || e.kind === "weather" ? "ctl" : "")).join("") || "<div class='dim'>Sin mensajes.</div>"}</div><button data-close style="width:100%">Cerrar</button>`, () => {});
   }
 
+  // ------------------------------------------------- menú, datos y ajustes
+  /** Datos del fin de semana, a mano dentro de la sesión (y en la parrilla, que es cuando hacen falta). */
+  function dataSheet() {
+    const team = TEAMS.find((t) => t.id === wk.playerTeam)!;
+    const me = mine();
+    const runs = weekendLongRuns(wk.st).concat(sess.longRuns.map((r) => ({ kind, r })));
+    open(`<div class="row"><span class="tab">Datos del fin de semana</span><span class="grow"></span><button data-close>Cerrar</button></div>
+      <h2>Lo que saben tus ingenieros</h2>
+      ${knowledgeTable(wk.st, track, team, me[0].d, sess.weather.trackT, sess.weather.airT)}
+      <div class="insheet">${longRunsPanel(runs, wk.playerTeam) || `<h2>Tandas largas</h2><div class="dim small">Todavía no hay tandas largas en seco.</div>`}</div>
+      <h2>Juegos de neumáticos</h2>
+      ${me.map((c) => `<div style="margin-bottom:6px"><b>${esc(c.d.nombre)}</b><div class="row wrap small" style="gap:4px;margin-top:3px">${setPills(c.e.sets)}</div></div>`).join("")}
+      <div class="small dim">El porcentaje es la goma que le queda a cada juego; tachados, los devueltos.</div>
+      <button data-close style="width:100%;margin-top:8px">Cerrar</button>`, () => {});
+  }
+  /** Qué momentos paran la sesión sola, cada uno por separado. */
+  function settingsSheet() {
+    const items: [keyof PausePrefs, string, string][] = [
+      ["control", "Dirección de carrera", "Coche de seguridad, VSC, banderas rojas y relanzadas."],
+      ["estratega", "Consejos del estratega", "Cuando recomienda parar esta vuelta."],
+      ["radio", "Radio de tus pilotos", "Neumáticos que se acaban, pista que se moja o se seca."],
+      ["partes", "Partes de la clasificación", "Final y principio de cada parte (Q1, Q2, Q3)."],
+      ["garaje", "Piloto sin programa", "En libres y clasificación, cuando uno que llevas tú vuelve al garaje sin nada programado."],
+    ];
+    open(`<div class="row"><span class="tab">Ajustes</span><span class="grow"></span><button data-close>Cerrar</button></div>
+      <h2>La sesión se para sola con…</h2>
+      ${items.map(([k, n, d]) => `<label class="optrow"><input type="checkbox" data-p="${k}" ${prefs.pausas[k] ? "checked" : ""}><span><b>${n}</b><br><span class="small dim">${d}</span></span></label>`).join("")}
+      <div class="row" style="gap:4px;margin:8px 0"><button id="pall" class="grow">Todas</button><button id="pnone" class="grow">Ninguna</button></div>
+      <div class="small dim">Un aviso que para la sesión se reanuda tocándolo o con cualquier velocidad. La velocidad que elijas se recuerda para la próxima sesión.<br>Teclado: espacio pausa, 1-4 velocidad, P pilotos, M muro, R radar, D radio, T columna de la torre, Esc cierra.</div>
+      <button data-close style="width:100%;margin-top:8px">Cerrar</button>`, (el) => {
+      const boxes = el.querySelectorAll<HTMLInputElement>("[data-p]");
+      boxes.forEach((b) => (b.onchange = () => { prefs.pausas[b.dataset.p as keyof PausePrefs] = b.checked; savePrefs(prefs); }));
+      const all = (v: boolean) => { boxes.forEach((b) => { b.checked = v; prefs.pausas[b.dataset.p as keyof PausePrefs] = v; }); savePrefs(prefs); };
+      el.querySelector<HTMLButtonElement>("#pall")!.onclick = () => all(true);
+      el.querySelector<HTMLButtonElement>("#pnone")!.onclick = () => all(false);
+    });
+  }
+  function menuSheet() {
+    if (ended || skipping) return;
+    open(`<div class="row"><span class="tab">${esc(SESSION_NAMES[kind])}</span><span class="grow"></span><button data-close>Cerrar</button></div>
+      <div class="menulist">
+        <button data-m="data"><b>Datos del fin de semana</b><span>Lo que saben tus ingenieros, tandas largas y juegos de neumáticos</span></button>
+        <button data-m="skip"><b>⏭ Simular hasta el final</b><span>El equipo lleva a tus pilotos y se calcula lo que queda</span></button>
+        <button data-m="settings"><b>Ajustes</b><span>Qué momentos paran la sesión sola · atajos de teclado</span></button>
+        ${onExit ? `<button data-m="exit"><b>Salir al fin de semana</b><span>${started ? "La sesión se guarda tal cual y se retoma con «Reanudar»" : "Aún no ha empezado: al volver se empieza de cero"}</span></button>` : ""}
+      </div>`, (el, close) => {
+      el.querySelectorAll<HTMLButtonElement>("[data-m]").forEach((b) => (b.onclick = () => {
+        const m = b.dataset.m;
+        close();
+        if (m === "data") dataSheet();
+        else if (m === "skip") skipToEnd();
+        else if (m === "settings") settingsSheet();
+        else if (m === "exit") exitSession();
+      }));
+    });
+  }
+
   // -------------------------------------------------- previa de carrera
   function preRace(start: () => void) {
     const me = mine();
@@ -1003,12 +1162,11 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     const plansOf = new Map(me.map((c) => [c.id, planOptions(sess, c, c.e.knowledge, 3)]));
     const sigOf = (p: { stints: { c: string; endLap: number }[] }) => p.stints.map((x) => `${x.c}${x.endLap}`).join("-");
     const grid = sess.order();
-    const html = () => `<b class="up">Parrilla · ${SESSION_NAMES[kind]}</b>
+    const html = () => `<div class="row"><b class="up grow">Parrilla · ${SESSION_NAMES[kind]}</b><button id="predata" title="Lo que saben tus ingenieros, tandas largas y juegos">Datos</button></div>
       <div class="small dim">${kind === "RACE" ? "En seco hay que usar dos compuestos distintos. " : "Sin parada obligatoria. "}Sin repostaje: el combustible que cargues es el que hay.</div>
       ${sess.flag === "sc" ? `<div class="small yellow" style="margin-top:4px">🟨 Salida detrás del coche de seguridad: hay demasiada agua (${sess.avgWater().toFixed(1)} mm). Sigue en pista hasta que se pueda correr.</div>` : ""}
       ${me.map((c, i) => `<div class="panel" style="margin:6px 0"><div class="hd"><span class="t">P${grid.indexOf(c) + 1} · ${esc(c.d.nombre)}</span></div><div class="bd">
-        ${(() => { const w = sess.startWater(c); const plan = c.plan.stints.map((s, j, a) => `${tyreHtml(s.c)}${j < a.length - 1 ? ` v${s.endLap}` : ""}`).join(" → ");
-          void plan;
+        ${(() => { const w = sess.startWater(c);
           return w > WET.si ? `<div class="small">Con agua (${w.toFixed(2)} mm previstos al empezar): el equipo recomienda salir con ${tyreHtml(w > WET.iw * 1.05 ? "W" : "I")}. <span class="dim">Las estrategias de abajo son para cuando se seque.</span></div>` : ""; })()}
         <h2>Estrategia</h2>
         <div class="plans" data-plans="${i}">${(plansOf.get(c.id) ?? []).map((o, j) => {
@@ -1016,13 +1174,24 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
           const on = sigOf(c.plan) === sigOf(o.plan);
           return `<button data-plan="${j}" class="plan${on ? " on" : ""}"><span class="pl-s">${seq}</span><span class="pl-d">${o.stops} ${o.stops === 1 ? "parada" : "paradas"} · ${o.delta < 0.05 ? "la más rápida" : `+${o.delta.toFixed(1)} s`}</span><span class="pl-r">si se gastan un 15 % más: +${o.ifWorse.toFixed(1)} s</span></button>`;
         }).join("")}</div>
-        <h2>Neumático de salida</h2><div class="opts" data-start="${i}">${setButtons(c, (s) => true, c.tyres?.id)}</div>
+        <h2>Neumático de salida <span class="dim small" style="text-transform:none">· el % es la goma que queda</span></h2><div data-start="${i}">${setButtons(c, () => true, c.tyres?.id)}</div>
         <h2>Combustible</h2><div class="seg" data-fuel="${i}">${[[-1.2, "Muy justo"], [-0.5, "Justo"], [0, "Exacto"], [0.6, "Con margen"]].map(([v, n]) => `<button data-v="${v}" class="${Math.abs(sess.fuelMargin(c) - (v as number)) < 0.05 ? "on" : ""}">${n}</button>`).join("")}</div>
       </div></div>`).join("")}
-      <table class="tv">${grid.map((c, i) => `<tr class="${c.player ? "me" : ""}"><td><span class="pos">${i + 1}</span></td><td><span class="teamdot" style="background:${c.team.color}"></span>${esc(c.d.nombre)}</td><td>${c.tyres ? tyreHtml(c.tyres.c) : ""}</td></tr>`).join("")}</table>
-      <button class="red big-cta" id="lights" style="margin-top:8px">🚦 Salida</button>`;
+      <details class="fold"><summary>Parrilla completa · ${grid.length} coches y su neumático de salida</summary>
+        <table class="tv">${grid.map((c, i) => `<tr class="${c.player ? "me" : ""}"><td><span class="pos">${i + 1}</span></td><td><span class="teamdot" style="background:${c.team.color}"></span>${esc(c.d.nombre)}</td><td>${c.tyres ? tyreHtml(c.tyres.c) : ""}</td></tr>`).join("")}</table>
+      </details>`;
     sheetOpen = true;
-    const { el } = sheet(`<div id="pre">${html()}</div>`, () => { sheetOpen = false; });
+    // obligatoria: no se cierra tocando fuera ni con «atrás» (antes se podía cerrar sin dar la salida
+    // y la carrera se quedaba muerta). La salida está siempre a la vista, en el pie.
+    const { el, close } = sheet(`<div id="pre">${html()}</div>
+      <div class="sheet-foot">${onExit ? `<button id="preexit">Volver</button>` : ""}<button class="red big-cta" id="lights">🚦 Salida</button></div>`, () => { sheetOpen = false; }, { modal: true });
+    const rerender = () => {
+      // al elegir algo se repinta la hoja: los plegables se quedan como estaban
+      const opened = Array.from(el.querySelectorAll<HTMLDetailsElement>("#pre details"), (d) => d.open);
+      el.querySelector("#pre")!.innerHTML = html();
+      el.querySelectorAll<HTMLDetailsElement>("#pre details").forEach((d, i) => { d.open = !!opened[i]; });
+      wire();
+    };
     const wire = () => {
       el.querySelectorAll<HTMLElement>("[data-plans]").forEach((box) => box.querySelectorAll<HTMLButtonElement>("[data-plan]").forEach((b) => (b.onclick = () => {
         const c = me[Number(box.dataset.plans)];
@@ -1031,92 +1200,101 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
         const first = o.plan.stints[0];
         if (sess.startWater(c) <= WET.si && first.setId && c.tyres?.c !== first.c) sess.setStartTyre(c, first.setId);
         c.plan = { stints: o.plan.stints.map((x) => ({ ...x })), total: o.plan.total };
-        el.querySelector("#pre")!.innerHTML = html(); wire();
+        rerender();
       })));
       el.querySelectorAll<HTMLElement>("[data-start]").forEach((box) => box.querySelectorAll<HTMLButtonElement>("[data-set]").forEach((b) => (b.onclick = () => {
         sess.setStartTyre(me[Number(box.dataset.start)], b.dataset.set!);
-        el.querySelector("#pre")!.innerHTML = html(); wire();
+        rerender();
       })));
       el.querySelectorAll<HTMLElement>("[data-fuel]").forEach((sg) => sg.querySelectorAll<HTMLButtonElement>("button").forEach((b) => (b.onclick = () => {
         sess.setFuel(me[Number(sg.dataset.fuel)], Number(b.dataset.v));
-        el.querySelector("#pre")!.innerHTML = html(); wire();
+        rerender();
       })));
-      el.querySelector<HTMLButtonElement>("#lights")!.onclick = () => { el.remove(); sheetOpen = false; start(); };
+      el.querySelector<HTMLButtonElement>("#predata")!.onclick = () => dataSheet();
     };
     wire();
+    el.querySelector<HTMLButtonElement>("#lights")!.onclick = () => { close(); start(); };
+    const ex = el.querySelector<HTMLButtonElement>("#preexit");
+    if (ex) ex.onclick = () => { close(); exitSession(); };
   }
 
   // ---------------------------------------------------------- bucle
-  function finish() {
-    if (ended) return;
+  /** Suelta todo lo que la pantalla tiene enganchado (al terminar o al salir). */
+  function cleanup() {
     ended = true;
     document.removeEventListener("visibilitychange", onHide);
     window.removeEventListener("pagehide", persist);
+    document.removeEventListener("keydown", onKey);
     cancelAnimationFrame(raf);
     window.onresize = null;
-    setTimeout(() => onFinish(sess), skipping ? 0 : 1200);
+    mapObs.disconnect();
+    keepAwake(false);
+  }
+  function finish() {
+    if (ended) return;
+    cleanup();
+    setTimeout(() => { closeAllSheets(); onFinish(sess); }, skipping ? 0 : 1200);
+  }
+  /** Salir a medias: la sesión queda guardada (si ya había empezado) y se retoma desde el fin de semana. */
+  function exitSession() {
+    if (ended || skipping || !onExit) return;
+    paused = true;
+    persist();
+    if (started) setParked(true);
+    cleanup();
+    closeAllSheets();
+    onExit();
   }
   function skipToEnd() {
-    if (skipping) return;
-    if (!confirm(race ? "¿Simular hasta el final? El equipo llevará a tus pilotos con la estrategia elegida (paradas, neumáticos y lluvia)." : "¿Simular hasta el final de la sesión? Tus pilotos seguirán con lo que tengan programado (o en automático).")) return;
+    if (skipping || ended) return;
+    if (!confirm(race ? "¿Simular hasta el final? El equipo llevará a tus pilotos con la estrategia elegida (paradas, neumáticos y lluvia)." : "¿Simular hasta el final de la sesión? El equipo se hace cargo del programa de tus dos pilotos (la tanda que estén haciendo sigue).")) return;
     skipping = true;
     paused = true;
     updSpeed();
-    for (const c of mine()) if (!race && !c.run && !c.queue.length) c.auto = true;
-    if (race) sess.autoPlayers = true;
-    const t0 = sess.wall;
-    const progress = (est: number) => {
-      showToast(`Simulando… ${Math.round(Math.min(1, est) * 100)} %<div class="progress"><i style="width:${Math.min(100, est * 100)}%"></i></div>`, 60000, "Muro", false, "left");
+    // antes, un piloto mandado a mano se quedaba en el garaje el resto de la sesión
+    if (race) sess.autoPlayers = true; else for (const c of mine()) teamTakesOver(sess, c);
+    runToEnd(sess, wk, (p) => {
+      showToast(`Simulando… ${Math.round(Math.min(1, p) * 100)} %<div class="progress"><i style="width:${Math.min(100, p * 100)}%"></i></div>`, 60000, "Muro", false, "left");
+      renderTower(); renderTop();
+    }, () => { hideToast(); renderTower(); renderTop(); finish(); });
+  }
+
+  // Un piloto que llevas tú vuelve al garaje y no tiene nada programado: se avisa (y, si está
+  // activado en Ajustes, se para la sesión) en vez de dejar correr el reloj sin decir nada.
+  const lastLoc = new Map<number, Car["loc"]>();
+  function idleCheck() {
+    for (const c of mine()) {
+      const prev = lastLoc.get(c.id);
+      lastLoc.set(c.id, c.loc);
+      if (!prev || prev === "garage" || c.loc !== "garage") continue;
+      if (c.auto || c.queue.length || c.eliminated || sess.flag === "red" || sess.remaining() < 150) continue;
+      let text: string;
+      if (quali) {
+        const part = sess.parts[sess.part];
+        const alive = sess.timingOrder().filter((x) => !x.eliminated);
+        const pos = alive.indexOf(c) + 1;
+        const cut = part?.advance ?? null;
+        text = `${c.d.abrev} está en el garaje: P${pos}${cut ? (pos > cut ? `, fuera del corte` : pos > cut - 3 ? `, al borde del corte` : `, dentro`) : ""}. Quedan ${fmtClock(sess.remaining())} de ${part?.name ?? "sesión"}.`;
+      } else text = `${c.d.abrev} está en el garaje sin nada programado. Quedan ${fmtClock(sess.remaining())}: «Tanda» o «Auto».`;
+      if (prefs.pausas.garaje) {
+        paused = true;
+        leftover = 0;
+        pend.right = { html: text, tab: "Garaje", cls: "", until: Infinity };
+        updSpeed();
+      } else showToast(text, 6000, "Garaje");
       renderMessages();
-    };
-    // en segundo plano (Web Worker): la pantalla no se bloquea; si no se puede, aquí mismo por trozos
-    if (typeof Worker !== "undefined") {
-      try {
-        const worker = new Worker(new URL("./simWorker.ts", import.meta.url), { type: "module" });
-        progress(0);
-        worker.onmessage = (ev: MessageEvent<{ type: string; p?: number; raw?: string }>) => {
-          const m = ev.data;
-          if (m.type === "progress") progress(m.p ?? 0);
-          else if (m.type === "done" && m.raw) {
-            worker.terminate();
-            const fin = parseSnapshot(m.raw);
-            if (!fin) { chunk(); return; }
-            adoptFinal(fin);
-            hideToast(); renderTower(); renderTop(); finish();
-          } else { worker.terminate(); chunk(); }
-        };
-        worker.onerror = () => { worker.terminate(); chunk(); };
-        worker.postMessage({ raw: snapshotSession(sess, wk.st), playerTeam: wk.playerTeam });
-        return;
-      } catch { /* sin workers: por trozos */ }
-    }
-    chunk();
-    function chunk() {
-      const lim = performance.now() + 30;
-      while (!sess.finished && performance.now() < lim) for (let i = 0; i < 200 && !sess.finished; i++) sess.step();
-      progress(race ? sess.leaderLap / sess.laps : (sess.wall - t0) / Math.max(1, (sess.parts.length ? 70 * 60 : 3600) - t0));
-      renderTower(); renderTop(); drawMap();
-      if (sess.finished) { hideToast(); finish(); } else setTimeout(chunk, 0);
+      renderDrivers();
     }
   }
-  /** Vuelca aquí el estado final calculado en segundo plano (mismos objetos de juegos y conocimiento). */
-  function adoptFinal(fin: SessionSnapshot) {
-    for (const [id, sets] of Object.entries(fin.weekend.sets)) {
-      const mineSets = wk.st.sets[Number(id)];
-      for (const x of sets) { const o = mineSets.find((y) => y.id === x.id); if (o) Object.assign(o, x); }
-    }
-    for (const [team, k] of Object.entries(fin.weekend.knowledge)) Object.assign(wk.st.knowledge[team], k, { profile: {} });
-    const cond = snapshotConditions(fin);
-    sess.weather = cond.weather;
-    sess.water = Float64Array.from(cond.water);
-    sess.waterOff = Float64Array.from(cond.waterOff);
-    applySnapshot(sess, fin);
-  }
+
   sizeMap();
   window.onresize = sizeMap;
   renderTower(); renderTop(); renderDrivers();
-  new ResizeObserver(() => sizeMap()).observe(document.querySelector(".mapbox")!);
+  const mapObs = new ResizeObserver(() => sizeMap());
+  mapObs.observe(document.querySelector(".mapbox")!);
   updSpeed();
+  // «atrás» (móvil o navegador) abre el menú de la sesión en vez de sacarte de la app
+  setBack(() => menuSheet());
   let last = performance.now();
   const loop = (now: number) => {
     const real = Math.min(0.1, (now - last) / 1000);
@@ -1136,6 +1314,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       }
     }
     try {
+      if (!race && !skipping) idleCheck();
       // en pausa no cambia casi nada: se redibuja 4 veces por segundo en vez de 60 (batería)
       const busy = !paused;
       if (!skipping && (busy || now - lastDraw > 250)) { lastDraw = now; drawMap(); drawGauges(); renderFly(); }
@@ -1158,10 +1337,10 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       raf = requestAnimationFrame(loop);
       return;
     }
+    // textos cortos: tienen que caber enteros en la caja de avisos de un móvil estrecho
     if (race) showToast("Pulsa una velocidad para dar la salida.", 0, "Muro", true, "left");
-    else showToast(quali ? "Pulsa una velocidad para empezar. «Salir» manda a tu piloto a pista; «Auto» deja que el equipo decida." : "Pulsa una velocidad para empezar. Programa tandas con «Tanda» o deja el programa en «Auto». ⏭ simula hasta el final.", 0, "Muro", true, "left");
+    else showToast(quali ? "Pulsa una velocidad para empezar. «Salir» manda a tu piloto a pista; con «Auto» decide el equipo." : "Pulsa una velocidad para empezar. «Tanda» programa una salida; con «Auto» decide el equipo.", 0, "Muro", true, "left");
     raf = requestAnimationFrame(loop);
   };
   if (race && !snap) preRace(begin); else begin();
-  void availableSets; void stintProfile; void DRY;
 }

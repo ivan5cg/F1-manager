@@ -149,6 +149,7 @@ export interface Car {
   autoErs: boolean;
   auto: boolean; // en libres/clasificación: la IA lleva el programa
   wetWarned?: boolean; // ya se avisó al jugador de que va con el neumático equivocado
+  cliffWarned?: string; // id del juego del que ya se avisó que se acaba
   gapWant: number; // hueco que busca con el de delante en la vuelta de salida (s)
   letPass?: number;
   advice?: { lap: number; setId: string };
@@ -219,6 +220,7 @@ export interface ResultRow {
   reason?: string;
   stops: number;
   part?: string; // clasificación: en qué parte quedó
+  grid?: number; // carreras: posición de salida
 }
 
 export class Session {
@@ -1017,7 +1019,9 @@ export class Session {
     const t = c.tyres;
     const wear = setWear(t);
     const sp = COMPOUNDS[t.c];
-    if (wear > sp.cliff - 0.06 && wear < sp.cliff + 0.02 && !c.pitRequest) {
+    // un aviso por juego: si el jugador decide seguir, no se le para la carrera en cada vuelta
+    if (wear > sp.cliff - 0.06 && wear < sp.cliff + 0.02 && !c.pitRequest && c.cliffWarned !== t.id) {
+      c.cliffWarned = t.id;
       this.log({ kind: "radio", carId: c.id, text: `📻 ${c.d.abrev}: "Los neumáticos se están acabando, noto cómo caen."`, pause: true, important: true });
     }
     if (t.F.grain > 0.35 || t.R.grain > 0.35) this.log({ kind: "radio", carId: c.id, text: `📻 ${c.d.abrev}: "Mucho graining en los ${t.F.grain > t.R.grain ? "delanteros" : "traseros"}."` });
@@ -1470,6 +1474,18 @@ export class Session {
       c.stops++;
       c.lastPitLap = this.lapsDone(c);
       c.pitRequest = null;
+      // El jugador puede parar fuera del plan (otra vuelta u otro compuesto). El plan se rehace
+      // desde aquí para que lo que enseña la tarjeta y lo que aconseja el estratega cuadre con lo
+      // que lleva montado. La IA ya actualiza el suyo al decidir la parada.
+      if (c.player && !this.autoPlayers && DRY.includes(set.c)) {
+        const lap = Math.min(this.laps - 1, Math.round(c.s / this.L));
+        const cur = c.plan.stints[c.stops];
+        const plannedLap = c.plan.stints[c.stops - 1]?.endLap;
+        if (!cur || cur.c !== set.c || plannedLap === undefined || Math.abs(plannedLap - lap) > 1) {
+          const past = Array.from({ length: c.stops }, (_, j) => ({ ...(c.plan.stints[j] ?? { c: set.c }), endLap: j === c.stops - 1 ? lap : c.plan.stints[j]?.endLap ?? lap }));
+          c.plan = { stints: [...past, ...planStrategy(this, c, c.e.knowledge, lap, set.c, set.laps, null).stints] };
+        }
+      }
       if (c.player || p.stationary > 4) this.log({ kind: "pit", carId: c.id, text: `⏱️ Parada de ${c.d.abrev}: ${p.stationary.toFixed(1)} s${p.noseChange ? " (cambio de morro)" : p.stationary > 4 ? " — ¡problema en la parada!" : ""}` });
     }
     const newK = Math.floor(c.s / this.L) * this.N + this.msIndexAt(c.s);
@@ -1546,6 +1562,7 @@ export class Session {
       reason: c.retireReason,
       stops: c.stops,
       part: this.parts.length ? this.parts[c.eliminated ? c.elimPart! : this.part]?.name : undefined,
+      grid: isRaceKind(this.kind) && this.lapOrder[0]?.includes(c.id) ? this.lapOrder[0].indexOf(c.id) + 1 : undefined,
     }));
   }
 }

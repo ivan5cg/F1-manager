@@ -405,3 +405,91 @@ html[data-tema] .bar, html[data-tema] .tr .body, html[data-tema] .tr .p, html[da
 .plans .plan.on { box-shadow: inset 0 0 0 2px var(--gold1); background: var(--gl); color: var(--text); }
 .plans .plan.on .pl-r { color: var(--dim); }
 canvas.sumchart { width: 100%; display: block; margin: 4px 0; }
+
+/* ===================================================================================
+   Comodidad de uso. Botones al tamaño del dedo (~40 px), menú de sesión, juegos de
+   neumáticos agrupados, pie fijo en la parrilla, ajustes, y columna centrada en escritorio.
+   =================================================================================== */
+/* escritorio y tableta: la app es una columna de móvil centrada, no una pantalla estirada */
+#app { max-width: 600px; margin: 0 auto; }
+.sheet { max-width: 600px; margin: 0 auto; }
+@media (min-width: 640px) { #sess { box-shadow: 0 0 0 1px var(--line, #2c3440); } }
+
+/* barra de la sesión: menú a la izquierda, velocidades a la derecha */
+.ctrl { padding: 4px; gap: 6px; }
+.ctrl .menu { flex: none; min-width: 40px; height: 38px; padding: 0; font-size: 18px; line-height: 1; }
+.ctrl .gp { flex: 1; min-width: 0; }
+.speed { gap: 3px; }
+.speed button { min-width: 38px; height: 38px; padding: 0 6px; font-size: 13px; }
+.tower .th { gap: 3px; }
+.tower .th button { height: 30px; min-width: 38px; padding: 0 9px; font-size: 11px; }
+.sidebtns button { padding: 11px 2px; font-size: 12px; }
+.dcard .b button { padding: 11px 2px; font-size: 12px; }
+.dcard .b button.sq { flex: 0 0 34px; font-size: 18px; padding: 0; }
+.dcard .b .mode { font-size: 10.5px; }
+.toast { height: 92px; }
+/* botones de las pantallas de fin de semana y temporada */
+.list-item button, .panel > .hd button { min-height: 38px; padding: 8px 12px; }
+.list-item.next { background: rgba(255, 216, 74, .07); }
+
+/* plan de paradas en la tarjeta del piloto */
+.dcard .planl { height: 17px; display: flex; align-items: center; gap: 3px; padding: 0 5px; font-size: 11px; font-weight: 700; white-space: nowrap; overflow: hidden; background: var(--gl); }
+.dcard .planl .tyre { width: 14px; height: 14px; border-width: 2px; font-size: 8px; }
+
+/* código de país donde no hay banderas emoji (Windows) */
+.cc { display: inline-block; font-size: .72em; font-weight: 900; letter-spacing: .05em; padding: 0 4px; border: 1px solid currentColor; border-radius: 2px; opacity: .8; vertical-align: 1px; }
+
+/* juegos de neumáticos agrupados: número de juegos iguales y barra de goma que queda */
+.sheet .opts { grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 4px; }
+.sheet .opts button { position: relative; padding: 9px 2px 10px; font-size: 10.5px; min-height: 76px; }
+.sheet .opts .cnt { position: absolute; top: 3px; right: 4px; font-size: 12px; font-weight: 900; color: var(--gold1); }
+.sheet .opts button.on .cnt { color: #9a6a00; }
+.sheet .opts .lifebar { position: absolute; left: 4px; right: 4px; bottom: 3px; height: 3px; background: rgba(128, 128, 128, .35); display: block; }
+.sheet .opts .lifebar i { display: block; height: 100%; }
+details.fold { margin: 4px 0 8px; }
+details.fold > summary { cursor: pointer; padding: 10px 8px; font-size: 12px; font-weight: 700; color: var(--dim); background: var(--panel, #1e242d); border: 1px solid var(--line, #2c3440); list-style-position: inside; }
+details.fold[open] > summary { margin-bottom: 4px; }
+.pill button.x { padding: 0 5px; margin-left: 2px; font-size: 11px; min-height: 0; border: 0; background: none; color: var(--dim); }
+
+/* botones de las hojas, a tamaño de dedo */
+.seg button { padding: 11px 3px; font-size: 12px; }
+.sheet [data-close], .sheet .btnrow > button { min-height: 40px; }
+.mw-row button { padding: 10px 12px; }
+/* pie fijo de la parrilla: la salida siempre a la vista */
+.sheet-foot { position: sticky; bottom: 0; z-index: 3; display: flex; gap: 6px; align-items: stretch; margin: 8px -12px 0; padding: 8px 12px calc(8px + var(--safe-b)); background: var(--sheet, #1b2129); border-top: 1px solid var(--line, #2c3440); }
+.sheet-foot .big-cta { flex: 1; }
+.sheet-foot #preexit { flex: none; padding: 0 14px; }
+
+/* menú de la sesión y ajustes */
+.menulist { display: flex; flex-direction: column; gap: 4px; margin: 8px 0 2px; }
+.menulist button { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; text-align: left; padding: 11px 12px; text-transform: none; letter-spacing: 0; }
+.menulist button b { font-size: 14px; font-weight: 900; text-transform: uppercase; letter-spacing: .04em; }
+.menulist button span { font-size: 12px; font-weight: 600; color: var(--dim); }
+.optrow { display: flex; gap: 10px; align-items: flex-start; padding: 9px 2px; border-bottom: 1px solid var(--line, #2c3440); cursor: pointer; }
+.optrow input { flex: none; width: 22px; height: 22px; margin: 1px 0 0; padding: 0; accent-color: var(--gold2); }
+.insheet .panel { margin: 10px 0; }
+
+/* clasificación: diferencia con el corte en el rótulo de tu piloto */
+.cutbox { display: flex; align-items: center; gap: 4px; padding: 0 8px 0 10px !important; margin-left: -3px; font-weight: 900; clip-path: polygon(var(--sl) 0, 100% 0, 100% 100%, 0 100%); }
+.cutbox i { font-style: normal; font-size: 8.5px; text-transform: uppercase; letter-spacing: .04em; opacity: .85; }
+.cutbox.in { background: linear-gradient(180deg, #45cf6c 0%, #24a548 100%); color: #fff; }
+.cutbox.out { background: var(--gl-red); color: #fff; }
+
+/* elección de equipo: lo competitivo que es el coche */
+.lvl { flex: none; display: inline-block; width: 54px; height: 5px; background: var(--line, #2c3440); }
+.lvl i { display: block; height: 100%; background: var(--gold1); }
+
+/* resultados: tus pilotos arriba y «Continuar» siempre a la vista */
+.mineline { padding: 3px 0; gap: 8px; }
+.mineline .posbox { min-width: 28px; height: 24px; font-size: 14px; }
+.sticky-cta { position: sticky; bottom: 0; z-index: 2; padding: 8px 10px calc(8px + var(--safe-b)); background: linear-gradient(180deg, transparent, var(--bg) 35%); }
+table.tv td.nm { max-width: 46vw; overflow: hidden; text-overflow: ellipsis; }
+.sumwrap .panel { margin: 10px 0; }
+
+/* simular una sesión desde el fin de semana */
+.simov { position: fixed; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center; background: rgba(8, 10, 14, .82); }
+.simbox { width: min(320px, 86vw); }
+.simbox .bar { padding: 10px 12px; text-transform: none; font-size: 14px; }
+.sidebtns button { min-width: 0; padding-left: 0; padding-right: 0; }
+.sidebtns.four button { font-size: 11px; }
+.tower .th .tab { min-width: 0; flex: 0 1 auto; text-overflow: clip; }

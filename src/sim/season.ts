@@ -1,9 +1,22 @@
 // Minitemporada: calendario, puntos y clasificaciones de pilotos y constructores.
-import { TeamDef, ResultRow } from "./session";
-import { WeekendState } from "./weekend";
+import type { TeamDef, ResultRow } from "./session";
+import type { WeekendState } from "./weekend";
+import type { Compound } from "./tyres";
 
 export const RACE_POINTS = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
 export const SPRINT_POINTS = [8, 7, 6, 5, 4, 3, 2, 1];
+
+/** Lo que hace falta para volver a dibujar el resumen de una carrera ya corrida (se guarda con la temporada). */
+export interface RaceSummary {
+  laps: number; // vueltas previstas
+  lapOrder: number[][]; // orden (ids) al cerrar cada vuelta; [0] = parrilla
+  order: number[]; // ids en orden de llegada
+  stints: Record<number, { c: Compound; from: number }[]>;
+  ends: Record<number, number>; // vuelta en la que acabó cada coche
+  mine: number[]; // ids de los pilotos del jugador
+  key: { lap: number; text: string }[]; // momentos clave
+  fl?: { id: number; t: number; lap: number }; // vuelta rápida
+}
 
 export interface RoundResult {
   round: number;
@@ -13,6 +26,8 @@ export interface RoundResult {
   race?: ResultRow[];
   raceTable?: number[]; // carrera acortada: tabla de puntos reducida
   sprintTable?: number[];
+  summary?: RaceSummary;
+  sprintSummary?: RaceSummary;
 }
 
 export interface SeasonState {

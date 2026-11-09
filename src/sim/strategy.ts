@@ -232,17 +232,31 @@ export interface PlanOption {
 /** Las mejores estrategias distintas (por compuestos y número de paradas) para elegir antes de la salida. */
 export function planOptions(sess: Session, car: Car, k: TeamKnowledge, n = 3): PlanOption[] {
   const all = enumeratePlans(sess, car, k, 0, null, 0);
+  // «Distintas» de verdad: mismo número de paradas y mismos compuestos en otro orden es la misma
+  // estrategia (S-S-M, S-M-S y M-S-S cuestan casi igual). De cada familia, solo la mejor.
   const seen = new Set<string>();
-  const picked: Plan[] = [];
+  const families: Plan[] = [];
   for (const o of all) {
-    const sig = o.stints.map((x) => x.c).join("-");
+    const sig = `${o.stints.length}:${o.stints.map((x) => x.c).sort().join("")}`;
     if (seen.has(sig)) continue;
     seen.add(sig);
-    picked.push(o);
-    if (picked.length >= n) break;
+    families.push(o);
   }
-  if (!picked.length) return [];
-  const best = picked[0].total!;
+  if (!families.length) return [];
+  const best = families[0].total!;
+  // la más rápida, la mejor con otro número de paradas (aunque cueste: es la alternativa que uno
+  // quiere poder comparar, con su precio a la vista) y el resto por tiempo si no son un disparate
+  const LIMIT = 45;
+  const picked: Plan[] = [families[0]];
+  const otherStops = families.find((o) => o.stints.length !== families[0].stints.length && o.total! - best <= 120);
+  if (otherStops) picked.push(otherStops);
+  for (const o of families) {
+    if (picked.length >= n) break;
+    if (picked.includes(o)) continue;
+    if (o.total! - best > LIMIT && picked.length >= 2) break;
+    picked.push(o);
+  }
+  picked.sort((a, b) => a.total! - b.total!);
   // el mismo plan con un desgaste un 15 % mayor (el error típico de lo que sabe un equipo)
   const worse: TeamKnowledge = { ...k, profile: {}, hidden: { ...k.hidden, wearMult: Object.fromEntries(Object.entries(k.hidden.wearMult).map(([c, v]) => [c, (v as number) * 1.15])) as TeamKnowledge["hidden"]["wearMult"] } };
   const avail = availableSets(car);
@@ -504,6 +518,23 @@ export function practiceProgram(sess: Session, car: Car): Run[] {
   }
   for (let i = 1; i < runs.length; i++) runs[i].at = Math.max(runs[i].at ?? 0, (runs[i - 1].at ?? 0) + 60);
   return runs;
+}
+
+/**
+ * El equipo se hace cargo del programa de un piloto en libres o clasificación (el jugador pulsa
+ * «Auto» o simula hasta el final). La tanda en curso sigue; en libres, si no queda nada
+ * programado, se rehace el programa con lo que aún cabe en la sesión.
+ */
+export function teamTakesOver(sess: Session, car: Car) {
+  car.auto = true;
+  if (sess.parts.length || !sess.kind.startsWith("FP") || car.queue.length) return;
+  const now = sess.partT;
+  let runs = practiceProgram(sess, car).filter((r) => (r.at ?? 0) > now);
+  if (!runs.length && sess.remaining() > 12 * 60) {
+    const extra = makeRun(sess, car, "qsim", "S", 2, now + 30) ?? makeRun(sess, car, "long", "M", 6, now + 30);
+    if (extra) runs = [extra];
+  }
+  car.queue = runs;
 }
 
 /**
