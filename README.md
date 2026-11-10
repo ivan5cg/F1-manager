@@ -11,7 +11,15 @@ Es una web para el móvil (se instala como aplicación desde el navegador) y fun
 - mensajes con pestaña blanca en diagonal («RADIO DEL EQUIPO», «DIRECCIÓN DE CARRERA») sobre barra oscura,
 - hora local con icono del cielo, temperaturas, lluvia media y máxima y agua por sector,
 - rótulos de piloto con la posición en caja roja y diferencias en caja amarilla,
-- velocímetro de cada uno de tus pilotos con velocidad, marcha, acelerador, freno, batería y modo adelantamiento.
+- velocímetro de cada uno de tus pilotos con velocidad, marcha, acelerador, freno, batería y modo adelantamiento,
+- en la tarjeta de cada piloto, su coche visto desde arriba con las cuatro ruedas: el color es la temperatura frente a la ventana del compuesto (azul frío, verde bien, amarillo al borde, rojo caliente) y el relleno, la banda que queda (la simulación lleva cada eje, así que las dos ruedas de un eje van iguales),
+- en la torre de carrera, las posiciones ganadas (▲) o perdidas (▼) desde la parrilla y una raya naranja en el que va a menos de 1 s del de delante.
+
+**El mapa** enseña las zonas de modo adelantamiento (línea discontinua por fuera), las frenadas donde se adelanta (en naranja) y los sectores del coche que sigues o de tu piloto, en morado, verde o amarillo como los parciales. Tocando un coche en el mapa, en la torre o en la franja de huecos se sigue: queda resaltado y arriba sale su rótulo con su posición, neumático y hueco con tus pilotos (o su mejor vuelta y lo que está haciendo, en libres y clasificación). Se deja de seguir tocando el rótulo, el mismo coche o Esc.
+- **Libres y clasificación:** los que no van en vuelta rápida salen apagados, y los coches lentos a menos de 350 m por delante de tu piloto en vuelta lanzada llevan un aro amarillo (tráfico).
+- **Carrera, fantasma de parada:** un círculo discontinuo marca dónde estaría ahora tu piloto si hubiera parado (la pérdida en boxes convertida en metros de pista), con la posición en la que saldría, la misma que da el Muro.
+- **Carrera, franja de huecos:** debajo del mapa, toda la parrilla en una vuelta, con el líder a la izquierda y una marca cada 10 s. Se ve dónde hay hueco y en cuál caería tu piloto si parase.
+- **Aviso de lluvia:** tu meteorólogo mira cada sector. Si va a llover en uno seco, la fila «Cielo» lo dice con cuenta atrás (por ejemplo, «Lluvia en S2 en ~6′») y sale un aviso a la izquierda; si llueve en todos y va a parar, «escampa ~10′». Tiene el mismo error que su previsión del radar.
 
 El radar meteorológico enseña en bucle los últimos 30 minutos (un fotograma cada 3), con la paleta por bandas de los radares reales, vista de 40 km y vista ampliada del circuito. Las células de lluvia tienen forma irregular, núcleos y textura propia que viaja con ellas, y siguen el ciclo de vida de una tormenta (30-60 min): nacen pequeñas y casi sin lluvia, crecen en tamaño e intensidad, maduran y se deshacen extendiéndose en lluvia débil. Las nuevas brotan sobre todo junto a las que ya llueven (tormentas multicelulares que se regeneran), y los sistemas grandes y los frentes nacen fuera del alcance del radar y entran por el borde: nada aparece hecho de la nada. Los frentes llegan en banda con lluvia más débil detrás. Lo que se ve en el radar es exactamente lo que cae en cada tramo de pista.
 
@@ -60,7 +68,7 @@ En la realidad, en 2026 el GP de Baréin no se corrió en Sakhir: se trasladó a
   - **Si para ahora:** en qué posición sale, detrás de quién y a cuánto, y quién queda detrás. Con cada juego disponible, cuánto ritmo gana frente a seguir y si alcanza al de delante. Se puede parar desde ahí.
   - **Undercut:** si el de detrás para ya y tú respondes en la vuelta siguiente, ¿te pasa? Y al revés con el de delante.
   - **Huecos en meta** de las últimas 15 vueltas con el de delante, el de detrás y tu compañero. Tocando la gráfica se ven los de cada vuelta.
-- ⏸ ×1 ×4 ×16 ×64 y ⏭ (simular hasta el final). La sesión se pausa sola en los momentos clave.
+- ⏸ ×1 ×2 ×4 ×8 ×16 ×64 (teclas 1-6) y ⏭ (simular hasta el final). La sesión se pausa sola en los momentos clave.
 
 ## Crea tu equipo
 

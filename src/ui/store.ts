@@ -72,6 +72,8 @@ export interface Prefs {
   velCarrera: number;
   velSesion: number;
 }
+/** Velocidades de la sesión (× tiempo real). */
+export const SPEEDS = [1, 2, 4, 8, 16, 64];
 const PKEY = "muro-preferencias";
 const DEFAULT_PREFS: Prefs = { pausas: { control: true, partes: true, estratega: true, radio: true, garaje: true }, velCarrera: 4, velSesion: 16 };
 
@@ -82,8 +84,8 @@ export function loadPrefs(): Prefs {
     if (raw) {
       const o = JSON.parse(raw) as Partial<Prefs>;
       Object.assign(p.pausas, o.pausas ?? {});
-      if ([1, 4, 16, 64].includes(o.velCarrera as number)) p.velCarrera = o.velCarrera as number;
-      if ([1, 4, 16, 64].includes(o.velSesion as number)) p.velSesion = o.velSesion as number;
+      if (SPEEDS.includes(o.velCarrera as number)) p.velCarrera = o.velCarrera as number;
+      if (SPEEDS.includes(o.velSesion as number)) p.velSesion = o.velSesion as number;
     } else if (localStorage.getItem("autopausa") === "0") {
       // ajuste antiguo (todo o nada)
       for (const k of Object.keys(p.pausas) as (keyof PausePrefs)[]) p.pausas[k] = false;

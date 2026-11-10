@@ -27,7 +27,7 @@ import { makeRun, planOptions, teamTakesOver } from "../sim/strategy";
 import { Rng } from "../sim/rng";
 import { snapshotSession, SessionSnapshot } from "../sim/snapshot";
 import { stopOptions, undercut, gapHistory, pitLoss, StopOption } from "../sim/pitwall";
-import { saveSession, loadPrefs, savePrefs, setParked, PausePrefs } from "./store";
+import { saveSession, loadPrefs, savePrefs, setParked, PausePrefs, SPEEDS } from "./store";
 
 type TowerMode = "int" | "gap" | "last" | "tyre";
 
@@ -80,7 +80,8 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     <div class="main">
       <div class="leftcol"><div class="tower" id="tower"></div><div class="toast" id="toast" title="Dirección de carrera y meteo"></div></div>
       <div class="side${race ? "" : " timed"}">
-        <div class="mapbox"><canvas id="map"></canvas><div class="flyov" id="flyov"></div></div>
+        <div class="mapbox"><canvas id="map" title="Toca un coche para seguirlo. Línea discontinua: zona de modo adelantamiento · naranja: frenada donde se adelanta${race ? " · círculo discontinuo: dónde estaría tu piloto si parase ahora" : ""}"></canvas><div class="flyov" id="flyov"></div><div class="selchip" id="selchip"></div></div>
+        ${race ? `<canvas id="gapstrip" class="gapstrip" title="Toda la parrilla en una vuelta: el líder a la izquierda. El círculo discontinuo es dónde saldría tu piloto si parase ahora."></canvas>` : ""}
         <div class="wxbox" id="wx"></div>
         <div id="lapban"></div>
         <div class="ticker" id="ticker"></div>
@@ -93,7 +94,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   // ------------------------------------------------------------- controles
   const spEl = $("#speed");
   // ⏭ (simular hasta el final) ya no está pegado a 64×: vive en el menú ☰, donde no se pulsa sin querer
-  spEl.innerHTML = `<button data-v="0" title="Pausa (espacio)">⏸</button>` + [1, 4, 16, 64].map((s, i) => `<button data-v="${s}" title="Tecla ${i + 1}">${s}×</button>`).join("");
+  spEl.innerHTML = `<button data-v="0" title="Pausa (espacio)">⏸</button>` + SPEEDS.map((s, i) => `<button data-v="${s}" title="Tecla ${i + 1}">${s}×</button>`).join("");
   /** Cambia la velocidad (0 = pausar o reanudar). La elegida se recuerda para la próxima sesión del mismo tipo. */
   function setSpeed(s: number) {
     if (skipping || ended) return;
@@ -134,12 +135,12 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     keepAwake(!paused && !ended && !skipping);
   }
   // ----------------------------------------------------------------- teclado (escritorio)
-  // espacio: pausa · 1-4: velocidad · P/M/R/D: pilotos, muro, radar, radio · Esc: cierra la hoja
+  // espacio: pausa · 1-6: velocidad · P/M/R/D: pilotos, muro, radar, radio · Esc: cierra la hoja
   const onKey = (e: KeyboardEvent) => {
     if (ended || e.ctrlKey || e.metaKey || e.altKey) return;
     const tag = (e.target as HTMLElement | null)?.tagName;
     if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
-    if (e.key === "Escape") { if (closeTopSheet()) e.preventDefault(); return; }
+    if (e.key === "Escape") { if (closeTopSheet()) e.preventDefault(); else if (selId !== null) select(null); return; }
     if (anySheetOpen()) return;
     const k = e.key.toLowerCase();
     if (k === " ") {
@@ -147,7 +148,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       (document.activeElement as HTMLElement | null)?.blur?.(); // que el espacio no pulse además el botón con el foco
       if (pend.left || pend.right) resume(); else setSpeed(0);
     }
-    else if (k >= "1" && k <= "4") setSpeed([1, 4, 16, 64][Number(k) - 1]);
+    else if (k >= "1" && k <= String(SPEEDS.length)) setSpeed(SPEEDS[Number(k) - 1]);
     else if (k === "p") pilotsSheet();
     else if (k === "m" && race) muroSheet();
     else if (k === "r") weatherSheet();
@@ -273,6 +274,106 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   const themeVar = (name: string, fallback: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
   const MAP = { track: themeVar("--map-track", "#6a6d74"), label: themeVar("--map-label", "#ffffff") };
   const GAUGE_BG = themeVar("--gauge-bg", "rgba(0,0,0,.88)");
+  // ------------------------------------------- selección, fantasma de parada y tráfico
+  /** Coche que el jugador sigue (tocándolo en el mapa, la franja o la torre). */
+  let selId: number | null = null;
+  const selCar = () => (selId === null ? null : sess.cars.find((c) => c.id === selId) ?? null);
+  /** Tocar el mismo coche (o un sitio vacío) deja de seguirlo. */
+  function select(id: number | null) {
+    selId = id !== null && id === selId ? null : id;
+    renderSel(); renderTower(); drawMap(); drawStrip();
+  }
+  const L = track.length;
+  const modL = (s: number) => ((s % L) + L) % L;
+  // tiempo de referencia acumulado a lo largo de la vuelta: para pasar segundos de pérdida a metros de pista
+  const NP = Math.min(track.xs.length, track.vref.length);
+  const tCum = new Float64Array(NP + 1);
+  for (let i = 0; i < NP; i++) tCum[i + 1] = tCum[i] + track.ds / Math.max(8, track.vref[i]);
+  /** Metros por detrás de s que se recorren en `sec` segundos a ritmo de carrera. */
+  function metersBack(s: number, sec: number): number {
+    const Tl = tCum[NP];
+    let tt = sec * (Tl / (sess.lapRefRace || Tl));
+    const laps = Math.floor(tt / Tl);
+    tt -= laps * Tl;
+    const p = modL(s);
+    const i = Math.min(NP - 1, Math.floor(p / track.ds));
+    let target = tCum[i] - tt;
+    if (target < 0) target += Tl;
+    let lo = 0, hi = NP;
+    while (hi - lo > 1) { const m = (lo + hi) >> 1; if (tCum[m] <= target) lo = m; else hi = m; }
+    const sT = (lo + (target - tCum[lo]) / Math.max(1e-9, tCum[lo + 1] - tCum[lo])) * track.ds;
+    return modL(p - sT) + laps * L;
+  }
+  /**
+   * Fantasma de parada (carrera): dónde estaría ahora tu piloto si hubiera parado, es decir, la
+   * pérdida en boxes convertida en metros por detrás de él, y la posición en la que saldría (la
+   * misma cuenta que «Si para ahora» en el Muro).
+   */
+  type Ghost = { back: number; pos: number; at: number };
+  const ghosts = new Map<number, Ghost>();
+  function updateGhosts() {
+    ghosts.clear();
+    if (!race || !started || sess.flag === "red" || sess.chequered) return;
+    const rows = sess.intervals().filter((r) => r.car.loc !== "out" && r.car.loc !== "fin");
+    for (const c of mine()) {
+      if (c.loc !== "track" || !c.tyres) continue;
+      const me = rows.find((r) => r.car === c);
+      if (!me) continue;
+      const loss = pitLoss(sess, c);
+      const at = me.gap + loss;
+      const pos = rows.filter((r) => r.car !== c && r.gap < at).length + 1;
+      ghosts.set(c.id, { back: metersBack(c.s, loss), pos, at });
+    }
+  }
+  /** Libres y clasificación: va en vuelta rápida (lanzada o tanda larga), no de salida ni enfriando. */
+  const hot = (c: Car) => c.loc === "track" && (c.run?.phase === "push" || c.run?.phase === "long");
+  /** Coches lentos (no lanzados) a menos de 350 m por delante de uno de tus pilotos en vuelta lanzada. */
+  function trafficIds(): Set<number> {
+    const out = new Set<number>();
+    if (race) return out;
+    for (const c of mine()) {
+      if (c.run?.phase !== "push" || c.loc !== "track") continue;
+      for (const o of sess.cars) {
+        if (o === c || o.loc !== "track" || hot(o)) continue;
+        const d = modL(o.s - c.s);
+        if (d > 0 && d < 350) out.add(o.id);
+      }
+    }
+    return out;
+  }
+  /** Coche cuyos sectores se pintan en el mapa: el que sigues o, si no, tu piloto que lleva la vuelta más reciente. */
+  function sectorCar(): Car | null {
+    const s = selCar();
+    if (s && s.loc !== "out") return s;
+    return mine().filter((c) => c.loc === "track").sort((a, b) => (b.lapStart || 0) - (a.lapStart || 0))[0] ?? null;
+  }
+  const SEC_COL: Record<string, string> = { purple: "#b25cff", green: "#33e05f", yellow: "#ffd84a" };
+  const sectorColor = (c: Car, j: number) => {
+    const cur = c.secCur[j];
+    const v = !isNaN(cur) ? cur : c.secLast[j];
+    if (isNaN(v) || !isFinite(v)) return null;
+    return { col: SEC_COL[tcls(v, c.secBest[j], sess.secBest[j])] ?? null, live: !isNaN(cur) };
+  };
+  /** Posiciones de los coches en el último dibujo del mapa (px del lienzo), para tocarlos. */
+  let mapPts: { id: number; x: number; y: number }[] = [];
+  const carXY = (s: number, pit: boolean, dpr: number) => {
+    const i = Math.min(track.xs.length - 1, Math.floor(modL(s) / track.ds));
+    return { x: mx(track.xs[i]), y: my(track.ys[i]) + (pit ? 7 * dpr : 0) };
+  };
+  /** Recorre el trazado de un minisector (con el cierre de la vuelta en el último). */
+  const msPath = (g: CanvasRenderingContext2D, m: (typeof track.ms)[number]) => {
+    const i0 = Math.floor(m.s0 / track.ds), i1 = Math.min(track.xs.length - 1, Math.floor(m.s1 / track.ds));
+    g.moveTo(mx(track.xs[i0]), my(track.ys[i0]));
+    for (let i = i0 + 1; i <= i1 + 1 && i < track.xs.length; i++) g.lineTo(mx(track.xs[i]), my(track.ys[i]));
+    if (m.i === track.ms.length - 1) g.lineTo(mx(track.xs[0]), my(track.ys[0]));
+  };
+  /** Raya corta perpendicular al trazado en la distancia s (salida, sectores). */
+  const tick = (g: CanvasRenderingContext2D, s: number, len: number) => {
+    const i = Math.min(track.xs.length - 2, Math.floor(modL(s) / track.ds));
+    const x = mx(track.xs[i]), y = my(track.ys[i]);
+    const dx = mx(track.xs[i + 1]) - x, dy = my(track.ys[i + 1]) - y, n = Math.hypot(dx, dy) || 1;
+    g.beginPath(); g.moveTo(x - (dy / n) * len, y + (dx / n) * len); g.lineTo(x + (dy / n) * len, y - (dx / n) * len); g.stroke();
+  };
   function drawMap() {
     const cv = $<HTMLCanvasElement>("#map");
     if (!cv || wide || cv.width < 20 || cv.height < 20) return;
@@ -282,43 +383,222 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     updateRainLayer(cv);
     if (rainLayerOn) { g.imageSmoothingEnabled = true; g.drawImage(rainLayer, 0, 0, cv.width, cv.height); }
     g.lineCap = "round"; g.lineJoin = "round";
+    // zonas de modo adelantamiento: línea discontinua por fuera del trazado
+    g.save();
+    g.strokeStyle = "rgba(255,255,255,.75)"; g.lineWidth = 1.3 * dpr; g.setLineDash([3 * dpr, 3 * dpr]);
     for (const m of track.ms) {
-      const i0 = Math.floor(m.s0 / track.ds), i1 = Math.min(track.xs.length - 1, Math.floor(m.s1 / track.ds));
+      if (!m.drs) continue;
+      const i0 = Math.floor(m.s0 / track.ds), i1 = Math.min(track.xs.length - 2, Math.floor(m.s1 / track.ds));
+      g.beginPath();
+      for (let i = i0; i <= i1; i++) {
+        const x = mx(track.xs[i]), y = my(track.ys[i]);
+        const dx = mx(track.xs[i + 1]) - x, dy = my(track.ys[i + 1]) - y, n = Math.hypot(dx, dy) || 1;
+        const ox = x - (dy / n) * 6 * dpr, oy = y + (dx / n) * 6 * dpr;
+        if (i === i0) g.moveTo(ox, oy); else g.lineTo(ox, oy);
+      }
+      g.stroke();
+    }
+    g.restore();
+    for (const m of track.ms) {
       const w = sess.water[m.i];
       g.strokeStyle = w > 0.05 ? `rgba(70,150,240,${Math.min(1, 0.55 + w * 0.45)})` : MAP.track;
       g.lineWidth = 5 * dpr;
-      g.beginPath();
-      g.moveTo(mx(track.xs[i0]), my(track.ys[i0]));
-      for (let i = i0 + 1; i <= i1 + 1 && i < track.xs.length; i++) g.lineTo(mx(track.xs[i]), my(track.ys[i]));
-      if (m.i === track.ms.length - 1) g.lineTo(mx(track.xs[0]), my(track.ys[0]));
-      g.stroke();
+      g.beginPath(); msPath(g, m); g.stroke();
+    }
+    // frenadas donde se adelanta (cuanto más fácil, más intenso)
+    for (const m of track.ms) {
+      if (m.overtake < 0.15) continue;
+      g.strokeStyle = `rgba(255,150,40,${Math.min(1, 0.45 + m.overtake)})`; g.lineWidth = 5 * dpr;
+      g.beginPath(); msPath(g, m); g.stroke();
+    }
+    // sectores del coche que sigues (o de tu piloto): morado, verde o amarillo, como los parciales
+    const sc = sectorCar();
+    if (sc) {
+      for (const m of track.ms) {
+        const col = sectorColor(sc, m.sector);
+        if (!col?.col) continue;
+        g.globalAlpha = col.live ? 1 : 0.55;
+        g.strokeStyle = col.col; g.lineWidth = 1.8 * dpr;
+        g.beginPath(); msPath(g, m); g.stroke();
+      }
+      g.globalAlpha = 1;
     }
     g.strokeStyle = MAP.label; g.lineWidth = 2 * dpr;
-    g.beginPath(); g.moveTo(mx(track.xs[0]), my(track.ys[0]) - 6 * dpr); g.lineTo(mx(track.xs[0]), my(track.ys[0]) + 6 * dpr); g.stroke();
-    const L = track.length;
-    const cars = [...sess.cars].sort((a, b) => Number(a.player) - Number(b.player));
+    tick(g, 0, 6 * dpr);
+    g.lineWidth = 1.2 * dpr;
+    for (const j of [1, 2]) tick(g, track.ms[sess.secStart[j]]?.s0 ?? 0, 5 * dpr);
+    const traffic = trafficIds();
+    const sel = selCar();
+    // orden de dibujo: los que no van lanzados debajo, luego el resto, tus pilotos y el seguido encima
+    const rank = (c: Car) => (c === sel ? 3 : c.player ? 2 : race || hot(c) ? 1 : 0);
+    const cars = sess.cars.filter((c) => c.loc === "track" || c.loc === "pit").sort((a, b) => rank(a) - rank(b));
+    const pts: typeof mapPts = [];
+    g.font = `900 ${9 * dpr}px "Titillium Web", sans-serif`;
     for (const c of cars) {
-      if (c.loc !== "track" && c.loc !== "pit") continue;
       const s = c.s + (paused ? 0 : c.v * leftover);
-      const pos = ((s % L) + L) % L;
-      const i = Math.min(track.xs.length - 1, Math.floor(pos / track.ds));
-      const x = mx(track.xs[i]), y = my(track.ys[i]) + (c.loc === "pit" ? 7 * dpr : 0);
-      const r = (c.player ? 5 : 3.6) * dpr;
+      const { x, y } = carXY(s, c.loc === "pit", dpr);
+      pts.push({ id: c.id, x, y });
+      const slow = !race && !c.player && c !== sel && !hot(c);
+      const r = (c.player || c === sel ? 5 : slow ? 2.8 : 3.6) * dpr;
+      g.globalAlpha = slow ? 0.45 : 1;
       g.fillStyle = c.team.color;
       g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
-      if (c.player) {
-        g.strokeStyle = MAP.label; g.lineWidth = 1.5 * dpr; g.stroke();
-        g.fillStyle = MAP.label; g.font = `900 ${9 * dpr}px "Titillium Web", sans-serif`;
+      g.globalAlpha = 1;
+      if (traffic.has(c.id)) { g.strokeStyle = "#ffd84a"; g.lineWidth = 1.6 * dpr; g.beginPath(); g.arc(x, y, r + 2.5 * dpr, 0, 7); g.stroke(); }
+      if (c.player || c === sel) {
+        g.strokeStyle = c === sel ? "#ffd84a" : MAP.label; g.lineWidth = (c === sel ? 2 : 1.5) * dpr;
+        g.beginPath(); g.arc(x, y, r, 0, 7); g.stroke();
+        g.fillStyle = c === sel ? "#ffd84a" : MAP.label;
         g.fillText(c.d.abrev, x + 6 * dpr, y - 5 * dpr);
       }
     }
+    mapPts = pts;
+    // fantasmas de parada: círculo discontinuo con la posición de salida (si los dos caen juntos,
+    // la etiqueta del segundo va encima para que no se pisen)
+    const labels: { x: number; y: number }[] = [];
+    for (const c of mine()) {
+      const gh = ghosts.get(c.id);
+      if (!gh) continue;
+      const { x, y } = carXY(c.s + (paused ? 0 : c.v * leftover) - gh.back, false, dpr);
+      g.save();
+      g.setLineDash([2.5 * dpr, 2 * dpr]);
+      g.strokeStyle = c.team.color; g.lineWidth = 2 * dpr;
+      g.fillStyle = "rgba(0,0,0,.55)";
+      g.beginPath(); g.arc(x, y, 5.5 * dpr, 0, 7); g.fill(); g.stroke();
+      g.restore();
+      const t = `${c.d.abrev} P${gh.pos}`;
+      g.font = `900 ${8.5 * dpr}px "Titillium Web", sans-serif`;
+      const tw = g.measureText(t).width;
+      let ly = y + 2 * dpr;
+      while (labels.some((l) => Math.abs(l.x - x) < tw + 8 * dpr && Math.abs(l.y - ly) < 11 * dpr)) ly -= 12 * dpr;
+      labels.push({ x, y: ly });
+      g.fillStyle = "rgba(0,0,0,.75)"; g.fillRect(x + 6 * dpr, ly, tw + 4 * dpr, 10 * dpr);
+      g.fillStyle = "#fff"; g.fillText(t, x + 8 * dpr, ly + 8 * dpr);
+    }
   }
+  $<HTMLCanvasElement>("#map").addEventListener("click", (e) => {
+    const cv = e.currentTarget as HTMLCanvasElement;
+    const r = cv.getBoundingClientRect();
+    const x = (e.clientX - r.left) * (cv.width / r.width), y = (e.clientY - r.top) * (cv.height / r.height);
+    const dpr = window.devicePixelRatio || 1;
+    let best: number | null = null, bd = (20 * dpr) ** 2;
+    for (const p of mapPts) { const d = (p.x - x) ** 2 + (p.y - y) ** 2; if (d < bd) { bd = d; best = p.id; } }
+    if (best === null) { if (selId !== null) select(null); } else select(best);
+  });
+
+  // ---------------------------------------------------- franja de huecos (carrera)
+  // Toda la parrilla en una vuelta, el líder a la izquierda: se ven los huecos libres y dónde
+  // caería tu piloto si parase ahora (círculo discontinuo con la posición de salida).
+  let stripPts: { id: number; x: number }[] = [];
+  function drawStrip() {
+    const cv = document.getElementById("gapstrip") as HTMLCanvasElement | null;
+    if (!cv || wide) return;
+    const dpr = window.devicePixelRatio || 1;
+    const W = cv.clientWidth, H = 34;
+    if (W < 20) return;
+    if (cv.width !== Math.round(W * dpr)) { cv.width = Math.round(W * dpr); cv.height = H * dpr; }
+    const g = cv.getContext("2d")!;
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    g.clearRect(0, 0, W, H);
+    const rows = sess.intervals().filter((r) => r.car.loc !== "out" && r.car.loc !== "fin");
+    const lead = rows[0]?.car;
+    const lap = (lead && lead.lapTimes.length ? lead.lapTimes[lead.lapTimes.length - 1] : 0) || sess.lapRefRace || 90;
+    const pad = 6, y0 = 11, y1 = 23;
+    const X = (t: number) => pad + ((((t % lap) + lap) % lap) / lap) * (W - 2 * pad);
+    g.fillStyle = "#15171b"; g.fillRect(0, y0 - 2, W, y1 - y0 + 4);
+    g.strokeStyle = "#2c3038"; g.lineWidth = 1;
+    for (let t = 10; t < lap; t += 10) { const x = Math.round(X(t)) + 0.5; g.beginPath(); g.moveTo(x, y0 - 2); g.lineTo(x, y1 + 2); g.stroke(); }
+    const sel = selCar();
+    const pts: typeof stripPts = [];
+    const ordered = [...rows].sort((a, b) => Number(a.car.player || a.car === sel) - Number(b.car.player || b.car === sel));
+    // etiquetas sin pisarse: si caen juntas, la siguiente se corre a la derecha
+    const place = (used: number[], x: number, w: number) => {
+      let lx = Math.max(w / 2, Math.min(W - w / 2, x));
+      while (used.some((u) => Math.abs(u - lx) < w)) lx += w;
+      if (lx > W - w / 2) { lx = Math.max(w / 2, Math.min(W - w / 2, x)); while (used.some((u) => Math.abs(u - lx) < w)) lx -= w; }
+      used.push(lx);
+      return lx;
+    };
+    const bottom: number[] = [], top: number[] = [];
+    g.font = `900 9px "Titillium Web", sans-serif`; g.textAlign = "center"; g.textBaseline = "alphabetic";
+    for (const { car: c, gap } of ordered) {
+      if (!isFinite(gap)) continue;
+      const x = X(c === lead ? 0 : gap);
+      pts.push({ id: c.id, x });
+      const big = c.player || c === sel;
+      g.globalAlpha = c.loc === "track" || big ? 1 : 0.45;
+      g.fillStyle = c.team.color;
+      g.fillRect(x - (big ? 2 : 1), big ? y0 - 3 : y0, big ? 4 : 2.5, big ? y1 - y0 + 6 : y1 - y0);
+      g.globalAlpha = 1;
+      if (big) { g.fillStyle = c === sel ? "#ffd84a" : "#fff"; g.fillText(c.d.abrev, place(bottom, x, 22), H - 1); }
+    }
+    stripPts = pts;
+    for (const c of mine()) {
+      const gh = ghosts.get(c.id);
+      if (!gh) continue;
+      const x = X(gh.at);
+      g.save(); g.setLineDash([2, 2]); g.strokeStyle = c.team.color; g.lineWidth = 1.6;
+      g.beginPath(); g.arc(x, (y0 + y1) / 2, 4.5, 0, 7); g.stroke(); g.restore();
+      g.fillStyle = "#fff"; g.font = `900 8.5px "Titillium Web", sans-serif`;
+      g.fillText(`${c.d.abrev} P${gh.pos}`, place(top, x, 40), 8);
+    }
+  }
+  document.getElementById("gapstrip")?.addEventListener("click", (e) => {
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const x = e.clientX - r.left;
+    let best: number | null = null, bd = 10;
+    for (const p of stripPts) { const d = Math.abs(p.x - x); if (d < bd) { bd = d; best = p.id; } }
+    if (best !== null) select(best);
+  });
+
+  // ------------------------------------------------- rótulo del coche que sigues
+  function renderSel() {
+    const el = document.getElementById("selchip");
+    if (!el) return;
+    const c = selCar();
+    if (!c) { if (el.innerHTML) { el.innerHTML = ""; el.classList.remove("on"); } return; }
+    const ord = sess.order();
+    const pos = ord.indexOf(c) + 1;
+    const tyre = c.tyres && (race || c.loc !== "garage") ? `${tyreHtml(c.tyres.c)}<span class="mono">${c.tyres.laps}v</span>` : "";
+    let info = "";
+    if (c.loc === "out") info = `<span class="dim">Fuera</span>`;
+    else if (race) {
+      if (c.player) {
+        const a = ord[pos - 2], b = ord[pos];
+        const f = (x: number) => (isFinite(x) && x > 0 ? x.toFixed(1) : "—");
+        info = `${a ? `▲${a.d.abrev} ${f(sess.gapBetween(a, c))}` : "Líder"}${b && b.loc !== "out" ? ` · ▼${b.d.abrev} ${f(sess.gapBetween(c, b))}` : ""}`;
+      } else {
+        // hueco con el más cercano de tus pilotos
+        let best = "";
+        let bv = Infinity;
+        for (const m of mine()) {
+          if (m.loc === "out") continue;
+          const ahead = ord.indexOf(c) < ord.indexOf(m);
+          const gp = ahead ? sess.gapBetween(c, m) : sess.gapBetween(m, c);
+          if (isFinite(gp) && gp < bv) { bv = gp; best = `${gp.toFixed(1)} s ${ahead ? "delante de" : "detrás de"} ${m.d.abrev}`; }
+        }
+        info = best;
+      }
+    } else {
+      const b = bestOf(c);
+      info = `${b !== undefined && isFinite(b) ? fmtLap(b) : "Sin tiempo"} · ${phaseName(c)}`;
+    }
+    const html = `<span class="posbox mono">${pos}</span><span class="nm"><span class="teamdot" style="background:${c.team.color}"></span>${c.d.abrev}</span><span class="in">${tyre}<span>${info}</span></span><span class="x" title="Dejar de seguir">✕</span>`;
+    el.classList.add("on");
+    if (el.innerHTML !== html) el.innerHTML = html;
+  }
+  $("#selchip").onclick = () => select(null);
 
   // --------------------------------------------------------------- torre
   const towerEl = $("#tower");
   towerEl.addEventListener("click", (e) => {
     const b = (e.target as HTMLElement).closest(".th button") as HTMLButtonElement | null;
-    if (!b) return;
+    if (!b) {
+      // tocar una fila: seguir a ese coche en el mapa
+      const row = (e.target as HTMLElement).closest(".tr[data-id]") as HTMLElement | null;
+      if (row) select(Number(row.dataset.id));
+      return;
+    }
     if (b.dataset.w) { wide = !wide; document.querySelector(".main")!.classList.toggle("wide", wide); if (!wide) requestAnimationFrame(() => sizeMap()); }
     else { const order: TowerMode[] = ["int", "gap", "last", "tyre"]; mode = order[(order.indexOf(mode) + 1) % order.length]; }
     renderTower();
@@ -363,11 +643,18 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       ? `<div class="trh"><span class="p"></span><span class="n">Piloto</span><span class="w">Int.</span><span class="w">Líder</span><span class="l">Última</span><span class="s">S1</span><span class="s">S2</span><span class="s">S3</span><span class="t">Neu</span><span class="k">P</span></div>`
       : `<div class="trh"><span class="p"></span><span class="n">Piloto</span><span class="l">Mejor</span><span class="w">Dif.</span><span class="l">Última</span><span class="s">S1</span><span class="s">S2</span><span class="s">S3</span><span class="t">Neu</span><span class="k">V</span></div>`;
     const cutAt = quali && part?.advance ? part.advance : -1;
+    // carrera: posiciones ganadas o perdidas desde la parrilla
+    const gridPos = new Map<number, number>(race && started ? (sess.lapOrder[0] ?? []).map((id, k) => [id, k + 1] as [number, number]) : []);
     rows.forEach(({ car: c, gap, interval, lapsDown }, i) => {
       if (i === cutAt) html += `<div class="cut"></div>`;
       const tyre = c.tyres && (race || c.loc !== "garage") ? tyreHtml(c.tyres.c) : "";
-      const cls = `tr${i === 0 ? " lead" : ""}${c.player ? " me" : ""}${c.loc === "out" || c.eliminated ? " out" : ""}${wide ? " wide" : ""}`;
-      const pre = `<span class="p">${i + 1}</span><span class="c" style="background:${c.team.color}"></span><span class="body"><span class="n">${c.d.abrev}</span>${statusFlag(c)}`;
+      // pelea: a menos de un segundo del de delante, los dos en pista y en la misma vuelta
+      const prev = rows[i - 1];
+      const fight = race && started && prev && c.loc === "track" && prev.car.loc === "track" && prev.lapsDown === lapsDown && interval > 0 && interval < 1;
+      const cls = `tr${i === 0 ? " lead" : ""}${c.player ? " me" : ""}${c.loc === "out" || c.eliminated ? " out" : ""}${wide ? " wide" : ""}${fight ? " fight" : ""}${c.id === selId ? " sel" : ""}`;
+      const gp = gridPos.get(c.id);
+      const dl = gp && c.loc !== "out" && gp !== i + 1 ? `<span class="dl ${gp > i + 1 ? "upp" : "dn"}" title="Desde la parrilla (P${gp})">${gp > i + 1 ? "▲" : "▼"}${Math.abs(gp - i - 1)}</span>` : "";
+      const pre = `<span class="p">${i + 1}</span><span class="c" style="background:${c.team.color}"></span><span class="body"><span class="n">${c.d.abrev}</span>${dl}${statusFlag(c)}`;
       if (wide) {
         let cells = "";
         if (race) {
@@ -379,7 +666,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
           const has = b !== undefined && isFinite(b);
           cells = `<span class="l mono ${has && b === sessBest ? "purple" : ""}">${has ? fmtLap(b) : "—"}</span><span class="w mono">${has && i > 0 && isFinite(gap) ? `+${gap.toFixed(3)}` : ""}</span><span class="l mono">${lastLap(c)}</span>${sectorCells(c)}<span class="t">${tyre}<span class="small mono">${c.tyres ? c.tyres.laps : ""}</span></span><span class="k mono">${c.sessionLaps}</span>`;
         }
-        html += `<div class="${cls}">${pre}${cells}</span></div>`;
+        html += `<div class="${cls}" data-id="${c.id}">${pre}${cells}</span></div>`;
         return;
       }
       let g = "";
@@ -400,9 +687,55 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       }
       const bt = race ? null : quali ? c.bestTyreByPart[c.eliminated ? c.elimPart! : sess.part] : c.bestTyre;
       const tyreCell = race || mode === "tyre" ? tyre : bt ? tyreHtml(bt) : "";
-      html += `<div class="${cls}">${pre}<span class="g mono">${g}</span><span class="t">${tyreCell}</span></span></div>`;
+      html += `<div class="${cls}" data-id="${c.id}">${pre}<span class="g mono">${g}</span><span class="t">${tyreCell}</span></span></div>`;
     });
     towerEl.innerHTML = html;
+  }
+
+  // ------------------------------------------------- aviso de lluvia por sectores
+  // La previsión de tu meteorólogo (con su error, la misma que en «Radar») para cada sector: cuándo
+  // empezará a llover en uno que está seco o cuándo escampará. Se rehace cada 20 s de sesión y
+  // como mucho cada 2 s reales (a 64× no se recalcula en cada refresco).
+  const RAIN_H = [0, 2, 4, 6, 8, 10, 12, 15, 20, 25, 30];
+  const secPts = [0, 1, 2].map((j) => track.ms.filter((m) => m.sector === j).filter((_, k) => k % 3 === 0).map((m) => [m.x / 1000, m.y / 1000] as [number, number]));
+  const rainAlert: { kind: "" | "start" | "stop"; text: string; wall: number; real: number; toastWall: number } = { kind: "", text: "", wall: -1e9, real: 0, toastWall: -1e9 };
+  function updateRainAlert() {
+    const w = sess.weather;
+    const now = performance.now();
+    if (Math.abs(sess.wall - rainAlert.wall) < 20 || now - rainAlert.real < 2000) return;
+    rainAlert.wall = sess.wall; rainAlert.real = now;
+    const before = rainAlert.kind;
+    rainAlert.kind = ""; rainAlert.text = "";
+    if (!w.cells.length && w.drizzle <= 0) return;
+    const team = wk.teams.find((t) => t.id === wk.playerTeam)!;
+    const starts: { j: number; h: number }[] = [], stops: { j: number; h: number }[] = [];
+    let wetSecs = 0;
+    secPts.forEach((pts, j) => {
+      if (!pts.length) return;
+      const wetNow = Math.max(...pts.map(([x, y]) => rainAt(w, x, y))) > 0.3;
+      // semilla propia: mirar la previsión no toca el azar de la simulación
+      const f = forecast(w, team.meteo, new Rng(Math.floor(sess.wall) * 3 + j + 11), 16, RAIN_H, pts);
+      if (wetNow) {
+        wetSecs++;
+        const k = f.horizons.findIndex((h, i) => h > 0 && f.prob[i] < 0.3);
+        if (k >= 0) stops.push({ j, h: f.horizons[k] });
+      } else {
+        const k = f.horizons.findIndex((h, i) => h > 0 && f.prob[i] >= 0.5);
+        if (k >= 0) starts.push({ j, h: f.horizons[k] });
+      }
+    });
+    if (starts.length) {
+      const h = Math.min(...starts.map((x) => x.h));
+      const secs = starts.filter((x) => x.h <= h + 2).map((x) => `S${x.j + 1}`).join("·");
+      rainAlert.kind = "start"; rainAlert.text = `Lluvia en ${secs} en ~${h}′`;
+      // aviso a la izquierda solo cuando aparece (no cada vez que la previsión baila)
+      if (before !== "start" && sess.wall - rainAlert.toastWall > 300) {
+        rainAlert.toastWall = sess.wall;
+        showToast(`🌦️ Tu meteorólogo: lluvia en ${secs.replace(/·/g, ", ")} en unos ${h} min.`, 6000, "Meteo", false, "left");
+      }
+    } else if (wetSecs && stops.length === wetSecs) {
+      rainAlert.kind = "stop"; rainAlert.text = `escampa ~${Math.max(...stops.map((x) => x.h))}′`;
+    }
   }
 
   // ------------------------------------------------------------ cabecera
@@ -427,7 +760,9 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     const arrow = `<svg class="wind" viewBox="0 0 16 16" style="transform:rotate(${(-wn.dir * 180) / Math.PI}deg)"><path d="M2 8h10M8.5 4.5 12 8l-3.5 3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
     $("#wx").innerHTML = `<span class="tab">Hora</span><span class="bar mono"><span class="sky">${fmtHour(w.clock)}${skyIcon(w.cloud, rAvg, w.clock)}</span><span class="grow"></span><span class="sky" title="Viento">${arrow}${Math.round(wn.speed)}<span class="small" style="text-transform:none">&nbsp;km/h</span></span></span>
       <span class="tab">Aire</span><span class="bar mono">${w.airT.toFixed(0)}° <span class="dim">pista</span> ${w.trackT.toFixed(0)}°</span>
-      <span class="tab">Cielo</span><span class="bar" style="white-space:nowrap">${rMax > 0.15 ? `Lluvia ${f1(rAvg)}<span class="small dim">&nbsp;máx</span>&nbsp;${f1(rMax)}<span class="small" style="text-transform:none">&nbsp;mm/h</span>` : w.cloud > 0.6 ? "Cubierto" : w.cloud > 0.3 ? "Nubes" : "Sol"}</span>
+      <span class="tab">Cielo</span><span class="bar" style="white-space:nowrap;overflow:hidden">${rMax > 0.15
+        ? rainAlert.kind === "stop" ? `Lluvia ${f1(rAvg)}<span class="small" style="text-transform:none">&nbsp;mm/h</span>&nbsp;<span class="yellow" title="Previsión de tu meteorólogo">· ${rainAlert.text}</span>` : `Lluvia ${f1(rAvg)}<span class="small dim">&nbsp;máx</span>&nbsp;${f1(rMax)}<span class="small" style="text-transform:none">&nbsp;mm/h</span>`
+        : rainAlert.kind === "start" ? `<span class="yellow" title="Previsión de tu meteorólogo">${rainAlert.text}</span>` : w.cloud > 0.6 ? "Cubierto" : w.cloud > 0.3 ? "Nubes" : "Sol"}</span>
       <span class="tab">Agua</span><span class="bar"><span class="wxsec grow">${sw.map((x) => `<div title="${x.toFixed(2)} mm" style="background:${x > 0.05 ? `rgba(58,139,232,${Math.min(1, 0.35 + x)})` : "#26282d"}"></div>`).join("")}</span><span class="mono small">${Math.max(...sw).toFixed(2)}</span></span>`;
     // última vuelta de tu piloto (libres/clasificación): [P][NOMBRE][TIEMPO][+DIF]
     const lb = $("#lapban");
@@ -532,14 +867,28 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     const ph = c.run?.phase;
     return ph === "out" ? "V. de salida" : ph === "push" ? "V. lanzada" : ph === "cool" ? "Enfriando" : ph === "in" ? "Entrando" : ph === "long" ? `Tanda ${c.run!.done}/${c.run!.pushLaps}` : PUSH_NAMES[c.push];
   }
+  /** Color de la temperatura del neumático frente a su ventana: azul frío, verde bien, amarillo al borde, rojo caliente. */
+  const tyreTempCol = (comp: Compound, v: number) => { const sp = COMPOUNDS[comp]; const d = v - sp.opt; return Math.abs(d) < sp.window * 0.5 ? "#33e05f" : d < -sp.window ? "#3a8be8" : d > sp.window ? "#ff5a50" : "#ffd84a"; };
+  /**
+   * Coche visto desde arriba (morro a la derecha) con sus cuatro ruedas: el color es la temperatura
+   * frente a la ventana del compuesto y el relleno, la banda de rodadura que queda. La simulación
+   * lleva delanteros y traseros por eje, así que las dos de cada eje van iguales.
+   */
+  function tyreCar(t: TyreSet) {
+    const wheel = (x: number, y: number, w: number, a: TyreSet["F"]) => {
+      const col = tyreTempCol(t.c, a.tBulk), left = Math.max(0, Math.min(1, 1 - a.wear));
+      return `<rect x="${x}" y="${y}" width="${w}" height="5" rx="1" fill="#111" stroke="${col}" stroke-width="1"/><rect x="${x + 1}" y="${y + 1}" width="${((w - 2) * left).toFixed(1)}" height="3" fill="${col}"/>`;
+    };
+    const tip = `Delanteros ${t.F.tBulk.toFixed(0)}° · ${Math.round((1 - t.F.wear) * 100)} % de banda — Traseros ${t.R.tBulk.toFixed(0)}° · ${Math.round((1 - t.R.wear) * 100)} %`;
+    return `<svg class="tcar" viewBox="0 0 42 16" role="img" aria-label="${tip}"><title>${tip}</title><path d="M8 6.2h20l10 1.3v1l-10 1.3H8z" fill="#5b6070"/><rect x="2" y="5" width="4" height="6" rx="1" fill="#5b6070"/>${wheel(5, 0, 9, t.R)}${wheel(5, 11, 9, t.R)}${wheel(27, 0, 8, t.F)}${wheel(27, 11, 8, t.F)}</svg>`;
+  }
   function statsHtml(c: Car) {
     const t = c.tyres;
-    const tc = (v: number) => { if (!t) return ""; const sp = COMPOUNDS[t.c]; const d = v - sp.opt; return Math.abs(d) < sp.window * 0.5 ? "green" : d < -sp.window ? "" : d > sp.window ? "redt" : "yellow"; };
     const cell = (k: string, v: string, cls = "") => `<div class="cl ${cls}"><i>${k}</i><b>${v}</b></div>`;
     const lap1 = (x: number | undefined) => (x && isFinite(x) ? `${Math.floor(x / 60)}:${(x % 60).toFixed(1).padStart(4, "0")}` : "—");
     const lt = c.lapTimes[c.lapTimes.length - 1];
     const ltCls = !lt ? "dim" : !race && !c.lastLapValid ? "dim" : lt <= sess.bestLap + 1e-6 ? "purple" : lt <= c.best + 1e-6 ? "green" : "";
-    const temps = t ? `<span class="${tc(t.F.tBulk)}">${t.F.tBulk.toFixed(0)}</span>/<span class="${tc(t.R.tBulk)}">${t.R.tBulk.toFixed(0)}</span>` : "—";
+    const temps = t ? tyreCar(t) : "—";
     if (race) {
       const ord = sess.order();
       const pos = ord.indexOf(c) + 1;
@@ -550,13 +899,13 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       const d = c.fuel / sess.fuelPerLap - (sess.laps - sess.lapsDone(c));
       return cell(`▲${ahead ? ahead.d.abrev : ""}`, f(ga), "gold") + cell(`▼${behind ? behind.d.abrev : ""}`, f(gb), "gold")
         + cell("Últ", lap1(lt), ltCls) + cell("Mej", lap1(c.best))
-        + cell("°C", temps) + cell("⛽", `${d >= 0 ? "+" : ""}${d.toFixed(1)}v`, d < 0 ? "redt" : d < 0.4 ? "yellow" : "");
+        + cell("Neu", temps, "tc") + cell("⛽", `${d >= 0 ? "+" : ""}${d.toFixed(1)}v`, d < 0 ? "redt" : d < 0.4 ? "yellow" : "");
     }
     const best = quali ? c.bestByPart[c.eliminated ? c.elimPart! : sess.part] : c.best;
     const secs = [0, 1, 2].map((j) => { const cur = !isNaN(c.secCur[j]); const v = cur ? c.secCur[j] : c.secLast[j]; return `<span class="${tcls(v, c.secBest[j], sess.secBest[j])}" style="${cur ? "" : "opacity:.6"}">●</span>`; }).join("");
     return cell("Mej", best && isFinite(best) ? fmtLap(best) : "—", "gold") + cell("Últ", lap1(lt), ltCls)
       + cell("Sect", secs) + cell("V", String(c.sessionLaps))
-      + cell("°C", temps) + cell("⛽", `${c.fuel.toFixed(0)} kg`);
+      + cell("Neu", temps, "tc") + cell("⛽", `${c.fuel.toFixed(0)} kg`);
   }
   function renderDrivers() {
     const ord = sess.order();
@@ -1128,7 +1477,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       <h2>La sesión se para sola con…</h2>
       ${items.map(([k, n, d]) => `<label class="optrow"><input type="checkbox" data-p="${k}" ${prefs.pausas[k] ? "checked" : ""}><span><b>${n}</b><br><span class="small dim">${d}</span></span></label>`).join("")}
       <div class="row" style="gap:4px;margin:8px 0"><button id="pall" class="grow">Todas</button><button id="pnone" class="grow">Ninguna</button></div>
-      <div class="small dim">Un aviso que para la sesión se reanuda tocándolo o con cualquier velocidad. La velocidad que elijas se recuerda para la próxima sesión.<br>Teclado: espacio pausa, 1-4 velocidad, P pilotos, M muro, R radar, D radio, T columna de la torre, Esc cierra.</div>
+      <div class="small dim">Un aviso que para la sesión se reanuda tocándolo o con cualquier velocidad. La velocidad que elijas se recuerda para la próxima sesión.<br>Teclado: espacio pausa, 1-6 velocidad, P pilotos, M muro, R radar, D radio, T columna de la torre, Esc cierra.</div>
       <button data-close style="width:100%;margin-top:8px">Cerrar</button>`, (el) => {
       const boxes = el.querySelectorAll<HTMLInputElement>("[data-p]");
       boxes.forEach((b) => (b.onchange = () => { prefs.pausas[b.dataset.p as keyof PausePrefs] = b.checked; savePrefs(prefs); }));
@@ -1319,10 +1668,11 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       if (!race && !skipping) idleCheck();
       // en pausa no cambia casi nada: se redibuja 4 veces por segundo en vez de 60 (batería)
       const busy = !paused;
-      if (!skipping && (busy || now - lastDraw > 250)) { lastDraw = now; drawMap(); drawGauges(); renderFly(); }
+      if (!skipping && (busy || now - lastDraw > 250)) { lastDraw = now; drawMap(); drawStrip(); drawGauges(); renderFly(); }
       if (now - lastUi > (busy ? 250 : 500) && !skipping) {
         lastUi = now;
-        renderTower(); renderTop(); renderMessages();
+        updateGhosts(); updateRainAlert();
+        renderTower(); renderTop(); renderMessages(); renderSel();
         if (!sheetOpen) renderDrivers();
       }
     } catch (err) {
