@@ -126,3 +126,22 @@ export function skyIcon(cloud: number, rain: number, clock: number): string {
   if (cloud > 0.3) return `<svg viewBox="0 0 22 15">${sun}${cl(5, 3, 0.8, "#e6e8eb")}</svg>`;
   return `<svg viewBox="0 0 22 15">${sun}</svg>`;
 }
+
+/**
+ * Icono de la previsión según la probabilidad de lluvia (0..1) y la hora: sol (o luna) si apenas
+ * hay riesgo, sol con nubes, nublado y, solo a partir del 60 %, nube con lluvia.
+ */
+export function forecastIcon(prob: number, clock: number): string {
+  const svg = prob < 0.15 ? clearIcon(clock) : prob < 0.35 ? skyIcon(0.45, 0, clock) : prob < 0.6 ? skyIcon(0.7, 0, clock) : skyIcon(0.8, prob >= 0.85 ? 2 : 0.5, clock);
+  return `<span class="fcico">${svg}</span>`;
+}
+
+/** Cielo despejado: sol con rayos, centrado (o luna de noche). */
+function clearIcon(clock: number): string {
+  if (lightAt(clock) === "noche") return `<svg viewBox="0 0 22 15"><path d="M12.6 2.2a5.6 5.6 0 1 0 4.3 8.9 4.6 4.6 0 1 1-4.3-8.9z" fill="#e8e8ef"/></svg>`;
+  const rays = Array.from({ length: 8 }, (_, i) => {
+    const a = (i * Math.PI) / 4, c = Math.cos(a), sn = Math.sin(a);
+    return `<path d="M${(11 + c * 4.9).toFixed(1)} ${(7.5 + sn * 4.9).toFixed(1)}L${(11 + c * 6.6).toFixed(1)} ${(7.5 + sn * 6.6).toFixed(1)}" stroke="#ffd84a" stroke-width="1.4" stroke-linecap="round"/>`;
+  }).join("");
+  return `<svg viewBox="0 0 22 15">${rays}<circle cx="11" cy="7.5" r="3.6" fill="#ffd84a"/></svg>`;
+}

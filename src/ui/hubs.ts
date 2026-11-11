@@ -6,7 +6,7 @@ import { SeasonState, RoundResult, RaceSummary, driverStandings, teamStandings, 
 import { Weekend, WeekendState, newWeekend, preparePu, DAY_NAMES } from "../sim/weekend";
 import { puPenalty } from "../sim/powerunit";
 import { startAttract } from "./attract";
-import { saveFile, helmetSvg, circuitSvg, skyGradient, lightAt, reducedMotion, skyIcon } from "./visual";
+import { saveFile, helmetSvg, circuitSvg, skyGradient, lightAt, reducedMotion, forecastIcon } from "./visual";
 import { SESSION_NAMES, SessionKind, ResultRow, isRaceKind, isQualiKind, Car, Session, LongRun, TeamDef, DriverDef } from "../sim/session";
 import { COMPOUNDS, DRY, ALL, setWear, Compound, TyreSet } from "../sim/tyres";
 import { stintProfile } from "../sim/strategy";
@@ -434,7 +434,7 @@ export function weekendScreen(nav: Nav, s: SeasonState, pending: SessionSnapshot
       <canvas id="mini"></canvas>
       <div class="gpt"><h1>${esc(def.gp)}</h1>
       <div>${esc(def.nombre)} · ${(track.length / 1000).toFixed(3)} km · ${def.vueltas} vueltas${def.formato === "sprint" ? ` · <span class="yellow">sprint (${def.vueltasSprint} v)</span>` : ""} · ${fmtDate(def.fecha)}</div></div>
-      ${next ? `<div class="gpnext">${skyIcon(heroGloom > 0.5 ? 0.8 : 0.2, heroGloom > 0.6 ? 2 : 0, heroClock)}<span><b>${DAY_NAMES[wk.when(next).day]} ${String(Math.floor(heroClock / 60)).padStart(2, "0")}:${String(heroClock % 60).padStart(2, "0")}</b> · ${SESSION_NAMES[next]}</span></div>` : ""}
+      ${next ? `<div class="gpnext">${forecastIcon(outlook.find((o) => o.kind === next)?.rain ?? 0, heroClock)}<span><b>${DAY_NAMES[wk.when(next).day]} ${String(Math.floor(heroClock / 60)).padStart(2, "0")}:${String(heroClock % 60).padStart(2, "0")}</b> · ${SESSION_NAMES[next]}</span></div>` : ""}
       <div class="tline">${sessions.map((k, i) => {
         const res = st.results[k];
         const best = res ? res.map((r, j) => ({ r, j })).filter(({ r }) => DRIVERS[r.id].team.id === s.playerTeam).map(({ j }) => j + 1).sort((a, b) => a - b)[0] : undefined;
@@ -453,7 +453,7 @@ export function weekendScreen(nav: Nav, s: SeasonState, pending: SessionSnapshot
         const myRes = res ? res.map((r, k) => ({ r, k })).filter(({ r }) => DRIVERS[r.id].team.id === s.playerTeam).map(({ r, k }) => `${DRIVERS[r.id].d.abrev} P${k + 1}`).join(" · ") : "";
         return `<div class="list-item${isNext ? " next" : ""}">
           <div style="width:62px" class="small dim up">${DAY_NAMES[w.day].slice(0, 3)} ${String(Math.floor(w.clock / 60)).padStart(2, "0")}:${String(w.clock % 60).padStart(2, "0")}</div>
-          <div class="grow"><b class="up">${SESSION_NAMES[kind]}</b><br><span class="small dim">${res ? `🏁 ${esc(DRIVERS[top!.id].d.abrev)} ${isRaceKind(kind) ? "" : fmtLap(top!.best)} · <span class="yellow">${myRes}</span>` : ol ? `🌧️ ${Math.round(ol.rain * 100)} % · ${ol.air[0].toFixed(0)}–${ol.air[1].toFixed(0)} °C · asfalto ~${ol.track.toFixed(0)} °C` : ""}</span></div>
+          <div class="grow"><b class="up">${SESSION_NAMES[kind]}</b><br><span class="small dim">${res ? `🏁 ${esc(DRIVERS[top!.id].d.abrev)} ${isRaceKind(kind) ? "" : fmtLap(top!.best)} · <span class="yellow">${myRes}</span>` : ol ? `${forecastIcon(ol.rain, w.clock)}lluvia ${Math.round(ol.rain * 100)} % · ${ol.air[0].toFixed(0)}–${ol.air[1].toFixed(0)} °C · asfalto ~${ol.track.toFixed(0)} °C` : ""}</span></div>
           ${res ? `<button data-res="${kind}">Ver</button>` : isNext ? (pending ? `<button class="red" id="resume">Reanudar</button>` : `<button id="sim" title="El equipo lleva a tus pilotos y se calcula la sesión entera">Simular</button><button class="red" id="play">Empezar</button>`) : ""}
         </div>`;
       }).join("")}
