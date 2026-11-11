@@ -554,3 +554,43 @@ canvas.gapstrip { display: block; width: 100%; height: 34px; flex: none; backgro
 /* tarjeta: coche visto desde arriba con temperatura (color) y banda que queda (relleno) */
 .dcard .cl.tc b { display: flex; justify-content: flex-end; align-items: center; }
 .dcard svg.tcar { height: 15px; width: auto; max-width: 100%; display: block; }
+
+/* ===================================================================================
+   EXPERIENCIA DE USO (2): barra de la sesión compacta, mapa sin hueco muerto, tarjetas
+   legibles sin velocímetro y partidas guardadas en el inicio
+   =================================================================================== */
+/* pausa · − velocidad + · ⏩ hasta lo siguiente: deja sitio al nombre de la sesión */
+.speed { gap: 3px; align-items: stretch; }
+.speed button { min-width: 38px; height: 38px; padding: 0 6px; display: flex; align-items: center; justify-content: center; }
+.speed .pm { min-width: 32px; font-size: 18px; padding: 0; }
+.speed .spv { min-width: 46px; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 900; background: var(--gl); color: var(--text, #fff); }
+.speed .pp.go { background: var(--gl-red); color: #fff; border-color: transparent; }
+.speed .ffb.on { background: var(--gl-gold); color: #000; border-color: transparent; }
+/* mensajes de tus pilotos: alto para dos avisos; el resto de la columna es para el mapa */
+.side .ticker { flex: 0 0 auto; height: 80px; }
+/* tarjetas: seis datos en dos filas, el rótulo encima y la cifra grande */
+.dcard .mid { height: auto; }
+.dcard .stats { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-rows: auto auto; }
+.dcard .cl { flex-direction: column; align-items: stretch; gap: 0; padding: 2px 5px 3px; }
+.dcard .cl i { font-size: 9.5px; letter-spacing: .03em; overflow: hidden; text-overflow: ellipsis; }
+.dcard .cl b { text-align: left; font-size: clamp(13px, 3.7vw, 15.5px); line-height: 1.15; }
+.dcard .cl.tc b { justify-content: flex-start; }
+.dcard svg.tcar { height: 17px; }
+/* inicio: partidas guardadas y las dos formas de empezar */
+.slotrow { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-bottom: 1px solid var(--line, #2c3440); }
+.slotrow.on { background: rgba(225, 6, 0, .12); }
+.slotrow.empty { opacity: .7; }
+.slotrow .slotn { flex: none; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 13px; background: var(--line, #2c3440); }
+.slotrow .teamdot { flex: none; width: 5px; margin: 0; }
+.slotrow button { flex: none; min-height: 38px; padding: 0 12px; }
+.slotrow button[data-more] { padding: 0 10px; font-size: 16px; }
+.newcards { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.newcard { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 14px 12px; text-align: left; text-transform: none; letter-spacing: 0; min-height: 132px; }
+.newcard b { font-size: 16px; font-weight: 900; text-transform: uppercase; letter-spacing: .04em; }
+.newcard span { font-size: 12px; font-weight: 600; color: var(--dim); line-height: 1.35; }
+#real.newcard { box-shadow: inset 0 3px 0 var(--red1); }
+#build.newcard { box-shadow: inset 0 3px 0 var(--gold1); }
+/* fin de semana: «¿Y ahora qué?» */
+.tip { position: relative; padding: 4px 0 4px 14px; line-height: 1.4; }
+.tip::before { content: "›"; position: absolute; left: 2px; top: 3px; color: var(--gold1); font-weight: 900; }
+.tip + .tip { border-top: 1px solid var(--line, #2c3440); }

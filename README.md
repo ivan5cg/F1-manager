@@ -50,6 +50,9 @@ En la realidad, en 2026 el GP de Baréin no se corrió en Sakhir: se trasladó a
 - **Formato sprint:** Libres 1, Clasificación sprint (SQ1 12', SQ2 10', SQ3 8'; medios en SQ1 y SQ2, blandos en SQ3), Sprint (21 vueltas en Singapur y 24 en Interlagos), Clasificación y Carrera.
 - **Puntos:** 25-18-15-12-10-8-6-4-2-1 en carrera; 8-7-6-5-4-3-2-1 en la sprint. Mundial de pilotos y de constructores.
 - La partida se guarda sola al terminar cada sesión y también a mitad de una: cada pocos segundos y al salir de la app. Si se cierra el navegador o entra una llamada, al volver la sesión sigue exactamente donde estaba.
+- Hay **3 partidas** (en el inicio: seguir, exportar o borrar cada una). Todo se guarda en el navegador del dispositivo, sin cuenta ni servidor: para hacer una copia de seguridad o seguir en otro dispositivo, «Exportar a un archivo» y luego «Importar partida» allí.
+- En la sesión, **⏩ hasta lo siguiente** avanza a toda velocidad y se para en cuanto pasa algo de tus pilotos (sale o vuelve al garaje, marca tiempo, entra a boxes, un aviso del ingeniero o del estratega) o de dirección de carrera. Teclas: espacio pausa, 1-6 o −/+ velocidad, F hasta lo siguiente.
+- En el fin de semana, **¿Y ahora qué?** resume lo siguiente que conviene hacer: compuestos que tus ingenieros aún no han medido, blandos nuevos que quedan, previsión de lluvia, parrilla y sanciones.
 
 ## Qué decides
 

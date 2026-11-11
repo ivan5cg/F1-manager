@@ -4,9 +4,9 @@ import "./style.css";
 document.documentElement.dataset.tema = "grafito";
 import { TEAMS, CIRCUITS, ROUNDS, DRIVERS, getTrack, useSeason } from "./data";
 import { builderScreen, PLAYER_TEAM_ID } from "./teamBuilder";
-import { loadSeason, saveSeason, clearSeason, loadSession, clearSession, isParked } from "./store";
+import { loadSeason, saveSeason, loadSession, clearSession, isParked, setActiveSlot, deleteSlot } from "./store";
 import type { SessionSnapshot } from "../sim/snapshot";
-import { startScreen, seasonScreen, weekendScreen, resultsScreen, longRunsPanel, Nav } from "./hubs";
+import { startScreen, seasonScreen, weekendScreen, resultsScreen, longRunsPanel, teamPickerScreen, Nav } from "./hubs";
 import { sessionView } from "./sessionView";
 import { SeasonState, driverStandings, teamStandings } from "../sim/season";
 import { Weekend } from "../sim/weekend";
@@ -63,23 +63,46 @@ function finishSession(wk: Weekend, kind: SessionKind, sess: Session) {
   window.scrollTo(0, 0);
 }
 
+/** Deja activa una partida y carga su temporada (y su parrilla). */
+function activate(slot: number) {
+  setActiveSlot(slot);
+  season = loadSeason();
+  useSeason(season);
+}
+
+/** Entra en la partida activa: la sesión a medias si la hay, si no la temporada (o el inicio). */
+function enter() {
+  // si se cerró la app a mitad de una sesión, se retoma donde estaba
+  // (salvo que el jugador saliera de ella a propósito: entonces espera en el fin de semana)
+  const pending = pendingSnap();
+  if (pending && !isParked()) nav.session(pending.kind, pending);
+  else if (pending) nav.weekend();
+  else {
+    if (loadSession()) clearSession();
+    if (season) nav.season(); else nav.home();
+  }
+}
+
+/** Temporada nueva en una partida: lo que hubiera en ella se borra. */
+function newSeason(slot: number, s: SeasonState) {
+  deleteSlot(slot);
+  setActiveSlot(slot);
+  season = s;
+  saveSeason(s);
+  useSeason(s);
+  nav.season();
+}
+
 const nav: Nav = {
-  home() { startScreen(nav, season, (team) => {
-    season = { v: 1, playerTeam: team, seed: Math.floor(Math.random() * 1e6), round: 0, weekend: null, rounds: [], calendar: [...ROUNDS] };
-    clearSession();
-    saveSeason(season);
-    useSeason(season);
-    nav.season();
-  }); window.scrollTo(0, 0); },
-  build() {
+  home() { startScreen(nav); window.scrollTo(0, 0); },
+  open(slot: number) { activate(slot); enter(); },
+  pickTeam(slot: number) { teamPickerScreen(nav, slot); },
+  startReal(slot: number, team: string) {
+    newSeason(slot, { v: 1, playerTeam: team, seed: Math.floor(Math.random() * 1e6), round: 0, weekend: null, rounds: [], calendar: [...ROUNDS] });
+  },
+  build(slot: number) {
     builderScreen(() => nav.home(), (spec) => {
-      if (season && !confirm("¿Borrar la temporada guardada y empezar con tu equipo?")) return;
-      clearSeason();
-      season = { v: 1, playerTeam: PLAYER_TEAM_ID, seed: Math.floor(Math.random() * 1e6), round: 0, weekend: null, rounds: [], calendar: [...ROUNDS], equipo: spec };
-      clearSession();
-      saveSeason(season);
-      useSeason(season);
-      nav.season();
+      newSeason(slot, { v: 1, playerTeam: PLAYER_TEAM_ID, seed: Math.floor(Math.random() * 1e6), round: 0, weekend: null, rounds: [], calendar: [...ROUNDS], equipo: spec });
     });
     window.scrollTo(0, 0);
   },
@@ -116,12 +139,4 @@ const nav: Nav = {
 
 declare const __BUILD__: string;
 if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register(`sw.js?v=${__BUILD__}`).catch(() => {});
-// si se cerró la app a mitad de una sesión, se retoma donde estaba
-// (salvo que el jugador saliera de ella a propósito: entonces espera en el fin de semana)
-const pending = pendingSnap();
-if (pending && !isParked()) nav.session(pending.kind, pending);
-else if (pending) nav.weekend();
-else {
-  if (loadSession()) clearSession();
-  if (season) nav.season(); else nav.home();
-}
+enter();
