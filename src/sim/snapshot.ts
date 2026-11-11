@@ -24,8 +24,8 @@ const rngState = (r: Rng) => (r as unknown as { s: number }).s;
 const setRngState = (r: Rng, s: number) => { (r as unknown as { s: number }).s = s; };
 
 /** JSON que conserva Infinity y NaN (JSON normal los convierte en null). */
-const replacer = (_k: string, v: unknown) => (typeof v === "number" && !Number.isFinite(v) ? (Number.isNaN(v) ? "__NaN" : v > 0 ? "__Inf" : "__-Inf") : v);
-const reviver = (_k: string, v: unknown) => (v === "__NaN" ? NaN : v === "__Inf" ? Infinity : v === "__-Inf" ? -Infinity : v);
+export const replacer = (_k: string, v: unknown) => (typeof v === "number" && !Number.isFinite(v) ? (Number.isNaN(v) ? "__NaN" : v > 0 ? "__Inf" : "__-Inf") : v);
+export const reviver = (_k: string, v: unknown) => (v === "__NaN" ? NaN : v === "__Inf" ? Infinity : v === "__-Inf" ? -Infinity : v);
 
 // el historial del radar solo se dibuja: se guarda compacto (redondeado y sin lo que cae fuera de la vista)
 const CELL_KEYS = ["x", "y", "vx", "vy", "sigma", "ax", "ang", "peak", "age", "life", "seed"] as const;
@@ -43,10 +43,14 @@ function carOut(c: Car, N: number) {
   for (const [k, v] of Object.entries(c)) if (!SKIP_CAR.has(k)) o[k] = v;
   o.tyresId = c.tyres?.id ?? null;
   o.used = [...c.usedCompounds];
-  // de los pasos por minisector solo hacen falta las últimas vueltas (huecos e intervalos)
+  // de los pasos por minisector solo hacen falta enteros los de las últimas vueltas (huecos e
+  // intervalos); de las anteriores, el paso por meta, que usan la gráfica de huecos del muro y la
+  // clasificación de una carrera suspendida
   const from = Math.max(0, c.cross.length - N * CROSS_KEEP_LAPS);
+  const r3 = (x: number | undefined) => (x === undefined ? null : Math.round(x * 1000) / 1000);
   o.crossFrom = from;
-  o.crossArr = c.cross.slice(from).map((x) => (x === undefined ? null : Math.round(x * 1000) / 1000));
+  o.crossArr = c.cross.slice(from).map(r3);
+  o.crossLines = Array.from({ length: Math.ceil(from / N) }, (_, L) => r3(c.cross[L * N]));
   return o;
 }
 
@@ -95,13 +99,15 @@ export function applySnapshot(sess: Session, snap: SessionSnapshot) {
   for (const o of s.cars as Record<string, unknown>[]) {
     const c = sess.carById(o.id as number);
     for (const [k, v] of Object.entries(o)) {
-      if (k === "tyresId" || k === "used" || k === "crossFrom" || k === "crossArr") continue;
+      if (k === "tyresId" || k === "used" || k === "crossFrom" || k === "crossArr" || k === "crossLines") continue;
       (c as unknown as Record<string, unknown>)[k] = v;
     }
     c.tyres = o.tyresId ? c.e.sets.find((x) => x.id === o.tyresId) ?? null : null;
     c.usedCompounds = new Set(o.used as Compound[]);
     const cross: number[] = [];
     cross.length = o.crossFrom as number;
+    // instantáneas antiguas: sin pasos por meta de las vueltas viejas
+    ((o.crossLines as (number | null)[] | undefined) ?? []).forEach((x, L) => { if (x !== null && L * sess.N < cross.length) cross[L * sess.N] = x; });
     for (const x of o.crossArr as (number | null)[]) cross.push(x === null ? (undefined as unknown as number) : x);
     c.cross = cross;
   }

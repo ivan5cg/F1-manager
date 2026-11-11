@@ -18,7 +18,7 @@ const clean = (t: string) => t.replace(/^[\p{Extended_Pictographic}\u{1F1E6}-\u{
 export function buildSummary(sess: Session): RaceSummary {
   const res = sess.results();
   const keyEv = sess.events.filter((e) =>
-    (e.kind === "control" && /COCHE DE SEGURIDAD —|VIRTUAL —|BANDERA ROJA —|tiempo máximo|no se reanudará/.test(e.text)) ||
+    (e.kind === "control" && /COCHE DE SEGURIDAD —|VIRTUAL —|BANDERA ROJA —|tiempo máximo|no se reanudará|descalificado/.test(e.text)) ||
     (e.kind === "incident" && /abandona/.test(e.text)) ||
     (e.kind === "pit" && /entra a boxes/.test(e.text) && e.carId !== undefined && sess.carById(e.carId).player));
   const fl = sess.cars.filter((c) => Number.isFinite(c.best)).sort((a, b) => a.best - b.best)[0];

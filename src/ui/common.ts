@@ -1,10 +1,11 @@
 import { COMPOUNDS, Compound, TyreSet, setWear } from "../sim/tyres";
+import { fmtMinSec } from "../sim/session";
 
 export const $ = <T extends HTMLElement = HTMLElement>(sel: string, root: ParentNode = document) => root.querySelector(sel) as T;
 export const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
-export const fmtLap = (t: number | null | undefined) => (t && isFinite(t) && t > 0 ? `${Math.floor(t / 60)}:${(t % 60).toFixed(3).padStart(6, "0")}` : "—");
+export const fmtLap = (t: number | null | undefined) => (t && isFinite(t) && t > 0 ? fmtMinSec(t) : "—");
 export const fmtClock = (t: number) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}`;
-export const fmtRace = (t: number) => { const h = Math.floor(t / 3600); const m = Math.floor((t % 3600) / 60); const s = (t % 60).toFixed(3).padStart(6, "0"); return h ? `${h}:${String(m).padStart(2, "0")}:${s}` : `${m}:${s}`; };
+export const fmtRace = (t: number) => { const u = Math.round(t * 1000) / 1000; const h = Math.floor(u / 3600); const ms = fmtMinSec(u - h * 3600); return h ? `${h}:${ms.padStart(9, "0")}` : ms; };
 export const tyreHtml = (c: Compound, big = false) => `<span class="tyre${big ? " big" : ""}" style="border-color:${COMPOUNDS[c].color}">${c}</span>`;
 
 // ------------------------------------------------------------------ neumáticos

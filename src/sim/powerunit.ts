@@ -67,17 +67,29 @@ export function fitUnit(p: PuState, choice: number | "new") {
   if (p.cur >= p.units.length) p.cur = p.units.length - 1;
 }
 
+/** Kilómetros (ponderados por el modo de motor) que gasta un fin de semana completo: ~23 % de la vida. */
+export const PU_WEEKEND_KM = 650;
+/** Fuera del cupo, hasta dónde se estira una unidad antes de aceptar la sanción por estrenar otra. */
+const PU_STRETCH = 1.15;
+
 /**
  * Lo que monta el equipo al empezar el fin de semana (la IA, y la propuesta para los tuyos, que
- * puedes cambiar antes de Libres 1): sigue con la que lleva mientras aguante; si está gastada,
- * otra usada en buen estado; si no hay, una nueva dentro del cupo; fuera del cupo, solo si está
- * rota o pasada de vida.
+ * puedes cambiar antes de Libres 1). Se mira la vida que le quedará al ACABAR el fin de semana,
+ * no la de ahora (antes una unidad al 81 % seguía y terminaba al 105 %):
+ * 1. sigue con la que lleva si llega al final sin pasarse de su vida;
+ * 2. si no, otra usada que sí llegue;
+ * 3. si no, una nueva mientras quede cupo;
+ * 4. sin cupo: la menos gastada si no se pasa demasiado; si ninguna aguanta (o está rota), una
+ *    nueva aunque cueste la sanción.
  */
-export function autoFit(p: PuState) {
+export function autoFit(p: PuState, weekendKm = PU_WEEKEND_KM) {
+  const w = weekendKm / PU_LIFE_KM;
   const cur = p.units[p.cur];
-  const u = puLife(cur.km);
-  if (!cur.broken && u < 0.82) return;
-  const spare = bestSpare(p, 0.7);
+  if (!cur.broken && puLife(cur.km) + w <= 1) return;
+  const spare = bestSpare(p, 1 - w);
   if (spare >= 0 && spare !== p.cur) { fitUnit(p, spare); return; }
-  if (p.units.length < PU_QUOTA || cur.broken || u > 1.0) fitUnit(p, "new");
+  if (p.units.length < PU_QUOTA) { fitUnit(p, "new"); return; }
+  const least = bestSpare(p, PU_STRETCH - w);
+  if (least >= 0) { if (least !== p.cur) fitUnit(p, least); return; }
+  fitUnit(p, "new");
 }

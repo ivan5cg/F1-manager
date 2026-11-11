@@ -8,7 +8,7 @@ import { Track, Minisector, msTimeAtGrip, MIN_MASS, REF_CAR } from "./track";
 import { Compound, COMPOUNDS, DRY, HiddenTyre, TyreSet, setGrip, updateSet, axleGrip, warmBlankets, setWear, bestWaterGrip, WET } from "./tyres";
 import { WeatherState, stepWeather, rainAt, evaporation, waterStep, windNow } from "./weather";
 import { PU_WEAR, puLife, puPowerLoss, puHazard } from "./powerunit";
-import { Plan, planStrategy, aiDecide, aiErs, TeamKnowledge, practiceProgram, qualiTick, pickSet, learnFromRun, aiRedFlagTyres, practiceWeather, wrongTyresForWater, teamForecast } from "./strategy";
+import { Plan, planStrategy, aiDecide, aiErs, TeamKnowledge, practiceProgram, qualiTick, pickSet, learnFromRun, aiRedFlagTyres, practiceWeather, wrongTyresForWater, teamForecast, ruleSatisfied } from "./strategy";
 
 export const PUSH_NAMES = ["Conservar", "Gestionar", "Normal", "Atacar", "Al límite"];
 export const ENGINE_NAMES = ["Ahorro", "Normal", "Potencia"];
@@ -226,7 +226,7 @@ export interface ResultRow {
   best: number;
   time: number; // carreras: tiempo total
   laps: number;
-  status: "fin" | "out" | "dns" | "ok";
+  status: "fin" | "out" | "dns" | "dsq" | "ok";
   reason?: string;
   stops: number;
   part?: string; // clasificación: en qué parte quedó
@@ -356,7 +356,9 @@ export class Session {
   carById(id: number) { return this.cars.find((c) => c.id === id)!; }
 
   log(e: Omit<RaceEvent, "t" | "lap">) {
-    const ev = { ...e, t: this.t, lap: Math.max(1, this.leaderLap + 1) };
+    // en carrera, tras la bandera a cuadros, los mensajes son de la última vuelta (no de una más)
+    const lap = Math.max(1, this.leaderLap + 1);
+    const ev = { ...e, t: this.t, lap: isRaceKind(this.kind) ? Math.min(this.laps, lap) : lap };
     this.events.push(ev);
     this.onEvent?.(ev);
   }
@@ -576,6 +578,10 @@ export class Session {
 
     if (isRaceKind(this.kind) && this.cars.every((c) => c.loc === "fin" || c.loc === "out")) {
       this.finished = true;
+      for (const id of this.ruleBreakers()) {
+        const c = this.carById(id);
+        this.log({ kind: "control", carId: c.id, text: `⛔ ${c.d.abrev} descalificado: no ha usado dos compuestos de seco`, important: true });
+      }
       this.log({ kind: "control", text: `🏁 ${SESSION_NAMES[this.kind]} terminada`, important: true, pause: true });
     }
   }
@@ -1053,6 +1059,9 @@ export class Session {
     if (t.F.blister > 0.25 || t.R.blister > 0.25) this.log({ kind: "radio", carId: c.id, text: `📻 Ingeniero: ampollas en los ${t.F.blister > t.R.blister ? "delanteros" : "traseros"} de ${c.d.abrev}.`, important: true });
     const lapsLeft = this.laps - lap;
     const fuelLaps = c.fuel / this.fuelPerLap;
+    // regla de los dos compuestos: se avisa a tiempo de parar (y otra vez al final)
+    if (this.kind === "RACE" && !this.autoPlayers && (lapsLeft === 12 || lapsLeft === 4) && !ruleSatisfied(c))
+      this.log({ kind: "radio", carId: c.id, text: `📻 Ingeniero: ${c.d.abrev} aún no ha usado un segundo compuesto de seco. Si no para a montar otro, le descalifican.`, important: true, pause: true });
     if (lapsLeft > 3 && fuelLaps < lapsLeft - 0.3 && lap % 3 === 0) this.log({ kind: "radio", carId: c.id, text: `📻 Ingeniero: ${c.d.abrev} va ${(lapsLeft - fuelLaps).toFixed(1)} vueltas corto de combustible. Hay que ahorrar.`, important: true });
   }
 
@@ -1576,11 +1585,30 @@ export class Session {
     if (mate) front.letPass = mate.id;
   }
 
+  /**
+   * Carrera (no la sprint) terminada en seco sin usar dos compuestos distintos: descalificados.
+   * Si ha montado intermedios o de lluvia no hace falta; y no se aplica a una carrera suspendida
+   * y no reanudada.
+   */
+  ruleBreakers(): Set<number> {
+    const out = new Set<number>();
+    if (this.kind !== "RACE" || this.shortened) return out;
+    for (const c of this.cars) if (c.loc === "fin" && !ruleSatisfied(c)) out.add(c.id);
+    return out;
+  }
+
   /** Resultado final de la sesión. */
   results(): ResultRow[] {
     const sh = this.shortened;
-    const ord = sh ? [...sh.order.map((id) => this.carById(id)), ...this.cars.filter((c) => !sh.order.includes(c.id))] : this.order();
-    return ord.map((c, i) => ({
+    let ord = sh ? [...sh.order.map((id) => this.carById(id)), ...this.cars.filter((c) => !sh.order.includes(c.id))] : this.order();
+    const dsq = this.ruleBreakers();
+    // los descalificados, al final de la clasificación
+    if (dsq.size) ord = [...ord.filter((c) => !dsq.has(c.id)), ...ord.filter((c) => dsq.has(c.id))];
+    return ord.map((c, i) => dsq.has(c.id) ? {
+      id: c.id, pos: i + 1, best: c.best, time: c.finishT, laps: this.lapsDone(c), status: "dsq" as const,
+      reason: "descalificado (dos compuestos)", stops: c.stops,
+      grid: this.lapOrder[0]?.includes(c.id) ? this.lapOrder[0].indexOf(c.id) + 1 : undefined,
+    } : ({
       id: c.id,
       pos: i + 1,
       best: this.parts.length ? (c.bestByPart[c.eliminated ? c.elimPart! : this.part] ?? Infinity) : c.best,
@@ -1595,6 +1623,18 @@ export class Session {
   }
 }
 
+/**
+ * Minutos y segundos con `dec` decimales. Se redondea antes de separar los minutos: si no,
+ * 119,9996 s salía como «1:60.000» en vez de «2:00.000».
+ */
+export function fmtMinSec(t: number, dec = 3): string {
+  const k = 10 ** dec;
+  const u = Math.round(t * k);
+  const m = Math.floor(u / (60 * k));
+  const s = (u - m * 60 * k) / k;
+  return `${m}:${s.toFixed(dec).padStart(dec ? dec + 3 : 2, "0")}`;
+}
+
 export function fmt(t: number) {
-  return isFinite(t) && t > 0 ? `${Math.floor(t / 60)}:${(t % 60).toFixed(3).padStart(6, "0")}` : "—";
+  return isFinite(t) && t > 0 ? fmtMinSec(t) : "—";
 }

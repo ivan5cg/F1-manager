@@ -4,11 +4,11 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "npm run check",
     "dev": "vite --host",
     "build": "vite build",
-    "sim": "tsx scripts/carrera.ts",
-    "lote": "tsx scripts/lote.ts",
+    "finde": "tsx scripts/finde.ts",
+    "pista": "tsx scripts/pista.ts",
     "check": "tsc --noEmit -p ."
   },
   "keywords": [],

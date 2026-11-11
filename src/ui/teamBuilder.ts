@@ -1,5 +1,5 @@
 // Modo «crear equipo»: pantalla de fichajes, panel de tu equipo y panel de unidades de potencia.
-import { BASE_TEAMS, MARKET, getTrack } from "./data";
+import { BASE_TEAMS, MARKET, ROUNDS, getTrack } from "./data";
 import { $, esc, setBack } from "./common";
 import type { TeamDef } from "../sim/session";
 import type { SeasonState } from "../sim/season";
@@ -8,7 +8,7 @@ import {
   CustomTeam, MarketBoss, MarketDriver, MarketEngine, MarketTech, buildGrid, costOf, clauseOf, priceOf, publicDriver, trueDriver,
   trueBoss, trueTech, trueEngine, band, DRIVER_BAND_SD, devBudgetMult, NEW_TEAM, PLAYER_TEAM_ID, devMean,
 } from "../sim/market";
-import { PU_QUOTA, PU_PENALTY, PU_LIFE_KM, puLife, puPowerLoss, puRaceRisk, fitUnit, PuState } from "../sim/powerunit";
+import { PU_QUOTA, PU_PENALTY, PU_LIFE_KM, PU_WEEKEND_KM, puLife, puPowerLoss, puRaceRisk, fitUnit, PuState } from "../sim/powerunit";
 
 const app = () => document.getElementById("app")!;
 const M = MARKET;
@@ -26,6 +26,8 @@ function bar(label: string, lo: number, hi: number, min: number, max: number, tx
   return `<div class="bandrow"><span class="bl">${label}</span><span class="bandbar"><i style="left:${l}%;width:${w}%"></i></span><span class="bv mono">${txt}</span></div>`;
 }
 const rng2 = ([a, b]: [number, number], d = 0) => (fx(a, d) === fx(b, d) ? fx(a, d) : `${fx(a, d)}–${fx(b, d)}`);
+/** Rondas de evoluciones hasta la última carrera (la primera se corre con el coche de salida). */
+const DEV_ROUNDS = ROUNDS.length - 1;
 /** Lo que vale 1 punto de agarre en una vuelta de 90 s. */
 const SEC_PER_GRIP = 90 / 180;
 
@@ -44,7 +46,7 @@ function bossBars(j: MarketBoss, real?: MarketBoss, seen = 0): string {
 function techBars(t: MarketTech, real?: MarketTech, seen = 0, mult = 1): string {
   // coche: lo que le sacaría a la media de la parrilla (equipo nuevo incluido), en s por vuelta de 90 s
   const car = band(t.diseno + NEW_TEAM.agarre, (real?.diseno ?? t.diseno) + NEW_TEAM.agarre, 0.25 * t.inc, seen).map((x) => -x * SEC_PER_GRIP) as [number, number];
-  const dev = band(t.desarrollo * mult, (real?.desarrollo ?? t.desarrollo) * mult, t.desarrollo * 0.15 * t.inc * mult, seen).map((x) => -(x - devMean(M)) * SEC_PER_GRIP * 8) as [number, number];
+  const dev = band(t.desarrollo * mult, (real?.desarrollo ?? t.desarrollo) * mult, t.desarrollo * 0.15 * t.inc * mult, seen).map((x) => -(x - devMean(M)) * SEC_PER_GRIP * DEV_ROUNDS) as [number, number];
   const tyre = band(t.desgaste, real?.desgaste ?? t.desgaste, 0.01 * t.inc, seen).map((x) => (x - 1) * 100) as [number, number];
   const sg = (x: number) => (x > 0 ? "+" : x < 0 ? "−" : "") + fx(Math.abs(x), 1);
   const rs = ([a, b]: [number, number], u = "") => { const lo = Math.min(a, b), hi = Math.max(a, b); return `${sg(lo)}${u} a ${sg(hi)}${u}`; };
@@ -92,7 +94,7 @@ export function builderScreen(onCancel: () => void, onCreate: (spec: CustomTeam)
       list = M.jefes.slice().sort((a, b) => priceOf(b) - priceOf(a)).map((j) => item(j.nombre, spec.jefe === j.nombre, esc(j.nombre), `${j.equipo ? esc(teamName(j.equipo)) : "sin equipo"} ${incDots(j.inc)}${j.nota ? ` · <i>${esc(j.nota)}</i>` : ""}`, bossBars(j), priceHtml(j))).join("");
     } else if (tab === "tecnico") {
       list = M.tecnicos.slice().sort((a, b) => priceOf(b) - priceOf(a)).map((t) => item(t.nombre, spec.tecnico === t.nombre, esc(t.nombre), `${t.equipo ? esc(teamName(t.equipo)) : "sin equipo"} ${incDots(t.inc)}${t.nota ? ` · <i>${esc(t.nota)}</i>` : ""}`, techBars(t, undefined, 0, mult), priceHtml(t))).join("");
-      list = `<div class="small dim" style="padding:6px 10px">Coche: segundos por vuelta frente a la media de la parrilla con su diseño, ya contando que un equipo nuevo empieza con desventaja (− es más rápido). Desarrollo: lo que gana o pierde frente a la media en 8 carreras, con tu presupuesto de evoluciones. Desg. neum.: cuánto más (+) o menos (−) gasta los neumáticos.</div>` + list;
+      list = `<div class="small dim" style="padding:6px 10px">Coche: segundos por vuelta frente a la media de la parrilla con su diseño, ya contando que un equipo nuevo empieza con desventaja (− es más rápido). Desarrollo: lo que habrá ganado o perdido frente a la media al llegar a la última carrera (${DEV_ROUNDS} rondas de evoluciones), con tu presupuesto. Desg. neum.: cuánto más (+) o menos (−) gasta los neumáticos.</div>` + list;
     } else {
       list = `<div class="small dim" style="padding:6px 10px">Potencia: segundos por vuelta en Silverstone frente al motor medio (− es más rápido). Averías: multiplicador de la probabilidad de avería (×1 normal). Lo real del motor vale para todos sus clientes.</div>` + M.motores.map((e) => item(e.id, spec.motor === e.id, esc(e.nombre), `${BASE_TEAMS.filter((t) => t.motor === e.nombre).map((t) => esc(t.nombre)).join(", ")} ${incDots(e.inc)}`, engineBars(e), `<div class="price"><b class="mono">${fmtM(e.precio)}</b><span class="small dim">por temporada</span></div>`)).join("");
     }
@@ -209,7 +211,7 @@ export function puPanel(st: WeekendState, ids: number[], names: string[], team: 
   }).join("");
   return `<div class="panel"><div class="hd"><span class="t">Unidades de potencia</span></div><div class="bd">
     ${rows}
-    <div class="small dim">Vida nominal ~${fx(PU_LIFE_KM / 1000, 1)} mil km (un fin de semana gasta ~600; el modo de motor alto la gasta un 60 % más deprisa y el de ahorro un 25 % menos). Con el desgaste pierde potencia (s/v en este circuito, a mitad de fin de semana) y se rompe más. ${editable ? "El equipo propone la marcada; se puede cambiar hasta Libres 1." : "Ya está montada para este fin de semana."} Una unidad rota no se puede volver a usar.</div>
+    <div class="small dim">Vida nominal ~${fx(PU_LIFE_KM / 1000, 1)} mil km (un fin de semana gasta ~${PU_WEEKEND_KM}; el modo de motor alto la gasta un 60 % más deprisa y el de ahorro un 25 % menos). Con el desgaste pierde potencia (s/v en este circuito, a mitad de fin de semana) y se rompe más. ${editable ? "El equipo propone la marcada; se puede cambiar hasta Libres 1." : "Ya está montada para este fin de semana."} Una unidad rota no se puede volver a usar.</div>
   </div></div>`;
 }
 

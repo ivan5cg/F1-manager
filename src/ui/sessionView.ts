@@ -4,7 +4,7 @@ import { puLife } from "../sim/powerunit";
 import { knowledgeTable, longRunsPanel, weekendLongRuns, setPills } from "./hubs";
 import { runToEnd } from "./simulate";
 import { Weekend } from "../sim/weekend";
-import { Session, Car, RaceEvent, SESSION_NAMES, SessionKind, isRaceKind, isQualiKind, PUSH_NAMES, ENGINE_NAMES, ERS_NAMES, SOC_MAX } from "../sim/session";
+import { Session, Car, RaceEvent, SESSION_NAMES, SessionKind, isRaceKind, isQualiKind, PUSH_NAMES, ENGINE_NAMES, ERS_NAMES, SOC_MAX, fmtMinSec } from "../sim/session";
 import { COMPOUNDS, Compound, DRY, ALL, setWear, TyreSet, WET } from "../sim/tyres";
 import { rainAt, forecast, RadarFrame, windNow } from "../sim/weather";
 import { renderField, colorize, terrain, RADAR_STEPS, fmtHour } from "./radar";
@@ -885,7 +885,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   function statsHtml(c: Car) {
     const t = c.tyres;
     const cell = (k: string, v: string, cls = "") => `<div class="cl ${cls}"><i>${k}</i><b>${v}</b></div>`;
-    const lap1 = (x: number | undefined) => (x && isFinite(x) ? `${Math.floor(x / 60)}:${(x % 60).toFixed(1).padStart(4, "0")}` : "—");
+    const lap1 = (x: number | undefined) => (x && isFinite(x) ? fmtMinSec(x, 1) : "—");
     const lt = c.lapTimes[c.lapTimes.length - 1];
     const ltCls = !lt ? "dim" : !race && !c.lastLapValid ? "dim" : lt <= sess.bestLap + 1e-6 ? "purple" : lt <= c.best + 1e-6 ? "green" : "";
     const temps = t ? tyreCar(t) : "—";
@@ -1129,8 +1129,8 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   const bestOf = (c: Car) => (sess.parts.length ? c.bestByPart[sess.part] : c.best);
   const splitsOf = (c: Car) => (sess.parts.length ? c.bestSecsByPart[sess.part] : c.bestSecs) ?? [];
   const cum = (a: number[], j: number) => { let x = 0; for (let i = 0; i <= j; i++) x += a[i]; return x; };
-  const fmtRun = (t: number) => `${Math.floor(t / 60)}:${(t % 60).toFixed(1).padStart(4, "0")}`;
-  const fmtSplit = (t: number) => (t >= 60 ? `${Math.floor(t / 60)}:${(t % 60).toFixed(3).padStart(6, "0")}` : t.toFixed(3));
+  const fmtRun = (t: number) => fmtMinSec(t, 1);
+  const fmtSplit = (t: number) => (Math.round(t * 1000) >= 60000 ? fmtMinSec(t) : t.toFixed(3));
   function flyRef(c: Car): FlyRef {
     const ord = sess.timingOrder().filter((x) => !x.eliminated && Number.isFinite(bestOf(x) ?? Infinity));
     const others = ord.filter((x) => x !== c);

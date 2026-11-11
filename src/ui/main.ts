@@ -114,7 +114,8 @@ const nav: Nav = {
   },
 };
 
-if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register("sw.js").catch(() => {});
+declare const __BUILD__: string;
+if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register(`sw.js?v=${__BUILD__}`).catch(() => {});
 // si se cerró la app a mitad de una sesión, se retoma donde estaba
 // (salvo que el jugador saliera de ella a propósito: entonces espera en el fin de semana)
 const pending = pendingSnap();
