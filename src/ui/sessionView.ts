@@ -1953,7 +1953,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   // «atrás» (móvil o navegador) abre el menú de la sesión en vez de sacarte de la app
   setBack(() => menuSheet());
   if (prefs.mapa3d) void set3d(true, false);
-  let last = performance.now();
+  let last = performance.now(), last3d = last;
   const loop = (now: number) => {
     const real = Math.min(0.1, (now - last) / 1000);
     last = now;
@@ -1979,8 +1979,10 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       // en pausa no cambia casi nada: se redibuja 4 veces por segundo en vez de 60 (batería)
       const busy = !paused;
       const in3d = view3d && !!m3 && !wide;
-      if (in3d && !skipping) m3!.draw(real, now); // el 3D va en cada fotograma: la cámara se mueve aunque esté en pausa
-      if (!skipping && (busy || now - lastDraw > 250)) { lastDraw = now; if (!in3d) drawMap(); drawStrip(); renderFly(); }
+      // en pausa, el 3D se redibuja 4 veces por segundo como el 2D, salvo mientras la cámara cambia de sitio
+      const due = busy || now - lastDraw > 250;
+      if (in3d && !skipping && (due || m3!.moving())) { m3!.draw(Math.min(0.1, (now - last3d) / 1000), now); last3d = now; }
+      if (!skipping && due) { lastDraw = now; if (!in3d) drawMap(); drawStrip(); renderFly(); }
       if (now - lastUi > (busy ? 250 : 500) && !skipping) {
         lastUi = now;
         updateGhosts(); updateRainAlert(); fastestLapCheck();

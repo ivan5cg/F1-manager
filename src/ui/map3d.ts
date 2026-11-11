@@ -678,6 +678,7 @@ function placeCars(list, W) {
 }
 
 // ------------------------------------------------------------------ cámara
+let swayT = 0, busyUntil = 0;
 let curW = 20, camFrom = null, camT = 1, camSnap = true, yaw = 0, teleIdx = -1;
 const cur = { pos: new THREE.Vector3(), look: new THREE.Vector3(), fov: 36 };
 const want = { pos: new THREE.Vector3(), look: new THREE.Vector3(), fov: 36 };
@@ -726,7 +727,8 @@ function updateCamera(dt, now) {
   let cut = false;
   const fast = Math.sqrt(Math.max(1, opt.speed() / 4));
   if (mode === "circuito") {
-    const sway = reduced ? 0 : 0.11 * Math.sin(now / 1000 * 2 * Math.PI / 48);
+    if (!opt.paused()) swayT += dt; // en pausa la vista se queda quieta
+    const sway = reduced ? 0 : 0.11 * Math.sin(swayT * 2 * Math.PI / 48);
     ovPose(ov.az + sway, ov.dist * 1.03, ov.shift, want); want.fov = 36;
   } else if (mode === "seguir") {
     sample(p.s + 28, _tp);
@@ -916,6 +918,7 @@ return {
   beforeStep: remember,
   draw(dt, now) {
     draw3d(dt, now);
+    if (opt.paused()) { fN = 0; fT = now; lowSecs = 0; return; } // en pausa se dibuja poco a propósito: no cuenta
     // calidad automática: si no llega a 40 fps tres segundos seguidos, baja un escalón (resolución, luego sombras y lluvia)
     fN++;
     if (now - fT >= 1000) {
@@ -926,8 +929,10 @@ return {
   },
   /** Tras una pausa larga del dibujo (pestaña oculta, mapa tapado): que no cuente como fotogramas lentos. */
   idle() { fN = 0; fT = performance.now(); lowSecs = 0; },
-  resize,
-  cycleCam() { setCam(CAMS[(CAMS.indexOf(camMode) + 1) % CAMS.length]); return CAM_NAME[camMode]; },
+  /** La cámara está cambiando de sitio: hay que seguir dibujando aunque la sesión esté en pausa. */
+  moving: () => camFrom !== null || camSnap || performance.now() < busyUntil,
+  resize() { resize(); busyUntil = performance.now() + 400; },
+  cycleCam() { busyUntil = performance.now() + 1300; setCam(CAMS[(CAMS.indexOf(camMode) + 1) % CAMS.length]); return CAM_NAME[camMode]; },
   cam: () => camMode,
   /** Coche más cercano al punto tocado (px del recuadro), o null. */
   pick(x, y) {
@@ -936,7 +941,7 @@ return {
     return best;
   },
   /** Ha cambiado el coche seguido: la cámara va hacia el nuevo con suavidad. */
-  selChanged() { if (camMode !== "circuito") { camFrom = { pos: cur.pos.clone(), look: cur.look.clone(), fov: cur.fov }; camT = 0; teleIdx = -1; } },
+  selChanged() { busyUntil = performance.now() + 1300; if (camMode !== "circuito") { camFrom = { pos: cur.pos.clone(), look: cur.look.clone(), fov: cur.fov }; camT = 0; teleIdx = -1; } },
   dispose() {
     scene.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => m.dispose()); });
     cloudTex.dispose(); if (sun.shadow.map) sun.shadow.map.dispose();
