@@ -8,7 +8,8 @@ import { loadSeason, saveSeason, loadSession, clearSession, isParked, setActiveS
 import type { SessionSnapshot } from "../sim/snapshot";
 import { startScreen, seasonScreen, weekendScreen, resultsScreen, longRunsPanel, teamPickerScreen, Nav } from "./hubs";
 import { sessionView } from "./sessionView";
-import { SeasonState, driverStandings, teamStandings } from "../sim/season";
+import { SeasonState, driverStandings, teamStandings, pointsFor, RACE_POINTS, SPRINT_POINTS } from "../sim/season";
+import { podiumHtml, standingsHtml, animateCounts, shareSheet } from "./podium";
 import { Weekend } from "../sim/weekend";
 import { Session, SessionKind, SESSION_NAMES, isRaceKind } from "../sim/session";
 import { raceSummaryHtml, drawRaceSummary, buildSummary } from "./summary";
@@ -43,11 +44,10 @@ function finishSession(wk: Weekend, kind: SessionKind, sess: Session) {
     s.weekend = null;
     // el mundial tras la carrera: los cinco primeros, y tus pilotos y tu equipo estén donde estén
     const all = driverStandings(s, DRIVERS.length);
-    const shown = all.map((x, i) => ({ x, i })).filter(({ x, i }) => i < 5 || DRIVERS[x.id].team.id === s.playerTeam);
+    const before = driverStandings({ ...s, rounds: s.rounds.slice(0, -1) }, DRIVERS.length);
     const ts = teamStandings(s, TEAMS);
     const tp = ts.findIndex((x) => x.team.id === s.playerTeam);
-    extra = `<div class="panel"><div class="hd"><span class="t">Mundial tras ${esc(gp)}</span></div><div class="bd">${shown.map(({ x, i }, k) => `${k > 0 && i > shown[k - 1].i + 1 ? `<div class="dim small" style="padding-left:6px">···</div>` : ""}<div class="row${DRIVERS[x.id].team.id === s.playerTeam ? " yellow" : ""}"><span class="pos">${i + 1}</span><span class="grow">${esc(DRIVERS[x.id].d.nombre)}</span><b class="mono">${x.points}</b></div>`).join("")}
-      <div class="small dim" style="margin-top:6px">Constructores: ${esc(ts[tp].team.nombre)}, ${tp + 1}.º con ${ts[tp].points} pts.</div></div></div>`;
+    extra = standingsHtml(gp, before, all, s.playerTeam, `<div class="small dim" style="margin-top:6px">Constructores: ${esc(ts[tp].team.nombre)}, ${tp + 1}.º con ${ts[tp].points} pts.</div>`);
     // la parrilla de la siguiente ronda (con lo que ha desarrollado cada equipo)
     useSeason(s);
   }
@@ -58,8 +58,26 @@ function finishSession(wk: Weekend, kind: SessionKind, sess: Session) {
   }
   if (sum) extra = raceSummaryHtml(sum) + extra;
   saveSeason(s);
-  resultsScreen(kind, sess.results(), s, gp, extra, () => (kind === "RACE" ? nav.season() : nav.weekend()));
+  const rows = sess.results();
+  // carrera o sprint: podio con confeti y la tarjeta para compartir
+  let top = "";
+  if (kind === "RACE" || kind === "SPRINT") {
+    top = podiumHtml(rows, kind === "SPRINT" ? `Podio · Sprint de ${gp.replace("Gran Premio de ", "")}` : `Podio · ${gp}`, s.playerTeam)
+      + `<div style="padding:0 10px"><button class="big-cta" id="sharebtn">Compartir resultado</button></div>`;
+  }
+  resultsScreen(kind, rows, s, gp, extra, () => (kind === "RACE" ? nav.season() : nav.weekend()), top);
   if (sum) requestAnimationFrame(() => drawRaceSummary(sum));
+  animateCounts();
+  const sb = document.getElementById("sharebtn");
+  if (sb && (kind === "RACE" || kind === "SPRINT")) sb.onclick = () => {
+    const table = kind === "RACE" ? s.rounds[s.rounds.length - 1]?.raceTable ?? RACE_POINTS : st.scoring?.SPRINT ?? SPRINT_POINTS;
+    const ds = driverStandings(s, DRIVERS.length);
+    const myTeam = TEAMS.find((t) => t.id === s.playerTeam)!;
+    void shareSheet({
+      kind, circuitId: st.circuitId, rows, points: pointsFor(rows, table), sum, playerTeam: s.playerTeam, teamName: myTeam.nombre, teamColor: myTeam.color,
+      standing: ds.map((x, i) => ({ id: x.id, pos: i + 1, points: x.points })).filter((x) => DRIVERS[x.id].team.id === s.playerTeam),
+    });
+  };
   window.scrollTo(0, 0);
 }
 

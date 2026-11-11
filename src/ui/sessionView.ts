@@ -8,21 +8,8 @@ import { Session, Car, RaceEvent, SESSION_NAMES, SessionKind, isRaceKind, isQual
 import { COMPOUNDS, Compound, DRY, ALL, setWear, TyreSet, WET } from "../sim/tyres";
 import { rainAt, forecast, RadarFrame, windNow } from "../sim/weather";
 import { renderField, colorize, terrain, RADAR_STEPS, fmtHour } from "./radar";
+import { helmetSvg, reducedMotion, lightAt, skyIcon } from "./visual";
 
-/** Icono del cielo para la caja de hora local (sol, nubes, lluvia, chaparrón). */
-function skyIcon(cloud: number, rain: number, clock: number): string {
-  const day = clock > 7 * 60 && clock < 19.25 * 60; // de noche (Singapur), luna
-  const sun = day ? `<circle cx="7" cy="6" r="4" fill="#ffd84a"/>` : `<path d="M9 2a5 5 0 1 0 3 8 4 4 0 1 1-3-8z" fill="#e8e8ef"/>`;
-  const cl = (x: number, y: number, s: number, c: string) => `<path transform="translate(${x} ${y}) scale(${s})" d="M4 10h11a3.5 3.5 0 0 0 0-7 5 5 0 0 0-9.5 1A3 3 0 0 0 4 10z" fill="${c}"/>`;
-  if (rain > 0.15) {
-    const n = rain > 6 ? 4 : rain > 1.5 ? 3 : 2;
-    const drops = Array.from({ length: n }, (_, i) => `<path d="M${7 + i * 3.5} 11.5l-1.2 3" stroke="#5aa8ff" stroke-width="1.6" stroke-linecap="round"/>`).join("");
-    return `<svg viewBox="0 0 22 15">${cl(1, -1.5, 1, rain > 6 ? "#7d828c" : "#c9ccd2")}${drops}</svg>`;
-  }
-  if (cloud > 0.6) return `<svg viewBox="0 0 22 15">${cl(0, 1, 0.75, "#8d9199")}${cl(4, 2, 0.85, "#d4d7dc")}</svg>`;
-  if (cloud > 0.3) return `<svg viewBox="0 0 22 15">${sun}${cl(5, 3, 0.8, "#e6e8eb")}</svg>`;
-  return `<svg viewBox="0 0 22 15">${sun}</svg>`;
-}
 import { makeRun, planOptions, teamTakesOver } from "../sim/strategy";
 import { Rng } from "../sim/rng";
 import { snapshotSession, SessionSnapshot } from "../sim/snapshot";
@@ -80,10 +67,10 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   <div id="sess">
     <div class="ctrl"><button id="menu" class="menu" title="Menú: simular hasta el final, datos, ajustes, salir" aria-label="Menú">☰</button><span class="gp">${flagHtml(def.bandera)} ${esc(SESSION_NAMES[kind])} · ${esc(def.nombre)}</span><div class="speed" id="speed"></div></div>
     <div class="lapc mono" id="lapc"></div>
-    <div class="main">
+    <div class="main"><div class="bigban" id="bigban" aria-live="polite"></div>
       <div class="leftcol"><div class="tower" id="tower"></div><div class="toast" id="toast" title="Dirección de carrera y meteo"></div></div>
       <div class="side${race ? "" : " timed"}">
-        <div class="mapbox"><canvas id="map" title="Toca un coche para seguirlo. Línea discontinua: zona de modo adelantamiento · naranja: frenada donde se adelanta${race ? " · círculo discontinuo: dónde estaría tu piloto si parase ahora" : ""}"></canvas><div class="flyov" id="flyov"></div><div class="selchip" id="selchip"></div></div>
+        <div class="mapbox"><canvas id="map" title="Toca un coche para seguirlo. Línea discontinua: zona de modo adelantamiento · naranja: frenada donde se adelanta${race ? " · círculo discontinuo: dónde estaría tu piloto si parase ahora" : ""}"></canvas><div class="flyov" id="flyov"></div><div class="selchip" id="selchip"></div><button class="camb" id="camb" title="Cámara: sigue de cerca a tu piloto (o al coche que sigues)" aria-label="Cámara que sigue"><svg viewBox="0 0 20 16" width="20" height="16" aria-hidden="true"><rect x="1" y="3" width="13" height="10" rx="2" fill="currentColor"/><path d="M14.5 7 19 4.5v7L14.5 9z" fill="currentColor"/></svg></button></div>
         ${race ? `<canvas id="gapstrip" class="gapstrip" title="Toda la parrilla en una vuelta: el líder a la izquierda. El círculo discontinuo es dónde saldría tu piloto si parase ahora."></canvas>` : ""}
         <div class="wxbox" id="wx"></div>
         <div id="lapban"></div>
@@ -272,8 +259,93 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     return newer || !c.advice || sess.leaderLap + 1 - e.lap >= 2 || c.loc === "out";
   }
 
+  // ----------------------------------------------------- avisos grandes (como en la tele)
+  // Una franja a todo el ancho que entra y sale: banderas, relanzada, pole, vuelta rápida y la
+  // parada de tu piloto. De una en una; si se amontonan (a mucha velocidad), solo las últimas.
+  type Ban = { cls: string; title: string; sub?: string; ms: number };
+  const banQ: Ban[] = [];
+  let banBusy = false;
+  function banner(b: Ban) {
+    if (skipping || ended) return;
+    banQ.push(b);
+    while (banQ.length > 2) banQ.shift();
+    if (!banBusy) nextBanner();
+  }
+  function nextBanner() {
+    const b = banQ.shift();
+    const box = document.getElementById("bigban");
+    if (!b || !box) { banBusy = false; return; }
+    banBusy = true;
+    const el = document.createElement("div");
+    el.className = `bb ${b.cls}`;
+    el.style.animationDuration = `${b.ms}ms`;
+    el.innerHTML = `<b>${esc(b.title)}</b>${b.sub ? `<span>${esc(b.sub)}</span>` : ""}`;
+    box.appendChild(el);
+    setTimeout(() => { el.remove(); nextBanner(); }, b.ms);
+  }
+  const plain = (t: string) => clean(t).replace(/<[^>]*>/g, "");
+  function bannerFor(e: RaceEvent) {
+    const t = e.text;
+    let m: RegExpMatchArray | null;
+    if (e.kind === "control") {
+      if ((m = t.match(/COCHE DE SEGURIDAD VIRTUAL — (.*)/))) return banner({ cls: "vsc", title: "Coche de seguridad virtual", sub: m[1], ms: 2800 });
+      if ((m = t.match(/COCHE DE SEGURIDAD — (.*)/))) return banner({ cls: "sc", title: "Coche de seguridad", sub: m[1], ms: 3000 });
+      if (/Salida detrás del coche de seguridad/.test(t)) return banner({ cls: "sc", title: "Salida tras el coche de seguridad", sub: "demasiada agua en pista", ms: 3000 });
+      if ((m = t.match(/BANDERA ROJA — ([^.]*)/))) return banner({ cls: "red", title: "Bandera roja", sub: m[1], ms: 3200 });
+      if (/Relanzada|Fin del coche de seguridad virtual|Se reanuda la sesión/.test(t)) return banner({ cls: "green", title: "Bandera verde", ms: 2200 });
+      if (/Se reanuda la carrera/.test(t)) return banner({ cls: "sc", title: "Se reanuda", sub: "detrás del coche de seguridad", ms: 2600 });
+      if ((m = t.match(/Empieza la (\S+)/))) return banner({ cls: "green", title: `Empieza la ${m[1]}`, ms: 2000 });
+      if (/^🏁 Bandera a cuadros/.test(t)) return banner({ cls: "chk", title: "Bandera a cuadros", sub: plain(t).replace(/^Bandera a cuadros ?/, ""), ms: 2600 });
+      if ((m = t.match(/POLE para (.+?) \((.+?)\) (\S+)/))) return banner({ cls: "pole", title: "Pole position", sub: `${m[1]} · ${m[3]}`, ms: 3400 });
+      if ((m = t.match(/(\w+) descalificado/))) return banner({ cls: "red", title: `${m[1]} descalificado`, sub: "no ha usado dos compuestos", ms: 3000 });
+    }
+    if (e.kind === "pit" && (m = t.match(/Parada de (\w+): ([\d.]+) s/)) && e.carId !== undefined && sess.carById(e.carId).player) {
+      const secs = Number(m[2]);
+      banner({ cls: secs > 4 ? "pit slow" : "pit", title: `Parada · ${m[1]}`, sub: `${m[2].replace(".", ",")} s${secs > 4 ? " · problema en la parada" : ""}`, ms: 2200 });
+    }
+  }
+  // vuelta rápida de la carrera: franja morada (como mucho una cada 40 s reales, salvo si es tuya)
+  let lastBest = Infinity, lastFlBanner = -1e9;
+  function fastestLapCheck() {
+    if (!race || !started || sess.bestLap >= lastBest - 1e-6) return;
+    const first = !isFinite(lastBest);
+    lastBest = sess.bestLap;
+    const c = sess.cars.find((x) => Math.abs(x.best - sess.bestLap) < 1e-9);
+    if (!c || first || sess.leaderLap < 3) return;
+    const now = performance.now();
+    if (!c.player && now - lastFlBanner < 40000) return;
+    lastFlBanner = now;
+    banner({ cls: "fl", title: "Vuelta rápida", sub: `${c.d.abrev} · ${fmtLap(sess.bestLap)}`, ms: 2000 });
+  }
+
+  // ------------------------------------------------------------- semáforo
+  /** Cinco luces rojas que se encienden una a una y se apagan de golpe; luego, carrera. */
+  function lightsOut(done: () => void) {
+    const ov = document.createElement("div");
+    ov.className = "lights";
+    ov.innerHTML = `<div class="lbox"><div class="lrow">${Array.from({ length: 5 }, () => `<span class="lamp"><i></i><i></i></span>`).join("")}</div><div class="lmsg">Atentos al semáforo</div></div>`;
+    document.getElementById("sess")!.appendChild(ov);
+    const lamps = ov.querySelectorAll<HTMLElement>(".lamp");
+    const step = reducedMotion() ? 350 : 900;
+    let k = 0;
+    const on = () => {
+      if (ended) return ov.remove();
+      if (k < 5) { lamps[k++].classList.add("on"); setTimeout(on, step); return; }
+      // espera variable antes de apagarse, como en la realidad
+      setTimeout(() => {
+        if (ended) return ov.remove();
+        lamps.forEach((l) => l.classList.remove("on"));
+        ov.classList.add("go");
+        ov.querySelector(".lmsg")!.textContent = "¡Salida!";
+        setTimeout(() => { ov.remove(); done(); }, 650);
+      }, reducedMotion() ? 300 : 400 + Math.random() * 1800);
+    };
+    setTimeout(on, 400);
+  }
+
   sess.onEvent = (e: RaceEvent) => {
     if (skipping) return;
+    bannerFor(e);
     const mineEv = isMineEv(e) && e.kind !== "control" && e.kind !== "weather";
     // la meteo informa pero no para; dirección de carrera y lo de tus pilotos, sí, según lo que
     // el jugador haya dejado activado en Ajustes (cada tipo de aviso por separado)
@@ -293,7 +365,9 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
 
 
   // ---------------------------------------------------------------- mapa
+  // vista base (todo el circuito) y vista actual (con la cámara puede ir más cerca)
   let mapScale = 1, mapOx = 0, mapOy = 0;
+  let bScale = 1, bOx = 0, bOy = 0;
   function sizeMap() {
     const cv = $<HTMLCanvasElement>("#map");
     if (!cv) return;
@@ -306,23 +380,27 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     let minx = 1e9, maxx = -1e9, miny = 1e9, maxy = -1e9;
     for (let i = 0; i < track.xs.length; i++) { minx = Math.min(minx, track.xs[i]); maxx = Math.max(maxx, track.xs[i]); miny = Math.min(miny, track.ys[i]); maxy = Math.max(maxy, track.ys[i]); }
     const pad = 10 * dpr;
-    mapScale = Math.min((cv.width - 2 * pad) / (maxx - minx), (cv.height - 2 * pad) / (maxy - miny));
-    mapOx = (cv.width - (maxx - minx) * mapScale) / 2 - minx * mapScale;
-    mapOy = (cv.height - (maxy - miny) * mapScale) / 2 + maxy * mapScale;
+    bScale = Math.min((cv.width - 2 * pad) / (maxx - minx), (cv.height - 2 * pad) / (maxy - miny));
+    bOx = (cv.width - (maxx - minx) * bScale) / 2 - minx * bScale;
+    bOy = (cv.height - (maxy - miny) * bScale) / 2 + maxy * bScale;
+    mapScale = bScale; mapOx = bOx; mapOy = bOy;
+    camK = 1; camX = NaN;
     rainLayerT = -1;
   }
   const mx = (x: number) => mapOx + x * mapScale;
   const my = (y: number) => mapOy - y * mapScale;
   // capa de lluvia del mapa (mismo campo que el radar), se recalcula cada pocos segundos de sesión
   const rainLayer = document.createElement("canvas");
-  let rainLayerT = -1, rainLayerOn = false;
+  let rainLayerT = -1, rainLayerOn = false, rainNow = 0;
   function updateRainLayer(cv: HTMLCanvasElement) {
     if (cv.width < 20 || cv.height < 20) { rainLayerOn = false; return; }
     if (rainLayerT >= 0 && Math.abs(sess.wall - rainLayerT) < 4) return;
     rainLayerT = sess.wall;
     const S = 110, H = Math.max(8, Math.round((S * cv.height) / cv.width));
-    const R = cv.width / 2 / mapScale / 1000; // km
-    const cx = (cv.width / 2 - mapOx) / mapScale / 1000, cy = (mapOy - cv.height / 2) / mapScale / 1000;
+    // siempre en la vista base: con la cámara se dibuja ampliada
+    const R = cv.width / 2 / bScale / 1000; // km
+    const cx = (cv.width / 2 - bOx) / bScale / 1000, cy = (bOy - cv.height / 2) / bScale / 1000;
+    rainNow = sess.rainOnTrack();
     const field = renderField(sess.weather as unknown as RadarFrame, cx, cy, R, S, H);
     rainLayerOn = field.some((v) => v >= 0.1);
     if (!rainLayerOn) return;
@@ -413,9 +491,22 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   };
   /** Posiciones de los coches en el último dibujo del mapa (px del lienzo), para tocarlos. */
   let mapPts: { id: number; x: number; y: number }[] = [];
+  /** Punto del trazado a la distancia s, con la dirección de marcha (px del lienzo); `side` lo aparta hacia el pit-lane. */
+  const trackAt = (s: number, side = 0) => {
+    const n = track.xs.length;
+    const f = modL(s) / track.ds;
+    const i = Math.min(n - 1, Math.floor(f)), j = (i + 1) % n, w = f - Math.floor(f);
+    const k2 = (i + 3) % n;
+    const x = mx(track.xs[i] + (track.xs[j] - track.xs[i]) * w), y = my(track.ys[i] + (track.ys[j] - track.ys[i]) * w);
+    let dx = mx(track.xs[k2]) - mx(track.xs[i]), dy = my(track.ys[k2]) - my(track.ys[i]);
+    const len = Math.hypot(dx, dy) || 1; dx /= len; dy /= len;
+    return { x: x - dy * side, y: y + dx * side, dx, dy };
+  };
+  /** Cuánto se engordan las líneas al acercar la cámara. */
+  const zoomW = () => 1 + (camK - 1) * 0.4;
   const carXY = (s: number, pit: boolean, dpr: number) => {
-    const i = Math.min(track.xs.length - 1, Math.floor(modL(s) / track.ds));
-    return { x: mx(track.xs[i]), y: my(track.ys[i]) + (pit ? 7 * dpr : 0) };
+    const p = trackAt(s, pit ? 8 * dpr * zoomW() : 0);
+    return { x: p.x, y: p.y };
   };
   /** Recorre el trazado de un minisector (con el cierre de la vuelta en el último). */
   const msPath = (g: CanvasRenderingContext2D, m: (typeof track.ms)[number]) => {
@@ -431,6 +522,103 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     const dx = mx(track.xs[i + 1]) - x, dy = my(track.ys[i + 1]) - y, n = Math.hypot(dx, dy) || 1;
     g.beginPath(); g.moveTo(x - (dy / n) * len, y + (dx / n) * len); g.lineTo(x + (dy / n) * len, y - (dx / n) * len); g.stroke();
   };
+  // --------------------------------------------- cámara que sigue
+  // Acerca el mapa al coche que sigues (o a tu piloto en pista) y lo acompaña con suavidad.
+  let camOn = false, camK = 1, camX = NaN, camY = NaN;
+  const CAM_ZOOM = 3.4;
+  function camTarget(): Car | null {
+    const sel = selCar();
+    const ok = (c: Car | null | undefined) => !!c && (c.loc === "track" || c.loc === "pit" || c.loc === "lane_out" || c.loc === "lane_in");
+    if (ok(sel)) return sel;
+    return mine().find((c) => ok(c)) ?? null;
+  }
+  function updateView(cv: HTMLCanvasElement) {
+    const tgt = camOn ? camTarget() : null;
+    const baseX = (cv.width / 2 - bOx) / bScale, baseY = (bOy - cv.height / 2) / bScale;
+    let tx = baseX, ty = baseY, tk = 1;
+    if (tgt) {
+      const f = modL(tgt.s + (paused ? 0 : tgt.v * leftover)) / track.ds;
+      const i = Math.min(track.xs.length - 1, Math.floor(f));
+      tx = track.xs[i]; ty = track.ys[i]; tk = CAM_ZOOM;
+    }
+    if (isNaN(camX)) { camX = baseX; camY = baseY; }
+    const a = reducedMotion() ? 1 : 0.18;
+    camK += (tk - camK) * a;
+    camX += (tx - camX) * a; camY += (ty - camY) * a;
+    if (!tgt && Math.abs(camK - 1) < 0.01) { camK = 1; camX = baseX; camY = baseY; }
+    mapScale = bScale * camK;
+    mapOx = cv.width / 2 - camX * mapScale;
+    mapOy = cv.height / 2 + camY * mapScale;
+  }
+  $("#camb").onclick = (e) => {
+    e.stopPropagation();
+    camOn = !camOn;
+    $("#camb").classList.toggle("on", camOn);
+    if (camOn && !camTarget()) showToast("La cámara sigue a tu piloto cuando está en pista (o al coche que toques).", 3500, "Mapa");
+    drawMap();
+  };
+  // gotas de lluvia sobre el mapa: posiciones relativas que caen con el tiempo real
+  const drops = Array.from({ length: 140 }, () => ({ x: Math.random(), y: Math.random(), v: 0.6 + Math.random() * 0.6 }));
+  let dropT = performance.now();
+  function drawRain(g: CanvasRenderingContext2D, cv: HTMLCanvasElement, dpr: number) {
+    const now = performance.now(), dtR = Math.min(0.1, (now - dropT) / 1000);
+    dropT = now;
+    if (rainNow < 0.3 || reducedMotion()) return;
+    const n = Math.min(drops.length, Math.round(18 + rainNow * 10));
+    const wn = windNow(sess.weather);
+    const tilt = Math.max(-0.6, Math.min(0.6, (Math.cos(wn.dir) * wn.speed) / 60));
+    g.save();
+    g.strokeStyle = "rgba(185, 210, 255, .42)"; g.lineWidth = 1.1 * dpr; g.lineCap = "round";
+    g.beginPath();
+    for (let i = 0; i < n; i++) {
+      const d = drops[i];
+      if (!paused) { d.y += d.v * dtR * 1.4; d.x += tilt * dtR * 0.5; }
+      if (d.y > 1) { d.y -= 1; d.x = Math.random(); }
+      d.x = ((d.x % 1) + 1) % 1;
+      const x = d.x * cv.width, y = d.y * cv.height, l = 9 * dpr;
+      g.moveTo(x, y); g.lineTo(x + tilt * l, y + l);
+    }
+    g.stroke();
+    g.restore();
+  }
+  /** Pit-lane: línea paralela al trazado desde la entrada hasta la salida. */
+  function drawPitLane(g: CanvasRenderingContext2D, dpr: number) {
+    const ent = track.pit.entry, ex = track.pit.exit + track.length;
+    const side = 8 * dpr * zoomW();
+    g.save();
+    g.strokeStyle = "rgba(160, 166, 178, .55)"; g.lineWidth = 2.2 * dpr * zoomW();
+    g.beginPath();
+    for (let s = ent, k = 0; s <= ex; s += track.ds * 2, k++) { const p = trackAt(s, side); if (k) g.lineTo(p.x, p.y); else g.moveTo(p.x, p.y); }
+    g.stroke();
+    g.restore();
+  }
+  /** Coche: flecha con el color del equipo hacia donde va y, si va rápido, una estela corta detrás. */
+  function drawCar(g: CanvasRenderingContext2D, c: Car, s: number, pit: boolean, r: number, dpr: number) {
+    const side = pit ? 8 * dpr * zoomW() : 0;
+    const p = trackAt(s, side);
+    if (!pit && c.v > 35 && !reducedMotion()) {
+      const len = Math.min(140, c.v * 0.9) * (camK > 1.5 ? 0.6 : 1.4);
+      const t = trackAt(s - len, side);
+      const grad = g.createLinearGradient(t.x, t.y, p.x, p.y);
+      grad.addColorStop(0, c.team.color + "00"); grad.addColorStop(1, c.team.color + "aa");
+      g.strokeStyle = grad; g.lineWidth = r * 0.95; g.lineCap = "round";
+      g.beginPath();
+      for (let d = len, k = 0; d >= 0; d -= track.ds * 2, k++) { const q = trackAt(s - d, side); if (k) g.lineTo(q.x, q.y); else g.moveTo(q.x, q.y); }
+      g.lineTo(p.x, p.y);
+      g.stroke();
+    }
+    const { dx, dy } = p;
+    g.beginPath();
+    g.moveTo(p.x + dx * r * 1.55, p.y + dy * r * 1.55);
+    g.lineTo(p.x - dx * r * 0.9 - dy * r * 1.05, p.y - dy * r * 0.9 + dx * r * 1.05);
+    g.lineTo(p.x - dx * r * 0.45, p.y - dy * r * 0.45);
+    g.lineTo(p.x - dx * r * 0.9 + dy * r * 1.05, p.y - dy * r * 0.9 - dx * r * 1.05);
+    g.closePath();
+    g.fillStyle = c.team.color; g.fill();
+    g.strokeStyle = "rgba(0,0,0,.7)"; g.lineWidth = 0.9 * dpr; g.stroke();
+    return p;
+  }
+
   function drawMap() {
     const cv = $<HTMLCanvasElement>("#map");
     if (!cv || wide || cv.width < 20 || cv.height < 20) return;
@@ -438,8 +626,19 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     const dpr = window.devicePixelRatio || 1;
     g.clearRect(0, 0, cv.width, cv.height);
     updateRainLayer(cv);
-    if (rainLayerOn) { g.imageSmoothingEnabled = true; g.drawImage(rainLayer, 0, 0, cv.width, cv.height); }
+    updateView(cv);
+    const zw = zoomW();
+    const night = lightAt(sess.weather.clock) === "noche";
+    if (rainLayerOn) {
+      // la capa está calculada para la vista base: se amplía con la misma cámara que el trazado
+      const k = mapScale / bScale;
+      g.save();
+      g.setTransform(k, 0, 0, k, mapOx - bOx * k, mapOy - bOy * k);
+      g.imageSmoothingEnabled = true; g.drawImage(rainLayer, 0, 0, cv.width, cv.height);
+      g.restore();
+    }
     g.lineCap = "round"; g.lineJoin = "round";
+    drawPitLane(g, dpr);
     // zonas de modo adelantamiento: línea discontinua por fuera del trazado
     g.save();
     g.strokeStyle = "rgba(255,255,255,.75)"; g.lineWidth = 1.3 * dpr; g.setLineDash([3 * dpr, 3 * dpr]);
@@ -456,16 +655,26 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       g.stroke();
     }
     g.restore();
+    // de noche, el circuito iluminado por los focos: un halo cálido alrededor del asfalto
+    if (night) {
+      g.save();
+      g.strokeStyle = "rgba(255, 236, 190, .16)"; g.lineWidth = 13 * dpr * zw;
+      g.shadowColor = "rgba(255, 230, 170, .55)"; g.shadowBlur = 14 * dpr;
+      g.beginPath(); for (const m of track.ms) msPath(g, m); g.stroke();
+      g.restore();
+    }
     for (const m of track.ms) {
       const w = sess.water[m.i];
-      g.strokeStyle = w > 0.05 ? `rgba(70,150,240,${Math.min(1, 0.55 + w * 0.45)})` : MAP.track;
-      g.lineWidth = 5 * dpr;
+      g.strokeStyle = w > 0.05 ? `rgba(70,150,240,${Math.min(1, 0.55 + w * 0.45)})` : night ? "#8c919b" : MAP.track;
+      g.lineWidth = 5 * dpr * zw;
       g.beginPath(); msPath(g, m); g.stroke();
+      // asfalto mojado: un brillo fino encima
+      if (w > 0.2) { g.strokeStyle = `rgba(220,235,255,${Math.min(0.45, 0.12 + w * 0.15)})`; g.lineWidth = 1.3 * dpr * zw; g.beginPath(); msPath(g, m); g.stroke(); }
     }
     // frenadas donde se adelanta (cuanto más fácil, más intenso)
     for (const m of track.ms) {
       if (m.overtake < 0.15) continue;
-      g.strokeStyle = `rgba(255,150,40,${Math.min(1, 0.45 + m.overtake)})`; g.lineWidth = 5 * dpr;
+      g.strokeStyle = `rgba(255,150,40,${Math.min(1, 0.45 + m.overtake)})`; g.lineWidth = 5 * dpr * zw;
       g.beginPath(); msPath(g, m); g.stroke();
     }
     // sectores del coche que sigues (o de tu piloto): morado, verde o amarillo, como los parciales
@@ -475,7 +684,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
         const col = sectorColor(sc, m.sector);
         if (!col?.col) continue;
         g.globalAlpha = col.live ? 1 : 0.55;
-        g.strokeStyle = col.col; g.lineWidth = 1.8 * dpr;
+        g.strokeStyle = col.col; g.lineWidth = 1.8 * dpr * zw;
         g.beginPath(); msPath(g, m); g.stroke();
       }
       g.globalAlpha = 1;
@@ -493,19 +702,21 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     g.font = `900 ${9 * dpr}px "Titillium Web", sans-serif`;
     for (const c of cars) {
       const s = c.s + (paused ? 0 : c.v * leftover);
-      const { x, y } = carXY(s, c.loc === "pit", dpr);
-      pts.push({ id: c.id, x, y });
       const slow = !race && !c.player && c !== sel && !hot(c);
-      const r = (c.player || c === sel ? 5 : slow ? 2.8 : 3.6) * dpr;
+      const r = (c.player || c === sel ? 5 : slow ? 2.8 : 3.6) * dpr * (camK > 1.5 ? 1.35 : 1);
       g.globalAlpha = slow ? 0.45 : 1;
-      g.fillStyle = c.team.color;
-      g.beginPath(); g.arc(x, y, r, 0, 7); g.fill();
+      const { x, y } = drawCar(g, c, s, c.loc === "pit", r, dpr);
       g.globalAlpha = 1;
+      pts.push({ id: c.id, x, y });
       if (traffic.has(c.id)) { g.strokeStyle = "#ffd84a"; g.lineWidth = 1.6 * dpr; g.beginPath(); g.arc(x, y, r + 2.5 * dpr, 0, 7); g.stroke(); }
       if (c.player || c === sel) {
         g.strokeStyle = c === sel ? "#ffd84a" : MAP.label; g.lineWidth = (c === sel ? 2 : 1.5) * dpr;
-        g.beginPath(); g.arc(x, y, r, 0, 7); g.stroke();
+        g.beginPath(); g.arc(x, y, r + 2.2 * dpr, 0, 7); g.stroke();
         g.fillStyle = c === sel ? "#ffd84a" : MAP.label;
+        g.fillText(c.d.abrev, x + 7 * dpr, y - 6 * dpr);
+      } else if (camK > 1.8) {
+        // con la cámara cerca se lee quién es cada uno
+        g.fillStyle = "rgba(255,255,255,.85)";
         g.fillText(c.d.abrev, x + 6 * dpr, y - 5 * dpr);
       }
     }
@@ -532,6 +743,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       g.fillStyle = "rgba(0,0,0,.75)"; g.fillRect(x + 6 * dpr, ly, tw + 4 * dpr, 10 * dpr);
       g.fillStyle = "#fff"; g.fillText(t, x + 8 * dpr, ly + 8 * dpr);
     }
+    drawRain(g, cv, dpr);
   }
   $<HTMLCanvasElement>("#map").addEventListener("click", (e) => {
     const cv = e.currentTarget as HTMLCanvasElement;
@@ -656,7 +868,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       if (row) select(Number(row.dataset.id));
       return;
     }
-    if (b.dataset.w) { wide = !wide; document.querySelector(".main")!.classList.toggle("wide", wide); if (!wide) requestAnimationFrame(() => sizeMap()); }
+    if (b.dataset.w) { towerTops = new Map(); wide = !wide; document.querySelector(".main")!.classList.toggle("wide", wide); if (!wide) requestAnimationFrame(() => sizeMap()); }
     else { const order: TowerMode[] = ["int", "gap", "last", "tyre"]; mode = order[(order.indexOf(mode) + 1) % order.length]; }
     renderTower();
   });
@@ -747,6 +959,32 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       html += `<div class="${cls}" data-id="${c.id}">${pre}<span class="g mono">${g}</span><span class="t">${tyreCell}</span></span></div>`;
     });
     towerEl.innerHTML = html;
+    animateTower();
+  }
+  // Torre animada (técnica FLIP): se mide dónde estaba cada fila antes de redibujar y, si ha
+  // cambiado de puesto, se coloca donde estaba y se desliza a su sitio, con un destello verde si
+  // gana posiciones y rojo si las pierde. Mientras se desliza no se redibuja (medio segundo).
+  let towerTops = new Map<number, number>();
+  let towerAnimUntil = 0;
+  function animateTower() {
+    const rows = towerEl.querySelectorAll<HTMLElement>(".tr[data-id]");
+    const tops = new Map<number, number>();
+    rows.forEach((el) => tops.set(Number(el.dataset.id), el.offsetTop));
+    const prev = towerTops;
+    towerTops = tops;
+    if (!started || reducedMotion() || !prev.size) return;
+    let moved = false;
+    rows.forEach((el) => {
+      const id = Number(el.dataset.id), was = prev.get(id), now = tops.get(id)!;
+      if (was === undefined || Math.abs(was - now) < 2) return;
+      el.style.transform = `translateY(${was - now}px)`;
+      el.classList.add(was > now ? "gain" : "loss");
+      moved = true;
+    });
+    if (!moved) return;
+    void towerEl.offsetHeight; // aplica la posición de partida antes de animar
+    rows.forEach((el) => { if (el.style.transform) { el.style.transition = "transform .45s cubic-bezier(.2,.8,.2,1)"; el.style.transform = ""; } });
+    towerAnimUntil = performance.now() + 480;
   }
 
   // ------------------------------------------------- aviso de lluvia por sectores
@@ -808,6 +1046,9 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     else if (sess.chequered) { st = "Bandera a cuadros"; cls = "chq"; }
     $("#lapc").innerHTML = `<span class="k">${k}</span><span class="v">${v}</span>${st ? `<span class="s ${cls}">${st}</span>` : ""}`;
     const w = sess.weather;
+    // noche, tarde o día según la hora local de la sesión (Singapur y Baréin, de noche)
+    const luz = lightAt(w.clock), sessEl = document.getElementById("sess");
+    if (sessEl && sessEl.dataset.luz !== luz) sessEl.dataset.luz = luz;
     const rMax = sess.maxRainOnTrack();
     const rAvg = sess.rainOnTrack();
     const sw = sess.sectorWater();
@@ -928,7 +1169,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       const wear = t ? setWear(t) : 0;
       const col = t ? wearColor(t) : "#444";
       const tyreInfo = t ? `${tyreHtml(t.c)}<span class="small mono">${t.laps}v ${lifeLeft(t)}%</span>` : `<span class="small dim">${phaseName(c)}</span>`;
-      card.querySelector(".h")!.innerHTML = `<span class="posbox mono">${pos}</span><span class="nm">${tvName(c)}<span class="ti">${tyreInfo}</span></span>`;
+      card.querySelector(".h")!.innerHTML = `<span class="posbox mono">${pos}</span><span class="hm">${helmetSvg(c.team.color, c.d.numero, c.d.abrev, 21)}</span><span class="nm">${tvName(c)}<span class="ti">${tyreInfo}</span></span>`;
       const wi = card.querySelector<HTMLElement>(".wear i")!;
       wi.style.width = `${(1 - wear) * 100}%`; wi.style.background = col;
       const pl = card.querySelector<HTMLElement>(".planl");
@@ -1569,7 +1810,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       el.querySelector<HTMLButtonElement>("#predata")!.onclick = () => dataSheet();
     };
     wire();
-    el.querySelector<HTMLButtonElement>("#lights")!.onclick = () => { close(); start(); };
+    el.querySelector<HTMLButtonElement>("#lights")!.onclick = () => { close(); lightsOut(start); };
     const ex = el.querySelector<HTMLButtonElement>("#preexit");
     if (ex) ex.onclick = () => { close(); exitSession(); };
   }
@@ -1678,8 +1919,9 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       if (!skipping && (busy || now - lastDraw > 250)) { lastDraw = now; drawMap(); drawStrip(); renderFly(); }
       if (now - lastUi > (busy ? 250 : 500) && !skipping) {
         lastUi = now;
-        updateGhosts(); updateRainAlert();
-        renderTower(); renderTop(); renderMessages(); renderSel();
+        updateGhosts(); updateRainAlert(); fastestLapCheck();
+        if (now >= towerAnimUntil) renderTower();
+        renderTop(); renderMessages(); renderSel();
         if (!sheetOpen) renderDrivers();
       }
     } catch (err) {
@@ -1701,5 +1943,6 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     else showToast(quali ? "Pulsa ▶ para empezar. «Salir» manda a tu piloto a pista; con «Auto» decide el equipo." : "Pulsa ▶ para empezar. «Tanda» programa una salida; con «Auto» decide el equipo.", 0, "Muro", true, "left");
     raf = requestAnimationFrame(loop);
   };
-  if (race && !snap) preRace(begin); else begin();
+  // tras el semáforo la carrera arranca sola, a la velocidad de siempre
+  if (race && !snap) preRace(() => { begin(); setSpeed(speed); }); else begin();
 }

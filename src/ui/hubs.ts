@@ -5,6 +5,8 @@ import { $, esc, fmtLap, fmtRace, tyreHtml, fmtDate, sheet, setLabel, groupSets,
 import { SeasonState, RoundResult, RaceSummary, driverStandings, teamStandings, RACE_POINTS, SPRINT_POINTS } from "../sim/season";
 import { Weekend, WeekendState, newWeekend, preparePu, DAY_NAMES } from "../sim/weekend";
 import { puPenalty } from "../sim/powerunit";
+import { startAttract } from "./attract";
+import { saveFile, helmetSvg, circuitSvg, skyGradient, lightAt, reducedMotion, skyIcon } from "./visual";
 import { SESSION_NAMES, SessionKind, ResultRow, isRaceKind, isQualiKind, Car, Session, LongRun, TeamDef, DriverDef } from "../sim/session";
 import { COMPOUNDS, DRY, ALL, setWear, Compound, TyreSet } from "../sim/tyres";
 import { stintProfile } from "../sim/strategy";
@@ -65,30 +67,16 @@ function slotWhere(s: SeasonState): string {
   return `Ronda ${s.round + 1}/${cal.length} · ${flagHtml(c.bandera)} ${esc(c.gp.replace("Gran Premio de ", "GP de "))}`;
 }
 
-/** Guarda un texto como archivo: con la hoja de compartir del móvil si la hay (para dejarlo en Archivos o mandarlo), si no, como descarga. */
-async function saveFile(name: string, text: string) {
-  const file = new File([text], name, { type: "application/json" });
-  const n = navigator as Navigator & { canShare?: (d: { files: File[] }) => boolean };
-  if (n.canShare?.({ files: [file] })) {
-    try { await navigator.share({ files: [file], title: name }); return; } catch (e) { if ((e as Error).name === "AbortError") return; }
-  }
-  const url = URL.createObjectURL(file);
-  const a = document.createElement("a");
-  a.href = url; a.download = name;
-  document.body.appendChild(a); a.click(); a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 5000);
-}
-
 export function startScreen(nav: Nav, notice = "") {
   const list = slotList();
   const active = getActiveSlot();
   const any = list.some((x) => x.season);
   app().innerHTML = `
   <div style="padding-bottom:16px">
-    <div class="panel"><div class="hd"><span class="t">Muro de Boxes · Temporada 2026</span></div><div class="bd">
-      <h1>Muro de Boxes</h1>
-      <div class="dim">Temporada de ${ROUNDS.length} grandes premios. Tú decides en el muro.</div>
-    </div></div>
+    <div class="hero"><canvas id="herocv" aria-hidden="true"></canvas>
+      <div class="herolive" id="herolive"></div>
+      <div class="herotxt"><span class="kick">Temporada 2026</span><h1>Muro de Boxes</h1><div>${ROUNDS.length} grandes premios. Tú decides en el muro.</div></div>
+    </div>
     ${any ? `<div class="panel"><div class="hd"><span class="t">Tus partidas</span></div><div class="bd" style="padding:0">
       ${list.map(({ slot, season, midSession }) => {
         if (!season) return `<div class="slotrow empty"><span class="slotn">${slot}</span><span class="grow dim small">Vacía</span></div>`;
@@ -128,6 +116,8 @@ export function startScreen(nav: Nav, notice = "") {
   };
   const cur = list[active - 1].season;
   setBack(cur ? () => nav.open(active) : null);
+  // la carrera de fondo se monta después de pintar la pantalla (tarda unas décimas)
+  setTimeout(() => { const cv = document.getElementById("herocv") as HTMLCanvasElement | null; if (cv) startAttract(cv, $("#herolive")); }, 80);
 }
 
 /** Opciones de una partida guardada: exportarla a un archivo o borrarla. */
@@ -145,7 +135,7 @@ function slotSheet(nav: Nav, slot: number) {
     const txt = exportSlot(slot);
     if (!txt) return;
     const base = t.name.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() || "equipo";
-    void saveFile(`muro-de-boxes-${base}-ronda-${Math.min(s.round + 1, calendarOf(s).length)}.json`, txt);
+    void saveFile(new File([txt], `muro-de-boxes-${base}-ronda-${Math.min(s.round + 1, calendarOf(s).length)}.json`, { type: "application/json" }));
     close();
   };
   el.querySelector<HTMLButtonElement>('[data-m="delete"]')!.onclick = () => {
@@ -175,6 +165,7 @@ export function teamPickerScreen(nav: Nav, slot: number) {
       <div class="panel"><div class="bd" style="padding:0">
         ${BT.map((t) => `<div class="list-item" data-team="${t.id}" style="cursor:pointer;${pick === t.id ? "background:rgba(225,6,0,.22)" : ""}">
           <span class="teamdot" style="background:${t.color};height:40px;width:6px"></span>
+          <span class="hpair">${t.pilotos.map((p) => helmetSvg(t.color, p.numero, p.abrev, 30)).join("")}</span>
           <div class="grow"><b class="up">${esc(t.nombre)}</b> <span class="dim small">· motor ${esc(t.motor)}</span><br><span class="small">${t.pilotos.map((p) => `#${p.numero} ${esc(p.nombre)}`).join(" · ")}</span>
             <div class="row small" style="gap:6px;margin-top:3px"><span class="lvl"><i style="width:${Math.round(12 + (88 * (t.agarre - gMin)) / (gMax - gMin))}%"></i></span><span class="dim">coche ${ord(rank("agarre", t))} · motor ${ord(rank("potencia", t))} · <span class="${rank("agarre", t) <= 4 ? "green" : rank("agarre", t) >= 8 ? "yellow" : ""}">${level(t)}</span></span></div></div>
           <span class="small" style="width:14px">${pick === t.id ? "✔" : ""}</span></div>`).join("")}
@@ -201,35 +192,57 @@ export function seasonScreen(nav: Nav, s: SeasonState) {
   const myTeam = TEAMS.find((t) => t.id === s.playerTeam)!;
   const myPos = ts.findIndex((x) => x.team.id === s.playerTeam) + 1;
   const mine = ds.map((x, i) => ({ x, i })).filter(({ x }) => DRIVERS[x.id].team.id === s.playerTeam);
+  // puesto de cada piloto antes de la última carrera (para las flechas)
+  const prevPos = new Map(driverStandings({ ...s, rounds: s.rounds.slice(0, -1) }, DRIVERS.length).map((x, i) => [x.id, i]));
   app().innerHTML = `
   <div style="padding-bottom:16px">
     <div class="panel"><div class="hd"><span class="t">Temporada 2026 · ${esc(myTeam.nombre)}</span><button id="home">Inicio</button></div><div class="bd">
-      ${done ? `<h1>🏆 ${esc(champ!.d.nombre)}</h1><div class="dim">Campeón de la minitemporada con ${ds[0].points} puntos</div>` : `<button class="red big-cta" id="go">${flagOf(ROUNDS_S[s.round])} ${s.weekend && s.weekend.round === s.round + 1 && s.weekend.next > 0 ? "Seguir en el" : "Ir al"} ${esc(CIRCUITS[ROUNDS_S[s.round]].gp)}</button>`}
+      ${done ? `<div class="champ">${helmetSvg(champ!.team.color, champ!.d.numero, champ!.d.abrev, 72)}<div><span class="kick">Campeón del mundo</span><h1>🏆 ${esc(champ!.d.nombre)}</h1><div class="dim">${esc(champ!.team.nombre)} · ${ds[0].points} puntos</div></div></div>` : `<button class="red big-cta" id="go">${flagOf(ROUNDS_S[s.round])} ${s.weekend && s.weekend.round === s.round + 1 && s.weekend.next > 0 ? "Seguir en el" : "Ir al"} ${esc(CIRCUITS[ROUNDS_S[s.round]].gp)}</button>`}
       ${s.rounds.length ? `<div class="small" style="margin-top:8px">${esc(myTeam.nombre)}: <b>${ord(myPos)}</b> de constructores con ${ts[myPos - 1].points} pts · ${mine.map(({ x, i }) => `${esc(DRIVERS[x.id].d.abrev)} ${ord(i + 1)} (${x.points})`).join(" · ")}</div>` : ""}
     </div></div>
     ${s.equipo ? myTeamPanel(s, TEAMS) : ""}
     ${s.equipo && s.pu ? `<div class="panel"><div class="hd"><span class="t">Unidades de potencia</span></div><div class="bd">${puSummary(s.pu, DRIVERS.filter((d) => d.team.id === PLAYER_TEAM_ID).map((d) => d.id), DRIVERS.filter((d) => d.team.id === PLAYER_TEAM_ID).map((d) => d.d.abrev))}<div class="small dim" style="margin-top:4px">Porcentaje de vida gastada de cada unidad (en amarillo, la montada; tachadas, las rotas).</div></div></div>` : ""}
     ${s.equipo && GRID_CHANGES.length ? `<div class="panel"><div class="hd"><span class="t">La parrilla tras tus fichajes</span></div><div class="bd small">${GRID_CHANGES.map((c) => `${esc(c.team)}: ${c.what === "piloto" ? `${esc(c.in)} por ${esc(c.out)}` : `interino por ${esc(c.out)}`}`).join("<br>")}</div></div>` : ""}
     <div class="panel"><div class="hd"><span class="t">Calendario</span></div><div class="bd" style="padding:0">
-      ${ROUNDS_S.map((id, i) => {
+      <div class="calstrip" id="calstrip">${ROUNDS_S.map((id, i) => {
         const c = CIRCUITS[id];
         const r = s.rounds.find((x) => x.round === i + 1);
-        const win = r?.race?.[0];
+        const win = r?.race?.find((x) => x.status === "fin");
         const best = r?.race ? r.race.map((row, k) => ({ row, k })).filter(({ row }) => DRIVERS[row.id].team.id === s.playerTeam && row.status === "fin").map(({ k }) => k + 1) : [];
-        return `<div class="list-item"${r ? ` data-round="${i + 1}" style="cursor:pointer"` : ""}><span class="pos">${i + 1}</span><div class="grow"><b>${flagHtml(c.bandera)} ${esc(c.gp)}</b>${c.formato === "sprint" ? ' <span class="pill yellow">Sprint</span>' : ""}<br><span class="small dim">${esc(c.nombre)} · ${fmtDate(c.fecha)}</span></div>
-          <span class="small" style="text-align:right">${win ? `🏁 ${esc(DRIVERS[win.id].d.abrev)}${best.length ? `<br><span class="yellow">tú: P${best.join(" · P")}</span>` : ""}` : i === s.round ? '<span class="yellow">SIGUIENTE</span>' : ""}</span>${r ? `<span class="dim">›</span>` : ""}</div>`;
-      }).join("")}
+        const b = best[0];
+        const badge = !r ? "" : b ? `<span class="cbadge ${b <= 3 ? "pod" : b <= 10 ? "pts" : ""}">P${b}</span>` : `<span class="cbadge out">—</span>`;
+        const cls = r ? " done" : i === s.round ? " next" : "";
+        return `<div class="calcard${cls}"${r ? ` data-round="${i + 1}"` : ""}>
+          <div class="cc-top"><span class="cc-n">${i + 1}</span>${flagHtml(c.bandera)}${c.formato === "sprint" ? '<span class="cc-spr">Sprint</span>' : ""}</div>
+          <div class="cc-sil">${circuitSvg(c, 104, 60, r ? "#8a909a" : i === s.round ? "#ffffff" : "#c9ccd2", 2.2)}</div>
+          <b class="cc-gp">${esc(c.gp.replace("Gran Premio de ", ""))}</b>
+          <span class="cc-date">${fmtDate(c.fecha)}</span>
+          <div class="cc-res">${r ? `${win ? `🏁 ${esc(DRIVERS[win.id].d.abrev)}` : ""}${badge}` : i === s.round ? `<span class="cc-next">Siguiente</span>` : ""}</div>
+        </div>`;
+      }).join("")}</div>
     </div></div>
     <div class="panel"><div class="hd"><span class="t">Mundial de pilotos</span></div><div class="bd" style="padding:0">
-      <table class="tv">${ds.map((x, i) => { const d = DRIVERS[x.id]; return `<tr class="${d.team.id === s.playerTeam ? "me" : ""}"><td class="mono"><span class="pos">${i + 1}</span></td><td><span class="teamdot" style="background:${d.team.color}"></span>${esc(d.d.nombre)}</td><td class="dim small">${esc(d.team.nombre)}</td><td class="mono" style="text-align:right"><b>${x.points}</b></td></tr>`; }).join("")}</table>
+      ${s.rounds.length ? `<canvas class="champchart" id="champchart"></canvas><div class="small dim" style="padding:0 10px 6px">Puntos acumulados ronda a ronda: los cinco primeros y tus pilotos (línea gruesa).</div>` : ""}
+      <table class="tv">${ds.map((x, i) => {
+        const d = DRIVERS[x.id];
+        const was = prevPos.get(x.id);
+        const mv = s.rounds.length > 1 && was !== undefined ? was - i : 0;
+        return `<tr class="${d.team.id === s.playerTeam ? "me" : ""}"><td class="mono"><span class="pos">${i + 1}</span></td><td class="hcell">${helmetSvg(d.team.color, d.d.numero, d.d.abrev, 24)}${esc(d.d.nombre)}${mv ? ` <span class="${mv > 0 ? "green" : "redt"} small">${mv > 0 ? "▲" : "▼"}${Math.abs(mv)}</span>` : ""}</td><td class="dim small">${esc(d.team.nombre)}</td><td class="mono" style="text-align:right"><b>${x.points}</b></td></tr>`;
+      }).join("")}</table>
     </div></div>
-    <div class="panel"><div class="hd"><span class="t">Mundial de constructores</span></div><div class="bd" style="padding:0">
-      <table class="tv">${ts.map((x, i) => `<tr class="${x.team.id === s.playerTeam ? "me" : ""}"><td><span class="pos">${i + 1}</span></td><td><span class="teamdot" style="background:${x.team.color}"></span>${esc(x.team.nombre)}</td><td class="mono" style="text-align:right"><b>${x.points}</b></td></tr>`).join("")}</table>
+    <div class="panel"><div class="hd"><span class="t">Mundial de constructores</span></div><div class="bd cbars">
+      ${ts.map((x, i) => `<div class="cbar${x.team.id === s.playerTeam ? " me" : ""}"><span class="pos">${i + 1}</span><span class="cn">${esc(x.team.nombre)}</span><span class="cb"><i style="--w:${ts[0].points ? Math.max(1.5, (100 * x.points) / ts[0].points) : 1.5}%;background:${x.team.color};animation-delay:${i * 45}ms"></i></span><b class="mono">${x.points}</b></div>`).join("")}
     </div></div>
     ${done ? `<div style="padding:0 10px"><button class="red big-cta" id="again">Nueva temporada</button></div>` : ""}
   </div>`;
   setBack(() => nav.home());
   $("#home").onclick = () => nav.home();
+  // el calendario se abre por la próxima carrera
+  const strip = document.getElementById("calstrip");
+  const nextCard = strip?.querySelector<HTMLElement>(".calcard.next");
+  if (strip && nextCard) strip.scrollLeft = Math.max(0, nextCard.offsetLeft - 12);
+  const cc = document.getElementById("champchart") as HTMLCanvasElement | null;
+  if (cc) requestAnimationFrame(() => drawChampChart(cc, s, ROUNDS_S));
   document.querySelectorAll<HTMLElement>("[data-round]").forEach((el) => (el.onclick = () => { const r = s.rounds.find((x) => x.round === Number(el.dataset.round)); if (r) roundSheet(r, s.playerTeam); }));
   if (!done) $("#go").onclick = () => {
     if (!s.weekend || s.weekend.round !== s.round + 1) {
@@ -240,6 +253,68 @@ export function seasonScreen(nav: Nav, s: SeasonState) {
     nav.weekend();
   };
   else $("#again").onclick = () => nav.home();
+}
+
+/**
+ * Mundial ronda a ronda: puntos acumulados de los cinco primeros y de tus pilotos (línea gruesa),
+ * cada uno con el color de su equipo y su abreviatura al final. Se dibuja de izquierda a derecha.
+ */
+function drawChampChart(cv: HTMLCanvasElement, s: SeasonState, cal: string[]) {
+  const n = s.rounds.length;
+  const per = Array.from({ length: n + 1 }, (_, r) => new Map(driverStandings({ ...s, rounds: s.rounds.slice(0, r) }, DRIVERS.length).map((x) => [x.id, x.points])));
+  const final = driverStandings(s, DRIVERS.length);
+  const ids = [...new Set([...final.slice(0, 5).map((x) => x.id), ...final.filter((x) => DRIVERS[x.id].team.id === s.playerTeam).map((x) => x.id)])];
+  const dpr = window.devicePixelRatio || 1;
+  const W = cv.clientWidth || 360, H = 200;
+  cv.width = W * dpr; cv.height = H * dpr; cv.style.height = H + "px";
+  const g = cv.getContext("2d")!;
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const L = 30, R = 46, T = 12, B = 24;
+  const max = Math.max(10, ...ids.map((id) => per[n].get(id) ?? 0));
+  const X = (r: number) => L + ((W - L - R) * r) / Math.max(1, cal.length);
+  const Y = (p: number) => T + (H - T - B) * (1 - p / max);
+  const FONT = (w: number, px: number) => `${w} ${px}px "Titillium Web", sans-serif`;
+  const seenTeam = new Set<string>();
+  const series = ids.map((id) => {
+    const d = DRIVERS[id];
+    const dash = seenTeam.has(d.team.id);
+    seenTeam.add(d.team.id);
+    return { id, d, mine: d.team.id === s.playerTeam, dash, pts: per.map((m) => m.get(id) ?? 0) };
+  });
+  const frame = (k: number) => {
+    g.clearRect(0, 0, W, H);
+    // rejilla y ejes
+    g.strokeStyle = "rgba(255,255,255,.08)"; g.lineWidth = 1; g.fillStyle = "#8e95a0"; g.font = FONT(600, 10);
+    const step = max > 150 ? 50 : max > 60 ? 25 : 10;
+    for (let p = 0; p <= max; p += step) { g.beginPath(); g.moveTo(L, Y(p) + 0.5); g.lineTo(W - R, Y(p) + 0.5); g.stroke(); g.textAlign = "right"; g.fillText(String(p), L - 5, Y(p) + 3); }
+    g.textAlign = "center";
+    for (let r = 1; r <= cal.length; r++) g.fillText(String(r), X(r), H - 8);
+    g.save();
+    g.beginPath(); g.rect(0, 0, L + (W - L - R) * k * (n / Math.max(1, cal.length)) + 2, H); g.clip();
+    for (const sr of [...series].sort((a, b) => Number(a.mine) - Number(b.mine))) {
+      g.strokeStyle = sr.d.team.color; g.lineWidth = sr.mine ? 3.2 : 1.8; g.globalAlpha = sr.mine ? 1 : 0.85;
+      g.setLineDash(sr.dash ? [5, 3] : []);
+      g.beginPath();
+      sr.pts.forEach((p, r) => (r ? g.lineTo(X(r), Y(p)) : g.moveTo(X(r), Y(p))));
+      g.stroke();
+    }
+    g.restore();
+    g.globalAlpha = 1; g.setLineDash([]);
+    if (k >= 1) {
+      // abreviaturas al final de cada línea, sin pisarse
+      const labels = series.map((sr) => ({ sr, y: Y(sr.pts[n]) })).sort((a, b) => a.y - b.y);
+      for (let i = 1; i < labels.length; i++) if (labels[i].y - labels[i - 1].y < 11) labels[i].y = labels[i - 1].y + 11;
+      g.textAlign = "left"; g.font = FONT(900, 10.5);
+      for (const { sr, y } of labels) {
+        g.fillStyle = sr.d.team.color; g.beginPath(); g.arc(X(n), Y(sr.pts[n]), sr.mine ? 3.5 : 2.5, 0, 7); g.fill();
+        g.fillStyle = sr.mine ? "#ffd84a" : "#e6e8ec"; g.fillText(sr.d.d.abrev, X(n) + 6, y + 3.5);
+      }
+    }
+  };
+  if (reducedMotion()) return frame(1);
+  const t0 = performance.now();
+  const tick = (now: number) => { if (!cv.isConnected) return; const k = Math.min(1, (now - t0) / 1100); frame(k); if (k < 1) requestAnimationFrame(tick); };
+  requestAnimationFrame(tick);
 }
 
 /** Un gran premio ya corrido: carrera (con su resumen si se guardó), sprint y clasificación. */
@@ -350,12 +425,22 @@ export function weekendScreen(nav: Nav, s: SeasonState, pending: SessionSnapshot
   const nextDay = wk.when(sessions[st.next] ?? "RACE").day;
   const past = st.days.map((d, i) => ({ d, i })).filter(({ i }) => i < nextDay);
   const tips = nextSteps(wk, team, mine, outlook);
+  // portada: el cielo de la próxima sesión (hora y lo que se espera que llueva)
+  const heroClock = next ? wk.when(next).clock : 14 * 60;
+  const heroGloom = Math.min(1, (outlook.find((o) => o.kind === next)?.rain ?? 0) * 1.2);
   app().innerHTML = `
   <div style="padding-bottom:16px">
-    <div class="panel"><div class="hd"><span class="t">Ronda ${st.round} · ${flagHtml(def.bandera)} ${esc(def.pais)}</span><button id="back">Temporada</button></div><div class="bd">
-      <h1>${esc(def.gp)}</h1>
-      <div class="dim">${esc(def.nombre)} · ${(track.length / 1000).toFixed(3)} km · ${def.vueltas} vueltas${def.formato === "sprint" ? ` · <span class="yellow">fin de semana sprint (${def.vueltasSprint} v)</span>` : ""} · ${fmtDate(def.fecha)}</div>
-      <canvas id="mini" style="width:100%;height:150px;margin-top:6px"></canvas>
+    <div class="panel"><div class="hd"><span class="t">Ronda ${st.round} · ${flagHtml(def.bandera)} ${esc(def.pais)}</span><button id="back">Temporada</button></div><div class="bd gphero${lightAt(heroClock) === "noche" ? " night" : ""}" style="background:${skyGradient(heroClock, heroGloom)}">
+      <canvas id="mini"></canvas>
+      <div class="gpt"><h1>${esc(def.gp)}</h1>
+      <div>${esc(def.nombre)} · ${(track.length / 1000).toFixed(3)} km · ${def.vueltas} vueltas${def.formato === "sprint" ? ` · <span class="yellow">sprint (${def.vueltasSprint} v)</span>` : ""} · ${fmtDate(def.fecha)}</div></div>
+      ${next ? `<div class="gpnext">${skyIcon(heroGloom > 0.5 ? 0.8 : 0.2, heroGloom > 0.6 ? 2 : 0, heroClock)}<span><b>${DAY_NAMES[wk.when(next).day]} ${String(Math.floor(heroClock / 60)).padStart(2, "0")}:${String(heroClock % 60).padStart(2, "0")}</b> · ${SESSION_NAMES[next]}</span></div>` : ""}
+      <div class="tline">${sessions.map((k, i) => {
+        const res = st.results[k];
+        const best = res ? res.map((r, j) => ({ r, j })).filter(({ r }) => DRIVERS[r.id].team.id === s.playerTeam).map(({ j }) => j + 1).sort((a, b) => a - b)[0] : undefined;
+        const SHORT: Record<SessionKind, string> = { FP1: "L1", FP2: "L2", FP3: "L3", SQ: "QS", SPRINT: "S", Q: "Q", RACE: "C" };
+        return `<div class="tn${res ? " done" : i === st.next ? " now" : ""}"><i></i><b>${SHORT[k]}</b><span>${DAY_NAMES[wk.when(k).day].slice(0, 3)}</span>${best ? `<em>P${best}</em>` : ""}</div>`;
+      }).join("")}</div>
     </div></div>
     ${tips.length ? `<div class="panel"><div class="hd"><span class="t">¿Y ahora qué?</span></div><div class="bd small">${tips.map((t) => `<div class="tip">${t}</div>`).join("")}</div></div>` : ""}
     <div class="panel"><div class="hd"><span class="t">Programa y previsión</span></div><div class="bd" style="padding:0">
@@ -384,7 +469,7 @@ export function weekendScreen(nav: Nav, s: SeasonState, pending: SessionSnapshot
       <div class="small dim">El porcentaje es la goma que le queda a cada juego; tachados, los devueltos. ${st.sprint ? "Sprint: 12 de seco (6 blandos, 4 medios, 2 duros), 6 intermedios y 3 de lluvia." : "13 de seco (8 blandos, 3 medios, 2 duros), 4 intermedios y 3 de lluvia."} Tras cada libre se devuelven los más gastados. En carrera en seco hay que usar dos compuestos.</div>
     </div></div>
   </div>`;
-  drawMini($<HTMLCanvasElement>("#mini"), track);
+  drawMini($<HTMLCanvasElement>("#mini"), track, true, lightAt(heroClock) === "noche");
   wirePu(st, () => { saveSeason(s); const y = window.scrollY; weekendScreen(nav, s, pending); window.scrollTo(0, y); });
   setBack(() => nav.season());
   $("#back").onclick = () => nav.season();
@@ -401,21 +486,55 @@ export function weekendScreen(nav: Nav, s: SeasonState, pending: SessionSnapshot
   document.querySelectorAll<HTMLElement>("[data-res]").forEach((b) => (b.onclick = () => { const kind = b.dataset.res as SessionKind; resultsSheet(kind, st.results[kind]!, s.playerTeam, st.scoring?.[kind], st.summaries?.[kind]); }));
 }
 
-export function drawMini(cv: HTMLCanvasElement, track: ReturnType<typeof getTrack>) {
+/** El circuito de la portada: se dibuja solo de la salida a la meta (y, de noche, con el halo de los focos). */
+export function drawMini(cv: HTMLCanvasElement, track: ReturnType<typeof getTrack>, animate = false, night = false) {
   const dpr = window.devicePixelRatio || 1;
   const w = cv.clientWidth, h = cv.clientHeight;
   cv.width = w * dpr; cv.height = h * dpr;
   const g = cv.getContext("2d")!;
   let minx = 1e9, maxx = -1e9, miny = 1e9, maxy = -1e9;
   for (let i = 0; i < track.xs.length; i++) { minx = Math.min(minx, track.xs[i]); maxx = Math.max(maxx, track.xs[i]); miny = Math.min(miny, track.ys[i]); maxy = Math.max(maxy, track.ys[i]); }
-  const pad = 10 * dpr;
+  const pad = 12 * dpr;
   const sc = Math.min((cv.width - 2 * pad) / (maxx - minx), (cv.height - 2 * pad) / (maxy - miny));
   const ox = (cv.width - (maxx - minx) * sc) / 2 - minx * sc, oy = (cv.height - (maxy - miny) * sc) / 2 + maxy * sc;
-  g.lineWidth = 5 * dpr; g.strokeStyle = "#e8e8e8"; g.lineJoin = "round";
-  g.beginPath();
-  for (let i = 0; i < track.xs.length; i++) { const x = ox + track.xs[i] * sc, y = oy - track.ys[i] * sc; if (i) g.lineTo(x, y); else g.moveTo(x, y); }
-  g.closePath(); g.stroke();
-  g.fillStyle = "#e10600"; g.beginPath(); g.arc(ox + track.xs[0] * sc, oy - track.ys[0] * sc, 5 * dpr, 0, 7); g.fill();
+  const pts: [number, number][] = [];
+  for (let i = 0; i < track.xs.length; i += 2) pts.push([ox + track.xs[i] * sc, oy - track.ys[i] * sc]);
+  pts.push(pts[0]);
+  let total = 0;
+  for (let i = 1; i < pts.length; i++) total += Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+  const path = () => { g.beginPath(); pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y))); };
+  const frame = (k: number) => {
+    g.clearRect(0, 0, cv.width, cv.height);
+    g.lineJoin = "round"; g.lineCap = "round";
+    g.setLineDash([total * k, total]);
+    g.save();
+    g.strokeStyle = night ? "rgba(255,236,190,.35)" : "rgba(255,255,255,.22)"; g.lineWidth = 12 * dpr;
+    g.shadowColor = night ? "rgba(255,225,160,.8)" : "rgba(0,0,0,.35)"; g.shadowBlur = 14 * dpr;
+    path(); g.stroke();
+    g.restore();
+    g.setLineDash([total * k, total]);
+    g.strokeStyle = "#f2f3f5"; g.lineWidth = 4.5 * dpr; path(); g.stroke();
+    g.setLineDash([]);
+    g.fillStyle = "#e10600"; g.beginPath(); g.arc(pts[0][0], pts[0][1], 6 * dpr, 0, 7); g.fill();
+    if (k < 1) { const p = pointAt(total * k); g.fillStyle = "#ffd84a"; g.beginPath(); g.arc(p[0], p[1], 5 * dpr, 0, 7); g.fill(); }
+  };
+  const pointAt = (d: number): [number, number] => {
+    for (let i = 1; i < pts.length; i++) {
+      const l = Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+      if (d <= l) { const t = d / (l || 1); return [pts[i - 1][0] + (pts[i][0] - pts[i - 1][0]) * t, pts[i - 1][1] + (pts[i][1] - pts[i - 1][1]) * t]; }
+      d -= l;
+    }
+    return pts[0];
+  };
+  if (!animate || reducedMotion()) return frame(1);
+  const t0 = performance.now(), dur = 1500;
+  const tick = (now: number) => {
+    if (!cv.isConnected) return;
+    const k = Math.min(1, (now - t0) / dur);
+    frame(1 - Math.pow(1 - k, 2.2));
+    if (k < 1) requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
 }
 
 // --------------------------------------------------------------- tandas largas
@@ -483,7 +602,7 @@ export function mineHeadline(kind: SessionKind, rows: ResultRow[], playerTeam: s
     } else {
       detail = `${fmtLap(r.best)}${i > 0 && isFinite(r.best) && isFinite(rows[0].best) ? ` (+${(r.best - rows[0].best).toFixed(3)})` : ""} · ${r.laps} v`;
     }
-    return `<div class="row mineline"><span class="posbox mono">${i + 1}</span><b class="up">${esc(d.d.nombre)}</b><span class="grow small" style="text-align:right">${detail}</span></div>`;
+    return `<div class="row mineline"><span class="posbox mono">${i + 1}</span>${helmetSvg(d.team.color, d.d.numero, d.d.abrev, 30)}<b class="up">${esc(d.d.nombre)}</b><span class="grow small" style="text-align:right">${detail}</span></div>`;
   });
   return lines.length ? `<div class="panel"><div class="hd"><span class="t">Tus pilotos</span></div><div class="bd">${lines.join("")}</div></div>` : "";
 }
@@ -493,9 +612,10 @@ export function resultsSheet(kind: SessionKind, rows: ResultRow[], playerTeam: s
   if (sum) requestAnimationFrame(() => drawRaceSummary(sum, el));
 }
 
-export function resultsScreen(kind: SessionKind, rows: ResultRow[], s: SeasonState, gp: string, extra: string, onContinue: () => void) {
+export function resultsScreen(kind: SessionKind, rows: ResultRow[], s: SeasonState, gp: string, extra: string, onContinue: () => void, top = "") {
   const table = s.weekend?.scoring?.[kind] ?? (kind === "RACE" ? s.rounds[s.rounds.length - 1]?.raceTable : undefined);
   app().innerHTML = `<div style="padding-bottom:8px">
+    ${top}
     ${mineHeadline(kind, rows, s.playerTeam, table)}
     <div class="panel"><div class="hd"><span class="t">🏁 ${SESSION_NAMES[kind]} · ${esc(gp)}</span></div><div class="bd" style="padding:0">${resultsTable(kind, rows, s.playerTeam, table)}</div></div>
     ${extra}
