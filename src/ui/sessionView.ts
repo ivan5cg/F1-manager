@@ -70,7 +70,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     <div class="main"><div class="bigban" id="bigban" aria-live="polite"></div>
       <div class="leftcol"><div class="tower" id="tower"></div><div class="toast" id="toast" title="Dirección de carrera y meteo"></div></div>
       <div class="side${race ? "" : " timed"}">
-        <div class="mapbox"><canvas id="map" title="Toca un coche para seguirlo. Línea discontinua: zona de modo adelantamiento · naranja: frenada donde se adelanta${race ? " · círculo discontinuo: dónde estaría tu piloto si parase ahora" : ""}"></canvas><div class="flyov" id="flyov"></div><div class="selchip" id="selchip"></div><button class="camb" id="camb" title="Cámara: sigue de cerca a tu piloto (o al coche que sigues)" aria-label="Cámara que sigue"><svg viewBox="0 0 20 16" width="20" height="16" aria-hidden="true"><rect x="1" y="3" width="13" height="10" rx="2" fill="currentColor"/><path d="M14.5 7 19 4.5v7L14.5 9z" fill="currentColor"/></svg></button></div>
+        <div class="mapbox"><canvas id="map" title="Toca un coche para seguirlo. Línea discontinua: zona de modo adelantamiento · naranja: frenada donde se adelanta${race ? " · círculo discontinuo: dónde estaría tu piloto si parase ahora" : ""}"></canvas><canvas id="map3d" hidden aria-label="Mapa 3D"></canvas><div class="lbl3d" id="lbl3d" hidden></div><div class="flyov" id="flyov"></div><div class="selchip" id="selchip"></div><button class="camb" id="camb" title="Cámara: sigue de cerca a tu piloto (o al coche que sigues)" aria-label="Cámara que sigue"><svg viewBox="0 0 20 16" width="20" height="16" aria-hidden="true"><rect x="1" y="3" width="13" height="10" rx="2" fill="currentColor"/><path d="M14.5 7 19 4.5v7L14.5 9z" fill="currentColor"/></svg><span id="camn"></span></button><button class="m3b" id="m3b" title="Cambia entre el mapa 2D y el 3D" aria-label="Mapa en 3D" aria-pressed="false">3D</button><button class="bigb" id="bigb" title="Amplía el mapa sobre la clasificación" aria-label="Ampliar el mapa" aria-pressed="false"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" fill="none" stroke="currentColor" stroke-width="2"/></svg></button></div>
         ${race ? `<canvas id="gapstrip" class="gapstrip" title="Toda la parrilla en una vuelta: el líder a la izquierda. El círculo discontinuo es dónde saldría tu piloto si parase ahora."></canvas>` : ""}
         <div class="wxbox" id="wx"></div>
         <div id="lapban"></div>
@@ -364,6 +364,63 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   };
 
 
+  // ------------------------------------------------------------- mapa 3D
+  // El 2D es el mapa de siempre. El 3D (map3d.ts, con three.js) se descarga la primera vez que se
+  // pulsa «3D» y ocupa el mismo recuadro; lo elegido se recuerda para la próxima sesión.
+  type Map3d = ReturnType<typeof import("./map3d").createMap3d>;
+  let view3d = false, m3: Map3d | null = null, m3busy = false;
+  function cam3d(name: string) {
+    $("#camn").textContent = view3d ? name : "";
+    $("#camb").classList.toggle("on", view3d ? name !== "Circuito" : camOn);
+  }
+  async function set3d(on: boolean, save = true) {
+    if (m3busy) return;
+    if (on && !m3) {
+      m3busy = true;
+      $("#m3b").classList.add("busy");
+      try {
+        const mod = await import("./map3d");
+        if (ended) return;
+        // el recuadro tiene que estar visible para que el lienzo coja su tamaño
+        $("#map3d").hidden = false;
+        m3 = mod.createMap3d({
+          canvas: $<HTMLCanvasElement>("#map3d"), labels: $("#lbl3d"), box: document.querySelector<HTMLElement>(".mapbox")!, sess,
+          mine, selId: () => selId,
+          alpha: () => (paused ? 1 : Math.min(1, leftover / sess.dt)),
+          paused: () => paused, speed: () => (ff ? FF_SPEED : speed),
+          ghosts: () => mine().flatMap((c) => { const gh = ghosts.get(c.id); return gh ? [{ s: c.s - gh.back, text: `${c.d.abrev} P${gh.pos}`, color: c.team.color }] : []; }),
+        });
+      } catch (err) {
+        console.error(err);
+        $("#map3d").hidden = true;
+        showToast("Este dispositivo no puede abrir el mapa 3D: sigues con el 2D.", 4500, "Mapa");
+        on = false;
+      } finally {
+        m3busy = false;
+        document.getElementById("m3b")?.classList.remove("busy");
+      }
+    }
+    if (ended) return;
+    view3d = on && !!m3;
+    $("#map").hidden = view3d; $("#map3d").hidden = !view3d; $("#lbl3d").hidden = !view3d;
+    $("#m3b").classList.toggle("on", view3d); $("#m3b").setAttribute("aria-pressed", String(view3d));
+    cam3d(view3d ? "Circuito" : "");
+    if (view3d) { while (m3!.cam() !== "circuito") m3!.cycleCam(); m3!.resize(); m3!.idle(); } else drawMap();
+    if (save) { prefs.mapa3d = view3d; savePrefs(prefs); }
+  }
+  $("#m3b").onclick = (e) => { e.stopPropagation(); void set3d(!view3d); };
+  $("#bigb").onclick = (e) => {
+    e.stopPropagation();
+    const on = document.querySelector(".main")!.classList.toggle("mapbig");
+    $("#bigb").classList.toggle("on", on); $("#bigb").setAttribute("aria-pressed", String(on));
+  };
+  $<HTMLCanvasElement>("#map3d").addEventListener("click", (e) => {
+    if (!m3) return;
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const best = m3.pick(e.clientX - r.left, e.clientY - r.top) as number | null;
+    if (best === null) { if (selId !== null) select(null); } else select(best);
+  });
+
   // ---------------------------------------------------------------- mapa
   // vista base (todo el circuito) y vista actual (con la cámara puede ir más cerca)
   let mapScale = 1, mapOx = 0, mapOy = 0;
@@ -416,6 +473,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   /** Tocar el mismo coche (o un sitio vacío) deja de seguirlo. */
   function select(id: number | null) {
     selId = id !== null && id === selId ? null : id;
+    m3?.selChanged();
     renderSel(); renderTower(); drawMap(); drawStrip();
   }
   const L = track.length;
@@ -552,6 +610,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   }
   $("#camb").onclick = (e) => {
     e.stopPropagation();
+    if (view3d && m3) { cam3d(m3.cycleCam()); return; }
     camOn = !camOn;
     $("#camb").classList.toggle("on", camOn);
     if (camOn && !camTarget()) showToast("La cámara sigue a tu piloto cuando está en pista (o al coche que toques).", 3500, "Mapa");
@@ -1825,6 +1884,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     cancelAnimationFrame(raf);
     window.onresize = null;
     mapObs.disconnect();
+    m3?.dispose(); m3 = null;
     keepAwake(false);
   }
   function finish() {
@@ -1887,11 +1947,12 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   sizeMap();
   window.onresize = sizeMap;
   renderTower(); renderTop(); renderDrivers();
-  const mapObs = new ResizeObserver(() => sizeMap());
+  const mapObs = new ResizeObserver(() => { sizeMap(); m3?.resize(); });
   mapObs.observe(document.querySelector(".mapbox")!);
   updSpeed();
   // «atrás» (móvil o navegador) abre el menú de la sesión en vez de sacarte de la app
   setBack(() => menuSheet());
+  if (prefs.mapa3d) void set3d(true, false);
   let last = performance.now();
   const loop = (now: number) => {
     const real = Math.min(0.1, (now - last) / 1000);
@@ -1904,6 +1965,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       // va algo más lenta en vez de dar tirones (y no se acumula retraso)
       const budget = performance.now() + (ff ? 28 : 10);
       while (leftover >= sess.dt && n < 6000) {
+        if (view3d && m3) m3.beforeStep();
         sess.step();
         leftover -= sess.dt;
         n++;
@@ -1916,7 +1978,9 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       if (!race && !skipping) idleCheck();
       // en pausa no cambia casi nada: se redibuja 4 veces por segundo en vez de 60 (batería)
       const busy = !paused;
-      if (!skipping && (busy || now - lastDraw > 250)) { lastDraw = now; drawMap(); drawStrip(); renderFly(); }
+      const in3d = view3d && !!m3 && !wide;
+      if (in3d && !skipping) m3!.draw(real, now); // el 3D va en cada fotograma: la cámara se mueve aunque esté en pausa
+      if (!skipping && (busy || now - lastDraw > 250)) { lastDraw = now; if (!in3d) drawMap(); drawStrip(); renderFly(); }
       if (now - lastUi > (busy ? 250 : 500) && !skipping) {
         lastUi = now;
         updateGhosts(); updateRainAlert(); fastestLapCheck();

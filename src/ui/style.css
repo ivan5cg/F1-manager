@@ -745,3 +745,27 @@ canvas.champchart { display: block; width: 100%; height: 200px; margin: 6px 0 2p
 .fcico svg { width: 21px; height: 14px; }
 .gpnext .fcico { margin-right: 0; }
 .gpnext .fcico svg { width: 24px; height: 16px; }
+
+/* ===================================================================================
+   MAPA 3D: mismo recuadro que el 2D, con su botón para cambiar, la cámara y ampliar
+   =================================================================================== */
+#map3d { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: pointer; touch-action: manipulation; }
+.lbl3d { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 2; }
+.lbl3 { position: absolute; left: 0; top: 0; display: flex; align-items: stretch; height: 13px; font-size: 9.5px; font-weight: 900; letter-spacing: .04em; line-height: 13px; white-space: nowrap; will-change: transform; color: #fff; }
+.lbl3 i { width: 2px; }
+.lbl3 span { background: rgba(8, 9, 11, .8); padding: 0 3px; }
+.lbl3.me span { color: var(--gold1); }
+.lbl3.sel span { background: var(--gl-gold); color: #000; }
+.gh3 { position: absolute; left: 0; top: 0; padding: 0 4px; height: 14px; line-height: 12px; font-size: 9px; font-weight: 900; color: #fff; background: rgba(0, 0, 0, .6); border: 1.5px dashed #fff; border-radius: 8px; white-space: nowrap; will-change: transform; }
+.m3b, .bigb { position: absolute; bottom: 4px; z-index: 3; height: 30px; min-height: 0; min-width: 36px; padding: 0 8px; display: flex; align-items: center; justify-content: center; background: rgba(8, 9, 11, .7); border: 1px solid rgba(255, 255, 255, .18); color: #cfd3da; font-size: 12px; font-weight: 900; letter-spacing: .06em; }
+.m3b { right: 4px; }
+.bigb { left: 4px; }
+.m3b.on, .bigb.on { background: var(--gl-gold); color: #000; border-color: transparent; }
+.m3b.busy { opacity: .55; }
+.camb { width: auto; min-width: 38px; padding: 0 8px; gap: 5px; font-size: 11px; font-weight: 900; letter-spacing: .06em; text-transform: uppercase; }
+.camb #camn:empty { display: none; }
+/* mapa ampliado: tapa la clasificación hasta que se vuelve a pulsar */
+.main.mapbig { position: relative; }
+.main.mapbig .mapbox { position: absolute; inset: 4px 4px 2px; z-index: 6; }
+/* los lienzos del mapa llevan display propio: «hidden» tiene que poder con él */
+#map[hidden], #map3d[hidden] { display: none; }

@@ -153,6 +153,18 @@ Cada circuito tiene su balance. En Monza ir a rebufo compensa; en Silverstone o 
 
 `data/mercado-2026.json`: el mercado del modo «crear equipo»: precios, incertidumbre, reservas y pilotos libres, jefes de equipo, directores técnicos y motores. Los cargos y reservas son los de la prensa de principios de 2026; los que no estaban confirmados llevan una nota. Las valoraciones son estimaciones del juego.
 
+## Mapa 3D
+
+En la sesión, el botón **3D** del mapa cambia el mapa de siempre por una vista en 3D que ocupa el
+mismo recuadro (se descarga la primera vez que se pulsa y se recuerda para la siguiente sesión).
+El botón de la cámara pasa por *Circuito*, *Seguir* y *Tele*, y el de la esquina amplía el mapa
+sobre la clasificación. Si el dispositivo va justo, la calidad baja sola.
+
+Posiciones, paradas, compuestos, lluvia, nubes, hora y agua en pista (con el carril seco al
+secarse) salen de la simulación. La altitud, la anchura y el lado de los boxes salen de los datos
+de cada circuito (`relieve`, `ancho`, `boxes.lado`), que genera `python3 scripts/relieve.py`. La
+trazada, el cabeceo de los coches, las escapatorias, los árboles y los edificios son solo dibujo.
+
 ## Simular sin interfaz
 
 ```bash
@@ -178,3 +190,4 @@ npx tsx scripts/pista.ts spa                         # análisis del circuito
 - Tormentas: [NWS: ciclo de vida de una tormenta](https://www.weather.gov/spotterguide/life), [Royal Meteorological Society: ciclo de vida de una tormenta](https://www.rmets.org/metmatters/life-cycle-thunderstorm).
 - Mojado: [Pirelli: cuándo cambiar de slicks a neumáticos de lluvia](https://www.pirelli.com/global/en-ww/race/when-it-s-time-to-change-from-slick-to-wet-tyres-in-formula-1), [FIA: pole en mojado de Interlagos 2024](https://fia.com/node/54403), [FIA: clasificación sprint de Interlagos 2024](https://fia.com/node/54364).
 - Clima: [24 Horas de Spa (julio)](https://www.crowdstrike24hoursofspa.com/news/1919/what-an-autumn-edition-means-for-the-total-24-hours-of-spa-weather-forecast), [weatherapi.com: Spa](https://www.weatherapi.com/history/july/q/spa-205712), [weatherapi.com: Monza](https://www.weatherapi.com/history/september/q/monza-1281402), [weatheronthisday.com: São Paulo](https://weatheronthisday.com/intl/sao-paulo/november), [weathermonth.com: São Paulo](https://weathermonth.com/en/sao-paulo-weather-in-november). Silverstone en julio es aproximado (no se encontró una normal climática fiable).
+- Altitud de los circuitos: Mapzen/AWS Terrain Tiles (teselas «terrarium»), con el trazado situado sobre el mapa mediante bacinger/f1-circuits.
