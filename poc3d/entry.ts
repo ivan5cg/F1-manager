@@ -6,12 +6,15 @@ import monaco from "../data/circuitos/monaco.json";
 import interlagos from "../data/circuitos/interlagos.json";
 import silverstone from "../data/circuitos/silverstone.json";
 import monza from "../data/circuitos/monza.json";
+import bahrein from "../data/circuitos/bahrein.json";
+import sepang from "../data/circuitos/sepang.json";
+import singapur from "../data/circuitos/singapur.json";
 import { buildTrack } from "../src/sim/track";
 import { Weekend, newWeekend } from "../src/sim/weekend";
 import type { TeamDef } from "../src/sim/session";
 import { rainAt } from "../src/sim/weather";
 
-const CIRCUITS: Record<string, any> = { spa, suzuka, monaco, interlagos, silverstone, monza };
+const CIRCUITS: Record<string, any> = { suzuka, bahrein, monaco, silverstone, spa, monza, sepang, singapur, interlagos };
 const TEAMS = teamsJson.equipos as unknown as TeamDef[];
 
 (globalThis as any).MuroSim = {
