@@ -136,6 +136,11 @@ function collect() {
       const p = n.attributes.position.array, qn = n.attributes.normal.array;
       for (let i = 0; i < p.length; i += 3) { pos.push(p[i], p[i + 1], p[i + 2]); nor.push(qn[i], qn[i + 1], qn[i + 2]); col.push(c[0], c[1], c[2]); }
     },
+    /** Geometría ya sin índices, con sus normales y colores de vértice. */
+    raw(g) {
+      const p = g.attributes.position.array, qn = g.attributes.normal.array, cc = g.attributes.color.array;
+      for (let i = 0; i < p.length; i++) { pos.push(p[i]); nor.push(qn[i]); col.push(cc[i]); }
+    },
     done() {
       const g = new THREE.BufferGeometry();
       g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
@@ -145,9 +150,43 @@ function collect() {
     },
   };
 }
+/**
+ * Superficie curva a lo largo del coche: une secciones [x, y centro, z centro, medio ancho, medio alto]
+ * con forma de superelipse. col(ángulo, índice de sección) da el color de cada vértice (ángulo 0 = arriba).
+ */
+function loft(c, secs, col, N = 14, expo = 2.6) {
+  const pos = [], colr = [], idx = [], R = secs.length;
+  for (let r = 0; r < R; r++) {
+    const [x, yc, zc, hw, hh] = secs[r];
+    for (let j = 0; j < N; j++) {
+      const a = (j / N) * Math.PI * 2, cy = Math.cos(a), sz = Math.sin(a);
+      const k = Math.pow(Math.pow(Math.abs(cy), expo) + Math.pow(Math.abs(sz), expo), -1 / expo);
+      pos.push(x, yc + hh * cy * k, zc + hw * sz * k);
+      colr.push(...col(a > Math.PI ? Math.PI * 2 - a : a, r));
+    }
+  }
+  for (let r = 0; r < R - 1; r++) for (let j = 0; j < N; j++) {
+    const a = r * N + j, b = r * N + ((j + 1) % N), d = a + N, e = b + N;
+    idx.push(a, b, d, b, e, d);
+  }
+  // tapas delante y detrás
+  for (const r of [0, R - 1]) {
+    const cI = pos.length / 3, s = secs[r];
+    pos.push(s[0], s[1], s[2]); colr.push(...col(Math.PI, r));
+    for (let j = 0; j < N; j++) idx.push(cI, r * N + j, r * N + ((j + 1) % N));
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute("color", new THREE.Float32BufferAttribute(colr, 3));
+  g.setIndex(idx);
+  g.computeVertexNormals(); // normales suaves: la carrocería no se ve a facetas
+  c.raw(g.toNonIndexed());
+}
+// Monoplaza genérico con las proporciones del reglamento de 2026 (x hacia delante, y arriba, z a la derecha; metros).
 function carGeometry() {
-  const c = collect();
-  /** Caja que se estrecha hacia delante (f) o hacia atrás (r): [escala alto, escala ancho]. */
+  const c = collect(), DEG = Math.PI / 180;
+  const ACC = [0.12, 0.8, 0]; // línea clara de la decoración
+  /** Caja que se estrecha hacia delante (f) o hacia atrás (r): [escala alto, escala ancho, desplazamiento en alto]. */
   const part = (lx, ly, lz, x, y, z, colr, f, r) => {
     const g = new THREE.BoxGeometry(lx, ly, lz), p = g.attributes.position;
     for (let i = 0; i < p.count; i++) {
@@ -156,46 +195,93 @@ function carGeometry() {
     }
     c.add(g.translate(x, y, z), colr);
   };
-  part(4.6, 0.06, 1.5, -0.2, 0.09, 0, BLACK, [1, 0.45], [1, 0.8]);            // fondo plano
-  part(2.3, 0.46, 0.78, 0.55, 0.42, 0, TEAM, [0.62, 0.6], null);              // monocasco
-  part(1.7, 0.3, 0.46, 2.45, 0.37, 0, TEAM, [0.45, 0.42, -0.07], null);       // morro afilado
-  part(0.34, 0.1, 0.22, 3.28, 0.25, 0, WHITE);                                // punta
-  part(2.0, 0.44, 0.52, -0.55, 0.36, 0.62, TEAM2, [0.8, 1], [0.45, 0.45]);    // pontones
-  part(2.0, 0.44, 0.52, -0.55, 0.36, -0.62, TEAM2, [0.8, 1], [0.45, 0.45]);
-  part(2.3, 0.5, 0.44, -1.25, 0.7, 0, TEAM, null, [0.3, 0.35, -0.12]);        // tapa del motor
-  part(0.5, 0.26, 0.3, -0.25, 1.02, 0, BLACK, [1, 1], [0.6, 0.6]);            // toma de aire
-  part(1.2, 0.3, 0.04, -1.55, 0.98, 0, TEAM2, null, [0.3, 1, -0.1]);          // aleta
-  part(0.75, 0.1, 0.44, 0.45, 0.68, 0, BLACK);                                // habitáculo
-  part(0.26, 0.2, 0.26, 0.3, 0.78, 0, WHITE);                                 // casco
-  part(0.06, 0.28, 0.06, 0.98, 0.78, 0, BLACK);                               // halo
-  part(0.95, 0.055, 0.055, 0.52, 0.93, 0.25, BLACK);
-  part(0.95, 0.055, 0.055, 0.52, 0.93, -0.25, BLACK);
-  part(0.5, 0.05, 1.9, 2.95, 0.13, 0, BLACK);                                 // alerón delantero
-  part(0.32, 0.05, 1.8, 2.76, 0.22, 0, TEAM);
-  part(0.55, 0.24, 0.04, 2.92, 0.22, 0.95, TEAM);
-  part(0.55, 0.24, 0.04, 2.92, 0.22, -0.95, TEAM);
-  part(0.42, 0.06, 1.3, -2.62, 0.98, 0, BLACK);                               // alerón trasero
-  part(0.3, 0.14, 1.3, -2.76, 1.1, 0, TEAM);
-  part(0.62, 0.72, 0.04, -2.64, 0.82, 0.67, TEAM);
-  part(0.62, 0.72, 0.04, -2.64, 0.82, -0.67, TEAM);
-  part(0.1, 0.5, 0.1, -2.5, 0.62, 0, BLACK);
-  part(0.06, 0.12, 0.14, -2.95, 0.42, 0, RED);                                // luz trasera
-  for (const [x, z] of [[1.8, 0.45], [1.8, -0.45], [-1.7, 0.45], [-1.7, -0.45]]) part(0.06, 0.05, 0.7, x, 0.36, z, BLACK); // suspensión
+  /** Barra fina entre dos puntos (suspensión, soportes). */
+  const strut = (a, b, t, colr) => {
+    const A = new THREE.Vector3(...a), B = new THREE.Vector3(...b), d = B.clone().sub(A), len = d.length();
+    const g = new THREE.BoxGeometry(len, t * 0.6, t);
+    g.applyMatrix4(new THREE.Matrix4().makeRotationFromQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1, 0, 0), d.normalize())));
+    c.add(g.translate((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2), colr);
+  };
+  const tube = (pts, rad, colr) => c.add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts.map((p) => new THREE.Vector3(...p))), 18, rad, 6, false), colr);
+  // decoración por altura: arriba el color del equipo, una línea clara en el costado y debajo un tono más oscuro
+  const livery = (a) => (a < 78 * DEG ? TEAM : a < 100 * DEG ? ACC : a < 150 * DEG ? TEAM2 : BLACK);
+
+  // casco: morro bajo y fino, monocasco que sube hasta el habitáculo y tapa del motor que cae hacia atrás
+  const spine = [[3.08, 0.2, 0, 0.09, 0.04], [2.75, 0.25, 0, 0.15, 0.07], [2.25, 0.33, 0, 0.2, 0.11], [1.75, 0.42, 0, 0.25, 0.15], [1.25, 0.48, 0, 0.31, 0.2],
+    [0.8, 0.5, 0, 0.38, 0.23], [0.25, 0.52, 0, 0.41, 0.25], [-0.25, 0.6, 0, 0.36, 0.33], [-0.8, 0.62, 0, 0.29, 0.35], [-1.4, 0.54, 0, 0.21, 0.27], [-2.0, 0.44, 0, 0.13, 0.18], [-2.5, 0.4, 0, 0.06, 0.09]];
+  // el hueco del habitáculo va en negro
+  loft(c, spine, (a, r) => (r >= 5 && r <= 6 && a < 40 * DEG ? BLACK : livery(a)));
+  // pontones: boca ancha detrás de las ruedas delanteras y cintura estrecha hacia atrás
+  for (const s of [1, -1]) {
+    loft(c, [[0.78, 0.44, 0.6 * s, 0.2, 0.15], [0.45, 0.43, 0.63 * s, 0.26, 0.2], [-0.2, 0.41, 0.62 * s, 0.27, 0.2], [-0.9, 0.36, 0.52 * s, 0.22, 0.15], [-1.5, 0.3, 0.4 * s, 0.14, 0.1], [-1.95, 0.26, 0.3 * s, 0.07, 0.06]],
+      (a, r) => (r === 0 ? BLACK : livery(a)), 12, 3.2);
+  }
+  // toma de aire sobre el piloto, cámara de tele y aleta de la tapa del motor
+  loft(c, [[-0.12, 0.98, 0, 0.13, 0.11], [-0.5, 0.98, 0, 0.14, 0.12], [-1.0, 0.9, 0, 0.1, 0.09], [-1.5, 0.78, 0, 0.05, 0.05]], (a, r) => (r === 0 ? BLACK : TEAM), 10, 2.2);
+  part(0.34, 0.045, 0.12, -0.36, 1.2, 0, BLACK); part(0.06, 0.1, 0.03, -0.36, 1.13, 0, BLACK);
+  part(1.5, 0.34, 0.03, -1.55, 0.82, 0, TEAM, [1, 1], [0.25, 1, -0.12]);
+  // fondo plano con el borde levantado y difusor
+  part(3.5, 0.035, 1.62, -0.35, 0.07, 0, BLACK, [1, 0.62], [1, 0.95]);
+  part(0.7, 0.2, 1.1, -2.2, 0.17, 0, BLACK, [0.2, 1, -0.08], [1, 1]);
+  for (const s of [1, -1]) part(2.2, 0.09, 0.03, -0.6, 0.12, 0.8 * s, BLACK, [0.5, 1], [1, 1]);
+  // habitáculo: casco del piloto, halo y retrovisores
+  c.add(new THREE.SphereGeometry(0.135, 10, 8).translate(0.22, 0.79, 0), WHITE);
+  tube([[-0.3, 0.9, 0.31], [0.25, 0.93, 0.3], [0.68, 0.88, 0.21], [0.88, 0.82, 0], [0.68, 0.88, -0.21], [0.25, 0.93, -0.3], [-0.3, 0.9, -0.31]], 0.037, TEAM2);
+  tube([[0.88, 0.82, 0], [0.98, 0.72, 0], [1.06, 0.6, 0]], 0.03, TEAM2);
+  for (const s of [1, -1]) { part(0.06, 0.09, 0.17, 0.8, 0.78, 0.56 * s, TEAM); strut([0.8, 0.68, 0.4 * s], [0.8, 0.76, 0.52 * s], 0.025, BLACK); }
+  // alerón delantero: tres planos que suben hacia atrás y placas en los extremos
+  part(0.42, 0.028, 1.9, 2.96, 0.1, 0, BLACK, [0.8, 0.96], [1, 1]);
+  for (const s of [1, -1]) {
+    part(0.3, 0.026, 0.82, 2.74, 0.17, 0.55 * s, TEAM, [1, 1, -0.02], [1, 1, 0.02]);
+    part(0.24, 0.026, 0.8, 2.56, 0.25, 0.56 * s, ACC, [1, 1, -0.02], [1, 1, 0.03]);
+    part(0.62, 0.3, 0.03, 2.74, 0.21, 0.96 * s, TEAM, [0.45, 1, -0.06], [1, 1]);
+    part(0.3, 0.02, 0.2, 2.62, 0.08, 1.05 * s, BLACK);
+  }
+  // alerón trasero: plano principal, flap, placas, soportes y ala inferior
+  part(0.46, 0.04, 1.24, -2.62, 0.9, 0, BLACK);
+  part(0.3, 0.17, 1.24, -2.8, 1.02, 0, TEAM, [0.25, 1, -0.05], [0.25, 1, 0.07]);
+  for (const s of [1, -1]) {
+    part(0.72, 0.6, 0.03, -2.62, 0.78, 0.63 * s, TEAM, [0.75, 1, 0.07], [1, 1]);
+    strut([-2.15, 0.45, 0.07 * s], [-2.5, 0.88, 0.07 * s], 0.03, BLACK);
+  }
+  part(0.3, 0.035, 1.0, -2.56, 0.44, 0, BLACK);
+  part(0.5, 0.1, 0.16, -2.72, 0.33, 0, BLACK); part(0.05, 0.11, 0.13, -2.98, 0.34, 0, RED);
+  // suspensión: dos triángulos por rueda y la barra de dirección o el palier
+  for (const s of [1, -1]) {
+    const fw = [1.8, 0.36, 0.7 * s], rw = [-1.7, 0.36, 0.68 * s];
+    for (const y of [0.5, 0.26]) {
+      strut([2.15, y, 0.2 * s], [fw[0], y - 0.03, fw[2]], 0.035, BLACK); strut([1.35, y, 0.27 * s], [fw[0], y - 0.03, fw[2]], 0.035, BLACK);
+      strut([-1.25, y - 0.02, 0.24 * s], [rw[0], y - 0.03, rw[2]], 0.035, BLACK); strut([-2.1, y - 0.04, 0.14 * s], [rw[0], y - 0.03, rw[2]], 0.035, BLACK);
+    }
+    strut([1.6, 0.4, 0.26 * s], [1.72, 0.38, fw[2]], 0.025, BLACK);
+    strut([-1.7, 0.36, 0.16 * s], rw, 0.045, BLACK);
+    // deflector tras la rueda delantera
+    part(0.5, 0.26, 0.025, 1.12, 0.26, 0.5 * s, BLACK, [0.5, 1], [1, 1]);
+  }
   return c.done();
 }
+/** Rueda: neumático con los hombros redondeados, tapacubos y la banda del compuesto en el flanco. */
 function wheelGeometry() {
-  const c = collect();
-  c.add(new THREE.CylinderGeometry(0.36, 0.36, 0.38, 14).rotateX(Math.PI / 2), [0.07, 0.07, 0.07]);
+  const c = collect(), K = [0.07, 0.07, 0.07];
+  const prof = [[0.2, -0.17], [0.31, -0.17], [0.345, -0.15], [0.36, -0.11], [0.36, 0.11], [0.345, 0.15], [0.31, 0.17], [0.2, 0.17]].map(([r, a]) => new THREE.Vector2(r, a));
+  const tyre = new THREE.LatheGeometry(prof, 22).rotateX(Math.PI / 2);
+  tyre.computeVertexNormals();
+  const n = tyre.toNonIndexed(), cnt = n.attributes.position.count, cols = new Float32Array(cnt * 3);
+  for (let i = 0; i < cnt; i++) cols.set(K, i * 3);
+  n.setAttribute("color", new THREE.BufferAttribute(cols, 3));
+  c.raw(n);
   for (const sz of [1, -1]) {
-    const ring = new THREE.RingGeometry(0.22, 0.31, 14); if (sz < 0) ring.rotateY(Math.PI);
-    c.add(ring.translate(0, 0, sz * 0.195), [1, 1, 1]);   // banda del compuesto
-    const hub = new THREE.CircleGeometry(0.2, 10); if (sz < 0) hub.rotateY(Math.PI);
-    c.add(hub.translate(0, 0, sz * 0.196), [0.12, 0.12, 0.12]);
+    const ring = new THREE.RingGeometry(0.235, 0.275, 22); if (sz < 0) ring.rotateY(Math.PI);
+    c.add(ring.translate(0, 0, sz * 0.172), [1, 1, 1]);   // banda del compuesto
+    const hub = new THREE.CircleGeometry(0.225, 18); if (sz < 0) hub.rotateY(Math.PI);
+    c.add(hub.translate(0, 0, sz * 0.168), [0.13, 0.13, 0.13]);
+    const cap = new THREE.CircleGeometry(0.07, 10); if (sz < 0) cap.rotateY(Math.PI);
+    c.add(cap.translate(0, 0, sz * 0.174), [0.3, 0.3, 0.3]);
   }
   return c.done();
 }
 const CAR_GEO = carGeometry(), WHEEL_GEO = wheelGeometry();
-const CAR_MAT = new THREE.MeshPhongMaterial({ vertexColors: true, shininess: 70, specular: 0x666666 });
+const CAR_MAT = new THREE.MeshPhongMaterial({ vertexColors: true, shininess: 90, specular: 0x777777, side: THREE.DoubleSide });
 CAR_MAT.onBeforeCompile = (sh) => {
   Object.assign(sh.uniforms, { uFlood: U.uFlood, uLight: U.uLight });
   sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nuniform float uLight;")
@@ -795,8 +881,9 @@ function updateCamera(dt, now) {
 }
 
 // ------------------------------------------------------------------ dibujo 3D
+const _ws = new THREE.Vector3();
 const m4 = new THREE.Matrix4(), mL = new THREE.Matrix4(), mW = new THREE.Matrix4(), _col = new THREE.Color();
-const WHEELS = [[1.8, 0.82, 1], [1.8, -0.82, 1], [-1.7, 0.82, 0], [-1.7, -0.82, 0]];
+const WHEELS = [[1.8, 0.83, 1, 0.92], [1.8, -0.83, 1, 0.92], [-1.7, 0.82, 0, 1.18], [-1.7, -0.82, 0, 1.18]]; // x, z, ¿gira?, ancho
 let screenPts = [], rainClock = 0;
 function draw3d(dt, now) {
   const list = updatePoses(dt);
@@ -829,7 +916,7 @@ function draw3d(dt, now) {
     _col.set(COMPOUND[c.tyres?.c] || "#888888");
     for (let w = 0; w < 4; w++) {
       const wd = WHEELS[w];
-      mL.makeRotationY(wd[2] ? steer : 0).setPosition(wd[0], 0.36, wd[1]);
+      mL.makeRotationY(wd[2] ? steer : 0).scale(_ws.set(1, 1, wd[3])).setPosition(wd[0], 0.36, wd[1]);
       mW.multiplyMatrices(m4, mL);
       wheels.setMatrixAt(i * 4 + w, mW); wheels.setColorAt(i * 4 + w, _col);
     }
