@@ -1498,7 +1498,8 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
         if (st.active) {
           const ord = sess.timingOrder().filter((x) => !x.eliminated);
           // sin referencia al empezar (nadie tenía tiempo): se compara con el primero de ahora
-          st.result = { time: c.lapTimes[c.lapTimes.length - 1], pos: ord.indexOf(c) + 1, ref: st.ref ?? flyRef(c), valid: c.lastLapValid, real: now, t: sess.t };
+          // la referencia es la de ahora, no la de cuando empezó la vuelta: otro puede haber mejorado mientras tanto
+          st.result = { time: c.lapTimes[c.lapTimes.length - 1], pos: ord.indexOf(c) + 1, ref: flyRef(c) ?? st.ref, valid: c.lastLapValid, real: now, t: sess.t };
         }
         st.laps = c.lapTimes.length;
         st.active = false;
@@ -1506,7 +1507,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       const pushing = c.run?.phase === "push" && c.loc === "track" && c.lapStart > 0;
       if (pushing && st.lapStart !== c.lapStart) { st.lapStart = c.lapStart; st.active = true; st.ref = flyRef(c); st.splitN = 0; }
       if (!pushing) st.active = false;
-      if (st.active && !st.ref) st.ref = flyRef(c); // alguien ha marcado tiempo mientras tanto
+      if (st.active) st.ref = flyRef(c) ?? st.ref; // siempre contra la referencia del momento: alguien puede marcar tiempo durante la vuelta
       const r = st.result;
       const showResult = r && (now - r.real < 4000 || sess.t - r.t < 10);
       const name = `<div class="fn">${tvName(c)}</div>`;

@@ -756,7 +756,9 @@ function buildWorld() {
     const r = add(new THREE.Mesh(RING_GEO, new THREE.MeshBasicMaterial({ color: k === 2 ? 0xffd84a : 0xffffff, depthTest: false, depthWrite: false, fog: false })));
     r.renderOrder = 5; r.visible = false; return r;
   });
-  world = { all, road, cars, wheels, blobs, spray, discs, rings, lamps, poles, halos, decals, steer };
+  // el dorsal y el segundo color son de cada coche, pero los coches se dibujan por orden en pista: se copian a su hueco en cada fotograma
+  const carIdx = new Map(sess.cars.map((c, i) => [c.id, i]));
+  world = { all, road, cars, wheels, blobs, spray, discs, rings, lamps, poles, halos, decals, steer, carIdx, c2src: c2a.slice(), col2: CAR_GEO.attributes.aCol2, cell: dg.attributes.aCell };
   U.uL.value = T.L;
   wetT = cloudT = lightT = -1e9;
   applyQuality();
@@ -1122,6 +1124,8 @@ function draw3d(dt, now) {
     }
     if (q === 0) { mL.copy(m4); mL.elements[13] = p.py + 0.1; blobs.setMatrixAt(i, mL); } // sin sombras del sol, una mancha bajo el coche
     world.decals.setMatrixAt(i, m4);
+    const ci = world.carIdx.get(c.id);
+    world.cell.array[i] = ci; world.col2.array[i * 3] = world.c2src[ci * 3]; world.col2.array[i * 3 + 1] = world.c2src[ci * 3 + 1]; world.col2.array[i * 3 + 2] = world.c2src[ci * 3 + 2];
     mL.makeRotationX(-steer * 2.4).setPosition(0.6, 0.67, 0); mW.multiplyMatrices(m4, mL); world.steer.setMatrixAt(i, mW);
     mL.makeScale(dr, dr, dr).setPosition(p.px, p.py + 0.3, p.pz); discs.setMatrixAt(i, mL); discs.setColorAt(i, _col.set(c.team.color));
     // spray: estela de agua detrás de cada coche sobre asfalto mojado
@@ -1139,6 +1143,7 @@ function draw3d(dt, now) {
   }
   cars.count = blobs.count = discs.count = world.decals.count = world.steer.count = i; wheels.count = i * 4; spray.count = ns;
   discs.visible = far > 0.02;
+  world.cell.needsUpdate = world.col2.needsUpdate = true;
   for (const m of [cars, wheels, blobs, discs, spray, world.decals, world.steer]) { m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true; }
   const sel = opt.selId() === null ? null : pose.get(opt.selId());
   const ringFor = [...opt.mine().map((c) => (c.id === opt.selId() ? null : pose.get(c.id))), sel];
