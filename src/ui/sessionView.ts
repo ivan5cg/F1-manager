@@ -65,7 +65,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
 
   app.innerHTML = `
   <div id="sess">
-    <div class="ctrl"><button id="menu" class="menu" title="Menú: simular hasta el final, datos, ajustes, salir" aria-label="Menú">☰</button><span class="gp">${flagHtml(def.bandera)} ${esc(SESSION_NAMES[kind])} · ${esc(def.nombre)}</span><div class="speed" id="speed"></div></div>
+    <div class="ctrl"><button id="menu" class="menu" title="Menú: simular hasta el final, datos, ajustes, salir" aria-label="Menú">☰</button><span class="gp" title="${esc(SESSION_NAMES[kind])} · ${esc(def.nombre)}">${flagHtml(def.bandera)} <b id="gpk"></b></span><div class="speed" id="speed"></div></div>
     <div class="lapc mono" id="lapc"></div>
     <div class="main"><div class="bigban" id="bigban" aria-live="polite"></div>
       <div class="leftcol"><div class="tower" id="tower"></div><div class="toast" id="toast" title="Dirección de carrera y meteo"></div></div>
@@ -1116,7 +1116,11 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   }
 
   // ------------------------------------------------------------ cabecera
+  /** Siglas de la sesión para la barra de arriba: FP1, Q2 (la parte en curso), S o R. */
+  const sessTag = () => (kind === "RACE" ? "R" : kind === "SPRINT" ? "S" : quali ? sess.parts[sess.part]?.name ?? kind : kind);
   function renderTop() {
+    const tag = sessTag(), gpk = $("#gpk");
+    if (gpk.textContent !== tag) gpk.textContent = tag;
     // contador al estilo TV: [VUELTA][28/71][ESTADO]
     let k = "", v = "", st = "", cls = "";
     if (race) { k = "Vuelta"; v = `${Math.min(sess.laps, sess.leaderLap + 1)}/${sess.laps}`; }

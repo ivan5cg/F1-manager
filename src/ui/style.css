@@ -791,3 +791,7 @@ canvas.champchart { display: block; width: 100%; height: 200px; margin: 6px 0 2p
 .tr .flag.vl.bad { background: var(--red1); color: #fff; }
 .dcard .cl.gain, html[data-tema] .dcard .cl.gain { background: linear-gradient(180deg, #45cf6c 0%, #24a548 100%); color: #000; text-shadow: none; }
 .dcard .cl.gain i { color: #06290f; } .dcard .cl.gain b { color: #000; }
+/* barra de arriba: solo la bandera y las siglas de la sesión, para que quepan las velocidades */
+.ctrl .gp { flex: none; display: flex; align-items: center; gap: 5px; overflow: visible; }
+.ctrl .gp b { font-size: 14px; font-weight: 900; color: var(--text, #fff); letter-spacing: .04em; }
+.ctrl .speed { margin-left: auto; }
