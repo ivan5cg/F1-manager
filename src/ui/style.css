@@ -806,14 +806,14 @@ canvas.champchart { display: block; width: 100%; height: 200px; margin: 6px 0 2p
    blanca, barra secundaria plateada con texto oscuro y extremos inclinados
    =================================================================================== */
 html[data-tema="grafito"] {
-  --gl: linear-gradient(180deg, #50545c 0%, #2e3136 47%, #0d0e10 53%, #1d1f22 100%);
-  --gl-pos: linear-gradient(180deg, #747983 0%, #4b4f57 47%, #24262a 53%, #363a40 100%);
-  --gl-white: linear-gradient(180deg, #f6f7f8 0%, #cfd2d6 47%, #a9adb3 53%, #bfc2c7 100%);
-  --gl-red: linear-gradient(180deg, #ff7468 0%, #e23a2e 47%, #b2190f 53%, #cb2a1f 100%);
-  --gl-gold: linear-gradient(180deg, #fff0a0 0%, #fcd445 47%, #e3a90c 53%, #f2c230 100%);
-  --gl-me: linear-gradient(180deg, #7a6a2e 0%, #54471f 47%, #2c250f 53%, #3f3518 100%);
-  --row-hi: inset 0 1px 0 rgba(255, 255, 255, .28), inset 0 -1px 0 rgba(0, 0, 0, .55);
-  --btn: linear-gradient(180deg, #555a63 0%, #33363c 47%, #17181b 53%, #26282c 100%); --btn-line: #5a5f68;
+  --gl: linear-gradient(180deg, #3d4148 0%, #2a2d32 46%, #17181b 54%, #202226 100%);
+  --gl-pos: linear-gradient(180deg, #5f646d 0%, #474b53 46%, #2f3237 54%, #3a3e44 100%);
+  --gl-white: linear-gradient(180deg, #eef0f2 0%, #d3d6da 46%, #b9bdc2 54%, #c5c8cd 100%);
+  --gl-red: linear-gradient(180deg, #f25a4e 0%, #df3a2e 46%, #c1241a 54%, #cd2c21 100%);
+  --gl-gold: linear-gradient(180deg, #ffe684 0%, #fbd348 46%, #eeb821 54%, #f4c536 100%);
+  --gl-me: linear-gradient(180deg, #65582a 0%, #4f4420 46%, #362e15 54%, #40371a 100%);
+  --row-hi: inset 0 1px 0 rgba(255, 255, 255, .16), inset 0 -1px 0 rgba(0, 0, 0, .45);
+  --btn: linear-gradient(180deg, #454a52 0%, #32353b 46%, #202226 54%, #292b30 100%); --btn-line: #4c515a;
 }
 /* texto blanco con sombra sobre las barras oscuras, como en la tele */
 html[data-tema] .bar, html[data-tema] .tr .body, html[data-tema] .tr .p, html[data-tema] .dcard .h .nm { text-shadow: 0 1px 1px rgba(0, 0, 0, .9); }
@@ -832,14 +832,14 @@ html[data-tema] .posbox, html[data-tema] .pos { background: var(--gl-pos); color
 .fly .fpos, .fly .fp { background: var(--gl-pos); box-shadow: var(--row-hi); text-shadow: 0 1px 1px rgba(0, 0, 0, .9); }
 .fly .fp.p1 { background: var(--gl-red); }
 .fly .fd { background: var(--gl-white); color: #0b0c0e; text-shadow: none; font-weight: 900; }
-.fly .fd.fast { background: linear-gradient(180deg, #7dea98 0%, #35c25c 47%, #1c9a40 53%, #27ad4c 100%); color: #04210c; }
+.fly .fd.fast { background: linear-gradient(180deg, #62da80 0%, #3cc461 46%, #27a849 54%, #2fb452 100%); color: #04210c; }
 .fly .fd.slow { background: var(--gl-gold); color: #000; }
 /* coche que sigues y banda de la última vuelta */
 .selchip .nm { background: var(--gl); box-shadow: var(--row-hi); clip-path: polygon(0 0, 100% 0, calc(100% - 6px) 100%, 0 100%); padding-right: 12px; }
 .selchip .in { background: var(--gl-white); color: #0b0c0e; margin-left: -4px; padding-left: 10px; clip-path: polygon(6px 0, 100% 0, calc(100% - 6px) 100%, 0 100%); padding-right: 12px; font-weight: 900; }
 /* contador de vueltas y tarjetas: mismo cristal */
 .lapc .v { font-weight: 900; }
-html[data-tema] .dcard .cl:not(.gold):not(.gain) { background: linear-gradient(180deg, #3a3e45 0%, #272a2f 47%, #131416 53%, #1e2023 100%); }
+html[data-tema] .dcard .cl:not(.gold):not(.gain) { background: linear-gradient(180deg, #33373d 0%, #282b30 46%, #1a1c1f 54%, #212327 100%); }
 html[data-tema] .dcard .cl i { color: #aab0ba; }
 /* botones del mapa */
-.camb, .m3b, .bigb { background: linear-gradient(180deg, rgba(80, 84, 92, .92) 0%, rgba(46, 49, 54, .92) 47%, rgba(13, 14, 16, .92) 53%, rgba(29, 31, 34, .92) 100%); border-color: rgba(255, 255, 255, .28); color: #fff; }
+.camb, .m3b, .bigb { background: linear-gradient(180deg, rgba(61, 65, 72, .92) 0%, rgba(42, 45, 50, .92) 46%, rgba(23, 24, 27, .92) 54%, rgba(32, 34, 38, .92) 100%); border-color: rgba(255, 255, 255, .2); color: #fff; }
