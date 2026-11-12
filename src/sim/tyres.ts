@@ -90,7 +90,10 @@ export function warmBlankets(t: TyreSet) {
 export function axleGrip(c: Compound, a: Axle): number {
   const sp = COMPOUNDS[c];
   const d = a.tBulk - sp.opt;
-  const fT = d < 0 ? 1 - 0.075 * Math.min(2.2, Math.pow(-d / 30, 2)) : 1 - 0.05 * Math.min(2.5, Math.pow(d / 30, 2));
+  // por encima de la óptima, la mitad de la ventana no cuesta agarre: si no, en un asfalto exigente
+  // apretar con blandos los calentaba tanto que iban más lentos que a ritmo normal
+  const dh = Math.max(0, d - sp.window * 0.5);
+  const fT = d < 0 ? 1 - 0.075 * Math.min(2.2, Math.pow(-d / 30, 2)) : 1 - 0.05 * Math.min(2.5, Math.pow(dh / 30, 2));
   const ds = a.tSurf - (sp.opt + 25);
   const fS = ds > 0 ? 1 - Math.min(0.03, ds * 0.0012) : 1;
   let fW = 1 - sp.slope * a.wear;
@@ -167,7 +170,8 @@ export function updateSet(t: TyreSet, env: TyreEnv, dt: number, lapRef: number, 
     a.tSurf += ((surfEq - a.tSurf) * dt) / 2.5;
 
     const over = a.tBulk - (sp.opt + sp.window * 0.5);
-    let wMult = over > 0 ? Math.exp(over / 22) : 1;
+    // el calor gasta más goma, pero sin dispararse: con /22 un blando no aguantaba 6 vueltas en un asfalto exigente
+    let wMult = over > 0 ? Math.exp(over / 30) : 1;
     if (a.tBulk < sp.opt - sp.window) wMult *= 1.15;
     let waterW = 1 - 0.65 * wet;
     if (t.c === "I") waterW *= 1 + (2.8 * Math.max(0, 0.3 - env.water)) / 0.3;
@@ -179,7 +183,8 @@ export function updateSet(t: TyreSet, env: TyreEnv, dt: number, lapRef: number, 
     const coldness = sp.opt - 8 - a.tBulk;
     if (coldness > 0 && eLoc > 0.9 && wet < 0.3) a.grain = Math.min(1, a.grain + dt * 0.0014 * hidden.grainProne * (coldness / 10) * e * (front ? 1.2 : 0.9));
     else if (a.tBulk > sp.opt - 4) a.grain = Math.max(0, a.grain - dt * 0.004);
-    const hot = a.tBulk - (sp.opt + sp.window + 6);
-    if (hot > 0) a.blister = Math.min(1, a.blister + dt * 0.0012 * (hot / 5));
+    // ampollas: solo con la carcasa claramente pasada de temperatura, y despacio (varias vueltas de abuso)
+    const hot = a.tBulk - (sp.opt + sp.window + 9);
+    if (hot > 0) a.blister = Math.min(1, a.blister + dt * 0.0007 * (hot / 5));
   }
 }

@@ -91,7 +91,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     pause: `<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M3.5 2.5h3v11h-3zM9.5 2.5h3v11h-3z" fill="currentColor"/></svg>`,
     ff: `<svg viewBox="0 0 20 16" width="20" height="16" aria-hidden="true"><path d="M1.5 2.5v11l7-5.5zM9 2.5v11l7-5.5z" fill="currentColor"/><path d="M16.5 2.5h2v11h-2z" fill="currentColor"/></svg>`,
   };
-  spEl.innerHTML = `<button data-v="0" class="pp" title="Pausa / seguir (espacio)" aria-label="Pausa o seguir"></button><button data-d="-1" class="pm" title="Más despacio" aria-label="Más despacio">−</button><span class="spv mono" id="spv"></span><button data-d="1" class="pm" title="Más deprisa" aria-label="Más deprisa">+</button><button data-ff="1" class="ffb" title="Hasta lo siguiente (F): avanza deprisa y se para en cuanto pasa algo de tus pilotos" aria-label="Avanzar hasta lo siguiente">${ICON.ff}</button>`;
+  spEl.innerHTML = `<button data-v="0" class="pp" title="Pausa / seguir (espacio)" aria-label="Pausa o seguir"></button>${SPEEDS.map((v, i) => `<button data-v="${v}" class="sv" title="Velocidad ${v}× (tecla ${i + 1})" aria-label="Velocidad ${v} por">${v}×</button>`).join("")}<button data-ff="1" class="ffb" title="Hasta lo siguiente (F): avanza deprisa y se para en cuanto pasa algo de tus pilotos" aria-label="Avanzar hasta lo siguiente">${ICON.ff}</button>`;
   /** Cambia la velocidad (0 = pausar o reanudar). La elegida se recuerda para la próxima sesión del mismo tipo. */
   function setSpeed(s: number) {
     if (skipping || ended) return;
@@ -170,7 +170,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     const pp = spEl.querySelector<HTMLButtonElement>(".pp")!;
     pp.innerHTML = paused ? ICON.play : ICON.pause;
     pp.classList.toggle("go", paused); // en pausa, el botón de seguir destaca
-    spEl.querySelector<HTMLElement>("#spv")!.textContent = ff ? "MÁX" : `${speed}×`;
+    spEl.querySelectorAll<HTMLButtonElement>(".sv").forEach((b) => b.classList.toggle("on", !ff && Number(b.dataset.v) === speed));
     spEl.querySelector<HTMLButtonElement>(".ffb")!.classList.toggle("on", ff);
     // con la sesión corriendo, que el móvil no apague la pantalla
     keepAwake(!paused && !ended && !skipping);
@@ -388,7 +388,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
           mine, selId: () => selId,
           alpha: () => (paused ? 1 : Math.min(1, leftover / sess.dt)),
           paused: () => paused, speed: () => (ff ? FF_SPEED : speed),
-          ghosts: () => mine().flatMap((c) => { const gh = ghosts.get(c.id); return gh ? [{ s: c.s - gh.back, text: `${c.d.abrev} P${gh.pos}`, color: c.team.color }] : []; }),
+          ghosts: () => mine().flatMap((c) => { const gh = ghosts.get(c.id); const sNow = c.s + (paused ? 0 : c.v * leftover); return gh ? [{ s: sNow - metersBack(sNow, gh.loss), text: `${c.d.abrev} P${gh.pos}`, color: c.team.color }] : []; }),
         });
       } catch (err) {
         console.error(err);
@@ -502,7 +502,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
    * pérdida en boxes convertida en metros por detrás de él, y la posición en la que saldría (la
    * misma cuenta que «Si para ahora» en el Muro).
    */
-  type Ghost = { back: number; pos: number; at: number };
+  type Ghost = { loss: number; pos: number; at: number };
   const ghosts = new Map<number, Ghost>();
   function updateGhosts() {
     ghosts.clear();
@@ -515,7 +515,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       const loss = pitLoss(sess, c);
       const at = me.gap + loss;
       const pos = rows.filter((r) => r.car !== c && r.gap < at).length + 1;
-      ghosts.set(c.id, { back: metersBack(c.s, loss), pos, at });
+      ghosts.set(c.id, { loss, pos, at });
     }
   }
   /** Libres y clasificación: va en vuelta rápida (lanzada o tanda larga), no de salida ni enfriando. */
@@ -786,7 +786,8 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     for (const c of mine()) {
       const gh = ghosts.get(c.id);
       if (!gh) continue;
-      const { x, y } = carXY(c.s + (paused ? 0 : c.v * leftover) - gh.back, false, dpr);
+      const sNow = c.s + (paused ? 0 : c.v * leftover);
+      const { x, y } = carXY(sNow - metersBack(sNow, gh.loss), false, dpr);
       g.save();
       g.setLineDash([2.5 * dpr, 2 * dpr]);
       g.strokeStyle = c.team.color; g.lineWidth = 2 * dpr;
@@ -936,6 +937,12 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     if (c.loc === "pit" || c.loc === "lane_in" || c.loc === "lane_out") return `<span class="flag pit">PIT</span>`;
     if (!race && c.loc === "garage") return "";
     if (!race && c.run?.phase === "out") return `<span class="flag outl">OUT LAP</span>`;
+    if (!race && c.run?.phase === "push" && c.loc === "track" && c.lapStart > 0) {
+      // en vuelta lanzada: el color es el de su último parcial (morado, verde o amarillo)
+      let k = "";
+      for (let j = 0; j < 3; j++) if (!isNaN(c.secCur[j])) k = tcls(c.secCur[j], c.secBest[j], sess.secBest[j]);
+      return `<span class="flag vl ${c.lapValid ? k : "bad"}" title="En vuelta lanzada: tócalo para ver su vuelta en el mapa">▶</span>`;
+    }
     if (c.drs) return `<span class="flag mo">MO</span>`;
     return "";
   }
@@ -956,6 +963,22 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     if (c.loc === "out") return `<span class="dim">${fmtLap(t)}</span>`;
     if (!race && !c.lastLapValid) return `<span class="dim" style="text-decoration:line-through">${fmtLap(t)}</span>`;
     return `<span class="${t <= sess.bestLap + 1e-6 ? "purple" : t <= c.best + 1e-6 ? "green" : ""}">${fmtLap(t)}</span>`;
+  }
+  /**
+   * Tendencia de un hueco: se compara con el de hace unos segundos de carrera. `good` es el signo del
+   * cambio que te conviene (-1: que baje, con el de delante; +1: que suba, con el de atrás). El color se
+   * mantiene hasta que la tendencia cambia de verdad, para que no parpadee.
+   */
+  const trends = new Map<number, { rival: number | undefined; ref: number; t: number; cls: string }>();
+  function gapTrend(key: number, rival: number | undefined, gap: number, good: number): string {
+    let st = trends.get(key);
+    if (!st || st.rival !== rival || !isFinite(gap) || !isFinite(st.ref)) { st = { rival, ref: gap, t: sess.t, cls: "" }; trends.set(key, st); return "flat"; }
+    if (sess.t - st.t >= 4) {
+      const d = (gap - st.ref) * good;
+      if (d > 0.04) st.cls = "gain"; else if (d < -0.04) st.cls = "gold";
+      st.ref = gap; st.t = sess.t;
+    }
+    return st.cls || "flat";
   }
   function renderTower() {
     const rows = sess.intervals();
@@ -1201,7 +1224,8 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       const f = (g: number) => (!isFinite(g) ? "—" : g > sess.lapRefRace * 0.95 ? "1V+" : g.toFixed(1));
       const d = c.fuel / sess.fuelPerLap - (sess.laps - sess.lapsDone(c));
       const soc = Math.round((c.soc / SOC_MAX) * 100);
-      return cell(`▲ ${ahead ? ahead.d.abrev : ""}`, f(ga), "gold") + cell(`▼ ${behind ? behind.d.abrev : ""}`, f(gb), "gold")
+      // verde si el hueco mejora (te acercas al de delante o te alejas del de atrás), amarillo si empeora
+      return cell(`▲ ${ahead ? ahead.d.abrev : ""}`, f(ga), gapTrend(c.id * 2, ahead?.id, ga, -1)) + cell(`▼ ${behind ? behind.d.abrev : ""}`, f(gb), gapTrend(c.id * 2 + 1, behind?.id, gb, 1))
         + cell("Última", lap1(lt), ltCls)
         + cell("Ruedas", temps, "tc") + cell("Gasolina", `${d >= 0 ? "+" : ""}${d.toFixed(1)} v`, d < 0 ? "redt" : d < 0.4 ? "yellow" : "")
         + cell(c.drs ? "Batería · MO" : "Batería", `${soc} %`, c.drs ? "green" : soc < 20 ? "yellow" : "");
@@ -1455,7 +1479,9 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     if (race) { if (box.innerHTML) box.innerHTML = ""; return; }
     const now = performance.now();
     const out: string[] = [];
-    for (const c of mine()) {
+    // el piloto que sigues va encima de los tuyos
+    const sc = selCar();
+    for (const c of sc && !sc.player ? [sc, ...mine()] : mine()) {
       let st = fly.get(c.id);
       if (!st) { st = { lapStart: -1, laps: c.lapTimes.length, active: false, ref: null, splitN: 0, splitReal: 0, splitT: 0 }; fly.set(c.id, st); }
       // vuelta terminada: tiempo, posición que logra y diferencia con la referencia

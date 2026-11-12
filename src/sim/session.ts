@@ -861,7 +861,11 @@ export class Session {
     const oldS = c.s;
     c.s += move;
 
-    const relE = (e: number) => (e / this.tRef[m.i]) * this.lapRefRace;
+    // en carrera, con el depósito medio vacío los neumáticos trabajan menos (hasta un ~6 % menos de energía al
+    // final). Con el depósito lleno no se penaliza: las estrategias de la IA están calculadas sin este efecto y,
+    // si las primeras tandas gastaran más de lo previsto, todo el mundo acababa parando una vez de más.
+    const fuelK = isRaceKind(this.kind) ? Math.min(1, (MIN_MASS + c.fuel) / (MIN_MASS + 0.5 * this.fuelPerLap * this.laps)) : 1;
+    const relE = (e: number) => (e / this.tRef[m.i]) * this.lapRefRace * fuelK;
     const slow = this.flag !== "green" ? 0.35 : ph.energy;
     updateSet(c.tyres!, {
       trackT: this.weather.trackT, airT: this.weather.airT, water,
