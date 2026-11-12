@@ -799,3 +799,47 @@ canvas.champchart { display: block; width: 100%; height: 200px; margin: 6px 0 2p
 .tr .lc { flex: none; width: 13px; margin-left: 1px; display: flex; align-items: center; justify-content: center; font-size: 9.5px; font-weight: 900; line-height: 1; }
 .tr .lc.pit { background: linear-gradient(#fff, #d4d4d4); color: #000; }
 .tr .lc.trk::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--green); }
+
+/* ===================================================================================
+   ESTÉTICA DE RÓTULO DE TELE CLÁSICO: barras negras con brillo de cristal (mitad de
+   arriba más clara, corte nítido a media altura), caja del número oscura con cifra
+   blanca, barra secundaria plateada con texto oscuro y extremos inclinados
+   =================================================================================== */
+html[data-tema="grafito"] {
+  --gl: linear-gradient(180deg, #50545c 0%, #2e3136 47%, #0d0e10 53%, #1d1f22 100%);
+  --gl-pos: linear-gradient(180deg, #747983 0%, #4b4f57 47%, #24262a 53%, #363a40 100%);
+  --gl-white: linear-gradient(180deg, #f6f7f8 0%, #cfd2d6 47%, #a9adb3 53%, #bfc2c7 100%);
+  --gl-red: linear-gradient(180deg, #ff7468 0%, #e23a2e 47%, #b2190f 53%, #cb2a1f 100%);
+  --gl-gold: linear-gradient(180deg, #fff0a0 0%, #fcd445 47%, #e3a90c 53%, #f2c230 100%);
+  --gl-me: linear-gradient(180deg, #7a6a2e 0%, #54471f 47%, #2c250f 53%, #3f3518 100%);
+  --row-hi: inset 0 1px 0 rgba(255, 255, 255, .28), inset 0 -1px 0 rgba(0, 0, 0, .55);
+  --btn: linear-gradient(180deg, #555a63 0%, #33363c 47%, #17181b 53%, #26282c 100%); --btn-line: #5a5f68;
+}
+/* texto blanco con sombra sobre las barras oscuras, como en la tele */
+html[data-tema] .bar, html[data-tema] .tr .body, html[data-tema] .tr .p, html[data-tema] .dcard .h .nm { text-shadow: 0 1px 1px rgba(0, 0, 0, .9); }
+html[data-tema] .tab, html[data-tema] .gold, html[data-tema] .dcard .cl.gold, html[data-tema] .dcard .cl.gain, html[data-tema] button.on, html[data-tema] button.yellow { text-shadow: none; }
+/* torre: el líder ya no va entero en rojo; solo su caja de posición */
+html[data-tema] .tr.lead .body { background: var(--gl); color: var(--text); }
+html[data-tema] .tr.lead.me .body { background: var(--gl-me); }
+html[data-tema] .tr.lead .p { background: var(--gl-red); color: #fff; }
+/* caja de posición: oscura con la cifra blanca y el borde derecho inclinado sobre la barra del nombre */
+.tr .p { width: 25px; padding-right: 3px; clip-path: polygon(0 0, 100% 0, calc(100% - 5px) 100%, 0 100%); margin-right: -3px; position: relative; z-index: 1; font-size: 13px; }
+.tr .n { font-weight: 900; letter-spacing: .06em; }
+html[data-tema] .posbox, html[data-tema] .pos { background: var(--gl-pos); color: #fff; text-shadow: 0 1px 1px rgba(0, 0, 0, .9); box-shadow: var(--row-hi); }
+/* rótulo de vuelta sobre el mapa: nombre en negro brillante, tiempo en plata con cifras oscuras */
+.fly .fn { background: var(--gl); box-shadow: var(--row-hi); text-transform: uppercase; font-weight: 900; padding: 2px 18px 2px 9px; }
+.fly .ft .mono { background: var(--gl-white); color: #0b0c0e; text-shadow: none; font-weight: 900; box-shadow: inset 0 1px 0 rgba(255, 255, 255, .7); }
+.fly .fpos, .fly .fp { background: var(--gl-pos); box-shadow: var(--row-hi); text-shadow: 0 1px 1px rgba(0, 0, 0, .9); }
+.fly .fp.p1 { background: var(--gl-red); }
+.fly .fd { background: var(--gl-white); color: #0b0c0e; text-shadow: none; font-weight: 900; }
+.fly .fd.fast { background: linear-gradient(180deg, #7dea98 0%, #35c25c 47%, #1c9a40 53%, #27ad4c 100%); color: #04210c; }
+.fly .fd.slow { background: var(--gl-gold); color: #000; }
+/* coche que sigues y banda de la última vuelta */
+.selchip .nm { background: var(--gl); box-shadow: var(--row-hi); clip-path: polygon(0 0, 100% 0, calc(100% - 6px) 100%, 0 100%); padding-right: 12px; }
+.selchip .in { background: var(--gl-white); color: #0b0c0e; margin-left: -4px; padding-left: 10px; clip-path: polygon(6px 0, 100% 0, calc(100% - 6px) 100%, 0 100%); padding-right: 12px; font-weight: 900; }
+/* contador de vueltas y tarjetas: mismo cristal */
+.lapc .v { font-weight: 900; }
+html[data-tema] .dcard .cl:not(.gold):not(.gain) { background: linear-gradient(180deg, #3a3e45 0%, #272a2f 47%, #131416 53%, #1e2023 100%); }
+html[data-tema] .dcard .cl i { color: #aab0ba; }
+/* botones del mapa */
+.camb, .m3b, .bigb { background: linear-gradient(180deg, rgba(80, 84, 92, .92) 0%, rgba(46, 49, 54, .92) 47%, rgba(13, 14, 16, .92) 53%, rgba(29, 31, 34, .92) 100%); border-color: rgba(255, 255, 255, .28); color: #fff; }
