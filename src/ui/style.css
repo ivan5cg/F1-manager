@@ -843,3 +843,6 @@ html[data-tema] .dcard .cl:not(.gold):not(.gain) { background: linear-gradient(1
 html[data-tema] .dcard .cl i { color: #aab0ba; }
 /* botones del mapa */
 .camb, .m3b, .bigb { background: linear-gradient(180deg, rgba(61, 65, 72, .92) 0%, rgba(42, 45, 50, .92) 46%, rgba(23, 24, 27, .92) 54%, rgba(32, 34, 38, .92) 100%); border-color: rgba(255, 255, 255, .2); color: #fff; }
+/* bandera del país junto al nombre del piloto */
+.nfl { margin-left: 6px; font-size: 1.05em; line-height: 1; text-shadow: none; flex: none; }
+.nfl .cc { font-size: .72em; }

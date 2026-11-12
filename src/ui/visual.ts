@@ -145,3 +145,18 @@ function clearIcon(clock: number): string {
   }).join("");
   return `<svg viewBox="0 0 22 15">${rays}<circle cx="11" cy="7.5" r="3.6" fill="#ffd84a"/></svg>`;
 }
+
+// ------------------------------------------------------------------ banderas de los pilotos
+// Por nombre, para que valga igual con la parrilla real, los fichajes del mercado y el equipo creado.
+const DRIVER_FLAG: Record<string, string> = {
+  "George Russell": "🇬🇧", "Kimi Antonelli": "🇮🇹", "Charles Leclerc": "🇲🇨", "Lewis Hamilton": "🇬🇧", "Max Verstappen": "🇳🇱", "Isack Hadjar": "🇫🇷",
+  "Lando Norris": "🇬🇧", "Oscar Piastri": "🇦🇺", "Liam Lawson": "🇳🇿", "Arvid Lindblad": "🇬🇧", "Pierre Gasly": "🇫🇷", "Franco Colapinto": "🇦🇷",
+  "Esteban Ocon": "🇫🇷", "Oliver Bearman": "🇬🇧", "Nico Hülkenberg": "🇩🇪", "Gabriel Bortoleto": "🇧🇷", "Carlos Sainz": "🇪🇸", "Alexander Albon": "🇹🇭",
+  "Fernando Alonso": "🇪🇸", "Lance Stroll": "🇨🇦", "Sergio Pérez": "🇲🇽", "Valtteri Bottas": "🇫🇮",
+  "Frederik Vesti": "🇩🇰", "Antonio Giovinazzi": "🇮🇹", "Yuki Tsunoda": "🇯🇵", "Pato O'Ward": "🇲🇽", "Leonardo Fornaroli": "🇮🇹", "Ayumu Iwasa": "🇯🇵",
+  "Paul Aron": "🇪🇪", "Ryo Hirakawa": "🇯🇵", "Luke Browning": "🇬🇧", "Jak Crawford": "🇺🇸", "Zhou Guanyu": "🇨🇳", "Mick Schumacher": "🇩🇪",
+  "Kevin Magnussen": "🇩🇰", "Jack Doohan": "🇦🇺", "Felipe Drugovich": "🇧🇷", "Théo Pourchaire": "🇫🇷", "Nyck de Vries": "🇳🇱", "Logan Sargeant": "🇺🇸",
+  "Richard Verschoor": "🇳🇱", "Alex Dunne": "🇮🇪", "Gabriele Minì": "🇮🇹", "Dino Beganovic": "🇸🇪", "Victor Martins": "🇫🇷", "Sebastián Montoya": "🇨🇴", "Kush Maini": "🇮🇳",
+};
+/** Bandera del país del piloto (cadena vacía si no se conoce). */
+export const driverFlag = (nombre: string): string => DRIVER_FLAG[nombre] ?? "";

@@ -8,7 +8,7 @@ import { Session, Car, RaceEvent, SESSION_NAMES, SessionKind, isRaceKind, isQual
 import { COMPOUNDS, Compound, DRY, ALL, setWear, TyreSet, WET } from "../sim/tyres";
 import { rainAt, forecast, RadarFrame, windNow } from "../sim/weather";
 import { renderField, colorize, terrain, RADAR_STEPS, fmtHour } from "./radar";
-import { helmetSvg, reducedMotion, lightAt, skyIcon } from "./visual";
+import { helmetSvg, reducedMotion, lightAt, skyIcon, driverFlag } from "./visual";
 
 import { makeRun, planOptions, teamTakesOver } from "../sim/strategy";
 import { Rng } from "../sim/rng";
@@ -59,6 +59,8 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   window.addEventListener("pagehide", persist);
   const mine = () => sess.cars.filter((c) => c.player).sort((a, b) => a.id - b.id);
   const tvName = (c: Car) => { const parts = c.d.nombre.split(" "); return `${parts[0][0]} ${parts.slice(1).join(" ")}`.toUpperCase(); };
+  /** Nombre de tele con la bandera del país a continuación. */
+  const nameFlag = (c: Car) => { const f = driverFlag(c.d.nombre); return f ? `${tvName(c)}<span class="nfl">${flagHtml(f)}</span>` : tvName(c); };
   const clean = (t: string) => t.replace(/^[\p{Extended_Pictographic}\u{1F1E6}-\u{1F1FF}\uFE0F\u200D\s]+/u, "");
   const TAB: Record<RaceEvent["kind"], string> = { radio: "Radio del equipo", control: "Dirección de carrera", pit: "Boxes", info: "Carrera", weather: "Meteo", incident: "Incidente" };
   const rmHtml = (tab: string, text: string, cls = "") => `<div class="rm ${cls}"><span class="tab">${tab}</span><div class="bar">${clean(text)}</div></div>`;
@@ -1175,7 +1177,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
         if (ot !== undefined && isFinite(ot)) box = `<span class="cutbox mono ${inside ? "in" : "out"}" title="${inside ? "Margen sobre el primer eliminado" : `Lo que falta para el P${adv}, el último que pasa`}"><i>corte</i>${inside ? "−" : "+"}${Math.abs(mineBest - ot).toFixed(3)}</span>`;
         else box = `<span class="cutbox in"><i>corte</i>dentro</span>`;
       } else if (ref && has && ord[0] !== c) box = `<span class="gold mono">+${(mineBest - ref).toFixed(3)}</span>`;
-      lb.innerHTML = last ? `<div class="lapbanner"><span class="posbox">${pos}</span><span class="bar grow">${short ? c.d.abrev : tvName(c)}</span><span class="bar mono">${has ? fmtLap(mineBest) : "Sin tiempo"}</span>${box}</div>` : "";
+      lb.innerHTML = last ? `<div class="lapbanner"><span class="posbox">${pos}</span><span class="bar grow">${short ? c.d.abrev : nameFlag(c)}</span><span class="bar mono">${has ? fmtLap(mineBest) : "Sin tiempo"}</span>${box}</div>` : "";
     } else lb.innerHTML = "";
   }
 
@@ -1261,7 +1263,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       const wear = t ? setWear(t) : 0;
       const col = t ? wearColor(t) : "#444";
       const tyreInfo = t ? `${tyreHtml(t.c)}<span class="small mono">${t.laps}v ${lifeLeft(t)}%</span>` : `<span class="small dim">${phaseName(c)}</span>`;
-      card.querySelector(".h")!.innerHTML = `<span class="posbox mono">${pos}</span><span class="hm">${helmetSvg(c.team.color, c.d.numero, c.d.abrev, 21)}</span><span class="nm">${tvName(c)}<span class="ti">${tyreInfo}</span></span>`;
+      card.querySelector(".h")!.innerHTML = `<span class="posbox mono">${pos}</span><span class="hm">${helmetSvg(c.team.color, c.d.numero, c.d.abrev, 21)}</span><span class="nm">${nameFlag(c)}<span class="ti">${tyreInfo}</span></span>`;
       const wi = card.querySelector<HTMLElement>(".wear i")!;
       wi.style.width = `${(1 - wear) * 100}%`; wi.style.background = col;
       const pl = card.querySelector<HTMLElement>(".planl");
@@ -1510,7 +1512,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       if (st.active) st.ref = flyRef(c) ?? st.ref; // siempre contra la referencia del momento: alguien puede marcar tiempo durante la vuelta
       const r = st.result;
       const showResult = r && (now - r.real < 4000 || sess.t - r.t < 10);
-      const name = `<div class="fn">${tvName(c)}</div>`;
+      const name = `<div class="fn">${nameFlag(c)}</div>`;
       if (showResult && r) {
         const d = r.valid && r.ref ? r.time - r.ref.time : null;
         out.push(`<div class="fly">${name}<div class="ft"><span class="mono">${fmtLap(r.time)}</span>${r.valid ? `<span class="fpos">${r.pos}</span>` : ""}</div>
