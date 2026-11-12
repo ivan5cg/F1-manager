@@ -10,8 +10,8 @@
 import * as THREE from "three";
 import { rainAt } from "../sim/weather";
 
-const CAMS = ["circuito", "seguir", "tele"];
-const CAM_NAME = { circuito: "Circuito", seguir: "Seguir", tele: "Tele" };
+const CAMS = ["circuito", "seguir", "tele", "abordo"];
+const CAM_NAME = { circuito: "Circuito", seguir: "Seguir", tele: "Tele", abordo: "A bordo" };
 const COMPOUND = { S: "#e8452c", M: "#f2d23c", H: "#f2f2f2", I: "#3cc35a", W: "#3a7be8" };
 const PIT_OFF = 2.15;
 const mod = (a, n) => ((a % n) + n) % n;
@@ -724,7 +724,7 @@ function updateCamera(dt, now) {
   const tgt = followCar(), p = tgt && pose.get(tgt.id);
   let mode = camMode;
   if (!p && mode !== "circuito") mode = "circuito";
-  let cut = false;
+  let cut = false, onboard = false;
   const fast = Math.sqrt(Math.max(1, opt.speed() / 4));
   if (mode === "circuito") {
     if (!opt.paused()) swayT += dt; // en pausa la vista se queda quieta
@@ -739,6 +739,18 @@ function updateCamera(dt, now) {
     want.look.set(p.px + cx * 12, p.py + 1, p.pz + cz * 12);
     want.pos.set(p.px - cx * D * Math.cos(el), p.py + D * Math.sin(el), p.pz - cz * D * Math.cos(el));
     want.fov = 38;
+  } else if (mode === "abordo") {
+    // a bordo: sobre la toma de aire, solidaria con el coche (cabecea y se inclina con él) y mirando a donde va
+    const k = carK(curW);
+    const ux = -p.sz * p.fy, uy = p.sz * p.fx - p.sx * p.fz, uz = p.sx * p.fy;
+    const th = clamp(p.acc / 55, -1, 0.4) * 0.05, ph = p.roll * 0.04;
+    const hx = ux - p.fx * th + p.sx * ph, hy = uy - p.fy * th, hz = uz - p.fz * th + p.sz * ph;
+    want.pos.set(p.px - p.fx * 0.25 * k + hx * 1.32 * k, p.py + hy * 1.32 * k - p.fy * 0.25 * k, p.pz - p.fz * 0.25 * k + hz * 1.32 * k);
+    sample(p.s + 26, _tp);
+    const la = latAt(p, p.s + 26, curW, 0) * curW * arrAt(T.wr, p.s + 26);
+    want.look.set(_tp.x + _tp.rx * la, _tp.y + 0.6, _tp.z + _tp.rz * la);
+    want.fov = 62;
+    onboard = true;
   } else {
     // cámaras fijas en torres junto a la pista, como la realización de la tele: giran, hacen zoom y se corta de una a otra
     const spacing = 360 * Math.max(1, opt.speed() / 2), nCam = Math.max(3, Math.round(T.L / spacing)), sp = T.L / nCam;
@@ -764,17 +776,17 @@ function updateCamera(dt, now) {
   } else { cur.pos.copy(want.pos); cur.look.copy(want.look); cur.fov = want.fov; }
   camera.position.copy(cur.pos); camera.fov = cur.fov;
   const dist = cur.pos.distanceTo(cur.look);
-  camera.near = Math.max(1.5, dist * 0.04);
+  camera.near = onboard ? 0.25 : Math.max(1.5, dist * 0.04);
   camera.updateProjectionMatrix(); camera.lookAt(cur.look);
   camera.updateMatrixWorld(); camera.matrixWorldInverse.copy(camera.matrixWorld).invert();
   sky.position.copy(cur.pos);
   // escala de maqueta: de lejos la pista y los coches engordan para leerse; de cerca, tamaño real
   const halfH = dist * Math.tan(cur.fov * Math.PI / 360);
-  const wT = clamp(halfH * 0.0195, W_REAL, T.Wov);
+  const wT = onboard ? W_REAL : clamp(halfH * 0.0195, W_REAL, T.Wov);
   curW = cut || camSnap ? wT : curW + (wT - curW) * (1 - Math.exp(-dt / 0.2));
   fog.near = Math.max(dist * 1.3, 220); fog.far = Math.max(dist * 6, 3800);
   // el sol ilumina (y da sombra) alrededor de lo que mira la cámara
-  const S = clamp(halfH * 2.1, 40, T.E * 0.9), sc = sun.shadow.camera;
+  const S = onboard ? 140 : clamp(halfH * 2.1, 40, T.E * 0.9), sc = sun.shadow.camera;
   sun.target.position.copy(cur.look); sun.position.copy(cur.look).addScaledVector(sunDir, S * 3.2);
   sc.left = sc.bottom = -S; sc.right = sc.top = S; sc.near = 1; sc.far = S * 8; sc.updateProjectionMatrix();
   sun.shadow.normalBias = S / 350;
@@ -867,7 +879,7 @@ function draw3d(dt, now) {
     const el = labels.get(p.c.id);
     if (!el) continue;
     const near = close && fp && Math.min(mod(p.s - fp.s, T.L), mod(fp.s - p.s, T.L)) < 22 * k;
-    if (ok && (p.c.player || p.c.id === opt.selId() || near)) {
+    if (ok && (p.c.player || p.c.id === opt.selId() || near) && !(camMode === "abordo" && p === fp)) {
       el.hidden = false;
       let ly = y - 19;
       while (placed.some((o) => Math.abs(o.x - x) < 30 && Math.abs(o.y - ly) < 13)) ly -= 14;

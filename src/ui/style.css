@@ -795,3 +795,7 @@ canvas.champchart { display: block; width: 100%; height: 200px; margin: 6px 0 2p
 .ctrl .gp { flex: none; display: flex; align-items: center; gap: 5px; overflow: visible; }
 .ctrl .gp b { font-size: 14px; font-weight: 900; color: var(--text, #fff); letter-spacing: .04em; }
 .ctrl .speed { margin-left: auto; }
+/* torre: al final de cada fila, dónde está el coche (P = boxes, verde = en pista) */
+.tr .lc { flex: none; width: 13px; margin-left: 1px; display: flex; align-items: center; justify-content: center; font-size: 9.5px; font-weight: 900; line-height: 1; }
+.tr .lc.pit { background: linear-gradient(#fff, #d4d4d4); color: #000; }
+.tr .lc.trk::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--green); }

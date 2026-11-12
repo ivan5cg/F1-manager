@@ -463,10 +463,12 @@ export function aiErs(sess: Session, car: Car) {
   if (ph === "out" || ph === "cool" || ph === "in") { car.ers = 0; return; }
   if (ph === "push") { car.ers = car.soc > 0.8 ? 2 : 1; return; }
   const attacking = car.followGap < 0.9 && car.aheadId >= 0;
-  if (car.soc < 0.6) car.ers = 0;
-  else if (attacking && car.soc > 1.2) car.ers = car.followGap < 0.5 ? 3 : 2;
-  else if (car.soc < 2.2) car.ers = 0;
-  else if (car.soc > 3.6) car.ers = 2;
+  // la batería sube y baja dentro de la vuelta: el modo se decide con la media reciente
+  const soc = car.socAvg ?? car.soc;
+  if (soc < 0.6) car.ers = 0;
+  else if (attacking && soc > 1.2) car.ers = car.followGap < 0.5 ? 3 : 2;
+  else if (soc < 2.2) car.ers = 0;
+  else if (soc > 3.6) car.ers = 2;
   else car.ers = 1;
   void sess;
 }

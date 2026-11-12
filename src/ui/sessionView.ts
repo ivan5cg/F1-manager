@@ -932,6 +932,11 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     else { const order: TowerMode[] = ["int", "gap", "last", "tyre"]; mode = order[(order.indexOf(mode) + 1) % order.length]; }
     renderTower();
   });
+  /** Al final de la fila: «P» si el coche está en boxes (garaje o pit-lane), una marca verde si está en pista. */
+  function whereCell(c: Car): string {
+    if (c.loc === "out" || c.loc === "fin") return `<span class="lc"></span>`;
+    return c.loc === "track" ? `<span class="lc trk" title="En pista"></span>` : `<span class="lc pit" title="En boxes">P</span>`;
+  }
   function statusFlag(c: Car): string {
     if (c.loc === "out") return `<span class="flag outl">OUT</span>`;
     if (c.loc === "pit" || c.loc === "lane_in" || c.loc === "lane_out") return `<span class="flag pit">PIT</span>`;
@@ -1017,7 +1022,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
           const has = b !== undefined && isFinite(b);
           cells = `<span class="l mono ${has && b === sessBest ? "purple" : ""}">${has ? fmtLap(b) : "—"}</span><span class="w mono">${has && i > 0 && isFinite(gap) ? `+${gap.toFixed(3)}` : ""}</span><span class="l mono">${lastLap(c)}</span>${sectorCells(c)}<span class="t">${tyre}<span class="small mono">${c.tyres ? c.tyres.laps : ""}</span></span><span class="k mono">${c.sessionLaps}</span>`;
         }
-        html += `<div class="${cls}" data-id="${c.id}">${pre}${cells}</span></div>`;
+        html += `<div class="${cls}" data-id="${c.id}">${pre}${cells}</span>${whereCell(c)}</div>`;
         return;
       }
       let g = "";
@@ -1038,7 +1043,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       }
       const bt = race ? null : quali ? c.bestTyreByPart[c.eliminated ? c.elimPart! : sess.part] : c.bestTyre;
       const tyreCell = race || mode === "tyre" ? tyre : bt ? tyreHtml(bt) : "";
-      html += `<div class="${cls}" data-id="${c.id}">${pre}<span class="g mono">${g}</span><span class="t">${tyreCell}</span></span></div>`;
+      html += `<div class="${cls}" data-id="${c.id}">${pre}<span class="g mono">${g}</span><span class="t">${tyreCell}</span></span>${whereCell(c)}</div>`;
     });
     towerEl.innerHTML = html;
     animateTower();

@@ -124,6 +124,8 @@ export interface Car {
   stops: number;
   fuel: number;
   soc: number;
+  /** Batería media reciente (la instantánea sube y baja en cada recta y cada frenada). */
+  socAvg?: number;
   push: number;
   engine: number;
   ers: number;
@@ -292,6 +294,10 @@ export class Session {
   private lastRainMsg = -999;
   private wasRaining = false;
   private tRef: number[];
+  /** Energía recuperada por vuelta (MJ) y cómo se reparten la recarga y el gasto entre los minisectores. */
+  ersLap = 6;
+  private ersIn: number[] = [];
+  private ersOut: number[] = [];
 
   constructor(public opt: SessionOptions) {
     this.kind = opt.kind;
@@ -306,6 +312,18 @@ export class Session {
     this.sprintWeekend = opt.sprintWeekend;
     this.lapRefRace = this.track.refLap;
     this.tRef = this.track.ms.map((m) => msTimeAtGrip(m, 1));
+    // Batería dentro de la vuelta: se recupera donde se frena o se levanta y se gasta donde se va a fondo
+    // (menos al final de las rectas, donde el reglamento recorta la potencia eléctrica). El saldo de la
+    // vuelta sigue siendo el del modo elegido (ERS_NET): solo cambia cuándo entra y cuándo sale la energía.
+    {
+      const ms = this.track.ms, off = ms.map((m, i) => (1 - m.throttle) * this.tRef[i]);
+      const on = ms.map((m, i) => m.throttle * clamp((345 - m.vAvg) / 60, 0.3, 1) * this.tRef[i]);
+      const sOff = off.reduce((a, b) => a + b, 0) || 1, sOn = on.reduce((a, b) => a + b, 0) || 1;
+      // lo que da de sí el circuito: 350 kW el 55 % del tiempo sin gas, con el tope de 8,5 MJ por vuelta
+      this.ersLap = clamp(0.35 * 0.55 * sOff, 2.5, 8.5);
+      this.ersIn = off.map((x) => x / sOff);
+      this.ersOut = on.map((x) => x / sOn);
+    }
     this.updateWind();
     // ¿compensa ir a rebufo de otro en una vuelta lanzada? (Monza sí; en circuitos de curvas, aire limpio)
     let bestG = 9, bestNet = 0;
@@ -875,8 +893,12 @@ export class Session {
     }, dt, this.lapRefRace, this.hidden);
     const underFlag = this.flag !== "green" || ph.speed < 1;
     c.fuel -= (this.fuelPerLap * ENGINE_FUEL[c.engine] * PUSH_FUEL[c.push] * (underFlag ? 0.5 : 1) * move) / L;
-    if (!underFlag) c.soc = clamp(c.soc + (ERS_NET[c.ers] / this.lapRefRace) * dt, 0, SOC_MAX);
-    else c.soc = clamp(c.soc + (1.5 / this.lapRefRace) * dt, 0, SOC_MAX);
+    if (!underFlag) {
+      const dE = this.ersLap * this.ersIn[m.i] - (this.ersLap - ERS_NET[c.ers]) * this.ersOut[m.i]; // MJ en este minisector
+      c.soc = clamp(c.soc + (dE / this.tRef[m.i]) * dt, 0, SOC_MAX);
+    } else c.soc = clamp(c.soc + (1.5 / this.lapRefRace) * dt, 0, SOC_MAX);
+    // media de la última vuelta más o menos: es la que mira la IA para elegir modo, no el pico del momento
+    c.socAvg = (c.socAvg ?? c.soc) + ((c.soc - (c.socAvg ?? c.soc)) * dt) / (this.lapRefRace * 0.6);
     if (c.fuel <= 0) { c.fuel = 0; this.retire(c, "sin combustible", 0.2); return; }
 
     const wmax = setWear(c.tyres!);
