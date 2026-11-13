@@ -37,6 +37,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   let leftover = 0;
   let raf = 0;
   let lastUi = 0;
+  let lastSheet = 0;
   let lastDraw = 0;
   let sheetOpen = false;
   let skipping = false;
@@ -1437,41 +1438,66 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     else if (f.risk[k]) out += `<div class="small" style="color:#ff9a3c">banda muy caliente</div>`;
     return out;
   }
+  /**
+   * Hoja de tus pilotos, compacta para que los dos quepan en un móvil sin desplazarse: cabecera con
+   * neumático y vueltas, los dos ejes en una fila, los datos en una rejilla y los mandos en filas con
+   * su etiqueta al lado. Se actualiza sola mientras está abierta.
+   */
+  let sheetTick: (() => void) | null = null;
+  // «Equilibrado» no cabe en un botón de un sexto de móvil
+  const ERS_SHORT = ERS_NAMES.map((n) => (n === "Equilibrado" ? "Equilib." : n));
+  /** «Fernando Alonso» → «F. Alonso»: en la hoja de pilotos el nombre entero no cabe al lado del neumático. */
+  const shortName = (n: string) => { const p = n.trim().split(/\s+/); return p.length > 1 ? `${p[0][0]}. ${p.slice(1).join(" ")}` : n; };
   function pilotsSheet() {
     const tempColor = (c: Compound, t: number) => { const sp = COMPOUNDS[c]; const d = t - sp.opt; return Math.abs(d) < sp.window * 0.5 ? "var(--green)" : d < -sp.window ? "var(--blue)" : d > sp.window ? "var(--red1)" : "var(--gold1)"; };
-    const body = () => mine().map((c, idx) => {
+    const card = (c: Car, idx: number) => {
       const t = c.tyres;
-      const axle = (name: string, a: TyreSet["F"], k: number) => !t ? "" : `<div style="border-color:${tempColor(t.c, a.tBulk)}"><div class="small dim up">${name}</div><div class="t mono" style="color:${tempColor(t.c, a.tBulk)}">${a.tBulk.toFixed(0)}°</div><div class="small dim mono">sup. ${a.tSurf.toFixed(0)}°</div><div class="small mono">${Math.round((1 - a.wear) * 100)} % banda</div>${feelHtml(c, k)}</div>`;
-      const seg = (key: string, names: string[], cur: number, auto?: boolean) => `<div class="seg" data-k="${key}" data-i="${idx}">${auto !== undefined ? `<button data-v="auto" class="${auto ? "on" : ""}">Auto</button>` : ""}${names.map((n, i) => `<button data-v="${i}" class="${!auto && cur === i ? "on" : ""}">${n}</button>`).join("")}</div>`;
+      const axle = (name: string, a: TyreSet["F"], k: number) => {
+        const col = tempColor(t!.c, a.tBulk);
+        return `<div class="ax" style="border-color:${col}"><span class="lb">${name}</span><b class="tt mono" style="color:${col}">${a.tBulk.toFixed(0)}°</b><span class="dt mono">sup. ${a.tSurf.toFixed(0)}° · ${Math.round((1 - a.wear) * 100)} %</span><span class="fl">${feelHtml(c, k) || "&nbsp;"}</span></div>`;
+      };
+      const seg = (key: string, label: string, names: string[], cur: number, auto?: boolean) => `<span class="sl">${label}</span><div class="seg" data-k="${key}" data-i="${idx}">${auto !== undefined ? `<button data-v="auto" class="${auto ? "on" : ""}">Auto</button>` : ""}${names.map((n, i) => `<button data-v="${i}" class="${!auto && cur === i ? "on" : ""}" title="${n}">${n}</button>`).join("")}</div>`;
       const fuelDelta = race ? c.fuel / sess.fuelPerLap - (sess.laps - sess.lapsDone(c)) : 0;
       const plan = race ? c.plan.stints.slice(c.stops).map((s, i, arr) => `${tyreHtml(s.c)}${i < arr.length - 1 ? ` v${s.endLap}` : ""}`).join(" → ") : "";
-      return `<div class="panel" style="margin:6px 0"><div class="hd"><span class="t"><span class="teamdot" style="background:${c.team.color}"></span>${esc(c.d.nombre)}</span>${t ? tyreHtml(t.c, true) : ""}</div><div class="bd">
-        ${t ? `<div class="small dim">${COMPOUNDS[t.c].name} · ${t.laps} v · ventana ${COMPOUNDS[t.c].opt - COMPOUNDS[t.c].window}–${COMPOUNDS[t.c].opt + COMPOUNDS[t.c].window} °C${c.wing > 0 ? ` · <span class="yellow">alerón dañado</span>` : ""}</div><div class="temp">${axle("Delanteros", t.F, 0)}${axle("Traseros", t.R, 1)}</div>` : `<div class="dim">En el garaje.</div>`}
-        <div class="kv"><span>Última / mejor</span><b class="mono">${fmtLap(c.lapTimes[c.lapTimes.length - 1])} / ${fmtLap(c.best)}</b>
-        ${t ? `<span>Ritmo posible ahora</span><b class="mono">${fmtLap(sess.estLap(c))}</b>` : ""}
-        <span>Combustible</span><b class="mono">${c.fuel.toFixed(1)} kg${race ? ` (${fuelDelta >= 0 ? "+" : ""}${fuelDelta.toFixed(1)} v)` : ""}</b>
-        <span>Batería</span><b class="mono">${Math.round((c.soc / SOC_MAX) * 100)} %</b>
-        ${c.e.pu ? `<span>Unidad de potencia</span><b class="mono">${Math.round(puLife(c.e.pu.km0 + c.puKm) * 100)} % de vida</b>` : ""}
-        ${race ? `<span>Plan</span><b>${plan}</b>` : ""}</div>
-        ${race ? `<h2>Ritmo</h2>${seg("push", PUSH_NAMES, c.push)}<h2>Motor</h2>${seg("engine", ENGINE_NAMES, c.engine)}<h2>Batería</h2>${seg("ers", ERS_NAMES, c.ers, c.autoErs)}<button data-let="${idx}" style="width:100%">Dejar pasar al compañero</button>` : ""}
-      </div></div>`;
-    }).join("") + `<button data-close style="width:100%">Cerrar</button>`;
-    open(`<div id="pbody">${body()}</div>`, (el, close) => {
-      const wire = () => {
-        el.querySelectorAll<HTMLElement>(".seg").forEach((sg) => (sg.onclick = (e) => {
-          const b = (e.target as HTMLElement).closest("button") as HTMLButtonElement;
-          if (!b) return;
-          const c = mine()[Number(sg.dataset.i)];
-          const k = sg.dataset.k;
-          if (k === "push") c.push = Number(b.dataset.v);
-          if (k === "engine") c.engine = Number(b.dataset.v);
-          if (k === "ers") { if (b.dataset.v === "auto") c.autoErs = true; else { c.autoErs = false; c.ers = Number(b.dataset.v); } }
-          el.querySelector("#pbody")!.innerHTML = body(); wire();
-        }));
-        el.querySelectorAll<HTMLButtonElement>("[data-let]").forEach((b) => (b.onclick = () => { const c = mine()[Number(b.dataset.let)]; sess.letTeammatePass(c); showToast(`📻 ${c.d.abrev}: "Entendido, dejo pasar a mi compañero."`, 2500); }));
-        el.querySelectorAll<HTMLElement>("[data-close]").forEach((b) => (b.onclick = () => close()));
+      const cell = (k: string, v: string, wide = false) => `<div class="${wide ? "w2" : ""}"><i>${k}</i><b class="mono">${v}</b></div>`;
+      const sp = t ? COMPOUNDS[t.c] : null;
+      return `<div class="pcard">
+        <div class="pc-h"><span class="teamdot" style="background:${c.team.color}"></span><b class="nm">${esc(shortName(c.d.nombre))}</b>${t ? `${tyreHtml(t.c)}<span class="dim">${t.laps} v · ${sp!.opt - sp!.window}–${sp!.opt + sp!.window}°</span>` : `<span class="dim">en el garaje</span>`}${c.wing > 0 ? `<span class="yellow">alerón</span>` : ""}${race ? `<button data-let="${idx}" title="Dejar pasar al compañero">Dejar pasar</button>` : ""}</div>
+        ${t ? `<div class="pc-t">${axle("Del.", t.F, 0)}${axle("Tras.", t.R, 1)}</div>` : ""}
+        <div class="pc-s">${cell("Última", fmtLap(c.lapTimes[c.lapTimes.length - 1]))}${cell("Mejor", fmtLap(c.best))}${t ? cell("Posible", fmtLap(sess.estLap(c))) : ""}${cell("Combust.", `${c.fuel.toFixed(1)} kg${race ? ` <small>${fuelDelta >= 0 ? "+" : ""}${fuelDelta.toFixed(1)} v</small>` : ""}`)}${cell("Batería", `${Math.round((c.soc / SOC_MAX) * 100)} %`)}${c.e.pu ? cell("Motor", `${Math.round(puLife(c.e.pu.km0 + c.puKm) * 100)} % vida`) : ""}${race ? cell("Plan", plan || "—", !c.e.pu) : ""}</div>
+        ${race ? `<div class="pc-c">${seg("push", "Ritmo", PUSH_NAMES, c.push)}${seg("engine", "Motor", ENGINE_NAMES, c.engine)}${seg("ers", "Batería", ERS_SHORT, c.ers, c.autoErs)}</div>` : ""}
+      </div>`;
+    };
+    const body = () => mine().map(card).join("");
+    open(`<div id="pbody" class="pcards">${body()}</div><button data-close class="pc-close">Cerrar</button>`, (el, close) => {
+      const pb = el.querySelector<HTMLElement>("#pbody")!;
+      // un solo manejador en el contenedor: así el contenido se puede redibujar sin perder los botones
+      pb.onclick = (e) => {
+        const b = (e.target as HTMLElement).closest("button") as HTMLButtonElement | null;
+        if (!b) return;
+        if (b.dataset.let !== undefined) {
+          const c = mine()[Number(b.dataset.let)];
+          sess.letTeammatePass(c);
+          showToast(`📻 ${c.d.abrev}: "Entendido, dejo pasar a mi compañero."`, 2500);
+          return;
+        }
+        const sg = b.closest<HTMLElement>(".seg");
+        if (!sg) return;
+        const c = mine()[Number(sg.dataset.i)];
+        const k = sg.dataset.k;
+        if (k === "push") c.push = Number(b.dataset.v);
+        if (k === "engine") c.engine = Number(b.dataset.v);
+        if (k === "ers") { if (b.dataset.v === "auto") c.autoErs = true; else { c.autoErs = false; c.ers = Number(b.dataset.v); } }
+        pb.innerHTML = body();
       };
-      wire();
+      el.querySelectorAll<HTMLElement>("[data-close]").forEach((b) => (b.onclick = () => close()));
+      // no se redibuja justo mientras se pulsa un botón (se perdería la pulsación)
+      let holdUntil = 0;
+      pb.onpointerdown = () => { holdUntil = performance.now() + 1200; };
+      sheetTick = () => {
+        if (!pb.isConnected) { sheetTick = null; return; }
+        if (performance.now() > holdUntil) pb.innerHTML = body();
+      };
     });
   }
   // ----------------------------------------- vuelta lanzada (como en la tele)
@@ -2041,6 +2067,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
         if (now >= towerAnimUntil) renderTower();
         renderTop(); renderMessages(); renderSel();
         if (!sheetOpen) renderDrivers();
+        else if (sheetTick && now - lastSheet > 1000) { lastSheet = now; sheetTick(); }
       }
     } catch (err) {
       console.error(err); // un fallo de dibujo no puede parar la sesión
