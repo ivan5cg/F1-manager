@@ -3,7 +3,7 @@
 // en libres. Con lo que sabe simula stints con el mismo modelo de neumáticos que la carrera y
 // busca la mejor combinación de paradas con los juegos que le quedan.
 import { Rng } from "./rng";
-import { Compound, COMPOUNDS, DRY, HiddenTyre, TyreSet, newSet, updateSet, setGrip, setWear, WET } from "./tyres";
+import { Compound, COMPOUNDS, DRY, HiddenTyre, TyreSet, newSet, updateSet, setGrip, setWear, WET, driverRough } from "./tyres";
 import { msTimeAtGrip } from "./track";
 import { forecast, Forecast } from "./weather";
 import type { Session, Car, TeamDef, Run } from "./session";
@@ -69,7 +69,9 @@ export function learnFromRun(sess: Session, car: Car, run: Run & { lapsData: num
 export function stintProfile(sess: Session, car: Car, k: TeamKnowledge, c: Compound) {
   // cada coche desgasta distinto: el perfil es de ESE coche (antes lo heredaba el compañero)
   const trackT = Math.round(sess.weather.trackT / 3) * 3, airT = Math.round(sess.weather.airT / 3) * 3;
-  const key = `${c}:${car.id}:${trackT}:${airT}`;
+  // la goma en pista cambia el graining: el perfil de unos libres con pista verde no vale para la carrera
+  const rubber = Math.round(sess.rubber * 5) / 5;
+  const key = `${c}:${car.id}:${trackT}:${airT}:${rubber}`;
   const cached = k.profile[key];
   if (cached) return cached;
   const tr = sess.track;
@@ -90,6 +92,7 @@ export function stintProfile(sess: Session, car: Car, k: TeamKnowledge, c: Compo
           trackT, airT, water: 0,
           eF: (m.energyF / tm) * lapRef, eR: (m.energyR / tm) * lapRef,
           push: 1, carWear: car.wearMult, abrasiveness: tr.abrasiveness,
+          rubber, rough: driverRough(car.d.neumaticos),
         }, h, lapRef, k.hidden);
       }
       gripSum += setGrip(set, 0) * tm;
@@ -452,6 +455,9 @@ export function aiModes(sess: Session, car: Car, left: number) {
   if (fuelLaps < left - 0.5) push = 0;
   if (wear > sp.cliff - 0.15 && toEnd > 6 && push > 1) push = 1;
   if (left <= 4 && wear < sp.cliff - 0.1 && fuelLaps > left + 0.5) push = 3;
+  // la telemetría ve la banda pasada de temperatura o el piloto ya nota ampollas: a cuidar, que son para siempre
+  const feel = car.tyreFeel;
+  if (feel && feel.set === car.tyres.id && toEnd > 2 && (feel.risk.some(Boolean) || feel.blister.some((b) => b > 0)) && push > 1) push = 1;
   if (!car.player || car.autoPush) car.push = push;
   if (!car.player) car.engine = fuelLaps < left - 0.3 ? 0 : 1;
 }

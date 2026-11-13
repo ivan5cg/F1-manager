@@ -5,7 +5,7 @@
 // distancias reales entre coches.
 import { Rng, clamp } from "./rng";
 import { Track, Minisector, msTimeAtGrip, MIN_MASS, REF_CAR } from "./track";
-import { Compound, COMPOUNDS, DRY, HiddenTyre, TyreSet, setGrip, updateSet, axleGrip, warmBlankets, setWear, bestWaterGrip, WET } from "./tyres";
+import { Compound, COMPOUNDS, DRY, HiddenTyre, TyreSet, setGrip, updateSet, axleGrip, warmBlankets, setWear, bestWaterGrip, WET, treadT, blisterT, grainT, driverRough } from "./tyres";
 import { WeatherState, stepWeather, rainAt, evaporation, waterStep, windNow } from "./weather";
 import { PU_WEAR, puLife, puPowerLoss, puHazard } from "./powerunit";
 import { Plan, planStrategy, aiDecide, aiErs, TeamKnowledge, practiceProgram, qualiTick, pickSet, learnFromRun, aiRedFlagTyres, practiceWeather, wrongTyresForWater, teamForecast, ruleSatisfied } from "./strategy";
@@ -86,6 +86,15 @@ export interface DriverDef {
   ataque: number; defensa: number; agresividad: number; salida: number;
 }
 
+/**
+ * Estado de los neumáticos según el piloto y los ingenieros (por eje, delantero y trasero).
+ * grain: graining que nota el piloto (0 nada, 1 leve, 2 moderado, 3 fuerte).
+ * blister: 0 nada, 1 el piloto nota vibraciones (sospecha), 2 confirmadas por los ingenieros.
+ * risk: la telemetría ve la banda pasada de temperatura (riesgo de ampollas).
+ */
+export interface TyreFeel { set: string; grain: [number, number]; blister: [number, number]; risk: [boolean, boolean]; hotLaps?: [number, number]; warned?: [boolean, boolean] }
+export const GRAIN_WORDS = ["", "leve", "moderado", "fuerte"];
+
 /** Lo que dura todo el fin de semana: juegos de neumáticos y lo que sabe el equipo. */
 export interface Entrant {
   id: number;
@@ -160,6 +169,10 @@ export interface Car {
   auto: boolean; // en libres/clasificación: la IA lleva el programa
   wetWarned?: boolean; // ya se avisó al jugador de que va con el neumático equivocado
   cliffWarned?: string; // id del juego del que ya se avisó que se acaba
+  /** Segundos de la vuelta en curso con la banda por encima de la temperatura de ampollas (del., tras.): lo ve la telemetría. */
+  tyreHeat?: [number, number];
+  /** Lo que el equipo sabe del juego montado: nadie ve el graining ni las ampollas, solo lo que nota el piloto y la telemetría. */
+  tyreFeel?: TyreFeel;
   gapWant: number; // hueco que busca con el de delante en la vuelta de salida (s)
   letPass?: number;
   advice?: { lap: number; setId: string };
@@ -435,6 +448,7 @@ export class Session {
   }
 
   mount(c: Car, set: TyreSet) {
+    if (c.tyres && c.tyres !== set) this.inspect(c, c.tyres);
     if (isRaceKind(this.kind)) {
       const from = this.lapsDone(c);
       // antes de la salida, cambiar el neumático de salida sustituye al anterior
@@ -885,12 +899,21 @@ export class Session {
     const fuelK = isRaceKind(this.kind) ? Math.min(1, (MIN_MASS + c.fuel) / (MIN_MASS + 0.5 * this.fuelPerLap * this.laps)) : 1;
     const relE = (e: number) => (e / this.tRef[m.i]) * this.lapRefRace * fuelK;
     const slow = this.flag !== "green" ? 0.35 : ph.energy;
-    updateSet(c.tyres!, {
+    // en aire sucio el morro pierde carga: el tren delantero desliza (subviraje), se recalienta y se rasga
+    const dirty = c.aheadId >= 0 ? dirtyAir(c.followGap) * m.aero * m.cornerSens * slow : 0;
+    const tyres = c.tyres!;
+    updateSet(tyres, {
       trackT: this.weather.trackT, airT: this.weather.airT, water,
       eF: relE(m.energyF) * slow * (c.followGap < 1.2 ? 1 + 0.12 * (1 - c.followGap / 1.2) * m.cornerSens : 1),
       eR: relE(m.energyR) * slow,
       push: PUSH_ENERGY[c.push], carWear: c.wearMult, abrasiveness: this.track.abrasiveness,
+      rubber: this.rubber, slideF: 2 * dirty, slideR: 0.5 * dirty, rough: driverRough(c.d.neumaticos),
     }, dt, this.lapRefRace, this.hidden);
+    // la telemetría mide la temperatura de la banda: cuánto rato pasa por encima del límite
+    const heat = (c.tyreHeat ??= [0, 0]);
+    const lim = blisterT(tyres.c);
+    if (treadT(tyres.F) > lim) heat[0] += dt;
+    if (treadT(tyres.R) > lim) heat[1] += dt;
     const underFlag = this.flag !== "green" || ph.speed < 1;
     c.fuel -= (this.fuelPerLap * ENGINE_FUEL[c.engine] * PUSH_FUEL[c.push] * (underFlag ? 0.5 : 1) * move) / L;
     if (!underFlag) {
@@ -1008,6 +1031,9 @@ export class Session {
       if (lap > 1 && lt < this.bestLap) this.bestLap = lt;
       c.tyres!.laps++;
       c.lapStart = c.cross[k];
+      // en carrera la pista también se engoma (si llovió por la mañana, sale verde y mejora vuelta a vuelta)
+      this.rubber = Math.min(1, this.rubber + 0.0009);
+      this.tyreLap(c);
     }
     if (lap > this.leaderLap) {
       this.leaderLap = lap;
@@ -1071,6 +1097,70 @@ export class Session {
     }
   }
 
+  /**
+   * Al cerrar cada vuelta: lo que nota el piloto y lo que ve la telemetría. Nadie mide el graining ni las
+   * ampollas directamente: el piloto nota el graining (subviraje, el coche «flota»), con más o menos
+   * acierto según lo fino que sea; las ampollas no se notan hasta que hay vibraciones, y la telemetría
+   * solo avisa de que la banda va pasada de temperatura (riesgo). Se confirman al ver el juego.
+   */
+  private tyreLap(c: Car) {
+    const t = c.tyres;
+    if (!t) return;
+    let f = c.tyreFeel;
+    if (!f || f.set !== t.id) f = c.tyreFeel = { set: t.id, grain: [0, 0], blister: [0, 0], risk: [false, false] };
+    const heat = c.tyreHeat ?? [0, 0];
+    c.tyreHeat = [0, 0];
+    const sd = clamp(0.05 + (95 - c.d.neumaticos) / 250, 0.04, 0.2);
+    const say = (text: string, important = false) => { if (c.player) this.log({ kind: "radio", carId: c.id, text, important }); };
+    const AX = ["delanteros", "traseros"];
+    for (let k = 0; k < 2; k++) {
+      const a = k === 0 ? t.F : t.R;
+      // graining: el piloto lo nota; se informa cuando empeora un escalón o cuando desaparece
+      const g = a.grain + this.rng.gauss(0, sd);
+      const lvl = g < 0.12 ? 0 : g < 0.3 ? 1 : g < 0.55 ? 2 : 3;
+      if (lvl > f.grain[k]) {
+        const cold = treadT(a) < grainT(t.c);
+        if (lvl >= 2) say(`📻 ${c.d.abrev}: "Graining ${GRAIN_WORDS[lvl]} en los ${AX[k]}, el coche no gira."${cold ? " Ingeniero: les falta temperatura, hay que calentarlos." : " Ingeniero: ya están en temperatura, se limpiará en unas vueltas."}`, lvl >= 3);
+        f.grain[k] = lvl;
+      } else if (lvl < f.grain[k] - 1 || (lvl === 0 && f.grain[k] > 0)) {
+        if (f.grain[k] >= 2 && lvl <= 1) say(`📻 ${c.d.abrev}: "Los ${AX[k]} ya se han limpiado, vuelven a agarrar."`);
+        f.grain[k] = lvl;
+      }
+      // riesgo de ampollas: la telemetría ve la banda pasada de temperatura un buen rato de la vuelta,
+      // dos vueltas seguidas (un bloqueo o una vuelta lanzada sueltos no lo son)
+      const hotLaps = (f.hotLaps ??= [0, 0]), warned = (f.warned ??= [false, false]);
+      hotLaps[k] = heat[k] > 3 ? hotLaps[k] + 1 : 0;
+      f.risk[k] = hotLaps[k] >= 2;
+      if (f.risk[k] && !warned[k] && f.blister[k] === 0 && !isQualiKind(this.kind) && c.run?.kind !== "quali") {
+        warned[k] = true;
+        say(`📻 Ingeniero: ${c.d.abrev}, temperatura de banda muy alta en los ${AX[k]}. Riesgo de ampollas: hay que bajar el ritmo.`, true);
+      }
+      // ampollas: con vibraciones las nota el piloto; las confirman en las imágenes y en la telemetría
+      const b = a.blister + this.rng.gauss(0, sd);
+      if (f.blister[k] === 0 && b > 0.3) {
+        f.blister[k] = 1;
+        say(`📻 ${c.d.abrev}: "Noto vibraciones en los ${AX[k]}… ¿ampollas?"`, true);
+      } else if (f.blister[k] === 1 && a.blister > 0.45 && this.rng.chance(0.5)) {
+        f.blister[k] = 2;
+        say(`📻 Ingeniero: confirmado, ${c.d.abrev} tiene ampollas en los ${AX[k]}. Van a caer rápido.`, true);
+      }
+    }
+  }
+
+  /** Al quitar un juego, los mecánicos lo miran: ahí se ve de verdad el graining y las ampollas. */
+  private inspect(c: Car, t: TyreSet) {
+    const r2 = (x: number) => Math.round(x * 100) / 100;
+    t.insp = { grain: [r2(t.F.grain), r2(t.R.grain)], blister: [r2(t.F.blister), r2(t.R.blister)] };
+    if (!c.player) return;
+    const AX = ["delanteros", "traseros"];
+    const bits: string[] = [];
+    for (let k = 0; k < 2; k++) {
+      if (t.insp.blister[k] >= 0.1) bits.push(`ampollas en los ${AX[k]} (${Math.round(t.insp.blister[k] * 100)} %)`);
+      if (t.insp.grain[k] >= 0.15) bits.push(`graining en los ${AX[k]} (${Math.round(t.insp.grain[k] * 100)} %)`);
+    }
+    if (bits.length) this.log({ kind: "radio", carId: c.id, text: `🔍 Mecánicos, juego ${t.id} de ${c.d.abrev}: ${bits.join(", ")}.` });
+  }
+
   private lapChecks(c: Car, lap: number) {
     if (!c.player || !c.tyres) return;
     const t = c.tyres;
@@ -1081,8 +1171,6 @@ export class Session {
       c.cliffWarned = t.id;
       this.log({ kind: "radio", carId: c.id, text: `📻 ${c.d.abrev}: "Los neumáticos se están acabando, noto cómo caen."`, pause: true, important: true });
     }
-    if (t.F.grain > 0.35 || t.R.grain > 0.35) this.log({ kind: "radio", carId: c.id, text: `📻 ${c.d.abrev}: "Mucho graining en los ${t.F.grain > t.R.grain ? "delanteros" : "traseros"}."` });
-    if (t.F.blister > 0.25 || t.R.blister > 0.25) this.log({ kind: "radio", carId: c.id, text: `📻 Ingeniero: ampollas en los ${t.F.blister > t.R.blister ? "delanteros" : "traseros"} de ${c.d.abrev}.`, important: true });
     const lapsLeft = this.laps - lap;
     const fuelLaps = c.fuel / this.fuelPerLap;
     // regla de los dos compuestos: se avisa a tiempo de parar (y otra vez al final)
@@ -1115,6 +1203,7 @@ export class Session {
     if (!run) return;
     c.tyres!.laps++;
     c.sessionLaps++;
+    this.tyreLap(c);
     this.rubber = Math.min(1, this.rubber + 0.0009);
     const wasPush = run.phase === "push" || run.phase === "long";
     if (wasPush && c.lapStart > 0) {
@@ -1256,6 +1345,7 @@ export class Session {
 
   toGarage(c: Car) {
     const run = c.run;
+    if (c.tyres) this.inspect(c, c.tyres);
     if (run && c.tyres) {
       c.tyres.laps++;
       if (run.kind === "long" || run.lapsData.length >= 3) learnFromRun(this, c, run);
@@ -1352,6 +1442,10 @@ export class Session {
     } else if (r < crashP + 0.35) {
       c.delay += this.rng.range(0.3, 0.8);
       tyres.flatSpot = Math.min(1, tyres.flatSpot + this.rng.range(0.3, 0.8));
+      // la rueda bloqueada arrastra goma por el asfalto: pico de temperatura en la superficie (que con
+      // la carcasa caliente puede iniciar ampollas) y banda que se va en ese punto
+      tyres.F.tSurf += this.rng.range(30, 70);
+      tyres.F.wear = Math.min(1, tyres.F.wear + this.rng.range(0.004, 0.012));
       if (c.player) this.log({ kind: "radio", carId: c.id, text: `📻 ${c.d.abrev}: "He bloqueado, tengo un plano en el delantero."` });
     } else {
       c.delay += this.rng.range(0.15, 0.6);

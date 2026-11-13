@@ -2,6 +2,16 @@
 // Cada eje tiene temperatura de carcasa (lenta) y de superficie (rápida), desgaste de banda,
 // graining (reversible) y ampollas (permanentes). La adherencia sale de la ventana de
 // temperatura, el desgaste (con "precipicio"), el agua en pista y esos daños.
+//
+// Graining: la goma de la superficie, demasiado fría (rígida) para lo que se le pide, desliza en vez
+// de agarrar y se rasga en rollitos que se quedan pegados encima de la banda. Hace falta frío Y
+// deslizamiento: pista verde (sin goma), aire sucio que hace deslizar el tren delantero, apretar con
+// el neumático aún frío. Se limpia sola cuando la banda trabaja caliente y con carga (el asfalto se
+// lleva los rollitos), pero esa goma ya no vuelve: cuesta banda.
+// Ampollas: la banda se calienta por dentro más deprisa de lo que puede soltar el calor (la goma
+// aísla) y los volátiles del compuesto forman bolsas de gas que revientan y arrancan trozos. Mandan la
+// temperatura de la banda (superficie más carcasa) en los picos de energía, y una carcasa ya caliente
+// que no deja escapar ese calor. Son permanentes y aceleran el desgaste.
 import { clamp, interp } from "./rng";
 
 export type Compound = "S" | "M" | "H" | "I" | "W";
@@ -20,6 +30,8 @@ export interface CompoundSpec {
   cliff: number; // desgaste a partir del cual cae la adherencia rápido
   water: readonly (readonly [number, number])[]; // agua (mm) -> factor
   cooling: number; // cuánto le enfría el agua
+  grainK: number; // tendencia de la goma a rasgarse en frío (los compuestos blandos, más)
+  blisterK: number; // tendencia a las ampollas (banda gruesa y de compuesto duro: retiene más el calor)
 }
 
 // Agarre según el agua en la trazada (mm). Calibrado con las referencias de Pirelli: el
@@ -30,13 +42,13 @@ const SLICK_WATER = [[0, 1], [0.05, 0.945], [0.1, 0.895], [0.2, 0.825], [0.3, 0.
 
 // ~2,5 % de agarre entre compuestos = ~1 s por vuelta en un circuito como Silverstone
 export const COMPOUNDS: Record<Compound, CompoundSpec> = {
-  S: { name: "Blando", short: "S", color: "#E8452C", base: 1.0, opt: 95, window: 12, slope: 0.06, wear: 0.036, cliff: 0.72, water: SLICK_WATER, cooling: 1 },
-  M: { name: "Medio", short: "M", color: "#F2D23C", base: 0.973, opt: 103, window: 13, slope: 0.036, wear: 0.0175, cliff: 0.74, water: SLICK_WATER, cooling: 1 },
-  H: { name: "Duro", short: "H", color: "#F2F2F2", base: 0.955, opt: 111, window: 14, slope: 0.026, wear: 0.0118, cliff: 0.76, water: SLICK_WATER, cooling: 1 },
+  S: { name: "Blando", short: "S", color: "#E8452C", base: 1.0, opt: 95, window: 12, slope: 0.06, wear: 0.036, cliff: 0.72, water: SLICK_WATER, cooling: 1, grainK: 1.35, blisterK: 0.8 },
+  M: { name: "Medio", short: "M", color: "#F2D23C", base: 0.973, opt: 103, window: 13, slope: 0.036, wear: 0.0175, cliff: 0.74, water: SLICK_WATER, cooling: 1, grainK: 1.0, blisterK: 1.0 },
+  H: { name: "Duro", short: "H", color: "#F2F2F2", base: 0.955, opt: 111, window: 14, slope: 0.026, wear: 0.0118, cliff: 0.76, water: SLICK_WATER, cooling: 1, grainK: 0.75, blisterK: 1.25 },
   I: { name: "Intermedio", short: "I", color: "#3CC35A", base: 1.0, opt: 88, window: 16, slope: 0.035, wear: 0.03, cliff: 0.75,
-    water: [[0, 0.875], [0.1, 0.835], [0.2, 0.8], [0.35, 0.77], [0.5, 0.748], [0.8, 0.718], [1.2, 0.675], [1.8, 0.605], [2.5, 0.535], [3, 0.485]], cooling: 0.55 },
+    water: [[0, 0.875], [0.1, 0.835], [0.2, 0.8], [0.35, 0.77], [0.5, 0.748], [0.8, 0.718], [1.2, 0.675], [1.8, 0.605], [2.5, 0.535], [3, 0.485]], cooling: 0.55, grainK: 1.1, blisterK: 1.1 },
   W: { name: "Lluvia", short: "W", color: "#3A7BE8", base: 1.0, opt: 80, window: 18, slope: 0.03, wear: 0.026, cliff: 0.78,
-    water: [[0, 0.79], [0.3, 0.755], [0.6, 0.725], [1, 0.695], [1.5, 0.667], [2, 0.638], [2.5, 0.605], [3, 0.575]], cooling: 0.35 },
+    water: [[0, 0.79], [0.3, 0.755], [0.6, 0.725], [1, 0.695], [1.5, 0.667], [2, 0.638], [2.5, 0.605], [3, 0.575]], cooling: 0.35, grainK: 0.7, blisterK: 1.2 },
 };
 
 export interface Axle {
@@ -56,6 +68,8 @@ export interface TyreSet {
   flatSpot: number;
   punctured: boolean;
   returned?: boolean; // devuelto a Pirelli (ya no se puede usar)
+  /** Lo que vieron los mecánicos la última vez que se quitó (delantero, trasero). */
+  insp?: { grain: [number, number]; blister: [number, number] };
 }
 
 /** Lo que el fin de semana esconde y nadie sabe con exactitud. */
@@ -81,9 +95,10 @@ export function allocation(sprint: boolean): TyreSet[] {
 export const setWear = (t: TyreSet) => Math.max(t.F.wear, t.R.wear);
 export const isNew = (t: TyreSet) => t.laps === 0;
 
-/** Mantas: al montar un juego (nuevo o usado) sale a 70 °C. */
+/** Mantas: al montar un juego (nuevo o usado) sale a 70 °C. La goma rasgada de un juego usado sigue
+ * ahí, aunque al enfriarse y volver a calentarse parte de los rollitos se suelta. */
 export function warmBlankets(t: TyreSet) {
-  for (const a of [t.F, t.R]) { a.tBulk = 70; a.tSurf = 70; a.grain = 0; }
+  for (const a of [t.F, t.R]) { a.tBulk = 70; a.tSurf = 70; a.grain *= 0.6; }
 }
 
 /** Factor de adherencia de un eje (sin agua). */
@@ -152,22 +167,54 @@ export interface TyreEnv {
   push: number;
   carWear: number;
   abrasiveness: number;
+  /** Goma depositada en la trazada: 0 = pista verde (viernes, tras la lluvia), 1 = muy engomada. */
+  rubber?: number;
+  /** Deslizamiento extra por eje que no sale de la energía de la curva (aire sucio, sobre todo delante). */
+  slideF?: number;
+  slideR?: number;
+  /** Cómo trata el piloto los neumáticos: 1 = media; menos, más fino; más, más brusco. */
+  rough?: number;
 }
+
+/** Cómo trata los neumáticos un piloto (atributo «neumáticos»): 1 = media; uno fino (95) desliza un ~20 % menos. */
+export const driverRough = (skill: number) => clamp(1 + (85 - skill) / 50, 0.7, 1.5);
+
+/** Temperatura de la banda: la goma que toca el suelo, a medio camino entre la carcasa y la superficie. */
+export const treadT = (a: Axle) => a.tBulk + 0.5 * (a.tSurf - a.tBulk);
+/** Temperatura de banda a partir de la cual empiezan a formarse ampollas. */
+export const blisterT = (c: Compound) => COMPOUNDS[c].opt + COMPOUNDS[c].window + 22;
+/** Por debajo de esta temperatura de banda la goma está rígida y, si desliza, se rasga (graining). */
+export const grainT = (c: Compound) => COMPOUNDS[c].opt - 12;
+
+// constantes del daño (por segundo): calibradas para que con el neumático claramente frío y en
+// pista verde el graining se vea en 2-4 vueltas, y que las ampollas pidan varias vueltas de abuso
+const GRAIN_GEN = 0.0026;
+const GRAIN_CLEAN = 1 / 190; // con la banda caliente y carga media, se limpia en ~3 min
+const GRAIN_TEAR = 0.05; // banda que se pierde por cada unidad de graining que se forma
+const BLISTER_GEN = 0.0009;
 
 /** Avanza el estado de un juego dt segundos. lapRef: duración de vuelta de referencia. */
 export function updateSet(t: TyreSet, env: TyreEnv, dt: number, lapRef: number, hidden: HiddenTyre): void {
   const sp = COMPOUNDS[t.c];
   const wet = Math.min(1, env.water / 0.8);
+  // en pista verde la goma no "engancha" en el asfalto: el neumático desliza más y se rasga más
+  const green = 1 + 1.6 * (1 - clamp(env.rubber ?? 1, 0, 1));
+  // con agua la banda desliza sobre una película que la lubrica: no se rasga
+  const dry = Math.max(0, 1 - env.water / 0.25);
+  const rough = env.rough ?? 1;
   for (let k = 0; k < 2; k++) {
     const front = k === 0;
     const a = front ? t.F : t.R;
     const eLoc = front ? env.eF : env.eR;
+    const slideX = (front ? env.slideF : env.slideR) ?? 0;
     // apretar calienta, pero menos que proporcional (el piloto gestiona la temperatura)
     const e = eLoc * (1 + 0.45 * (env.push - 1));
     const eq = 0.45 * env.trackT + 0.15 * env.airT + 79 * Math.min(e, 2.2) + hidden.thermalOffset - 34 * wet * sp.cooling + (front ? 11 : -2);
     a.tBulk += ((eq - a.tBulk) * dt) / 32;
-    const surfEq = a.tBulk + 30 * (eLoc - 1) + 35 * (env.push - 1) - 12 * wet * sp.cooling;
+    // deslizar calienta la superficie (el aire sucio hace patinar el delantero y lo recalienta)
+    const surfEq = a.tBulk + 30 * (eLoc - 1) + 35 * (env.push - 1) + 12 * slideX - 12 * wet * sp.cooling;
     a.tSurf += ((surfEq - a.tSurf) * dt) / 2.5;
+    const tTread = treadT(a);
 
     const over = a.tBulk - (sp.opt + sp.window * 0.5);
     // el calor gasta más goma, pero sin dispararse: con /22 un blando no aguantaba 6 vueltas en un asfalto exigente
@@ -178,13 +225,30 @@ export function updateSet(t: TyreSet, env: TyreEnv, dt: number, lapRef: number, 
     if (t.c === "W") waterW *= 1 + (4.5 * Math.max(0, 0.7 - env.water)) / 0.7;
     const axleShare = front ? env.eF : env.eR;
     const rate = (sp.wear * hidden.wearMult[t.c] * env.abrasiveness * env.carWear * axleShare * Math.pow(env.push, 1.6) * wMult * waterW) / lapRef;
-    a.wear = clamp(a.wear + rate * dt * (1 + a.blister * 0.8), 0, 1);
+    // con ampollas se arrancan trozos; con graining la banda patina sobre los rollitos y se gasta más
+    a.wear = clamp(a.wear + rate * dt * (1 + 0.8 * a.blister + 0.3 * a.grain), 0, 1);
 
-    const coldness = sp.opt - 8 - a.tBulk;
-    if (coldness > 0 && eLoc > 0.9 && wet < 0.3) a.grain = Math.min(1, a.grain + dt * 0.0014 * hidden.grainProne * (coldness / 10) * e * (front ? 1.2 : 0.9));
-    else if (a.tBulk > sp.opt - 4) a.grain = Math.max(0, a.grain - dt * 0.004);
-    // ampollas: solo con la carcasa claramente pasada de temperatura, y despacio (varias vueltas de abuso)
-    const hot = a.tBulk - (sp.opt + sp.window + 9);
-    if (hot > 0) a.blister = Math.min(1, a.blister + dt * 0.0007 * (hot / 5));
+    // --- graining: frío × deslizamiento. El deslizamiento crece con la energía de la curva y, mucho,
+    // con apretar (al cuadrado: atacar con el neumático frío es lo que más lo rasga)
+    // por debajo de ~15 °C del umbral ya no rasga más: lo que limita entonces es cuánto desliza
+    const cold = Math.min(1.5, (grainT(t.c) - tTread) / 10);
+    let gen = 0;
+    if (cold > 0 && dry > 0) {
+      const slip = Math.max(0, eLoc - 0.7) * env.push * env.push + 1.5 * slideX;
+      gen = GRAIN_GEN * sp.grainK * hidden.grainProne * green * rough * dry * Math.pow(cold, 1.4) * slip * (front ? 1.15 : 0.9);
+      a.wear = Math.min(1, a.wear + gen * dt * GRAIN_TEAR);
+    }
+    // limpieza: hace falta banda caliente (goma blanda que se deja arrastrar) y carga; el asfalto
+    // abrasivo la limpia antes. Es proporcional a lo que hay (los rollitos se van arrancando)
+    const warm = clamp((tTread - (sp.opt - 18)) / 15, 0, 1.5);
+    const clean = a.grain * GRAIN_CLEAN * warm * env.abrasiveness * Math.min(1.6, Math.max(0.2, eLoc));
+    a.grain = clamp(a.grain + (gen - clean) * dt, 0, 1);
+
+    // --- ampollas: banda por encima de su temperatura crítica (pico de energía en curva, bloqueos)
+    // con la carcasa ya caliente, que no deja salir ese calor hacia dentro
+    const hot = tTread - blisterT(t.c);
+    const soak = clamp((a.tBulk - (sp.opt + sp.window * 0.5)) / sp.window, 0, 2);
+    if (hot > 0 && soak > 0)
+      a.blister = Math.min(1, a.blister + dt * BLISTER_GEN * sp.blisterK * Math.pow(hot / 8, 1.5) * soak * Math.sqrt(rough));
   }
 }

@@ -13,7 +13,9 @@ export const tyreHtml = (c: Compound, big = false) => `<span class="tyre${big ? 
 // que la barra de la tarjeta del piloto.
 /** Goma que le queda a un juego, en % (100 = nuevo). */
 export const lifeLeft = (s: TyreSet) => Math.round((1 - setWear(s)) * 100);
-export const setLabel = (s: TyreSet) => (s.laps === 0 ? "nuevo" : `${s.laps} v · ${lifeLeft(s)} %`);
+/** Un juego usado con ampollas (lo vieron los mecánicos al quitarlo) se marca: se gasta antes y agarra menos. */
+const blistered = (s: TyreSet) => !!s.insp && Math.max(...s.insp.blister) >= 0.1;
+export const setLabel = (s: TyreSet) => (s.laps === 0 ? "nuevo" : `${s.laps} v · ${lifeLeft(s)} %${blistered(s) ? " · ampollas" : ""}`);
 /** Color de la barra de goma: verde, ámbar cerca del precipicio y rojo pasado. */
 export function wearColor(s: TyreSet): string {
   const w = setWear(s), sp = COMPOUNDS[s.c];
@@ -23,7 +25,7 @@ export function wearColor(s: TyreSet): string {
 export function groupSets(sets: TyreSet[]): { sets: TyreSet[]; c: Compound }[] {
   const out: { key: string; sets: TyreSet[]; c: Compound }[] = [];
   for (const s of sets) {
-    const key = `${s.c}:${s.laps}:${lifeLeft(s)}:${s.returned ? 1 : 0}`;
+    const key = `${s.c}:${s.laps}:${lifeLeft(s)}:${s.returned ? 1 : 0}:${blistered(s) ? 1 : 0}`;
     const g = out.find((x) => x.key === key);
     if (g) g.sets.push(s); else out.push({ key, sets: [s], c: s.c });
   }
