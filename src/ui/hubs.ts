@@ -345,7 +345,7 @@ export function setPills(sets: TyreSet[]): string {
 export function knowledgeTable(st: WeekendState, track: Track, team: TeamDef, driver: DriverDef, trackT: number, airT: number): string {
   const k = st.knowledge[team.id];
   const fakeSess = { track, weather: { trackT, airT }, lapRefRace: track.refLap, secPerGrip: (() => { let a = 0, b = 0; for (const m of track.ms) { a += m.tByGrip[12]; b += m.tByGrip[11]; } return (b - a) / 5; })() } as unknown as Session;
-  const fakeCar = { id: 0, wearMult: team.desgaste * (1.18 - driver.neumaticos * 0.002) } as unknown as Car;
+  const fakeCar = { id: 0, d: driver, wearMult: team.desgaste * (1.18 - driver.neumaticos * 0.002) } as unknown as Car;
   const kk = { ...k, profile: {} };
   const profM = stintProfile(fakeSess, fakeCar, kk, "M");
   const rows = DRY.map((c) => {
