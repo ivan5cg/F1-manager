@@ -141,6 +141,8 @@ export interface Prefs {
   velSesion: number;
   /** El mapa de la sesión se abre en 3D (lo último que eligió el jugador). */
   mapa3d?: boolean;
+  /** Comentarios de Antonio Lobato en la sesión (por defecto, sí). */
+  lobato?: boolean;
 }
 /** Velocidades de la sesión (× tiempo real). */
 export const SPEEDS = [1, 2, 4, 8, 16, 64];
@@ -157,6 +159,7 @@ export function loadPrefs(): Prefs {
       if (SPEEDS.includes(o.velCarrera as number)) p.velCarrera = o.velCarrera as number;
       if (SPEEDS.includes(o.velSesion as number)) p.velSesion = o.velSesion as number;
       if (o.mapa3d === true) p.mapa3d = true;
+      if (o.lobato === false) p.lobato = false;
     } else if (localStorage.getItem("autopausa") === "0") {
       // ajuste antiguo (todo o nada)
       for (const k of Object.keys(p.pausas) as (keyof PausePrefs)[]) p.pausas[k] = false;

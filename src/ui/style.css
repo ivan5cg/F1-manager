@@ -279,6 +279,9 @@ button.yellow { background: var(--gl-gold); text-shadow: none; }
 .rm .tab, .toast .tab { padding-right: calc(6px + var(--sl)); }
 .rm.ctl .tab { background: var(--gl-gold); }
 .rm.red .tab { background: var(--gl-red); }
+/* comentarios de Antonio Lobato: pestaña azul de la tele y texto en cursiva */
+.rm.lob .tab { background: linear-gradient(180deg, #9cc8ff 0%, #3a8be8 46%, #1f66c4 54%, #2a74d6 100%); color: #fff; text-shadow: 0 1px 1px rgba(0, 0, 0, .5); }
+.rm.lob .bar { font-style: italic; }
 
 /* tiempo: pestañas a la izquierda y caja de hora local con icono */
 .wxbox .tab { clip-path: polygon(0 0, 100% 0, calc(100% - 5px) 100%, 0 100%); padding-right: 9px; text-align: left; }

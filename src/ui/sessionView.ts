@@ -14,6 +14,7 @@ import { makeRun, planOptions, teamTakesOver } from "../sim/strategy";
 import { Rng } from "../sim/rng";
 import { snapshotSession, SessionSnapshot } from "../sim/snapshot";
 import { stopOptions, undercut, gapHistory, pitLoss, StopOption } from "../sim/pitwall";
+import { createLobato } from "./lobato";
 import { saveSession, loadPrefs, savePrefs, setParked, PausePrefs, SPEEDS } from "./store";
 
 type TowerMode = "int" | "gap" | "last" | "tyre";
@@ -64,6 +65,10 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   const nameFlag = (c: Car) => { const f = driverFlag(c.d.nombre); return f ? `${tvName(c)}<span class="nfl">${flagHtml(f)}</span>` : tvName(c); };
   const clean = (t: string) => t.replace(/^[\p{Extended_Pictographic}\u{1F1E6}-\u{1F1FF}\uFE0F\u200D\s]+/u, "");
   const TAB: Record<RaceEvent["kind"], string> = { radio: "Radio del equipo", control: "Dirección de carrera", pit: "Boxes", info: "Carrera", weather: "Meteo", incident: "Incidente" };
+  /** Antonio Lobato comenta la sesión (solo interfaz: no cambia nada de la simulación). */
+  const lob = createLobato(sess, def.gp ?? def.nombre);
+  const LOB_TAB = "Antonio Lobato";
+  let lastCtlReal = -1e9; // cuándo llegó el último aviso de dirección de carrera o meteo (ms reales)
   const rmHtml = (tab: string, text: string, cls = "") => `<div class="rm ${cls}"><span class="tab">${tab}</span><div class="bar">${clean(text)}</div></div>`;
 
   app.innerHTML = `
@@ -230,7 +235,10 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     else if (temp.left) lh = noteHtml(temp.left, false);
     else {
       const e = [...sess.events].reverse().find((x) => x.kind === "control" || x.kind === "weather");
-      if (e) lh = rmHtml(TAB[e.kind], e.text, clsFor(e.text, e.kind));
+      const com = prefs.lobato !== false ? lob.list[lob.list.length - 1] : undefined;
+      // el comentario tapa el aviso solo si es más nuevo y el aviso ya lleva unos segundos a la vista
+      if (com && (!e || (com.t >= e.t && now - lastCtlReal > 5000))) lh = rmHtml(`🎙️ ${LOB_TAB}`, com.text, "lob");
+      else if (e) lh = rmHtml(TAB[e.kind], e.text, clsFor(e.text, e.kind));
     }
     L.classList.toggle("show", !!pend.left);
     if (lh !== lastLeft) { lastLeft = lh; L.innerHTML = lh; }
@@ -349,6 +357,8 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   sess.onEvent = (e: RaceEvent) => {
     if (skipping) return;
     bannerFor(e);
+    if (e.kind === "control" || e.kind === "weather") lastCtlReal = performance.now();
+    if (prefs.lobato !== false) lob.onEvent(e);
     const mineEv = isMineEv(e) && e.kind !== "control" && e.kind !== "weather";
     // la meteo informa pero no para; dirección de carrera y lo de tus pilotos, sí, según lo que
     // el jugador haya dejado activado en Ajustes (cada tipo de aviso por separado)
@@ -1828,8 +1838,12 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     });
   }
   function radioSheet() {
-    const evs = sess.events.slice(-150).reverse();
-    open(`<span class="tab">Radio y dirección de carrera</span><div style="margin:6px 0;display:flex;flex-direction:column;gap:3px">${evs.map((e) => rmHtml(`${race ? "V" + e.lap : fmtClock(e.t)} · ${TAB[e.kind]}`, e.text, e.kind === "control" && /ROJA/.test(e.text) ? "red" : e.kind === "control" || e.kind === "weather" ? "ctl" : "")).join("") || "<div class='dim'>Sin mensajes.</div>"}</div><button data-close style="width:100%">Cerrar</button>`, () => {});
+    // mensajes y comentarios de Lobato, mezclados por orden (los más nuevos arriba)
+    type Row = { t: number; lap: number; text: string; tab: string; cls: string };
+    const rows: Row[] = sess.events.slice(-150).map((e) => ({ t: e.t, lap: e.lap, text: e.text, tab: TAB[e.kind], cls: e.kind === "control" && /ROJA/.test(e.text) ? "red" : e.kind === "control" || e.kind === "weather" ? "ctl" : "" }));
+    if (prefs.lobato !== false) for (const c of lob.list) rows.push({ t: c.t + 1e-6, lap: c.lap, text: c.text, tab: LOB_TAB, cls: "lob" });
+    rows.sort((a, b) => b.t - a.t);
+    open(`<span class="tab">Radio y dirección de carrera</span><div style="margin:6px 0;display:flex;flex-direction:column;gap:3px">${rows.slice(0, 200).map((e) => rmHtml(`${race ? "V" + e.lap : fmtClock(e.t)} · ${e.tab}`, e.text, e.cls)).join("") || "<div class='dim'>Sin mensajes.</div>"}</div><button data-close style="width:100%">Cerrar</button>`, () => {});
   }
 
   // ------------------------------------------------- menú, datos y ajustes
@@ -1860,6 +1874,8 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       <h2>La sesión se para sola con…</h2>
       ${items.map(([k, n, d]) => `<label class="optrow"><input type="checkbox" data-p="${k}" ${prefs.pausas[k] ? "checked" : ""}><span><b>${n}</b><br><span class="small dim">${d}</span></span></label>`).join("")}
       <div class="row" style="gap:4px;margin:8px 0"><button id="pall" class="grow">Todas</button><button id="pnone" class="grow">Ninguna</button></div>
+      <h2>Retransmisión</h2>
+      <label class="optrow"><input type="checkbox" id="plob" ${prefs.lobato !== false ? "checked" : ""}><span><b>Comentarios de Antonio Lobato</b><br><span class="small dim">Comenta adelantamientos, banderas, paradas, la pole y cómo va la carrera. Salen en la caja de la izquierda y en Radio.</span></span></label>
       <div class="small dim">Un aviso que para la sesión se reanuda tocándolo o con ▶. La velocidad que elijas se recuerda para la próxima sesión. ⏩ avanza a toda velocidad hasta que pasa algo de tus pilotos (sale o vuelve, marca tiempo, para, un aviso del ingeniero) o de dirección de carrera.<br>Teclado: espacio pausa, 1-6 o −/+ velocidad, F hasta lo siguiente, P pilotos, M muro, R radar, D radio, T columna de la torre, Esc cierra.</div>
       <button data-close style="width:100%;margin-top:8px">Cerrar</button>`, (el) => {
       const boxes = el.querySelectorAll<HTMLInputElement>("[data-p]");
@@ -1867,6 +1883,8 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       const all = (v: boolean) => { boxes.forEach((b) => { b.checked = v; prefs.pausas[b.dataset.p as keyof PausePrefs] = v; }); savePrefs(prefs); };
       el.querySelector<HTMLButtonElement>("#pall")!.onclick = () => all(true);
       el.querySelector<HTMLButtonElement>("#pnone")!.onclick = () => all(false);
+      const lb = el.querySelector<HTMLInputElement>("#plob")!;
+      lb.onchange = () => { prefs.lobato = lb.checked; savePrefs(prefs); lastLeft = ""; renderMessages(); };
     });
   }
   function menuSheet() {
@@ -2064,6 +2082,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       if (now - lastUi > (busy ? 250 : 500) && !skipping) {
         lastUi = now;
         updateGhosts(); updateRainAlert(); fastestLapCheck();
+        if (started && !paused && prefs.lobato !== false) lob.tick();
         if (now >= towerAnimUntil) renderTower();
         renderTop(); renderMessages(); renderSel();
         if (!sheetOpen) renderDrivers();
