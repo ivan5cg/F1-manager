@@ -578,15 +578,36 @@ WHEEL_MAT.onBeforeCompile = (sh) => {
 const BLOB_GEO = new THREE.PlaneGeometry(6.6, 3.0).rotateX(-Math.PI / 2);
 const BLOB_MAT = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.3, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6 });
 const RING_GEO = new THREE.RingGeometry(1.0, 1.13, 48).rotateX(-Math.PI / 2);
-const SPRAY_GEO = new THREE.ConeGeometry(1, 1, 7, 1, true).translate(0, -0.5, 0).rotateZ(-Math.PI / 2);
-const SPRAY_MAT = new THREE.MeshBasicMaterial({ color: 0xc3ced9, transparent: true, opacity: 0.22, depthWrite: false, side: THREE.DoubleSide });
-// la estela nace fina pegada al coche, se abre y se deshace en jirones hacia atrás
-SPRAY_MAT.onBeforeCompile = (sh) => {
-  sh.uniforms.uTime = U.uTime;
-  sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nvarying vec3 vSp;").replace("#include <begin_vertex>", "#include <begin_vertex>\nvSp = position;");
-  sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nvarying vec3 vSp; uniform float uTime;" + GLSL_NOISE)
-    .replace("#include <color_fragment>", "float sl = -vSp.x; diffuseColor.a *= smoothstep(0.0, 0.18, sl) * (1.0 - smoothstep(0.3, 1.0, sl)) * (0.35 + 0.9 * vn(vec2(sl * 7.0 - uTime * 9.0, atan(vSp.y, vSp.z) * 2.5)));");
-};
+// Estela de agua: una nube de jirones por coche. Cada jirón es un cuadro que mira a la cámara, nace pegado a las
+// ruedas traseras y al difusor, y se va quedando atrás mientras sube, se abre y se deshace. Todo ocurre en el
+// sombreador: por jirón solo se guarda dónde está su coche, hacia dónde va y con cuánta agua.
+const SPRAY_P = 20;
+const SPRAY_MAT = new THREE.ShaderMaterial({
+  uniforms: { uTime: U.uTime, uCol: { value: new THREE.Color(0.7, 0.75, 0.8) } },
+  transparent: true, depthWrite: false,
+  vertexShader: `attribute vec3 aCar, aDir; attribute vec4 aPar; uniform float uTime; varying vec2 vQ; varying float vA, vSeed;
+    void main(){
+      float seed = aPar.z, k = aPar.y, L = aPar.w;
+      float ph = fract(seed * 7.31 + uTime * (0.6 + 0.5 * fract(seed * 3.7)));   // vida del jirón: 0 recién levantado, 1 deshecho
+      vec3 side = normalize(cross(vec3(0.0, 1.0, 0.0), aDir));
+      float lat = (fract(seed * 13.7) - 0.5) * 2.0;
+      vec3 c = aCar - aDir * (1.7 * k + ph * L) + side * lat * k * (0.7 + ph * 1.7)
+        + vec3(0.0, k * (0.3 + ph * (1.0 + 1.6 * fract(seed * 5.3))), 0.0);
+      float size = k * (1.3 + ph * 4.8) * (0.75 + 0.5 * fract(seed * 9.1));
+      vec4 mv = viewMatrix * vec4(c, 1.0); mv.xy += position.xy * size;
+      gl_Position = projectionMatrix * mv;
+      vQ = position.xy * 2.0; vSeed = seed;
+      vA = aPar.x * smoothstep(0.0, 0.07, ph) * pow(1.0 - ph, 1.3);
+    }`,
+  fragmentShader: `uniform vec3 uCol; varying vec2 vQ; varying float vA, vSeed;` + GLSL_NOISE + `
+    void main(){
+      float r2 = dot(vQ, vQ); if (r2 > 1.0) discard;
+      float soft = (1.0 - r2) * (1.0 - r2), n = vn(vQ * 2.3 + vSeed * 37.0) * 0.7 + vn(vQ * 5.1 - vSeed * 11.0) * 0.3;
+      gl_FragColor = vec4(uCol * (0.85 + 0.3 * n), vA * soft * smoothstep(0.15, 0.75, n + 0.35 * (1.0 - r2)) * 0.5);
+      #include <tonemapping_fragment>
+      #include <colorspace_fragment>
+    }`,
+});
 
 // ------------------------------------------------------------------ pista
 function vnoise(x, y) {
@@ -933,7 +954,12 @@ function buildWorld() {
   const inst = (geo, mat, count, order) => { const m = add(new THREE.InstancedMesh(geo, mat, count)); m.frustumCulled = false; m.renderOrder = order; return m; };
   const cars = inst(CAR_GEO, CAR_MAT, NC, 10), wheels = inst(WHEEL_GEO, WHEEL_MAT, NC * 4, 10);
   cars.castShadow = wheels.castShadow = true; cars.receiveShadow = true;
-  const blobs = inst(BLOB_GEO, BLOB_MAT, NC, 6), spray = inst(SPRAY_GEO, SPRAY_MAT, NC, 12);
+  const blobs = inst(BLOB_GEO, BLOB_MAT, NC, 6);
+  const sg = new THREE.InstancedBufferGeometry();
+  sg.setAttribute("position", new THREE.Float32BufferAttribute([-0.5, -0.5, 0, 0.5, -0.5, 0, 0.5, 0.5, 0, -0.5, 0.5, 0], 3)); sg.setIndex([0, 1, 2, 0, 2, 3]);
+  for (const [name, size] of [["aCar", 3], ["aDir", 3], ["aPar", 4]]) sg.setAttribute(name, new THREE.InstancedBufferAttribute(new Float32Array(NC * SPRAY_P * size), size).setUsage(THREE.DynamicDrawUsage));
+  sg.instanceCount = 0;
+  const spray = add(new THREE.Mesh(sg, SPRAY_MAT)); spray.frustumCulled = false; spray.renderOrder = 12;
   // segundo color por coche
   const c2a = new Float32Array(NC * 3);
   sess.cars.forEach((c, i) => { col.set(SECOND[c.team.id] || "#e2e4e8"); c2a.set([col.r, col.g, col.b], i * 3); });
@@ -1074,6 +1100,7 @@ function updateLight(now) {
   // el suelo que ve el entorno: lo que el sol y el cielo sacan del verde (o del gris en los urbanos)
   skyU.uGround.value.setHex(T.street ? 0x3a3d42 : 0x26381f).multiplyScalar(0.25 + 0.9 * day * (1 - 0.5 * cloud));
   fog.color.copy(hor);
+  SPRAY_MAT.uniforms.uCol.value.setRGB(0.8, 0.84, 0.88).lerp(hor, 0.35).multiplyScalar(0.2 + 0.7 * day);
   renderer.setClearColor(hor, 1);
   // al atardecer y de noche el cielo apenas alumbra: sube un poco lo que aporta el entorno para que se siga viendo
   scene.environmentIntensity = 1 + 0.6 * (1 - day) + 0.6 * warm;
@@ -1457,20 +1484,22 @@ function draw3d(dt, now) {
     // spray: estela de agua detrás de cada coche sobre asfalto mojado
     const mi = track.msOfPoint[Math.min(T.n - 1, Math.floor(mod(p.s, T.L) / T.ds))], offLine = Math.min(1, Math.abs(p.lat) / 0.3);
     const wet = c.loc === "track" ? sess.water[mi] + (sess.waterOff[mi] - sess.water[mi]) * offLine : 0;
-    if (wet > 0.12 && c.v > 22 && q > 0) {
-      const len = (7 + c.v * 0.3) * Math.min(1, wet * 1.6) * k, rad = (1.5 + c.v * 0.035) * k;
-      mL.set(fx * len, 0, p.sx * rad, p.px - fx * 2.2 * k,
-        fy * len, rad * 0.8, 0, p.py + 0.5 * k,
-        fz * len, 0, p.sz * rad, p.pz - fz * 2.2 * k,
-        0, 0, 0, 1);
-      spray.setMatrixAt(ns++, mL);
+    if (wet > 0.04 && c.v > 18 && q > 0) {
+      // cuanta más agua y más velocidad, más densa y más larga
+      const str = Math.min(1, wet * 2.2) * clamp((c.v - 18) / 35, 0, 1), L = (6 + c.v * 0.4) * k * (0.6 + 0.4 * Math.min(1, wet * 1.6));
+      const sa = spray.geometry.attributes, ci = world.carIdx.get(c.id);
+      for (let j = 0; j < SPRAY_P; j++, ns++) {
+        sa.aCar.array.set([p.px, p.py, p.pz], ns * 3); sa.aDir.array.set([fx, fy, fz], ns * 3);
+        sa.aPar.array.set([str, k, ci * 0.173 + (j + 0.5) / SPRAY_P, L], ns * 4);
+      }
     }
     i++;
   }
-  cars.count = blobs.count = discs.count = world.decals.count = world.steer.count = i; wheels.count = i * 4; spray.count = ns;
+  cars.count = blobs.count = discs.count = world.decals.count = world.steer.count = i; wheels.count = i * 4; spray.geometry.instanceCount = ns;
+  for (const a of Object.values(spray.geometry.attributes)) if (a.isInstancedBufferAttribute) a.needsUpdate = true;
   discs.visible = far > 0.02;
   world.cell.needsUpdate = world.col2.needsUpdate = true;
-  for (const m of [cars, wheels, blobs, discs, spray, world.decals, world.steer]) { m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true; }
+  for (const m of [cars, wheels, blobs, discs, world.decals, world.steer]) { m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true; }
   const sel = opt.selId() === null ? null : pose.get(opt.selId());
   const ringFor = [...opt.mine().map((c) => (c.id === opt.selId() ? null : pose.get(c.id))), sel];
   world.rings.forEach((r, j) => {
