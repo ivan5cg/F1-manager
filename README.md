@@ -163,7 +163,14 @@ Cada circuito tiene su balance. En Monza ir a rebufo compensa; en Silverstone o 
 En la sesión, el botón **3D** del mapa cambia el mapa de siempre por una vista en 3D que ocupa el
 mismo recuadro (se descarga la primera vez que se pulsa y se recuerda para la siguiente sesión).
 El botón de la cámara pasa por *Circuito*, *Seguir* y *Tele*, y el de la esquina amplía el mapa
-sobre la clasificación. Si el dispositivo va justo, la calidad baja sola.
+sobre la clasificación.
+
+La luz es física (three.js, materiales PBR): el sol da la luz directa y las sombras, y el propio
+cielo de cada momento (hora, nubes) se fotografía en un cubo y da la luz ambiente y los reflejos
+de la carrocería y del asfalto mojado. Las texturas de asfalto, hierba y grava se calculan al
+arrancar, sin descargar nada. Hay cuatro escalones de calidad y, si el dispositivo no llega a
+40 fps, baja solo: primero quita la oclusión ambiental y el desenfoque de la cámara de tele,
+luego resolución, luego el resplandor y el búfer HDR, y al final las sombras.
 
 Posiciones, paradas, compuestos, lluvia, nubes, hora y agua en pista (con el carril seco al
 secarse) salen de la simulación. La altitud, la anchura y el lado de los boxes salen de los datos

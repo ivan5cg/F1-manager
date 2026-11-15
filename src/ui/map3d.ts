@@ -8,6 +8,12 @@
 //  · de los datos del circuito: altitud («relieve»), anchura («ancho») y lado de los boxes («boxes.lado»);
 //  · solo dibujo: la trazada, el cabeceo y el balanceo, el coche parado en su caja, escapatorias, árboles y edificios.
 import * as THREE from "three";
+import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+import { TexturePass } from "three/addons/postprocessing/TexturePass.js";
+import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
+import { GTAOPass } from "three/addons/postprocessing/GTAOPass.js";
+import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
+import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { rainAt } from "../sim/weather";
 
 const CAMS = ["circuito", "seguir", "tele", "abordo"];
@@ -19,9 +25,10 @@ const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
 const sstep = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
 
 /**
- * opt: { canvas, labels, box, sess, mine(), selId(), alpha(), paused(), speed(), ghosts() }
+ * opt: { canvas, labels, box, sess, mine(), selId(), alpha(), paused(), speed(), ghosts(), quality? }
  *  · alpha(): cuánto del paso de simulación en curso ha pasado ya (0..1), para interpolar posiciones;
- *  · ghosts(): [{ s, text, color }] con los fantasmas de parada.
+ *  · ghosts(): [{ s, text, color }] con los fantasmas de parada;
+ *  · quality (opcional): calidad fija de 0 a 3, sin memoria (para pruebas).
  * Devuelve { beforeStep, draw, resize, cycleCam, pick, selChanged, dispose }.
  */
 export function createMap3d(opt) {
@@ -29,7 +36,16 @@ const sess = opt.sess, track = sess.track;
 const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
 const hourMode = "sesion", qMode = "auto";
 let W_REAL = 6.5; // media anchura media de la pista (m); cada circuito pone la suya
-let T, camMode = "circuito", q = 2;
+// Calidad: 0 baja … 3 máxima. Baja sola si el dispositivo no puede y lo que aguantó se recuerda una semana, para
+// no repetir los tirones en cada sesión. Los táctiles empiezan en 2: la oclusión ambiental a pantalla completa les pesa.
+const Q_KEY = "muro-mapa3d-calidad";
+function startQuality() {
+  if (opt.quality !== undefined) return opt.quality;
+  let q0 = matchMedia("(pointer: coarse)").matches ? 2 : 3;
+  try { const m = JSON.parse(localStorage.getItem(Q_KEY) || "null"); if (m && Date.now() - m.t < 7 * 864e5) q0 = Math.min(q0, m.q); } catch (e) { /* sin memoria */ }
+  return q0;
+}
+let T, camMode = "circuito", q = startQuality(), prScale = 1;
 const prevS = new Map(), prevV = new Map(), labels = new Map();
 
 // ------------------------------------------------------------------ escena
@@ -37,58 +53,125 @@ const glc = opt.canvas;
 let renderer;
 try { renderer = new THREE.WebGLRenderer({ canvas: glc, antialias: true, powerPreference: "high-performance" }); }
 catch (e) { throw new Error("sin WebGL"); }
+// La escena se calcula en luz lineal y con valores por encima de 1 (el sol, los focos); la curva de tonos
+// la lleva a pantalla. La «neutra» comprime solo los brillos: los colores de los equipos salen como son.
+renderer.toneMapping = THREE.NeutralToneMapping;
+renderer.toneMappingExposure = 0.85;
 const scene = new THREE.Scene();
 const fog = new THREE.Fog(0xc3d8ea, 1000, 9000);
 scene.fog = fog;
-const hemi = new THREE.HemisphereLight(0xcfe0f5, 0x4a5a40, 0.8);
-const sun = new THREE.DirectionalLight(0xfff3dd, 1.2);
-scene.add(hemi, sun, sun.target);
+// el sol da la luz directa y la sombra; la luz ambiente sale del propio cielo (scene.environment, más abajo)
+const sun = new THREE.DirectionalLight(0xfff3dd, 3);
+scene.add(sun, sun.target);
 sun.shadow.bias = -0.0004;
 const camera = new THREE.PerspectiveCamera(36, 1, 5, 80000);
-if (renderer) { renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap; }
-// cielo: cúpula con degradado del horizonte al cénit, pegada a la cámara
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap;
 const GLSL_NOISE = `
 float h21(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
 float vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
   return mix(mix(h21(i), h21(i + vec2(1.0, 0.0)), f.x), mix(h21(i + vec2(0.0, 1.0)), h21(i + vec2(1.0, 1.0)), f.x), f.y); }
+// color escrito «como se ve» (sRGB) pasado a luz lineal
+vec3 SR(vec3 c){ return pow(c, vec3(2.2)); }
 `;
-// cielo: degradado del horizonte al cénit, nubes que se mueven y el disco del sol
+// cielo: degradado del horizonte al cénit, bruma hacia el sol, nubes con volumen que se mueven y el disco del sol.
+// El mismo material pinta el entorno que reflejan los coches y el asfalto mojado (uEnv = 1: sin disco, con suelo).
 const skyU = { uZen: { value: new THREE.Color() }, uHor: { value: new THREE.Color() }, uSun: { value: new THREE.Vector3(0, 1, 0) }, uSunCol: { value: new THREE.Color() },
-  uCloudCol: { value: new THREE.Color() }, uCover: { value: 0.3 }, uT: { value: 0 } };
-const sky = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 12), new THREE.ShaderMaterial({
-  uniforms: skyU, side: THREE.BackSide, fog: false, depthWrite: false,
+  uCloudCol: { value: new THREE.Color() }, uGround: { value: new THREE.Color() }, uCover: { value: 0.3 }, uT: { value: 0 }, uNight: { value: 0 } };
+const skyMat = (env) => new THREE.ShaderMaterial({
+  uniforms: { ...skyU, uEnv: { value: env } }, side: THREE.BackSide, fog: false, depthWrite: false,
   vertexShader: `varying vec3 vDir; void main(){ vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-  fragmentShader: `uniform vec3 uZen, uHor, uSun, uSunCol, uCloudCol; uniform float uCover, uT; varying vec3 vDir;` + GLSL_NOISE + `
+  fragmentShader: `uniform vec3 uZen, uHor, uSun, uSunCol, uCloudCol, uGround; uniform float uCover, uT, uEnv, uNight; varying vec3 vDir;` + GLSL_NOISE + `
+    float cloudDen(vec2 q){ return 0.5 * vn(q) + 0.27 * vn(q * 2.1 + 7.0) + 0.15 * vn(q * 4.3 + 3.0) + 0.08 * vn(q * 8.9 + 11.0); }
     void main(){
       vec3 d = normalize(vDir);
-      vec3 col = mix(uHor, uZen, pow(max(d.y, 0.0), 0.55));
+      float up = max(d.y, 0.0);
+      vec3 col = mix(uHor, uZen, pow(up, 0.5));
       float s = max(dot(d, uSun), 0.0);
-      col += uSunCol * (pow(s, 600.0) * 3.0 + pow(s, 12.0) * 0.18);
-      if (d.y > 0.015) {
-        vec2 q = d.xz / (d.y + 0.14) * 1.3 + vec2(uT * 0.006, uT * 0.002);
-        float n = 0.55 * vn(q) + 0.3 * vn(q * 2.1 + 7.0) + 0.15 * vn(q * 4.3 + 3.0);
-        float c = smoothstep(0.68 - 0.42 * uCover, 0.86 - 0.3 * uCover, n) * smoothstep(0.015, 0.16, d.y);
-        col = mix(col, uCloudCol * (0.82 + 0.3 * n), c * 0.92);
+      // bruma: el cielo se aclara hacia el sol, sobre todo cerca del horizonte
+      col += uSunCol * (pow(s, 6.0) * 0.10 + pow(s, 40.0) * 0.22) * (1.0 - 0.6 * up);
+      float disc = smoothstep(0.99955, 0.9998, s) * 30.0 + pow(s, 900.0) * 3.0;
+      // estrellas
+      if (uNight > 0.01 && uEnv < 0.5) {
+        vec2 sq = d.xz / (d.y + 0.35) * 150.0; float st = h21(floor(sq));
+        col += vec3(0.8, 0.86, 1.0) * step(0.9972, st) * smoothstep(0.5, 0.1, length(fract(sq) - 0.5)) * uNight * smoothstep(0.03, 0.3, d.y) * (0.4 + 2.2 * fract(st * 91.7));
       }
+      float c = 0.0;
+      if (d.y > 0.0) {
+        vec2 q = d.xz / (d.y + 0.14) * 1.3 + vec2(uT * 0.006, uT * 0.002);
+        float n = cloudDen(q), lo = 0.66 - 0.42 * uCover;
+        c = smoothstep(lo, lo + 0.19, n) * smoothstep(0.0, 0.13, d.y);
+        // volumen: la cara que mira al sol clarea; el vientre de las nubes densas oscurece
+        float n2 = cloudDen(q + normalize(uSun.xz + vec2(1e-4)) * 0.16);
+        float lit = clamp(0.5 + (n - n2) * 4.5, 0.0, 1.0);
+        vec3 cc = uCloudCol * mix(0.5, 1.2, lit) * mix(1.0, 0.62, smoothstep(lo + 0.1, lo + 0.5, n));
+        col = mix(col, cc + uSunCol * pow(s, 10.0) * 0.25 * (1.0 - c * 0.6), c * 0.96);
+      }
+      col += uSunCol * disc * (1.0 - c) * (1.0 - uEnv);
+      // por debajo del horizonte: lo que hay de verdad es suelo (solo importa en los reflejos)
+      col = mix(col, mix(uHor, uGround, uEnv), smoothstep(0.0, -0.06, d.y));
       gl_FragColor = vec4(col, 1.0);
       #include <tonemapping_fragment>
+      #include <colorspace_fragment>
     }`,
-}));
+});
+const sky = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 16), skyMat(0));
 sky.scale.setScalar(40000); sky.renderOrder = -10; sky.frustumCulled = false; scene.add(sky);
-// lo que refleja la carrocería: un cubo diminuto con el cielo arriba y el suelo abajo, que sigue a la hora del día
-const envCanvas = [0, 1, 2, 3, 4, 5].map(() => { const c = document.createElement("canvas"); c.width = c.height = 16; return c; });
-const envTex = new THREE.CubeTexture(envCanvas);
-function paintEnv(zen, hor) {
-  const css = (c, k = 1) => `rgb(${Math.round(c.r * 255 * k)},${Math.round(c.g * 255 * k)},${Math.round(c.b * 255 * k)})`;
-  envCanvas.forEach((cv, f) => {
-    const g = cv.getContext("2d");
-    if (f === 2) g.fillStyle = css(zen);            // +y
-    else if (f === 3) g.fillStyle = css(hor, 0.25); // -y: el asfalto
-    else { const gr = g.createLinearGradient(0, 0, 0, 16); gr.addColorStop(0, css(zen)); gr.addColorStop(0.5, css(hor)); gr.addColorStop(0.56, css(hor, 0.35)); gr.addColorStop(1, css(hor, 0.2)); g.fillStyle = gr; }
-    g.fillRect(0, 0, 16, 16);
-  });
-  envTex.needsUpdate = true;
+// entorno: el cielo de este momento, fotografiado en un cubo pequeño y filtrado por rugosidad (PMREM). De ahí salen
+// la luz ambiente de todo y los reflejos de la carrocería y del agua. Se rehace cuando cambian la hora o las nubes.
+const envScene = new THREE.Scene();
+envScene.add(new THREE.Mesh(sky.geometry, skyMat(1)));
+const envCube = new THREE.WebGLCubeRenderTarget(128, { type: THREE.HalfFloatType });
+const envCam = new THREE.CubeCamera(0.1, 10, envCube);
+const pmrem = new THREE.PMREMGenerator(renderer);
+let envRT = null, envT = -1e9, envSig = "";
+function updateEnv(now, sig) {
+  if (sig === envSig || now - envT < 2500) return;
+  envSig = sig; envT = now;
+  envCam.update(renderer, envScene);
+  envRT = pmrem.fromCubemap(envCube.texture, envRT);
+  scene.environment = envRT.texture;
 }
+
+// ------------------------------------------------------------------ texturas de detalle (asfalto, hierba, grava)
+// Se calculan al arrancar, sin descargar nada, y se repiten sin costura. Cada una lleva: R = claro/oscuro del color,
+// G y B = inclinación de la superficie (relieve fino para la luz) y A = más o menos rugosa.
+function detailTex(kind) {
+  const N = 256, H = new Float32Array(N * N), A = new Float32Array(N * N), out = new Uint8Array(N * N * 4);
+  const lat = (x, y, per, sd) => hash2(mod(x, per) * 1.37 + sd, mod(y, per) * 1.91 - sd);
+  const tn = (x, y, per, sd) => {
+    const fx = (x / N) * per, fy = (y / N) * per, xi = Math.floor(fx), yi = Math.floor(fy), xf = fx - xi, yf = fy - yi;
+    const u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf);
+    const a = lat(xi, yi, per, sd), b = lat(xi + 1, yi, per, sd), c = lat(xi, yi + 1, per, sd), d = lat(xi + 1, yi + 1, per, sd);
+    return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+  };
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const i = y * N + x, sp = hash2(x * 3.1 + 5, y * 2.7 + 9);
+    if (kind === "asfalto") {
+      // áridos de varios tamaños y alguna piedra más clara o más oscura
+      const h = 0.42 * tn(x, y, 128, 1) + 0.3 * tn(x, y, 64, 2) + 0.18 * tn(x, y, 32, 3) + 0.1 * tn(x, y, 8, 4);
+      H[i] = h; A[i] = 0.5 + (h - 0.5) * 0.9 + (sp > 0.94 ? 0.3 : sp < 0.05 ? -0.22 : 0);
+    } else if (kind === "hierba") {
+      const h = 0.34 * tn(x, y, 96, 5) + 0.3 * tn(x, y, 48, 6) + 0.22 * tn(x, y, 20, 7) + 0.14 * tn(x, y, 6, 8);
+      H[i] = h; A[i] = 0.5 + (h - 0.5) * 1.5 + (sp - 0.5) * 0.3;
+    } else {
+      // grava: guijarros (crestas del ruido) de tonos distintos
+      const r = 1 - Math.abs(tn(x, y, 72, 9) - 0.5) * 2, r2 = 1 - Math.abs(tn(x, y, 36, 10) - 0.5) * 2;
+      H[i] = 0.6 * r + 0.4 * r2; A[i] = 0.5 + (tn(x, y, 72, 11) - 0.5) * 1.1 + (sp - 0.5) * 0.35;
+    }
+  }
+  const K = kind === "asfalto" ? 2.2 : kind === "hierba" ? 3.2 : 4.5;
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const i = y * N + x, dx = (H[y * N + ((x + 1) % N)] - H[y * N + ((x + N - 1) % N)]) * K, dz = (H[((y + 1) % N) * N + x] - H[((y + N - 1) % N) * N + x]) * K;
+    const l = Math.hypot(dx, 1, dz);
+    out[i * 4] = clamp(A[i], 0, 1) * 255; out[i * 4 + 1] = (0.5 - 0.5 * dx / l) * 255; out[i * 4 + 2] = (0.5 - 0.5 * dz / l) * 255; out[i * 4 + 3] = clamp(0.5 + (H[i] - 0.5) * 0.8, 0, 1) * 255;
+  }
+  const t = new THREE.DataTexture(out, N, N, THREE.RGBAFormat);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearMipmapLinearFilter; t.generateMipmaps = true;
+  t.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy()); t.needsUpdate = true;
+  return t;
+}
+function hash2(x, y) { const s = Math.sin(x * 127.1 + y * 311.7) * 43758.5453; return s - Math.floor(s); }
+const DET = { asfalto: detailTex("asfalto"), hierba: detailTex("hierba"), grava: detailTex("grava") };
 
 // uniformes que comparten la pista, los coches y la lluvia
 const U = {
@@ -104,7 +187,7 @@ const adsCanvas = document.createElement("canvas"); adsCanvas.width = 2048; adsC
 { const g = adsCanvas.getContext("2d"), ads = [["VELTRA", "#0b3d91", "#ffffff"], ["KORU", "#f2f2f2", "#c8102e"], ["NIMBO", "#101216", "#ffd84a"], ["ARDEN", "#c8102e", "#ffffff"], ["OSTRA", "#0f6b4f", "#f2f2f2"], ["LUMEN", "#ffd84a", "#101216"], ["TAIGA", "#f2f2f2", "#0b3d91"], ["ZEFIR", "#3a3f48", "#7fe0ff"]];
   g.textAlign = "center"; g.textBaseline = "middle"; g.font = "900 78px 'Titillium Web', 'Arial Narrow', sans-serif";
   ads.forEach(([t, bg, fg], k) => { g.fillStyle = bg; g.fillRect(k * 256, 0, 256, 128); g.fillStyle = fg; g.fillText(t, k * 256 + 128, 68, 220); }); }
-const adsTex = new THREE.CanvasTexture(adsCanvas);
+const adsTex = new THREE.CanvasTexture(adsCanvas); adsTex.colorSpace = THREE.SRGBColorSpace;
 U.uAds = { value: adsTex };
 
 // ------------------------------------------------------------------ material de las cintas (asfalto, hierba, grava, muros)
@@ -119,87 +202,115 @@ transformed.y += aY * (aY > 0.0 ? uW / 6.5 : 1.0);
 vU = aU; vV = aV; vWet = aWet; vWetOff = aWetOff; vKerb = aKerb; vDash = aDash; vLine = aLine; vEdge = aEdge; vXZ = transformed.xz;
 `;
 const RIB_FH = `` + GLSL_NOISE + `
-uniform float uW, uDetail, uL, uFlood, uTexR, uMode; uniform sampler2D uCloud, uAds;
+uniform float uW, uDetail, uL, uFlood, uTexR; uniform sampler2D uCloud, uAds, uDet;
 varying float vU, vV, vWet, vWetOff, vKerb, vDash, vLine; varying vec3 vEdge; varying vec2 vXZ;
 `;
+// Cada cinta compila solo su rama (RMODE): 0 muro liso, 1 pista, 2 calle de boxes, 3 hierba, 4 grava, 5 barrera, 6 valla, 7 publicidad.
+// Sale de aquí: col (color), rough (rugosidad), metal y dn (inclinación fina de la superficie, en x/z del mundo).
 const RIB_FB = `
-// metros por píxel: el grano fino se apaga de lejos para que no centellee
-float px = fwidth(vXZ.x) + fwidth(vXZ.y);
-#define FADE(f) clamp(1.0 - px * (f) * 1.3, 0.0, 1.0)
-vec3 col = diffuse; float wetS = 0.02;
+float px = fwidth(vXZ.x) + fwidth(vXZ.y); // metros por píxel
+vec3 col = diffuse; float rough = 0.9, metal = 0.0, glow = 0.0; vec2 dn = vec2(0.0);
 float cloudS = texture2D(uCloud, vXZ / (2.0 * uTexR) + 0.5).g;
-if (uMode > 0.5 && uMode < 2.5) {
+#if RMODE == 1 || RMODE == 2
   float a = abs(vU);
   float edge = smoothstep(0.80, 0.85, a + (vn(vec2(vV * 0.9, vU * 3.0)) - 0.5) * 0.035 * uDetail);
-  // grano del asfalto, parches de distinto tono y juntas
-  col *= 1.0 + (vn(vXZ * 2.6) - 0.5) * 0.24 * FADE(2.6) + (vn(vXZ * 11.0) - 0.5) * 0.12 * FADE(11.0) + (vn(vXZ * 0.06) - 0.5) * 0.16;
-  if (uMode < 1.5) {
+  // asfalto: el árido de cerca, manchas de un par de metros y parches de distinto tono a lo lejos
+  vec4 d1 = texture2D(uDet, vXZ / 2.7), d2 = texture2D(uDet, vXZ / 23.0 + 0.31);
+  float big = vn(vXZ * 0.06);
+  col *= (0.55 + 0.9 * d1.r) * (0.72 + 0.56 * d2.r) * (0.84 + 0.32 * big);
+  dn = (d1.gb - 0.5) * 1.5 + (d2.gb - 0.5) * 0.5;
+  rough = 0.86 + (d1.a - 0.5) * 0.2;
+  #if RMODE == 1
+    // la trazada: goma depositada, más oscura y más lisa
     float dl = (vU - vLine) / 0.30;
-    col *= 1.0 - 0.24 * exp(-dl * dl) * (0.35 + 0.65 * uDetail) * (0.8 + 0.4 * vn(vec2(vV * 0.15, vU * 4.0)));
-    col *= 0.94 + 0.06 * smoothstep(0.0, 0.7, a);
-    float wet = mix(vWetOff, vWet, exp(-dl * dl * 0.5));
-    col = mix(col, col * vec3(0.46, 0.52, 0.62), wet * uDetail);
-    col = mix(col, vec3(0.27, 0.59, 0.94), vWet * (1.0 - uDetail) * 0.85);
-    wetS = 0.02 + wet * 0.6 * (0.2 + 0.8 * uDetail);
+    float rub = exp(-dl * dl) * (0.35 + 0.65 * uDetail) * (0.8 + 0.4 * vn(vec2(vV * 0.15, vU * 4.0)));
+    col *= 1.0 - 0.42 * rub; rough -= 0.2 * rub; dn *= 1.0 - 0.5 * rub;
+    col *= 0.9 + 0.1 * smoothstep(0.0, 0.7, a);
+    // agua: oscurece, alisa y, donde se encharca, hace de espejo del cielo
+    float wet = mix(vWetOff, vWet, exp(-dl * dl * 0.5)) * uDetail;
+    float pud = smoothstep(0.42, 0.8, wet * 1.2 + (d2.r - 0.5) * 0.7 + (big - 0.5) * 0.5);
+    col *= mix(vec3(1.0), vec3(0.42, 0.46, 0.52), wet);
+    rough = mix(rough, mix(0.22, 0.04, pud), smoothstep(0.0, 0.5, wet));
+    dn *= 1.0 - 0.9 * pud * smoothstep(0.0, 0.5, wet);
+    col = mix(col, SR(vec3(0.27, 0.59, 0.94)), vWet * (1.0 - uDetail) * 0.85);
     float dash = vDash > 0.5 ? step(0.45, fract(vV / (uW * 4.0))) : 1.0;
     float stripe = step(0.5, fract(vV / (uW * 0.5)));
-    vec3 kerb = mix(vec3(0.80, 0.12, 0.10), vec3(0.95), stripe) * (0.86 + 0.2 * vn(vXZ * 3.0));
+    vec3 kerb = mix(SR(vec3(0.82, 0.10, 0.08)), SR(vec3(0.95)), stripe) * (0.72 + 0.56 * d2.r);
     float k = step(0.5, vKerb) * uDetail;
-    col = mix(col, mix(vEdge, kerb, k), edge * max(dash, k));
+    float em = edge * max(dash, k);
+    col = mix(col, mix(SR(vEdge), kerb, k), em);
     float sl = step(vV, uW * 0.45) * step(a, 0.8);
     float chk = mod(floor(vU * 4.0) + floor(vV / (uW * 0.225)), 2.0);
-    col = mix(col, mix(vec3(0.95), mix(vec3(0.95), vec3(0.06), chk), uDetail), sl);
+    col = mix(col, mix(SR(vec3(0.95)), mix(SR(vec3(0.95)), SR(vec3(0.06)), chk), uDetail), sl);
     float g = (uL - vV - 9.0) / 8.0;
     float sideSel = mod(floor(g), 2.0) < 0.5 ? 1.0 : -1.0;
-    float slot = step(0.0, g) * step(g, 22.0) * step(0.12, vU * sideSel) * step(vU * sideSel, 0.72) * step(fract(g), 0.07);
-    col = mix(col, vec3(0.93), slot * uDetail);
-  } else {
-    col = mix(col, vec3(0.92), edge * (0.3 + 0.6 * uDetail));
-  }
-} else if (uMode < 3.5 && uMode > 2.5) {
-  // hierba: franjas de siega, manchas y grano
-  col *= 0.95 + 0.07 * step(0.5, fract(vV / 16.0)) * FADE(0.1);
-  col *= 1.0 + (vn(vXZ * 3.4) - 0.5) * 0.34 * FADE(3.4) + (vn(vXZ * 0.13) - 0.5) * 0.2;
-} else if (uMode < 4.5 && uMode > 3.5) {
-  col *= 1.0 + (vn(vXZ * 7.0) - 0.5) * 0.4 * FADE(7.0) + (vn(vXZ * 0.6) - 0.5) * 0.16;
-} else if (uMode < 5.5 && uMode > 4.5) {
+    float slot = step(0.0, g) * step(g, 22.0) * step(0.12, vU * sideSel) * step(vU * sideSel, 0.72) * step(fract(g), 0.07) * uDetail;
+    col = mix(col, SR(vec3(0.93)), slot);
+    // la pintura es más lisa que el asfalto (y brilla más mojada)
+    float paint = max(em, max(sl, slot));
+    rough = mix(rough, min(rough, 0.55), paint); dn *= 1.0 - 0.7 * paint;
+  #else
+    col = mix(col, SR(vec3(0.92)), edge * (0.3 + 0.6 * uDetail));
+  #endif
+#elif RMODE == 3
+  // hierba: franjas de siega, calvas más secas y la textura de la hierba a dos escalas
+  vec4 d1 = texture2D(uDet, vXZ / 3.3), d2 = texture2D(uDet, vXZ / 41.0 + 0.31);
+  col *= 0.9 + 0.2 * step(0.5, fract(vV / 16.0)) * clamp(1.0 - px * 0.13, 0.0, 1.0);
+  col *= (0.5 + 1.0 * d1.r) * (0.7 + 0.6 * d2.r) * (0.82 + 0.36 * vn(vXZ * 0.13));
+  col = mix(col, col * vec3(1.45, 1.12, 0.55), smoothstep(0.55, 0.9, vn(vXZ * 0.031 + 4.0)) * 0.4);
+  dn = (d1.gb - 0.5) * 2.0 + (d2.gb - 0.5) * 0.8; rough = 0.93;
+#elif RMODE == 4
+  vec4 d1 = texture2D(uDet, vXZ / 1.9), d2 = texture2D(uDet, vXZ / 13.0 + 0.31);
+  col *= (0.55 + 0.9 * d1.r) * (0.75 + 0.5 * d2.r) * (0.9 + 0.2 * vn(vXZ * 0.6));
+  dn = (d1.gb - 0.5) * 2.4 + (d2.gb - 0.5) * 1.2; rough = 0.96;
+#elif RMODE == 5
   if (vKerb > 0.5) {
     // protección de neumáticos: bloques rojos y blancos
-    col = mix(vec3(0.78, 0.11, 0.09), vec3(0.92), step(0.5, fract(vV / 2.4)));
-    col *= 0.72 + 0.28 * step(0.18, fract(vU * 3.0)) * step(0.1, fract(vV / 0.6));
+    col = mix(SR(vec3(0.78, 0.11, 0.09)), SR(vec3(0.92)), step(0.5, fract(vV / 2.4)));
+    col *= 0.6 + 0.4 * step(0.18, fract(vU * 3.0)) * step(0.1, fract(vV / 0.6));
+    rough = 0.7;
   } else {
-    // guardarraíl: dos bandas de chapa y un poste cada pocos metros
+    // guardarraíl: dos bandas de chapa galvanizada y un poste cada pocos metros
     float rail = step(0.16, vU) * step(vU, 0.46) + step(0.6, vU) * step(vU, 0.9);
-    col = mix(vec3(0.22, 0.23, 0.25), vec3(0.74, 0.76, 0.79) * (0.9 + 0.2 * vn(vec2(vV * 0.7, vU * 6.0))), rail);
+    col = mix(SR(vec3(0.22, 0.23, 0.25)), SR(vec3(0.74, 0.76, 0.79)) * (0.85 + 0.3 * vn(vec2(vV * 0.7, vU * 6.0))), rail);
     col *= 1.0 - 0.45 * step(fract(vV / 3.8), 0.035);
+    rough = mix(0.8, 0.42, rail); metal = 0.75 * rail;
   }
-} else if (uMode < 6.5 && uMode > 5.5) {
+#elif RMODE == 6
   // valla: postes, cable de arriba y malla (que se apaga de lejos)
   float post = step(fract(vV / 5.0), 0.025), top = step(0.95, vU);
   float mesh = max(1.0 - step(0.16, fract(vV * 3.0)), 1.0 - step(0.16, fract(vU * 10.0))) * step(px, 0.5);
   if (post + top + mesh < 0.5) discard;
-  col = vec3(0.5, 0.53, 0.57);
-} else if (uMode > 6.5) {
+  col = SR(vec3(0.5, 0.53, 0.57)); rough = 0.5; metal = 0.6;
+#elif RMODE == 7
   // paneles de publicidad: cada 7 m, una marca al azar
   float pi = floor(vV / 7.0), f = fract(vV / 7.0);
   col = texture2D(uAds, vec2((floor(h21(vec2(pi, 3.7)) * 8.0) + (vDash > 0.5 ? 1.0 - f : f)) / 8.0, vU)).rgb;
   col *= 1.0 - 0.5 * step(f, 0.012);
-}
-col *= 1.0 - 0.32 * cloudS;
+  rough = 0.45; glow = 0.22; // los paneles se leen también a contraluz
+#else
+  rough = 0.8;
+#endif
+col *= 1.0 - 0.4 * cloudS;
 vec4 diffuseColor = vec4(col, opacity);
 `;
+const RIB_DET = [null, DET.asfalto, DET.asfalto, DET.hierba, DET.grava, null, null, null];
 function ribbonMat(color, mode, po) {
-  const m = new THREE.MeshPhongMaterial({ color, shininess: 90, specular: 0x9fb0c4, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: po, polygonOffsetUnits: po });
-  m.extensions = { derivatives: true };
-  const uMode = { value: mode };
+  // flatShading: la normal sale de la propia superficie ya deformada (las cintas se ensanchan en el sombreador)
+  const m = new THREE.MeshStandardMaterial({ color, roughness: 0.9, metalness: 0, flatShading: true, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: po, polygonOffsetUnits: po });
+  m.defines = { ...m.defines, RMODE: mode };
+  const uDet = { value: RIB_DET[mode] };
   m.onBeforeCompile = (sh) => {
-    Object.assign(sh.uniforms, U, { uMode });
+    Object.assign(sh.uniforms, U, { uDet });
     sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\n" + RIB_VH).replace("#include <begin_vertex>", RIB_VB);
     sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\n" + RIB_FH)
       .replace("vec4 diffuseColor = vec4( diffuse, opacity );", RIB_FB)
-      .replace("#include <specularmap_fragment>", "float specularStrength = wetS;")
-      .replace("vec3 totalEmissiveRadiance = emissive;", "vec3 totalEmissiveRadiance = emissive + col * uFlood * (uMode > 0.5 ? 1.0 : 0.3);");
+      .replace("#include <roughnessmap_fragment>", "float roughnessFactor = clamp(rough, 0.04, 1.0);")
+      .replace("#include <metalnessmap_fragment>", "float metalnessFactor = metal;")
+      .replace("#include <normal_fragment_maps>", "normal = normalize(normal + mat3(viewMatrix) * vec3(dn.x, 0.0, dn.y));")
+      .replace("vec3 totalEmissiveRadiance = emissive;", "vec3 totalEmissiveRadiance = emissive + col * (uFlood * (RMODE > 0 ? 1.0 : 0.3) + glow);");
   };
+  m.customProgramCacheKey = () => "cinta" + mode;
   return m;
 }
 
@@ -372,7 +483,7 @@ const STEER_GEO = (() => {
   for (const s of [1, -1]) { c.add(new THREE.BoxGeometry(0.07, 0.085, 0.07).translate(-0.01, 0, 0.125 * s), [0.82, 0.82, 0.84]); c.add(new THREE.BoxGeometry(0.2, 0.07, 0.07).translate(-0.12, -0.03, 0.15 * s), [0.82, 0.82, 0.84]); }
   return c.done();
 })();
-const STEER_MAT = new THREE.MeshPhongMaterial({ vertexColors: true, shininess: 20 });
+const STEER_MAT = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.7 });
 // dorsales: una lámina con todos los números y tres pegatinas por coche (morro y los dos lados de la aleta)
 const NUM_COLS = 8, NUM_ROWS = 4;
 const DECAL_GEO = (() => {
@@ -386,24 +497,30 @@ const DECAL_GEO = (() => {
   g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
   return g;
 })();
-const CAR_MAT = new THREE.MeshPhongMaterial({ vertexColors: true, shininess: 110, specular: 0x888888, side: THREE.DoubleSide, envMap: envTex, combine: THREE.AddOperation, reflectivity: 0.12 });
+// Carrocería: pintura con barniz (dos capas de brillo) que refleja el cielo. La geometría mezcla pintura, fibra de
+// carbono, casco y luz trasera: vPaint dice cuánto de pintura tiene cada punto y el resto sale mate y sin barniz.
+const CAR_MAT = new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.45, metalness: 0.15, clearcoat: 1, clearcoatRoughness: 0.05, side: THREE.DoubleSide });
 CAR_MAT.onBeforeCompile = (sh) => {
   Object.assign(sh.uniforms, { uFlood: U.uFlood, uLight: U.uLight });
-  sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nuniform float uLight; attribute vec3 aCol2;")
-    .replace("#include <color_vertex>", "vColor = instanceColor * color.r + aCol2 * color.b + vec3(max(color.g, 0.0)) + vec3(step(color.g, -0.5) * uLight, 0.0, 0.0);");
-  sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nuniform float uFlood;")
-    .replace("vec3 totalEmissiveRadiance = emissive;", "vec3 totalEmissiveRadiance = emissive + vColor * uFlood * 0.6;");
+  sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nuniform float uLight; attribute vec3 aCol2; varying float vPaint, vGlow;")
+    .replace("#include <color_vertex>", `float kr = pow(color.r, 2.2), kb = pow(color.b, 2.2), red = step(color.g, -0.5);
+      vColor = vec4(instanceColor.rgb * kr + aCol2 * kb + vec3(pow(max(color.g, 0.0), 2.2)) + vec3(0.25, 0.0, 0.0) * red, 1.0);
+      vPaint = step(0.25, color.r + color.b); vGlow = red * uLight;`);
+  sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nuniform float uFlood; varying float vPaint, vGlow;")
+    .replace("#include <roughnessmap_fragment>", "float roughnessFactor = mix(0.62, roughness, vPaint);")
+    .replace("#include <metalnessmap_fragment>", "float metalnessFactor = metalness * vPaint;")
+    .replace("#include <lights_physical_fragment>", "#include <lights_physical_fragment>\nmaterial.clearcoat *= vPaint;")
+    .replace("vec3 totalEmissiveRadiance = emissive;", "vec3 totalEmissiveRadiance = emissive + vColor.rgb * uFlood * 0.6 + vec3(7.0, 0.25, 0.1) * vGlow;");
 };
-const WHEEL_MAT = new THREE.MeshPhongMaterial({ vertexColors: true, shininess: 10, specular: 0x222222 });
-WHEEL_MAT.onBeforeCompile = (sh) => { sh.vertexShader = sh.vertexShader.replace("#include <color_vertex>", "vColor = instanceColor * color.r + vec3(color.g);"); };
+const WHEEL_MAT = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.82 });
+WHEEL_MAT.onBeforeCompile = (sh) => { sh.vertexShader = sh.vertexShader.replace("#include <color_vertex>", "vColor = vec4(instanceColor.rgb * color.r + vec3(pow(color.g, 2.2)), 1.0);"); };
 const BLOB_GEO = new THREE.PlaneGeometry(6.6, 3.0).rotateX(-Math.PI / 2);
 const BLOB_MAT = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.3, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6 });
 const RING_GEO = new THREE.RingGeometry(1.0, 1.13, 48).rotateX(-Math.PI / 2);
 const SPRAY_GEO = new THREE.ConeGeometry(1, 1, 7, 1, true).translate(0, -0.5, 0).rotateZ(-Math.PI / 2);
-const SPRAY_MAT = new THREE.MeshBasicMaterial({ color: 0xe6eef7, transparent: true, opacity: 0.2, depthWrite: false, side: THREE.DoubleSide });
+const SPRAY_MAT = new THREE.MeshBasicMaterial({ color: 0xc3ced9, transparent: true, opacity: 0.13, depthWrite: false, side: THREE.DoubleSide });
 
 // ------------------------------------------------------------------ pista
-function hash2(x, y) { const s = Math.sin(x * 127.1 + y * 311.7) * 43758.5453; return s - Math.floor(s); }
 function vnoise(x, y) {
   const xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi;
   const u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf);
@@ -496,6 +613,7 @@ function pitRamp(s) {
 }
 
 let world = null;
+const srgb = (t) => { t.colorSpace = THREE.SRGBColorSpace; return t; };
 function buildWorld() {
   if (world) for (const o of world.all) { scene.remove(o); o.geometry && o.geometry.dispose(); }
   const all = [], n = T.n, tmp = mkS(), E = T.E, street = T.street;
@@ -540,7 +658,7 @@ function buildWorld() {
   }
   const ramp = (s) => pitRamp(s);
   const rightEdge = (s) => Math.max(SH, ramp(s) * (PIT_OFF + 2.6));
-  const grassCol = street ? 0x7c8187 : 0x4f8043;
+  const grassCol = street ? 0x7c8187 : 0x48743d;
   // arcén con su talud (cubre los huecos con el terreno), grava, calle de boxes, asfalto y muros
   ribbon(0, n, (i, s) => { const re = rightEdge(s); return [[-(SH + 1.3), -(T.rO[i] + 10), -40, 0], [-SH, -T.rO[i], 0, 0], [re, T.rP[i], 0, 0], [re + 1.3, T.rP[i] + 10, -40, 0]]; }, ribbonMat(grassCol, street ? 4 : 3, 0), 1);
   if (!street) {
@@ -587,7 +705,7 @@ function buildWorld() {
   const G = 128, R = E * 3.2, PW = 1.5, TR = U.uTexR.value = E * 1.5;
   const tp = new Float32Array((G + 1) * (G + 1) * 3), tc = new Float32Array((G + 1) * (G + 1) * 3), tuv = new Float32Array((G + 1) * (G + 1) * 2);
   const warp = (u) => Math.sign(u) * Math.pow(Math.abs(u), PW) * R;
-  const cA = new THREE.Color(street ? 0x6d7278 : 0x3c6a37), cB = new THREE.Color(street ? 0x80858b : 0x4d7d44), cC = new THREE.Color(street ? 0x8a8f95 : 0x5c8c4e), cc = new THREE.Color();
+  const cA = new THREE.Color(street ? 0x6d7278 : 0x355f31), cB = new THREE.Color(street ? 0x80858b : 0x456f3c), cC = new THREE.Color(street ? 0x8a8f95 : 0x527e45), cc = new THREE.Color();
   for (let a = 0; a <= G; a++) for (let b = 0; b <= G; b++) {
     const ua = (a / G) * 2 - 1, ub = (b / G) * 2 - 1, x = warp(ua), z = warp(ub), v = a * (G + 1) + b;
     const cell = R * PW * Math.pow(Math.max(Math.abs(ua), Math.abs(ub), 0.02), PW - 1) * (2 / G);
@@ -604,17 +722,25 @@ function buildWorld() {
   tg.setAttribute("color", new THREE.BufferAttribute(tc, 3));
   tg.setAttribute("uv", new THREE.BufferAttribute(tuv, 2));
   tg.setIndex(ti);
-  const terrMat = new THREE.MeshPhongMaterial({ vertexColors: true, flatShading: true, shininess: 0, specular: 0x000000 });
+  tg.computeVertexNormals(); // normales suaves: las colinas ya no se ven a facetas
+  const terrMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.94, metalness: 0 });
+  const uDetT = { value: street ? DET.asfalto : DET.hierba };
   terrMat.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, { uDet: uDetT, uCloud: U.uCloud, uTexR: U.uTexR, uFlood: U.uFlood });
     sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nvarying vec2 vTX;").replace("#include <begin_vertex>", "#include <begin_vertex>\nvTX = position.xz;");
-    sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nvarying vec2 vTX;" + GLSL_NOISE)
-      .replace("vec4 diffuseColor = vec4( diffuse, opacity );", "float tpx = fwidth(vTX.x) + fwidth(vTX.y);\nvec4 diffuseColor = vec4( diffuse * (1.0 + (vn(vTX * 2.9) - 0.5) * 0.32 * clamp(1.0 - tpx * 3.8, 0.0, 1.0) + (vn(vTX * 0.1) - 0.5) * 0.22), opacity );");
+    sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nvarying vec2 vTX; uniform sampler2D uDet, uCloud; uniform float uTexR, uFlood;" + GLSL_NOISE)
+      .replace("vec4 diffuseColor = vec4( diffuse, opacity );", `vec4 t1 = texture2D(uDet, vTX / 3.3), t2 = texture2D(uDet, vTX / 41.0 + 0.31);
+        vec3 tcol = diffuse * (0.5 + 1.0 * t1.r) * (0.7 + 0.6 * t2.r) * (0.82 + 0.36 * vn(vTX * 0.13)) * (0.86 + 0.28 * vn(vTX * 0.011));
+        ${street ? "" : "tcol = mix(tcol, tcol * vec3(1.45, 1.12, 0.55), smoothstep(0.55, 0.9, vn(vTX * 0.031 + 4.0)) * 0.4);"}
+        tcol *= 1.0 - 0.4 * texture2D(uCloud, vTX / (2.0 * uTexR) + 0.5).g;
+        vec2 tdn = (t1.gb - 0.5) * 2.0 + (t2.gb - 0.5) * 0.8;
+        vec4 diffuseColor = vec4(tcol, opacity);`)
+      .replace("#include <normal_fragment_maps>", "normal = normalize(normal + mat3(viewMatrix) * vec3(tdn.x, 0.0, tdn.y));")
+      .replace("vec3 totalEmissiveRadiance = emissive;", "vec3 totalEmissiveRadiance = emissive + diffuseColor.rgb * vColor.rgb * uFlood * 0.12;");
   };
+  terrMat.customProgramCacheKey = () => "terreno" + street;
   const terrain = add(new THREE.Mesh(tg, terrMat));
   terrain.frustumCulled = false; terrain.receiveShadow = true;
-  // sombra de las nubes sobre el terreno (la misma textura oscurece las cintas en su material)
-  const over = add(new THREE.Mesh(tg, new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.32, alphaMap: cloudTex, depthWrite: false, fog: false, polygonOffset: true, polygonOffsetFactor: -0.5, polygonOffsetUnits: -0.5 })));
-  over.frustumCulled = false; over.renderOrder = 0.5;
 
   // ---- arbolado
   const trees = [], rnd = (() => { let s = 12345 + T.n; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296); })();
@@ -629,18 +755,26 @@ function buildWorld() {
   const tgc = collect();
   // dos especies mezcladas en la misma malla: frondosa (copa de varios volúmenes) y conífera (tres pisos)
   const blob = (r, x, y, z, shade) => {
-    const g = new THREE.IcosahedronGeometry(r, 1), p = g.attributes.position;
-    for (let i = 0; i < p.count; i++) { const k = 0.86 + 0.28 * hash2(p.getX(i) * 9 + x, p.getY(i) * 7 + z); p.setXYZ(i, p.getX(i) * k, p.getY(i) * k * 0.9, p.getZ(i) * k); }
-    tgc.add(g.translate(x, y, z), [shade, shade, shade]);
+    const g = new THREE.IcosahedronGeometry(r, 1), p = g.attributes.position, nrm = g.attributes.normal, cl = new Float32Array(p.count * 3);
+    for (let i = 0; i < p.count; i++) {
+      const k = 0.86 + 0.28 * hash2(Math.round(p.getX(i) * 400) * 0.0225 + x, Math.round(p.getY(i) * 400) * 0.0175 + z);
+      p.setXYZ(i, p.getX(i) * k, p.getY(i) * k * 0.9, p.getZ(i) * k);
+      // sombra propia de la copa: oscura abajo y hacia el tronco, clara arriba y por fuera
+      const wy = y + p.getY(i), out = Math.hypot(x + p.getX(i), z + p.getZ(i));
+      const sh = shade * (0.55 + 0.45 * sstep(0.45, 1.15, wy)) * (0.8 + 0.2 * sstep(0.05, 0.45, out));
+      cl[i * 3] = cl[i * 3 + 1] = cl[i * 3 + 2] = sh;
+    }
+    g.setAttribute("color", new THREE.BufferAttribute(cl, 3));
+    tgc.raw(g.translate(x, y, z));
   };
-  blob(0.36, 0, 0.82, 0, 1); blob(0.27, 0.22, 0.66, 0.1, 0.9); blob(0.26, -0.2, 0.7, -0.12, 1.08); blob(0.22, 0.02, 1.08, 0.06, 1.14);
-  tgc.add(new THREE.CylinderGeometry(0.05, 0.07, 0.55, 5).translate(0, 0.27, 0), [0.5, 0.36, 0.26]);
-  const treeMesh = add(new THREE.InstancedMesh(tgc.done(), new THREE.MeshPhongMaterial({ vertexColors: true, flatShading: true, shininess: 0, specular: 0x000000 }), trees.length));
-  const m4 = new THREE.Matrix4(), col = new THREE.Color(), c2 = new THREE.Color(0x4a8a4a);
+  blob(0.36, 0, 0.82, 0, 1); blob(0.27, 0.22, 0.66, 0.1, 0.9); blob(0.26, -0.2, 0.7, -0.12, 1.08); blob(0.22, 0.02, 1.08, 0.06, 1.14); blob(0.2, -0.05, 0.62, 0.22, 0.95);
+  tgc.add(new THREE.CylinderGeometry(0.05, 0.07, 0.55, 6).translate(0, 0.27, 0), [0.5, 0.36, 0.26]);
+  const treeMesh = add(new THREE.InstancedMesh(tgc.done(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, metalness: 0 }), trees.length));
+  const m4 = new THREE.Matrix4(), col = new THREE.Color(), c2 = new THREE.Color(0x5c9a50);
   trees.forEach((t, i) => {
     const s = T.Wov * 1.05 * t[3];
     m4.makeScale(s, s, s).setPosition(t[0], t[1], t[2]); treeMesh.setMatrixAt(i, m4);
-    treeMesh.setColorAt(i, col.setHex(0x2c5a34).lerp(c2, t[4]));
+    treeMesh.setColorAt(i, col.setHex(0x3a6e3c).lerp(c2, t[4]));
   });
   treeMesh.frustumCulled = false; treeMesh.castShadow = true; treeMesh.receiveShadow = true;
 
@@ -648,7 +782,7 @@ function buildWorld() {
   const blocks = [], laneLen = T.L - track.pit.entry + track.pit.exit;
   for (let k = 0; k < 7; k++) blocks.push({ s: track.pit.entry + laneLen * (0.2 + 0.1 * k), lat: T.PS * (PIT_OFF + 1.5), len: laneLen * 0.094, w: 1.1, h: 0.5, c: 0xaeb6c0 });
   for (let k = 0; k < 4; k++) blocks.push({ s: 60 + k * laneLen * 0.11, lat: -T.PS * (SH + 1.1), len: laneLen * 0.1, w: 1.2, h: 0.85, c: 0x7b8490 });
-  const bMesh = add(new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), new THREE.MeshPhongMaterial({ flatShading: true, shininess: 0 }), blocks.length));
+  const bMesh = add(new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), new THREE.MeshStandardMaterial({ roughness: 0.75, metalness: 0.05 }), blocks.length));
   blocks.forEach((b, i) => {
     sample(b.s, tmp);
     const W = T.Wov;
@@ -660,8 +794,8 @@ function buildWorld() {
   });
   bMesh.frustumCulled = false; bMesh.castShadow = true; bMesh.receiveShadow = true;
   const nP = Math.floor(T.L / 130);
-  const lamps = add(new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: 0xfff1c9, fog: false }), nP));
-  const poles = add(new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), new THREE.MeshPhongMaterial({ color: 0x30353c }), nP));
+  const lamps = add(new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: new THREE.Color(0xfff1c9).multiplyScalar(6), fog: false }), nP));
+  const poles = add(new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), new THREE.MeshStandardMaterial({ color: 0x30353c, roughness: 0.6, metalness: 0.5 }), nP));
   for (let k = 0; k < nP; k++) {
     const s = k * 130, i = Math.floor(s / T.ds);
     sample(s, tmp);
@@ -675,7 +809,7 @@ function buildWorld() {
   const hpos = new Float32Array(nP * 3);
   for (let k = 0; k < nP; k++) { lamps.getMatrixAt(k, m4); hpos[k * 3] = m4.elements[12]; hpos[k * 3 + 1] = m4.elements[13]; hpos[k * 3 + 2] = m4.elements[14]; }
   const hg = new THREE.BufferGeometry(); hg.setAttribute("position", new THREE.BufferAttribute(hpos, 3));
-  const halos = add(new THREE.Points(hg, new THREE.PointsMaterial({ map: new THREE.CanvasTexture(hc), size: 26, sizeAttenuation: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false })));
+  const halos = add(new THREE.Points(hg, new THREE.PointsMaterial({ map: srgb(new THREE.CanvasTexture(hc)), size: 26, sizeAttenuation: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false })));
   halos.frustumCulled = false; halos.renderOrder = 15;
 
   // ---- carteles de frenada (150, 100, 50), puestos de comisarios, pórtico de salida y tribunas
@@ -696,14 +830,14 @@ function buildWorld() {
       0, 0, 0, 1);
     return m4;
   };
-  const numTex = (txt) => { const cv = document.createElement("canvas"); cv.width = 128; cv.height = 96; const g = cv.getContext("2d"); g.fillStyle = "#f4f4f4"; g.fillRect(0, 0, 128, 96); g.fillStyle = "#111"; g.font = "900 64px 'Titillium Web', sans-serif"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(txt, 64, 52); return new THREE.CanvasTexture(cv); };
+  const numTex = (txt) => { const cv = document.createElement("canvas"); cv.width = 128; cv.height = 96; const g = cv.getContext("2d"); g.fillStyle = "#f4f4f4"; g.fillRect(0, 0, 128, 96); g.fillStyle = "#111"; g.font = "900 64px 'Titillium Web', sans-serif"; g.textAlign = "center"; g.textBaseline = "middle"; g.fillText(txt, 64, 52); return srgb(new THREE.CanvasTexture(cv)); };
   [150, 100, 50].forEach((d) => {
-    const bm = add(new THREE.InstancedMesh(new THREE.BoxGeometry(0.12, 1, 1).translate(0, 0.5, 0), new THREE.MeshLambertMaterial({ map: numTex(String(d)) }), brakes.length));
+    const bm = add(new THREE.InstancedMesh(new THREE.BoxGeometry(0.12, 1, 1).translate(0, 0.5, 0), new THREE.MeshStandardMaterial({ map: numTex(String(d)), roughness: 0.6 }), brakes.length));
     brakes.forEach((bi, k) => { const s = bi * T.ds - d - 35, i2 = Math.floor(mod(s, T.L) / T.ds); bm.setMatrixAt(k, place(s, sideAt(i2) + T.PS * 1.6, 1.0, 1, 1.0, 1.45)); });
     bm.frustumCulled = false;
   });
   const nM = Math.floor(T.L / 380);
-  const marsh = add(new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), new THREE.MeshPhongMaterial({ color: 0xe8791f, shininess: 5 }), nM));
+  const marsh = add(new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), new THREE.MeshStandardMaterial({ color: 0xe8791f, roughness: 0.7 }), nM));
   for (let k = 0; k < nM; k++) { const s = 190 + k * 380, i2 = Math.floor(s / T.ds) % n; marsh.setMatrixAt(k, place(s, sideAt(i2) - T.PS * 1.4, 0, 2.6, 2.3, 2.0)); }
   marsh.frustumCulled = false; marsh.castShadow = true;
   // pórtico de salida con el semáforo
@@ -711,7 +845,7 @@ function buildWorld() {
     for (const z of [half, -half]) gg.add(new THREE.BoxGeometry(0.3, 6.8, 0.3).translate(0, 3.4, z), [0.2, 0.22, 0.25]);
     gg.add(new THREE.BoxGeometry(0.5, 0.7, half * 2).translate(0, 6.6, 0), [0.2, 0.22, 0.25]);
     for (let k = -2; k <= 2; k++) gg.add(new THREE.BoxGeometry(0.25, 1.0, 0.5).translate(-0.3, 5.9, k * 0.8), [0.05, 0.05, 0.06]);
-    const gm = add(new THREE.Mesh(gg.done(), new THREE.MeshPhongMaterial({ vertexColors: true, shininess: 10 })));
+    const gm = add(new THREE.Mesh(gg.done(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5, metalness: 0.4 })));
     sample(6, tmp); gm.matrixAutoUpdate = false;
     gm.matrix.set(tmp.tx, 0, tmp.rx, tmp.x, 0, 1, 0, tmp.y, tmp.tz, 0, tmp.rz, tmp.z, 0, 0, 0, 1); gm.castShadow = true; gm.frustumCulled = false; }
   // tribunas con público por fuera de las tres frenadas más fuertes
@@ -719,10 +853,10 @@ function buildWorld() {
   { const g = crowd.getContext("2d"); g.fillStyle = "#3a4048"; g.fillRect(0, 0, 256, 128);
     const pal = ["#e8452c", "#f2d23c", "#f2f2f2", "#3a7be8", "#ff8000", "#1f1f24", "#d9c9a8", "#00d7b6", "#e6e6e6", "#b03030"];
     for (let y = 6; y < 128; y += 5) { g.fillStyle = "rgba(0,0,0,.35)"; g.fillRect(0, y + 3, 256, 2); for (let x = 0; x < 256; x += 3) if (hash2(x, y) > 0.14) { g.fillStyle = pal[Math.floor(hash2(x * 3.1, y * 1.7) * pal.length)]; g.fillRect(x, y, 2, 3); } } }
-  const crowdTex = new THREE.CanvasTexture(crowd); crowdTex.wrapS = THREE.RepeatWrapping; crowdTex.repeat.set(3, 1);
+  const crowdTex = srgb(new THREE.CanvasTexture(crowd)); crowdTex.wrapS = THREE.RepeatWrapping; crowdTex.repeat.set(3, 1);
   const stands = brakes.slice().sort((a, b) => (vr[a] - vr[b])).slice(0, 3);
-  const stM = add(new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), new THREE.MeshLambertMaterial({ map: crowdTex }), stands.length));
-  const roofM = add(new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), new THREE.MeshPhongMaterial({ color: 0x596270, shininess: 5 }), stands.length));
+  const stM = add(new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), new THREE.MeshStandardMaterial({ map: crowdTex, roughness: 0.85 }), stands.length));
+  const roofM = add(new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), new THREE.MeshStandardMaterial({ color: 0x596270, roughness: 0.55, metalness: 0.3 }), stands.length));
   stands.forEach((bi, k) => { const s = bi * T.ds - 60; stM.setMatrixAt(k, place(s, sideAt(bi) - T.PS * 14, 0, 70, 9, 12)); roofM.setMatrixAt(k, place(s, sideAt(bi) - T.PS * 15, 10.5, 72, 0.5, 14)); });
   stM.frustumCulled = roofM.frustumCulled = false; stM.castShadow = roofM.castShadow = true;
 
@@ -741,10 +875,10 @@ function buildWorld() {
   const nc = document.createElement("canvas"); nc.width = NUM_COLS * 64; nc.height = NUM_ROWS * 64;
   { const g = nc.getContext("2d"); g.textAlign = "center"; g.textBaseline = "middle"; g.font = "900 46px 'Titillium Web', sans-serif"; g.lineJoin = "round";
     sess.cars.forEach((c, i) => { const x = (i % NUM_COLS) * 64 + 32, y = Math.floor(i / NUM_COLS) * 64 + 34, t = String(c.d.numero ?? ""); g.lineWidth = 8; g.strokeStyle = "#0c0d10"; g.strokeText(t, x, y); g.fillStyle = "#ffffff"; g.fillText(t, x, y); }); }
-  const numMat = new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(nc), transparent: true, alphaTest: 0.35, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
+  const numMat = new THREE.MeshBasicMaterial({ map: srgb(new THREE.CanvasTexture(nc)), transparent: true, alphaTest: 0.35, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
   numMat.onBeforeCompile = (sh) => {
     sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nattribute float aCell;")
-      .replace("#include <uv_vertex>", `vUv = (uv + vec2(mod(aCell, ${NUM_COLS}.0), ${NUM_ROWS - 1}.0 - floor(aCell / ${NUM_COLS}.0))) / vec2(${NUM_COLS}.0, ${NUM_ROWS}.0);`);
+      .replace("#include <uv_vertex>", `vMapUv = (uv + vec2(mod(aCell, ${NUM_COLS}.0), ${NUM_ROWS - 1}.0 - floor(aCell / ${NUM_COLS}.0))) / vec2(${NUM_COLS}.0, ${NUM_ROWS}.0);`);
   };
   const dg = DECAL_GEO.clone();
   dg.setAttribute("aCell", new THREE.InstancedBufferAttribute(Float32Array.from(sess.cars, (c, i) => i), 1));
@@ -834,34 +968,120 @@ function updateLight(now) {
   else sunDir.set(0.35, 0.8, 0.3).normalize();
   sun.color.setHex(0xfff3dd).lerp(_c1.setHex(0xff9a52), warm);
   if (day <= 0.02) sun.color.setHex(0x8fa8ff);
-  sun.intensity = day > 0.02 ? 1.25 * day * (1 - 0.65 * cloud) : 0.16;
-  hemi.intensity = 0.22 + 0.62 * day * (1 - 0.2 * cloud);
-  hemi.color.setHex(0x35405e).lerp(_c1.setHex(0xcfe0f5), day);
+  // intensidades en unidades físicas de three (π ≈ «blanco a pleno sol»); de noche el «sol» es la luna
+  sun.intensity = day > 0.02 ? 3.0 * day * (1 - 0.8 * cloud) : 0.35;
   const grey = cloud * 0.85 * day;
   const zen = _c1.copy(SKY.zNight).lerp(_c3.copy(SKY.zDay).lerp(SKY.zDusk, warm), day).lerp(SKY.zGrey, grey);
   const hor = _c2.copy(SKY.hNight).lerp(_c3.copy(SKY.hDay).lerp(SKY.hDusk, warm * 0.8), day).lerp(SKY.hGrey, grey);
-  skyU.uZen.value.copy(zen); skyU.uHor.value.copy(hor); skyU.uSun.value.copy(sunDir); skyU.uCover.value = cloud;
+  skyU.uZen.value.copy(zen); skyU.uHor.value.copy(hor); skyU.uSun.value.copy(sunDir); skyU.uCover.value = cloud; skyU.uNight.value = 1 - day;
   skyU.uSunCol.value.copy(sun.color).multiplyScalar(day > 0.02 ? day * (1 - 0.7 * cloud) : 0.25);
-  skyU.uCloudCol.value.setRGB(1, 1, 1).lerp(hor, 0.3 + 0.4 * cloud).multiplyScalar(0.25 + 0.75 * day);
+  skyU.uCloudCol.value.setRGB(1, 1, 1).lerp(hor, 0.3 + 0.4 * cloud).multiplyScalar((0.25 + 0.75 * day) * 1.1);
+  // el suelo que ve el entorno: lo que el sol y el cielo sacan del verde (o del gris en los urbanos)
+  skyU.uGround.value.setHex(T.street ? 0x3a3d42 : 0x26381f).multiplyScalar(0.25 + 0.9 * day * (1 - 0.5 * cloud));
   skyU.uT.value = sess.weather.clock * 60;
-  paintEnv(zen, hor);
   fog.color.copy(hor);
-  if (renderer) renderer.setClearColor(hor, 1);
+  renderer.setClearColor(hor, 1);
+  // al atardecer y de noche el cielo apenas alumbra: sube un poco lo que aporta el entorno para que se siga viendo
+  scene.environmentIntensity = 1 + 0.6 * (1 - day) + 0.6 * warm;
+  updateEnv(now, [sunDir.x, sunDir.y, sunDir.z, zen.r, zen.g, zen.b, hor.r, hor.g, hor.b, cloud].map((v) => v.toFixed(2)).join());
   U.uFlood.value = (1 - day) * 0.8;
   world.lamps.visible = world.poles.visible = world.halos.visible = day < 0.5;
 }
 
+// ------------------------------------------------------------------ postproceso
+// Con calidad 2 o 3 la escena se dibuja en un búfer con valores altos (HDR) y pasa por: oclusión ambiental (las
+// rendijas y los contactos con el suelo se oscurecen), desenfoque del fondo en la cámara de tele, resplandor de lo
+// muy brillante y, al final, la curva de tonos. Con calidad 0 o 1 se dibuja directo a pantalla, como siempre.
+const DOF_SHADER = {
+  uniforms: { tDiffuse: { value: null }, tDepth: { value: null }, uNear: { value: 1 }, uFar: { value: 1000 }, uFocus: { value: 50 }, uRange: { value: 5 }, uMax: { value: 0 }, uPx: { value: new THREE.Vector2() } },
+  vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  fragmentShader: `uniform sampler2D tDiffuse, tDepth; uniform float uNear, uFar, uFocus, uRange, uMax; uniform vec2 uPx; varying vec2 vUv;
+    // radio del círculo de confusión (px): cero en torno al coche enfocado, crece con la distancia a ese plano
+    float coc(vec2 uv){ float d = texture2D(tDepth, uv).x, z = uNear * uFar / (uFar - d * (uFar - uNear));
+      return uMax * clamp(max(0.0, abs(z - uFocus) - uRange) / z * (z < uFocus ? 0.7 : 1.5), 0.0, 1.0); }
+    void main(){
+      vec3 c0 = texture2D(tDiffuse, vUv).rgb; float r0 = coc(vUv);
+      if (r0 < 0.6) { gl_FragColor = vec4(c0, 1.0); return; }
+      vec3 acc = c0; float w = 1.0;
+      for (int i = 1; i <= 16; i++) {
+        float fr = sqrt(float(i) / 16.0), an = float(i) * 2.39996;
+        vec2 uv = vUv + vec2(cos(an), sin(an)) * fr * r0 * uPx;
+        // una muestra solo cuenta si su propio desenfoque llega hasta aquí: lo nítido no se derrama sobre el fondo
+        float k = clamp(coc(uv) - fr * r0 + 1.5, 0.0, 1.0);
+        acc += texture2D(tDiffuse, uv).rgb * k; w += k;
+      }
+      gl_FragColor = vec4(acc / w, 1.0);
+    }`,
+};
+let canPost = renderer.capabilities.isWebGL2 && (renderer.extensions.has("EXT_color_buffer_half_float") || renderer.extensions.has("EXT_color_buffer_float"));
+if (!canPost) q = Math.min(q, 1);
+let post = null, dofK = 0, dofFocus = 50, aoRadius = 1;
+function makePost() {
+  const depth = new THREE.DepthTexture(2, 2);
+  const rt = new THREE.WebGLRenderTarget(2, 2, { type: THREE.HalfFloatType, samples: 4, depthTexture: depth });
+  const composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(2, 2, { type: THREE.HalfFloatType }));
+  const ao = new GTAOPass(scene, camera, 2, 2, { depthTexture: depth });
+  ao.updateGtaoMaterial({ samples: 16, distanceExponent: 1, distanceFallOff: 1, thickness: 1, scale: 1.5, screenSpaceRadius: false });
+  ao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, rings: 2, samples: 12 });
+  const dof = new ShaderPass(DOF_SHADER);
+  dof.uniforms.tDepth.value = depth;
+  const bloom = new UnrealBloomPass(new THREE.Vector2(2, 2), 0.25, 0.6, 1.4);
+  for (const p of [new TexturePass(rt.texture), ao, dof, bloom, new OutputPass()]) composer.addPass(p);
+  return { rt, composer, ao, dof, bloom };
+}
+function render() {
+  if (q < 2 || !post) { renderer.render(scene, camera); return; }
+  renderer.setRenderTarget(post.rt); renderer.render(scene, camera);
+  if (!post.checked) {
+    // hay móviles que no saben dibujar en un búfer HDR con suavizado: se nota aquí (no da error) y se sigue sin efectos
+    const gl = renderer.getContext();
+    post.checked = true;
+    if (gl.checkFramebufferStatus(gl.DRAW_FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) {
+      console.warn("mapa 3D: este dispositivo no admite el búfer HDR; sigue sin postproceso");
+      renderer.setRenderTarget(null); canPost = false; q = 1; applyQuality(); renderer.render(scene, camera); return;
+    }
+  }
+  renderer.setRenderTarget(null);
+  post.ao.enabled = q >= 3;
+  if (post.ao.enabled) post.ao.updateGtaoMaterial({ radius: aoRadius });
+  post.dof.enabled = q >= 3 && dofK > 0.02;
+  if (post.dof.enabled) {
+    const u = post.dof.uniforms, h = post.rt.height;
+    u.uNear.value = camera.near; u.uFar.value = camera.far; u.uFocus.value = dofFocus; u.uRange.value = Math.max(10, dofFocus * 0.12);
+    u.uMax.value = dofK * h * 0.008; u.uPx.value.set(1 / post.rt.width, 1 / h);
+  }
+  post.composer.render();
+}
+
 // ------------------------------------------------------------------ calidad
-const Q_NAME = ["Baja", "Media", "Alta"];
+// 0: sin sombras ni efectos · 1: sombras · 2: + búfer HDR y resplandor · 3: + oclusión ambiental y desenfoque de tele
+const Q_PR = [1, 1.5, 2, 2], Q_SHADOW = [1024, 1024, 2048, 4096];
 function applyQuality() {
-  if (!renderer) return;
-  const box = opt.box;
-  renderer.setPixelRatio(Math.min(devicePixelRatio || 1, [1, 1.5, 2][q]));
-  renderer.setSize(box.clientWidth, box.clientHeight, false);
+  if (q >= 2 && !canPost) q = 1;
+  const box = opt.box, w = box.clientWidth, h = box.clientHeight;
+  // con efectos, antes de quitarlos se prueba a dibujar con algo menos de resolución (prScale)
+  const pr = Math.min(devicePixelRatio || 1, Q_PR[q]) * (q >= 2 ? prScale : 1);
+  renderer.setPixelRatio(pr);
+  renderer.setSize(w, h, false);
+  if (q >= 2) {
+    try {
+      post = post || makePost();
+      const pw = Math.max(2, Math.floor(w * pr)), ph = Math.max(2, Math.floor(h * pr));
+      post.rt.setSize(pw, ph); post.composer.setSize(pw, ph);
+    } catch (e) { console.warn("mapa 3D: sin postproceso", e); post = null; q = 1; applyQuality(); return; }
+  }
   sun.castShadow = q > 0;
-  const ms = q === 2 ? 2048 : 1024;
+  const ms = Q_SHADOW[q];
   if (sun.shadow.mapSize.x !== ms) { sun.shadow.mapSize.set(ms, ms); if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; } }
   if (world) world.blobs.visible = q === 0;
+}
+/** El dispositivo no llega: primero fuera la oclusión y el desenfoque, luego menos resolución, luego sin efectos y al final sin sombras. */
+function lowerQuality() {
+  if (q === 2 && prScale > 0.7) prScale -= 0.15;
+  else if (q > 0) { q--; if (q < 2) prScale = 1; }
+  else return;
+  if (opt.quality === undefined) try { localStorage.setItem(Q_KEY, JSON.stringify({ q, t: Date.now() })); } catch (e) { /* sin memoria */ }
+  applyQuality();
 }
 
 // ------------------------------------------------------------------ lluvia
@@ -878,7 +1098,10 @@ const rain = (() => {
       void main(){ vec3 q = fract(position + vec3(uWind.x * uTime * 0.25, -uTime * (0.9 + position.x * 0.5), uWind.y * uTime * 0.25)) - 0.5;
         vec3 p = uCenter + q * uSize; p.y += uSize.y * 0.45; p += aEnd * vec3(uWind.x * 0.4, -1.0, uWind.y * 0.4) * uSize.y * 0.035;
         vA = texture2D(uTex, p.xz / (2.0 * uTexR) + 0.5).r; gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0); }`,
-    fragmentShader: `varying float vA; void main(){ gl_FragColor = vec4(0.82, 0.88, 1.0, min(0.6, vA * 1.6)); }`,
+    fragmentShader: `varying float vA; void main(){ gl_FragColor = vec4(0.62, 0.72, 1.0, min(0.4, vA * 1.1));
+      #include <tonemapping_fragment>
+      #include <colorspace_fragment>
+    }`,
     transparent: true, depthWrite: false,
   });
   const l = new THREE.LineSegments(g, m); l.frustumCulled = false; l.renderOrder = 20; scene.add(l);
@@ -1008,6 +1231,7 @@ function setCam(m) {
   camFrom = { pos: cur.pos.clone(), look: cur.look.clone(), fov: cur.fov }; camT = 0;
 }
 const _tp = mkS(), _tq = mkS();
+const _up = new THREE.Vector3(0, 1, 0), _sr = new THREE.Vector3(), _su = new THREE.Vector3(), _sc = new THREE.Vector3();
 function updateCamera(dt, now) {
   const tgt = followCar(), p = tgt && pose.get(tgt.id);
   let mode = camMode;
@@ -1074,10 +1298,17 @@ function updateCamera(dt, now) {
   curW = cut || camSnap ? wT : curW + (wT - curW) * (1 - Math.exp(-dt / 0.2));
   fog.near = Math.max(dist * 1.3, 220); fog.far = Math.max(dist * 6, 3800);
   // el sol ilumina (y da sombra) alrededor de lo que mira la cámara
-  const S = onboard ? 75 : clamp(halfH * 2.1, 40, T.E * 0.9), sc = sun.shadow.camera;
-  sun.target.position.copy(cur.look); sun.position.copy(cur.look).addScaledVector(sunDir, S * 3.2);
+  // el tamaño va a saltos y el centro se mueve de téxel en téxel: así el borde de las sombras no tiembla al mover la cámara
+  const S0 = onboard ? 75 : clamp(halfH * 2.1, 40, T.E * 0.9), S = Math.pow(2, Math.ceil(Math.log2(S0) * 3) / 3), sc = sun.shadow.camera;
+  const texel = (2 * S) / sun.shadow.mapSize.x;
+  _sr.crossVectors(_up, sunDir).normalize(); _su.crossVectors(sunDir, _sr);
+  _sc.copy(sunDir).multiplyScalar(cur.look.dot(sunDir)).addScaledVector(_sr, Math.round(cur.look.dot(_sr) / texel) * texel).addScaledVector(_su, Math.round(cur.look.dot(_su) / texel) * texel);
+  sun.target.position.copy(_sc); sun.position.copy(_sc).addScaledVector(sunDir, S * 3.2);
   sc.left = sc.bottom = -S; sc.right = sc.top = S; sc.near = 1; sc.far = S * 8; sc.updateProjectionMatrix();
-  sun.shadow.normalBias = S / 350;
+  sun.shadow.normalBias = texel * 1.6;
+  // postproceso: la oclusión abarca más o menos lo mismo en pantalla a cualquier distancia; el desenfoque, solo en tele
+  aoRadius = clamp(halfH * 0.1, 0.5, 400);
+  dofFocus = dist; dofK += ((mode === "tele" ? 1 : 0) - dofK) * (cut || camSnap ? 1 : 1 - Math.exp(-dt / 0.4));
   camSnap = false;
   return halfH;
 }
@@ -1160,7 +1391,7 @@ function draw3d(dt, now) {
     u.uTime.value = rainClock; u.uCenter.value.copy(cur.look); u.uSize.value.set(sz, sz * 0.75, sz);
     u.uWind.value.set(Math.cos(sess.weather.windDir), -Math.sin(sess.weather.windDir));
   }
-  renderer.render(scene, camera);
+  render();
   // rótulos y puntos para tocar
   const box = opt.box, w = box.clientWidth, h = box.clientHeight, close = camMode !== "circuito" && W < 12;
   screenPts = [];
@@ -1225,11 +1456,11 @@ return {
   draw(dt, now) {
     draw3d(dt, now);
     if (opt.paused()) { fN = 0; fT = now; lowSecs = 0; return; } // en pausa se dibuja poco a propósito: no cuenta
-    // calidad automática: si no llega a 40 fps tres segundos seguidos, baja un escalón (resolución, luego sombras y lluvia)
+    // calidad automática: si no llega a 40 fps tres segundos seguidos, baja un escalón (ver lowerQuality)
     fN++;
     if (now - fT >= 1000) {
       const fps = (fN * 1000) / (now - fT);
-      if (++warm > 3 && q > 0) { lowSecs = fps < 40 ? lowSecs + 1 : 0; if (lowSecs >= 3) { q--; lowSecs = 0; applyQuality(); } }
+      if (++warm > 3) { lowSecs = fps < 40 ? lowSecs + 1 : 0; if (lowSecs >= 3) { lowSecs = 0; lowerQuality(); } }
       fN = 0; fT = now;
     }
   },
@@ -1251,6 +1482,9 @@ return {
   dispose() {
     scene.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => m.dispose()); });
     cloudTex.dispose(); if (sun.shadow.map) sun.shadow.map.dispose();
+    for (const t of Object.values(DET)) t.dispose();
+    envScene.children[0].material.dispose(); envCube.dispose(); if (envRT) envRT.dispose(); pmrem.dispose();
+    if (post) { post.rt.dispose(); post.composer.dispose(); post.ao.dispose(); post.bloom.dispose(); }
     renderer.dispose(); renderer.forceContextLoss();
     opt.labels.innerHTML = "";
   },
