@@ -76,12 +76,18 @@ vec3 SR(vec3 c){ return pow(c, vec3(2.2)); }
 // cielo: degradado del horizonte al cénit, bruma hacia el sol, nubes con volumen que se mueven y el disco del sol.
 // El mismo material pinta el entorno que reflejan los coches y el asfalto mojado (uEnv = 1: sin disco, con suelo).
 const skyU = { uZen: { value: new THREE.Color() }, uHor: { value: new THREE.Color() }, uSun: { value: new THREE.Vector3(0, 1, 0) }, uSunCol: { value: new THREE.Color() },
-  uCloudCol: { value: new THREE.Color() }, uGround: { value: new THREE.Color() }, uCover: { value: 0.3 }, uT: { value: 0 }, uNight: { value: 0 } };
+  uCloudCol: { value: new THREE.Color() }, uGround: { value: new THREE.Color() }, uNight: { value: 0 },
+  uWx: { value: null }, uWxR: { value: 40000 }, uCam: { value: new THREE.Vector2() }, uWind: { value: new THREE.Vector2() } };
 const skyMat = (env) => new THREE.ShaderMaterial({
   uniforms: { ...skyU, uEnv: { value: env } }, side: THREE.BackSide, fog: false, depthWrite: false,
   vertexShader: `varying vec3 vDir; void main(){ vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-  fragmentShader: `uniform vec3 uZen, uHor, uSun, uSunCol, uCloudCol, uGround; uniform float uCover, uT, uEnv, uNight; varying vec3 vDir;` + GLSL_NOISE + `
-    float cloudDen(vec2 q){ return 0.5 * vn(q) + 0.27 * vn(q * 2.1 + 7.0) + 0.15 * vn(q * 4.3 + 3.0) + 0.08 * vn(q * 8.9 + 11.0); }
+  fragmentShader: `uniform vec3 uZen, uHor, uSun, uSunCol, uCloudCol, uGround; uniform float uEnv, uNight, uWxR; uniform vec2 uCam, uWind; uniform sampler2D uWx; varying vec3 vDir;` + GLSL_NOISE + `
+    // ruido de gradiente con transición suave (no deja ver la rejilla) y octavas giradas
+    vec2 g2(vec2 p){ float a = h21(p) * 6.2831853; return vec2(cos(a), sin(a)); }
+    float gn(vec2 p){ vec2 i = floor(p), f = fract(p), u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+      return mix(mix(dot(g2(i), f), dot(g2(i + vec2(1.0, 0.0)), f - vec2(1.0, 0.0)), u.x),
+                 mix(dot(g2(i + vec2(0.0, 1.0)), f - vec2(0.0, 1.0)), dot(g2(i + vec2(1.0, 1.0)), f - vec2(1.0, 1.0)), u.x), u.y); }
+    float cloudDen(vec2 q){ float s = 0.0, a = 0.5; for (int i = 0; i < 5; i++) { s += a * gn(q); q = mat2(1.6, 1.2, -1.2, 1.6) * q + 3.7; a *= 0.5; } return 0.5 + 0.9 * s; }
     void main(){
       vec3 d = normalize(vDir);
       float up = max(d.y, 0.0);
@@ -97,14 +103,21 @@ const skyMat = (env) => new THREE.ShaderMaterial({
       }
       float c = 0.0;
       if (d.y > 0.0) {
-        vec2 q = d.xz / (d.y + 0.14) * 1.3 + vec2(uT * 0.006, uT * 0.002);
-        float n = cloudDen(q), lo = 0.66 - 0.42 * uCover;
-        c = smoothstep(lo, lo + 0.19, n) * smoothstep(0.0, 0.13, d.y);
-        // volumen: la cara que mira al sol clarea; el vientre de las nubes densas oscurece
-        float n2 = cloudDen(q + normalize(uSun.xz + vec2(1e-4)) * 0.16);
-        float lit = clamp(0.5 + (n - n2) * 4.5, 0.0, 1.0);
-        vec3 cc = uCloudCol * mix(0.5, 1.2, lit) * mix(1.0, 0.62, smoothstep(lo + 0.1, lo + 0.5, n));
-        col = mix(col, cc + uSunCol * pow(s, 10.0) * 0.25 * (1.0 - c * 0.6), c * 0.96);
+        // Las nubes están en un techo a 1,6 km sobre el mapa del tiempo del juego (el mismo del radar): cada mirada
+        // cae en un punto de ese mapa, que dice cuánta nube y cuánta lluvia hay allí. El ruido solo pone la forma.
+        vec2 pw = uCam + d.xz * (1600.0 / (d.y + 0.06));
+        vec4 wx = texture2D(uWx, pw / (2.0 * uWxR) + 0.5);
+        float cover = wx.g, rainK = wx.r;
+        float n = cloudDen(pw / 2600.0 + uWind), lo = mix(0.66, 0.2, cover);
+        c = smoothstep(lo, lo + 0.2, n) * smoothstep(0.0, 0.08, d.y);
+        // desde abajo: los bordes finos dejan pasar la luz, el vientre grueso es gris y bajo la lluvia, plomo
+        float th = clamp((n - lo) / 0.4, 0.0, 1.0) * (0.45 + 0.55 * cover);
+        vec3 cc = uCloudCol * mix(1.18, 0.44, th) * mix(1.0, 0.5, rainK);
+        cc += uSunCol * pow(s, 8.0) * 0.35 * (1.0 - th);
+        cc = mix(cc, uHor, smoothstep(0.14, 0.0, d.y) * 0.55); // se pierden en la calima del horizonte
+        col = mix(col, cc, c * 0.97);
+        // cortinas de lluvia bajo los chubascos lejanos
+        col = mix(col, uCloudCol * 0.36, rainK * smoothstep(0.24, 0.02, d.y) * 0.75);
       }
       col += uSunCol * disc * (1.0 - c) * (1.0 - uEnv);
       // por debajo del horizonte: lo que hay de verdad es suelo (solo importa en los reflejos)
@@ -182,6 +195,11 @@ const CN = 48, cloudData = new Uint8Array(CN * CN * 4);
 const cloudTex = new THREE.DataTexture(cloudData, CN, CN, THREE.RGBAFormat);
 cloudTex.magFilter = cloudTex.minFilter = THREE.LinearFilter; cloudTex.needsUpdate = true;
 U.uCloud.value = cloudTex;
+// el tiempo a lo grande para el cielo: 40 km a cada lado del circuito, como el radar. R = lluvia, G = cuánta nube
+const WN = 72, WX_R = 40000, wxData = new Uint8Array(WN * WN * 4);
+const wxTex = new THREE.DataTexture(wxData, WN, WN, THREE.RGBAFormat);
+wxTex.magFilter = wxTex.minFilter = THREE.LinearFilter; wxTex.needsUpdate = true;
+skyU.uWx.value = wxTex; skyU.uWxR.value = WX_R;
 // publicidad de pista: ocho marcas inventadas en una tira
 const adsCanvas = document.createElement("canvas"); adsCanvas.width = 2048; adsCanvas.height = 128;
 { const g = adsCanvas.getContext("2d"), ads = [["VELTRA", "#0b3d91", "#ffffff"], ["KORU", "#f2f2f2", "#c8102e"], ["NIMBO", "#101216", "#ffd84a"], ["ARDEN", "#c8102e", "#ffffff"], ["OSTRA", "#0f6b4f", "#f2f2f2"], ["LUMEN", "#ffd84a", "#101216"], ["TAIGA", "#f2f2f2", "#0b3d91"], ["ZEFIR", "#3a3f48", "#7fe0ff"]];
@@ -948,6 +966,33 @@ function updateCloud(now) {
   }
   cloudTex.needsUpdate = true;
   rainHere = rmax;
+  updateSkyWeather(now);
+}
+/** Lo que se ve en el cielo sale de las mismas células y la misma llovizna que dibuja el radar. */
+let wxT = -1e9, wxMean = 0;
+function updateSkyWeather(now) {
+  const w = sess.weather;
+  // las nubes viajan con el viento de altura, igual que las células
+  const k = w.clock * w.windSpeed / 60 / 2.6;
+  skyU.uWind.value.set(-Math.cos(w.windDir) * k, Math.sin(w.windDir) * k);
+  if (now - wxT < 2000) return;
+  wxT = now;
+  let sum = 0;
+  for (let iz = 0; iz < WN; iz++) for (let ix = 0; ix < WN; ix++) {
+    const xk = (((ix + 0.5) / WN * 2 - 1) * WX_R + T.cx) / 1000, yk = (-((iz + 0.5) / WN * 2 - 1) * WX_R + T.cy) / 1000;
+    const rain = rainAt(w, xk, yk);
+    let cl = w.baseCloud;
+    for (const c of w.cells) {
+      const env = Math.pow(Math.max(0, Math.sin(Math.PI * clamp(c.age / c.life, 0, 1))), 0.6), rad = Math.max(2, 2.5 * c.sigma * Math.max(1, c.ax) ** 0.5);
+      cl += 0.85 * Math.min(1, env * 1.5) * Math.exp(-((xk - c.x) ** 2 + (yk - c.y) ** 2) / (2 * rad * rad));
+    }
+    // donde llueve hay nube siempre, aunque el borde de la célula quede fuera de su mancha
+    const cover = clamp(Math.max(cl, rain > 0.05 ? 0.75 + rain * 0.1 : 0), 0, 1), o = (iz * WN + ix) * 4;
+    wxData[o] = Math.sqrt(clamp(rain / 6, 0, 1)) * 255; wxData[o + 1] = cover * 255; wxData[o + 3] = 255;
+    sum += cover;
+  }
+  wxMean = sum / (WN * WN);
+  wxTex.needsUpdate = true;
 }
 
 // ------------------------------------------------------------------ luz según la hora
@@ -973,17 +1018,16 @@ function updateLight(now) {
   const grey = cloud * 0.85 * day;
   const zen = _c1.copy(SKY.zNight).lerp(_c3.copy(SKY.zDay).lerp(SKY.zDusk, warm), day).lerp(SKY.zGrey, grey);
   const hor = _c2.copy(SKY.hNight).lerp(_c3.copy(SKY.hDay).lerp(SKY.hDusk, warm * 0.8), day).lerp(SKY.hGrey, grey);
-  skyU.uZen.value.copy(zen); skyU.uHor.value.copy(hor); skyU.uSun.value.copy(sunDir); skyU.uCover.value = cloud; skyU.uNight.value = 1 - day;
+  skyU.uZen.value.copy(zen); skyU.uHor.value.copy(hor); skyU.uSun.value.copy(sunDir); skyU.uNight.value = 1 - day;
   skyU.uSunCol.value.copy(sun.color).multiplyScalar(day > 0.02 ? day * (1 - 0.7 * cloud) : 0.25);
   skyU.uCloudCol.value.setRGB(1, 1, 1).lerp(hor, 0.3 + 0.4 * cloud).multiplyScalar((0.25 + 0.75 * day) * 1.1);
   // el suelo que ve el entorno: lo que el sol y el cielo sacan del verde (o del gris en los urbanos)
   skyU.uGround.value.setHex(T.street ? 0x3a3d42 : 0x26381f).multiplyScalar(0.25 + 0.9 * day * (1 - 0.5 * cloud));
-  skyU.uT.value = sess.weather.clock * 60;
   fog.color.copy(hor);
   renderer.setClearColor(hor, 1);
   // al atardecer y de noche el cielo apenas alumbra: sube un poco lo que aporta el entorno para que se siga viendo
   scene.environmentIntensity = 1 + 0.6 * (1 - day) + 0.6 * warm;
-  updateEnv(now, [sunDir.x, sunDir.y, sunDir.z, zen.r, zen.g, zen.b, hor.r, hor.g, hor.b, cloud].map((v) => v.toFixed(2)).join());
+  updateEnv(now, [sunDir.x, sunDir.y, sunDir.z, zen.r, zen.g, zen.b, hor.r, hor.g, hor.b, cloud, wxMean, Math.min(rainHere, 3) / 2].map((v) => v.toFixed(2)).join());
   U.uFlood.value = (1 - day) * 0.8;
   world.lamps.visible = world.poles.visible = world.halos.visible = day < 0.5;
 }
@@ -1291,7 +1335,7 @@ function updateCamera(dt, now) {
   camera.near = onboard ? 0.25 : Math.max(1.5, dist * 0.04);
   camera.updateProjectionMatrix(); camera.lookAt(cur.look);
   camera.updateMatrixWorld(); camera.matrixWorldInverse.copy(camera.matrixWorld).invert();
-  sky.position.copy(cur.pos);
+  sky.position.copy(cur.pos); skyU.uCam.value.set(cur.pos.x, cur.pos.z);
   // escala de maqueta: de lejos la pista y los coches engordan para leerse; de cerca, tamaño real
   const halfH = dist * Math.tan(cur.fov * Math.PI / 360);
   const wT = onboard ? W_REAL : clamp(halfH * 0.0195, W_REAL, T.Wov);
@@ -1481,7 +1525,7 @@ return {
   selChanged() { busyUntil = performance.now() + 1300; if (camMode !== "circuito") { camFrom = { pos: cur.pos.clone(), look: cur.look.clone(), fov: cur.fov }; camT = 0; teleIdx = -1; } },
   dispose() {
     scene.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => m.dispose()); });
-    cloudTex.dispose(); if (sun.shadow.map) sun.shadow.map.dispose();
+    cloudTex.dispose(); wxTex.dispose(); if (sun.shadow.map) sun.shadow.map.dispose();
     for (const t of Object.values(DET)) t.dispose();
     envScene.children[0].material.dispose(); envCube.dispose(); if (envRT) envRT.dispose(); pmrem.dispose();
     if (post) { post.rt.dispose(); post.composer.dispose(); post.ao.dispose(); post.bloom.dispose(); }
