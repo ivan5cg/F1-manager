@@ -363,6 +363,12 @@ function collect() {
       const p = n.attributes.position.array, qn = n.attributes.normal.array;
       for (let i = 0; i < p.length; i += 3) { pos.push(p[i], p[i + 1], p[i + 2]); nor.push(qn[i], qn[i + 1], qn[i + 2]); col.push(c[0], c[1], c[2]); }
     },
+    /** Con sus propias normales (superficies redondas: tubos, esferas, tornos) y un solo color. */
+    keep(g, c) {
+      const n = g.index ? g.toNonIndexed() : g, cl = new Float32Array(n.attributes.position.count * 3);
+      for (let i = 0; i < cl.length; i += 3) cl.set(c, i);
+      n.setAttribute("color", new THREE.BufferAttribute(cl, 3)); this.raw(n);
+    },
     /** Geometría ya sin índices, con sus normales y colores de vértice. */
     raw(g) {
       const p = g.attributes.position.array, qn = g.attributes.normal.array, cc = g.attributes.color.array;
@@ -384,7 +390,7 @@ function collect() {
  */
 function skin(c, rings, col, crease = 0.75) {
   const R = rings.length, N = rings[0].length, pos = [], colr = [], idx = [];
-  for (let r = 0; r < R; r++) for (let j = 0; j < N; j++) { pos.push(...rings[r][j]); colr.push(...col(j / N, r)); }
+  for (let r = 0; r < R; r++) for (let j = 0; j < N; j++) { pos.push(...rings[r][j]); colr.push(...col(j / N, r, rings[r][j])); }
   for (let r = 0; r < R - 1; r++) for (let j = 0; j < N; j++) {
     const a = r * N + j, b = r * N + ((j + 1) % N), d = a + N, e = b + N;
     idx.push(a, b, d, b, e, d);
@@ -392,7 +398,7 @@ function skin(c, rings, col, crease = 0.75) {
   for (const r of [0, R - 1]) {
     const cI = pos.length / 3, m = [0, 0, 0];
     for (const p of rings[r]) { m[0] += p[0] / N; m[1] += p[1] / N; m[2] += p[2] / N; }
-    pos.push(...m); colr.push(...col(0.5, r));
+    pos.push(...m); colr.push(...col(0.5, r, m));
     for (let j = 0; j < N; j++) idx.push(cI, r * N + j, r * N + ((j + 1) % N));
   }
   const g = new THREE.BufferGeometry();
@@ -401,10 +407,13 @@ function skin(c, rings, col, crease = 0.75) {
   g.setIndex(idx);
   c.raw(toCreasedNormals(g, crease));
 }
-// Monoplaza genérico con las proporciones del reglamento de 2026 (x hacia delante, y arriba, z a la derecha; metros).
-function carGeometry() {
+// Monoplaza genérico con las formas de los coches de 2026 (x hacia delante, y arriba, z a la derecha; metros): morro
+// largo y bajo que se apoya en el alerón, piloto adelantado, pontones de boca alta que caen hacia atrás, aleta
+// triangular y alerón trasero de tres planos. hi = malla fina (de cerca); si no, una ligera para verlo de lejos.
+function carGeometry(hi) {
   const c = collect(), DEG = Math.PI / 180;
   const ACC = [0, 0, 1]; // línea de la decoración: el segundo color del equipo
+  const NA = hi ? 36 : 14, PER = hi ? 4 : 1; // puntos alrededor de cada sección y secciones intermedias por tramo
   /** Caja que se estrecha hacia delante (f) o hacia atrás (r): [escala alto, escala ancho, desplazamiento en alto]. */
   const part = (lx, ly, lz, x, y, z, colr, f, r) => {
     const g = new THREE.BoxGeometry(lx, ly, lz), p = g.attributes.position;
@@ -414,21 +423,28 @@ function carGeometry() {
     }
     c.add(g.translate(x, y, z), colr);
   };
-  /** Barra fina entre dos puntos (suspensión, soportes). */
+  /** Brazo de sección aplanada entre dos puntos (suspensión, soportes). */
   const strut = (a, b, t, colr) => {
     const A = new THREE.Vector3(...a), B = new THREE.Vector3(...b), d = B.clone().sub(A), len = d.length();
-    const g = new THREE.BoxGeometry(len, t * 0.6, t);
+    const g = new THREE.CylinderGeometry(t * 0.75, t * 0.75, len, hi ? 10 : 5, 1).rotateZ(Math.PI / 2).scale(1, 0.4, 1);
     g.applyMatrix4(new THREE.Matrix4().makeRotationFromQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1, 0, 0), d.normalize())));
-    c.add(g.translate((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2), colr);
+    c.keep(g.translate((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2), colr);
   };
-  const tube = (pts, rad, colr) => {
-    const g = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts.map((p) => new THREE.Vector3(...p))), 20, rad, 8, false);
-    const n = g.toNonIndexed(), cl = new Float32Array(n.attributes.position.count * 3);
-    for (let i = 0; i < cl.length; i += 3) cl.set(colr, i);
-    n.setAttribute("color", new THREE.BufferAttribute(cl, 3)); c.raw(n); // con sus normales: tubo redondo
+  const tube = (pts, rad, colr, closed = false) => c.keep(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts.map((p) => new THREE.Vector3(...p)), closed), hi ? 56 : 16, rad, hi ? 12 : 6, closed), colr);
+  const ball = (rx, ry, rz, x, y, z, colr) => c.keep(new THREE.SphereGeometry(1, hi ? 20 : 8, hi ? 14 : 6).scale(rx, ry, rz).translate(x, y, z), colr);
+  /** Secciones intermedias suaves (Catmull-Rom) entre las que se dan a mano. */
+  const resample = (secs, per = PER) => {
+    if (per <= 1) return secs;
+    const m = secs.length, at = (i) => secs[clamp(i, 0, m - 1)], out = [];
+    for (let i = 0; i < m - 1; i++) for (let k = 0; k < per; k++) {
+      const t = k / per;
+      out.push(at(i).map((p1, j) => { const p0 = at(i - 1)[j], p2 = at(i + 1)[j], p3 = at(i + 2)[j]; return 0.5 * (2 * p1 + (p2 - p0) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t * t + (3 * p1 - p0 - 3 * p2 + p3) * t * t * t); }));
+    }
+    out.push(secs[m - 1]);
+    return out;
   };
   /** Sección de carrocería: superelipse con distinto alto por arriba (hT) y por abajo (hB). */
-  const sec = (x, yc, zc, hw, hT, hB, e = 2.6, N = 20) => {
+  const sec = (x, yc, zc, hw, hT, hB, e = 2.6, N = NA) => {
     const ring = [];
     for (let j = 0; j < N; j++) {
       const a = (j / N) * Math.PI * 2, cy = Math.cos(a), sz = Math.sin(a);
@@ -438,63 +454,75 @@ function carGeometry() {
     return ring;
   };
   const deg = (u) => { const a = u * 360; return a > 180 ? 360 - a : a; }; // 0 = arriba, 180 = abajo
-  // decoración por altura: arriba el color del equipo, una línea del segundo color, un tono más oscuro y fibra de carbono abajo
-  const livery = (a) => (a < 64 ? TEAM : a < 80 ? ACC : a < 124 ? TEAM2 : BLACK);
-  /** Perfil de ala (10 puntos, cuerda 1 hacia atrás) y ala tendida entre estaciones [z, x del borde de ataque, y, cuerda, ángulo]. */
-  const FOIL = [[0, 0], [0.04, 0.05], [0.22, 0.085], [0.52, 0.07], [0.82, 0.03], [1, 0], [0.82, -0.012], [0.52, -0.022], [0.22, -0.028], [0.04, -0.025]];
-  const wing = (st, colr) => skin(c, st.map(([z, x0, y0, ch, th]) => FOIL.map(([px, py]) => [x0 - px * ch * Math.cos(th), y0 + px * ch * Math.sin(th) + py * ch, z])), () => colr, 0.9);
-  /** Chapa fina recortada: contorno en el plano x-y (a la altura z) o en planta x-z (a la altura y). */
-  const plate = (pts, z, t, colr) => c.add(new THREE.ExtrudeGeometry(new THREE.Shape(pts.map(([x, y]) => new THREE.Vector2(x, y))), { depth: t, bevelEnabled: false }).translate(0, 0, z - t / 2), colr);
-  const plateXZ = (pts, y, t, colr) => c.add(new THREE.ExtrudeGeometry(new THREE.Shape(pts.map(([x, z]) => new THREE.Vector2(x, z))), { depth: t, bevelEnabled: false }).rotateX(Math.PI / 2).translate(0, y + t, 0), colr);
+  // decoración: arriba el color del equipo, una línea del segundo color a lo largo del coche, un tono más
+  // oscuro por debajo y fibra de carbono vista en los bajos y en la zaga
+  const livery = (a, x) => {
+    const band = 72;
+    if (a > 128 || (x < -0.9 && a > 98)) return BLACK;
+    return a < band - 8 ? TEAM : a < band + 6 ? ACC : TEAM2;
+  };
+  /** Perfil de ala (cuerda 1 hacia atrás) y ala tendida entre estaciones [z, x del borde de ataque, y, cuerda, ángulo]. */
+  const FOIL0 = [[0, 0], [0.04, 0.05], [0.22, 0.085], [0.52, 0.07], [0.82, 0.03], [1, 0], [0.82, -0.012], [0.52, -0.022], [0.22, -0.028], [0.04, -0.025]];
+  const FOIL = hi ? [[0, 0], [0.012, 0.028], [0.04, 0.05], [0.11, 0.072], [0.22, 0.085], [0.37, 0.082], [0.52, 0.07], [0.68, 0.052], [0.82, 0.03], [0.93, 0.012], [1, 0],
+    [0.93, -0.006], [0.82, -0.012], [0.68, -0.018], [0.52, -0.022], [0.37, -0.026], [0.22, -0.028], [0.11, -0.028], [0.04, -0.025], [0.012, -0.016]] : FOIL0;
+  const wing = (st, colr) => skin(c, resample(st, hi ? 3 : 1).map(([z, x0, y0, ch, th]) => FOIL.map(([px, py]) => [x0 - px * ch * Math.cos(th), y0 + px * ch * Math.sin(th) + py * ch, z])), () => colr, 0.9);
+  /** Chapa recortada: contorno en el plano x-y (a la altura z) o en planta x-z (a la altura y). round redondea las esquinas. */
+  const outline = (pts, round) => new THREE.Shape(hi && round ? new THREE.CatmullRomCurve3(pts.map(([x, y]) => new THREE.Vector3(x, y, 0)), true, "catmullrom", round).getPoints(pts.length * 7).map((p) => new THREE.Vector2(p.x, p.y)) : pts.map(([x, y]) => new THREE.Vector2(x, y)));
+  const slab = (pts, t, round) => new THREE.ExtrudeGeometry(outline(pts, round), hi ? { depth: t * 0.6, bevelEnabled: true, bevelThickness: t * 0.2, bevelSize: t * 0.2, bevelSegments: 1 } : { depth: t, bevelEnabled: false });
+  const plate = (pts, z, t, colr, round = 0) => c.add(slab(pts, t, round).translate(0, 0, z - (hi ? t * 0.3 : t / 2)), colr);
+  const plateXZ = (pts, y, t, colr, round = 0) => c.add(slab(pts, t, round).rotateX(Math.PI / 2).translate(0, y + t, 0), colr);
 
-  // Formas tomadas de los coches de 2026: morro largo y bajo que se apoya en el alerón, piloto adelantado,
-  // pontones con la boca alta y estrecha que caen hacia atrás, aleta triangular y alerón trasero de tres planos.
   // casco: [x, y del centro, medio ancho, alto por arriba, alto por abajo]
   const spine = [[3.05, 0.15, 0.07, 0.03, 0.03], [2.9, 0.165, 0.1, 0.045, 0.04], [2.6, 0.2, 0.125, 0.06, 0.05], [2.2, 0.27, 0.15, 0.085, 0.07], [1.8, 0.37, 0.19, 0.15, 0.13],
     [1.4, 0.43, 0.25, 0.19, 0.18], [1.0, 0.46, 0.31, 0.22, 0.22], [0.6, 0.47, 0.37, 0.23, 0.26], [0.2, 0.48, 0.4, 0.24, 0.29], [-0.1, 0.5, 0.39, 0.3, 0.3],
     [-0.5, 0.52, 0.34, 0.33, 0.31], [-1.0, 0.5, 0.27, 0.3, 0.28], [-1.5, 0.45, 0.2, 0.24, 0.22], [-2.0, 0.4, 0.13, 0.17, 0.15], [-2.4, 0.37, 0.07, 0.1, 0.08]];
   // el hueco del habitáculo va en negro
-  skin(c, spine.map((q) => sec(q[0], q[1], 0, q[2], q[3], q[4])), (u, r) => (r >= 6 && r <= 8 && deg(u) < 40 ? BLACK : livery(deg(u))));
+  skin(c, resample(spine).map((q) => sec(q[0], q[1], 0, q[2], q[3], q[4])), (u, r, p) => (p[0] > 0.24 && p[0] < 1.04 && deg(u) < 42 - 55 * Math.abs(p[0] - 0.64) ** 2 ? BLACK : livery(deg(u), p[0])));
+  // borde acolchado del habitáculo
+  if (hi) tube([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].map((k) => { const a = (k / 12) * Math.PI * 2, x = 0.62 + 0.44 * Math.cos(a); return [x, 0.705 - 0.03 * Math.cos(a) + 0.012, 0.215 * Math.sin(a)]; }), 0.024, BLACK, true);
   for (const s of [1, -1]) {
     // pontón: boca apaisada y alta, vientre recogido (se ve el suelo por debajo) y lomo que baja hasta el suelo
-    skin(c, [[0.72, 0.56, 0.52, 0.25, 0.085, 0.09], [0.66, 0.555, 0.52, 0.275, 0.1, 0.11], [0.35, 0.5, 0.53, 0.3, 0.15, 0.2], [-0.2, 0.43, 0.52, 0.3, 0.17, 0.2], [-0.8, 0.33, 0.45, 0.26, 0.14, 0.14], [-1.3, 0.24, 0.36, 0.18, 0.08, 0.07], [-1.7, 0.19, 0.28, 0.08, 0.04, 0.04]]
-      .map((q) => sec(q[0], q[1], q[2] * s, q[3], q[4], q[5], 3.4, 16)), (u, r) => (r === 0 ? BLACK : livery(deg(u))));
+    const pod = [[0.72, 0.56, 0.52, 0.25, 0.085, 0.09], [0.66, 0.555, 0.52, 0.275, 0.1, 0.11], [0.35, 0.5, 0.53, 0.3, 0.15, 0.2], [-0.2, 0.43, 0.52, 0.3, 0.17, 0.2], [-0.8, 0.33, 0.45, 0.26, 0.14, 0.14], [-1.3, 0.24, 0.36, 0.18, 0.08, 0.07], [-1.7, 0.19, 0.28, 0.08, 0.04, 0.04]];
+    skin(c, [pod[0], ...resample(pod.slice(1))].map((q) => sec(q[0], q[1], q[2] * s, q[3], q[4], q[5], 3.4, hi ? 28 : 12)), (u, r, p) => (r === 0 ? BLACK : livery(deg(u), p[0])));
     // deflectores tras la rueda delantera y aleta del borde del suelo
-    plate([[1.36, 0.1], [1.36, 0.4], [1.0, 0.44], [0.9, 0.1]], 0.5 * s, 0.02, BLACK);
-    plate([[1.2, 0.1], [1.2, 0.3], [0.95, 0.3], [0.9, 0.1]], 0.66 * s, 0.018, BLACK);
+    plate([[1.36, 0.1], [1.36, 0.4], [1.0, 0.44], [0.9, 0.1]], 0.5 * s, 0.02, BLACK, 0.15);
+    plate([[1.2, 0.1], [1.2, 0.3], [0.95, 0.3], [0.9, 0.1]], 0.66 * s, 0.018, BLACK, 0.15);
     plate([[0.9, 0.09], [0.86, 0.16], [-1.1, 0.14], [-1.2, 0.09]], 0.8 * s, 0.018, BLACK);
   }
   // toma de aire sobre el piloto, cámara de tele y aleta triangular de la tapa del motor
-  skin(c, [[0.0, 0.98, 0.115, 0.11, 0.1], [-0.06, 0.985, 0.13, 0.12, 0.11], [-0.4, 0.99, 0.13, 0.11, 0.13], [-0.9, 0.9, 0.1, 0.09, 0.15], [-1.5, 0.74, 0.05, 0.05, 0.1]]
-    .map((q) => sec(q[0], q[1], 0, q[2], q[3], q[4], 2.2, 14)), (u, r) => (r === 0 ? BLACK : TEAM));
-  part(0.06, 0.09, 0.03, -0.3, 1.13, 0, BLACK); part(0.26, 0.04, 0.34, -0.3, 1.185, 0, BLACK, [0.5, 0.8], [1, 1]);
-  plate([[-0.75, 0.6], [-0.6, 1.07], [-1.0, 1.05], [-1.82, 0.84], [-1.97, 0.5]], 0, 0.03, TEAM);
-  // fondo plano (con su forma en planta), difusor y estructura trasera con la luz de lluvia
-  plateXZ([[1.78, 0.2], [1.3, 0.52], [1.0, 0.79], [-1.15, 0.8], [-1.32, 0.6], [-2.1, 0.56], [-2.1, -0.56], [-1.32, -0.6], [-1.15, -0.8], [1.0, -0.79], [1.3, -0.52], [1.78, -0.2]], 0.06, 0.035, BLACK);
+  const box = [[0.0, 0.98, 0.115, 0.11, 0.1], [-0.06, 0.985, 0.13, 0.12, 0.11], [-0.4, 0.99, 0.13, 0.11, 0.13], [-0.9, 0.9, 0.1, 0.09, 0.15], [-1.5, 0.74, 0.05, 0.05, 0.1]];
+  skin(c, [box[0], ...resample(box.slice(1))].map((q) => sec(q[0], q[1], 0, q[2], q[3], q[4], 2.2, hi ? 24 : 10)), (u, r) => (r === 0 ? BLACK : TEAM));
+  part(0.06, 0.09, 0.03, -0.3, 1.13, 0, BLACK);
+  wing([-0.17, 0, 0.17].map((z) => [z, -0.18, 1.18, 0.24, 0]), BLACK); // cámara en T
+  plate([[-0.75, 0.6], [-0.6, 1.07], [-1.0, 1.05], [-1.82, 0.84], [-1.97, 0.5]], 0, 0.03, TEAM, 0.08);
+  // fondo plano (con su forma en planta), difusor y estructura trasera con el escape y la luz de lluvia
+  plateXZ([[1.78, 0.2], [1.3, 0.52], [1.0, 0.79], [-1.15, 0.8], [-1.32, 0.6], [-2.1, 0.56], [-2.1, -0.56], [-1.32, -0.6], [-1.15, -0.8], [1.0, -0.79], [1.3, -0.52], [1.78, -0.2]], 0.06, 0.035, BLACK, 0.12);
   part(0.7, 0.2, 1.1, -2.0, 0.17, 0, BLACK, [0.2, 1, -0.08], [1, 1]);
-  for (const z of [-0.36, -0.12, 0.12, 0.36]) plate([[-1.7, 0.08], [-2.34, 0.1], [-2.34, 0.27]], z, 0.014, BLACK); // aletas del difusor
-  c.add(new THREE.CylinderGeometry(0.07, 0.085, 0.5, 10).rotateZ(Math.PI / 2).translate(-2.4, 0.36, 0), BLACK); part(0.05, 0.11, 0.13, -2.67, 0.36, 0, RED);
+  for (const z of [-0.42, -0.25, -0.08, 0.08, 0.25, 0.42]) plate([[-1.7, 0.08], [-2.34, 0.1], [-2.34, 0.27]], z, 0.014, BLACK); // aletas del difusor
+  c.keep(new THREE.CylinderGeometry(0.07, 0.085, 0.5, hi ? 20 : 8).rotateZ(Math.PI / 2).translate(-2.4, 0.36, 0), BLACK);
+  c.keep(new THREE.CylinderGeometry(0.05, 0.05, 0.22, hi ? 16 : 6, 1, true).rotateZ(Math.PI / 2).translate(-2.3, 0.5, 0), [0, 0.3, 0]);
+  part(0.05, 0.11, 0.13, -2.67, 0.36, 0, RED);
   // habitáculo: casco del piloto con su visera, halo y retrovisores
-  { const g = new THREE.SphereGeometry(0.135, 16, 12).toNonIndexed(), p = g.attributes.position, cl = new Float32Array(p.count * 3);
+  { const g = new THREE.SphereGeometry(0.135, hi ? 28 : 12, hi ? 20 : 8).toNonIndexed(), p = g.attributes.position, cl = new Float32Array(p.count * 3);
     for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i), z = p.getZ(i); cl.set(x > 0.035 && y > -0.03 && y < 0.06 ? [0, 0.02, 0] : Math.abs(z) < 0.035 && y > 0 ? ACC : WHITE, i * 3); }
     g.setAttribute("color", new THREE.BufferAttribute(cl, 3)); c.raw(g.translate(0.5, 0.79, 0)); }
-  tube([[-0.05, 0.9, 0.31], [0.45, 0.93, 0.3], [0.85, 0.88, 0.21], [1.05, 0.82, 0], [0.85, 0.88, -0.21], [0.45, 0.93, -0.3], [-0.05, 0.9, -0.31]], 0.04, TEAM2);
+  tube([[-0.05, 0.9, 0.31], [0.2, 0.925, 0.305], [0.45, 0.93, 0.3], [0.68, 0.915, 0.265], [0.85, 0.88, 0.2], [0.98, 0.845, 0.1], [1.05, 0.82, 0], [0.98, 0.845, -0.1], [0.85, 0.88, -0.2], [0.68, 0.915, -0.265], [0.45, 0.93, -0.3], [0.2, 0.925, -0.305], [-0.05, 0.9, -0.31]], 0.04, TEAM2);
   tube([[1.05, 0.82, 0], [1.14, 0.75, 0], [1.24, 0.64, 0]], 0.03, TEAM2);
   for (const s of [1, -1]) {
-    const g = new THREE.SphereGeometry(1, 10, 8).scale(0.05, 0.05, 0.11).toNonIndexed(), cl = new Float32Array(g.attributes.position.count * 3);
-    for (let i = 0; i < cl.length; i += 3) cl.set(TEAM, i);
-    g.setAttribute("color", new THREE.BufferAttribute(cl, 3)); c.raw(g.translate(0.95, 0.74, 0.66 * s));
+    ball(0.05, 0.05, 0.11, 0.95, 0.74, 0.66 * s, TEAM); ball(0.012, 0.042, 0.095, 0.915, 0.74, 0.66 * s, [0, 0.5, 0]);
     strut([0.95, 0.66, 0.36 * s], [0.95, 0.73, 0.58 * s], 0.025, BLACK);
   }
-  // alerón delantero: plano principal en V de lado a lado (el morro se apoya en él), dos flaps por lado y derivas con su aleta
+  if (hi) { c.keep(new THREE.CylinderGeometry(0.006, 0.006, 0.22, 6).translate(1.9, 0.63, 0), BLACK); c.keep(new THREE.CylinderGeometry(0.005, 0.005, 0.12, 6).translate(2.3, 0.4, 0.05), BLACK); } // antena y pitot
+  // alerón delantero: plano principal en V de lado a lado (el morro se apoya en él), tres flaps por lado y derivas con su aleta
   const fwX = (z) => 3.0 - 0.3 * Math.abs(z) / 0.95, fwY = (z) => 0.085 + 0.025 * Math.abs(z) / 0.95;
-  wing([-0.95, -0.7, -0.45, -0.2, 0, 0.2, 0.45, 0.7, 0.95].map((z) => [z, fwX(z), fwY(z), 0.34, 4 * DEG]), TEAM);
+  wing([-0.95, -0.7, -0.45, -0.2, 0, 0.2, 0.45, 0.7, 0.95].map((z) => [z, fwX(z), fwY(z), 0.3, 4 * DEG]), TEAM);
   for (const s of [1, -1]) {
-    wing([0.14, 0.4, 0.66, 0.93].map((z) => [z * s, fwX(z) - 0.27, fwY(z) + 0.06, 0.22, 16 * DEG]), TEAM2);
-    wing([0.16, 0.42, 0.67, 0.93].map((z) => [z * s, fwX(z) - 0.45, fwY(z) + 0.125, 0.19, 28 * DEG]), ACC);
-    plate([[2.74, 0.05], [2.72, 0.2], [2.4, 0.36], [2.05, 0.38], [2.05, 0.05]], 0.945 * s, 0.02, TEAM);
-    part(0.34, 0.016, 0.1, 2.36, 0.23, 0.995 * s, TEAM, [0.6, 0.6], [1, 1, 0.03]);
-    part(0.5, 0.016, 0.08, 2.36, 0.055, 0.99 * s, BLACK);
+    wing([0.13, 0.4, 0.66, 0.93].map((z) => [z * s, fwX(z) - 0.24, fwY(z) + 0.045, 0.19, 13 * DEG]), TEAM2);
+    wing([0.15, 0.42, 0.67, 0.93].map((z) => [z * s, fwX(z) - 0.39, fwY(z) + 0.095, 0.17, 22 * DEG]), BLACK);
+    wing([0.17, 0.43, 0.68, 0.93].map((z) => [z * s, fwX(z) - 0.52, fwY(z) + 0.16, 0.15, 32 * DEG]), ACC);
+    plate([[2.76, 0.05], [2.74, 0.19], [2.5, 0.32], [2.2, 0.39], [2.02, 0.39], [2.02, 0.05]], 0.945 * s, 0.02, TEAM, 0.12);
+    wing([0.95, 1.0, 1.03].map((z) => [z * s, 2.55, 0.24, 0.34, 6 * DEG]), TEAM);  // aleta exterior de la deriva
+    part(0.6, 0.016, 0.09, 2.36, 0.055, 0.99 * s, BLACK);
   }
   // alerón trasero: tres planos entre dos derivas que se estrechan hacia abajo, sobre dos pilares
   const spoon = (z) => 0.035 * (1 - (z / 0.6) ** 2);
@@ -502,11 +530,12 @@ function carGeometry() {
   wing(span.map((z) => [z, -1.98, 0.81 - spoon(z), 0.38, 8 * DEG]), BLACK);
   wing(span.map((z) => [z, -2.34, 0.865 - spoon(z) * 0.6, 0.2, 24 * DEG]), BLACK);
   wing(span.map((z) => [z, -2.5, 0.935 - spoon(z) * 0.3, 0.13, 38 * DEG]), TEAM);
+  if (hi) c.keep(new THREE.CapsuleGeometry(0.03, 0.2, 4, 10).rotateZ(Math.PI / 2).translate(-2.2, 0.9, 0), BLACK); // actuador del ala
   for (const s of [1, -1]) {
-    plate([[-1.9, 0.56], [-1.88, 0.99], [-2.62, 1.04], [-2.66, 0.6], [-2.46, 0.3], [-2.22, 0.3]], 0.61 * s, 0.02, TEAM);
-    plate([[-1.84, 0.42], [-2.02, 0.81], [-2.15, 0.81], [-2.0, 0.42]], 0.07 * s, 0.02, BLACK);
+    plate([[-1.9, 0.56], [-1.88, 0.99], [-2.62, 1.04], [-2.66, 0.6], [-2.46, 0.3], [-2.22, 0.3]], 0.61 * s, 0.02, TEAM, 0.1);
+    plate([[-1.84, 0.42], [-2.02, 0.81], [-2.15, 0.81], [-2.0, 0.42]], 0.07 * s, 0.02, BLACK, 0.1);
   }
-  // suspensión: dos triángulos por rueda y la barra de dirección o el palier
+  // suspensión: dos triángulos por rueda, tirante, barra de dirección o palier, y el portamanguetas con su conducto de freno
   for (const s of [1, -1]) {
     const fw = [1.8, 0.36, 0.7 * s], rw = [-1.7, 0.36, 0.68 * s];
     for (const y of [0.47, 0.27]) {
@@ -514,28 +543,31 @@ function carGeometry() {
       strut([-1.25, y - 0.02, 0.22 * s], [rw[0], y - 0.03, rw[2]], 0.035, BLACK); strut([-2.05, y - 0.06, 0.12 * s], [rw[0], y - 0.03, rw[2]], 0.035, BLACK);
     }
     strut([1.6, 0.36, 0.2 * s], [1.72, 0.38, fw[2]], 0.025, BLACK);
-    strut([1.75, 0.5, 0.2 * s], [1.8, 0.24, 0.62 * s], 0.03, BLACK); // tirante
+    strut([1.75, 0.5, 0.2 * s], [1.8, 0.24, 0.62 * s], 0.03, BLACK);
     strut([-1.7, 0.36, 0.16 * s], rw, 0.045, BLACK);
+    for (const w of [fw, rw]) c.keep(new THREE.CylinderGeometry(0.2, 0.2, 0.12, hi ? 24 : 8).rotateX(Math.PI / 2).translate(w[0], 0.36, w[2] - 0.05 * s), [0, 0.03, 0]);
   }
   return c.done();
 }
-/** Rueda: neumático de hombros redondos, tapacubos con el aro metálico y la banda del compuesto en el flanco. */
-function wheelGeometry() {
-  const c = collect(); // r = color del compuesto, g = gris fijo, b = metal
-  const prof = [[0.2, -0.168], [0.295, -0.172], [0.33, -0.163], [0.35, -0.14], [0.36, -0.1], [0.36, 0.1], [0.35, 0.14], [0.33, 0.163], [0.295, 0.172], [0.2, 0.168]].map(([r, a]) => new THREE.Vector2(r, a));
-  const flat = (g, colr) => { const n = g.index ? g.toNonIndexed() : g, cl = new Float32Array(n.attributes.position.count * 3); for (let i = 0; i < cl.length; i += 3) cl.set(colr, i); n.setAttribute("color", new THREE.BufferAttribute(cl, 3)); c.raw(n); };
-  flat(new THREE.LatheGeometry(prof, 28).rotateX(Math.PI / 2), [0, 0.05, 0]);
+/** Rueda: neumático de flanco abombado, tapacubos ligeramente cónico con el aro metálico y la banda del compuesto. */
+function wheelGeometry(hi) {
+  const c = collect(), SEG = hi ? 48 : 16; // r = color del compuesto, g = gris fijo, b = metal
+  const prof = (hi ? [[0.205, -0.165], [0.24, -0.172], [0.285, -0.176], [0.315, -0.172], [0.337, -0.16], [0.351, -0.14], [0.358, -0.115], [0.36, -0.07], [0.36, 0.07], [0.358, 0.115], [0.351, 0.14], [0.337, 0.16], [0.315, 0.172], [0.285, 0.176], [0.24, 0.172], [0.205, 0.165]]
+    : [[0.2, -0.168], [0.295, -0.172], [0.34, -0.155], [0.36, -0.1], [0.36, 0.1], [0.34, 0.155], [0.295, 0.172], [0.2, 0.168]]).map(([r, a]) => new THREE.Vector2(r, a));
+  c.keep(new THREE.LatheGeometry(prof, SEG).rotateX(Math.PI / 2), [0, 0.05, 0]);
   for (const sz of [1, -1]) {
     const face = (g) => (sz < 0 ? g.rotateY(Math.PI) : g);
-    flat(face(new THREE.RingGeometry(0.245, 0.285, 28)).translate(0, 0, sz * 0.173), [1, 0, 0]);   // banda del compuesto
-    flat(face(new THREE.RingGeometry(0.2, 0.228, 28)).translate(0, 0, sz * 0.169), [0, 0.55, 1]);   // aro de la llanta
-    flat(face(new THREE.CircleGeometry(0.2, 24)).translate(0, 0, sz * 0.16), [0, 0.1, 0]);          // tapacubos
-    flat(face(new THREE.CircleGeometry(0.055, 12)).translate(0, 0, sz * 0.166), [0, 0.45, 1]);      // tuerca
-    for (let k = 0; k < 2; k++) c.add(new THREE.BoxGeometry(0.09, 0.022, 0.006).translate(0.31, 0, sz * 0.166).rotateZ(k * Math.PI + 0.4), [1, 0, 0]);
+    c.keep(face(new THREE.RingGeometry(0.248, 0.286, SEG)).translate(0, 0, sz * 0.1765), [1, 0, 0]);   // banda del compuesto
+    c.keep(face(new THREE.RingGeometry(0.196, 0.226, SEG)).translate(0, 0, sz * 0.17), [0, 0.55, 1]);  // aro de la llanta
+    // tapacubos: un cono muy tendido, con la tuerca en el centro
+    c.keep(face(new THREE.ConeGeometry(0.2, 0.022, SEG, 1, true).rotateX(Math.PI / 2)).translate(0, 0, sz * 0.166), [0, 0.085, 0]);
+    c.keep(face(new THREE.CylinderGeometry(0.045, 0.055, 0.03, hi ? 12 : 6).rotateX(Math.PI / 2)).translate(0, 0, sz * 0.178), [0, 0.45, 1]);
+    for (let k = 0; k < 2; k++) c.add(new THREE.BoxGeometry(0.09, 0.022, 0.006).translate(0.31, 0, sz * 0.172).rotateZ(k * Math.PI + 0.4), [1, 0, 0]);
   }
   return c.done();
 }
-const CAR_GEO = carGeometry(), WHEEL_GEO = wheelGeometry();
+// dos mallas: la fina para verlo de cerca y una ligera para la vista de circuito y los dispositivos justos
+const CAR_GEO = carGeometry(true), WHEEL_GEO = wheelGeometry(true), CAR_LO = carGeometry(false), WHEEL_LO = wheelGeometry(false);
 // volante con las manos del piloto (gira con la dirección)
 const STEER_GEO = (() => {
   const c = collect();
@@ -969,7 +1001,7 @@ function buildWorld() {
   // segundo color por coche
   const c2a = new Float32Array(NC * 3);
   sess.cars.forEach((c, i) => { col.set(SECOND[c.team.id] || "#e2e4e8"); c2a.set([col.r, col.g, col.b], i * 3); });
-  CAR_GEO.setAttribute("aCol2", new THREE.InstancedBufferAttribute(c2a, 3));
+  CAR_GEO.setAttribute("aCol2", new THREE.InstancedBufferAttribute(c2a, 3)); CAR_LO.setAttribute("aCol2", CAR_GEO.attributes.aCol2);
   const steer = inst(STEER_GEO, STEER_MAT, NC, 10);
   // lámina de dorsales
   const nc = document.createElement("canvas"); nc.width = NUM_COLS * 64; nc.height = NUM_ROWS * 64;
@@ -1457,6 +1489,9 @@ function draw3d(dt, now) {
   if (!opt.paused()) U.uTime.value = (U.uTime.value + dt) % 1000;
   U.uLight.value = rainHere > 0.3 ? (Math.floor(now / 160) % 2 ? 1 : 0.1) : 0.25;
   const { cars, wheels, blobs, spray, discs } = world;
+  // malla fina solo de cerca y con calidad alta
+  const fine = q >= 2 && far < 0.5;
+  cars.geometry = fine ? CAR_GEO : CAR_LO; wheels.geometry = fine ? WHEEL_GEO : WHEEL_LO;
   const dr = W * 0.6 * far;
   let i = 0, ns = 0;
   for (const p of list) {
