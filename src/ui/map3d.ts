@@ -447,68 +447,74 @@ function carGeometry() {
   const plate = (pts, z, t, colr) => c.add(new THREE.ExtrudeGeometry(new THREE.Shape(pts.map(([x, y]) => new THREE.Vector2(x, y))), { depth: t, bevelEnabled: false }).translate(0, 0, z - t / 2), colr);
   const plateXZ = (pts, y, t, colr) => c.add(new THREE.ExtrudeGeometry(new THREE.Shape(pts.map(([x, z]) => new THREE.Vector2(x, z))), { depth: t, bevelEnabled: false }).rotateX(Math.PI / 2).translate(0, y + t, 0), colr);
 
-  // casco: morro bajo y fino, monocasco que sube hasta el habitáculo y tapa del motor que se afila hacia atrás
-  const spine = [[3.12, 0.2, 0.06, 0.025, 0.025], [3.0, 0.21, 0.105, 0.045, 0.04], [2.7, 0.25, 0.145, 0.065, 0.055], [2.3, 0.31, 0.185, 0.09, 0.08], [1.9, 0.38, 0.225, 0.125, 0.12],
-    [1.5, 0.43, 0.27, 0.165, 0.17], [1.1, 0.46, 0.325, 0.2, 0.22], [0.7, 0.47, 0.375, 0.22, 0.26], [0.3, 0.48, 0.4, 0.235, 0.29], [-0.1, 0.5, 0.39, 0.3, 0.3],
-    [-0.5, 0.52, 0.35, 0.34, 0.31], [-1.0, 0.51, 0.29, 0.33, 0.29], [-1.5, 0.47, 0.22, 0.27, 0.24], [-2.0, 0.42, 0.14, 0.19, 0.17], [-2.45, 0.38, 0.07, 0.1, 0.09]];
+  // Formas tomadas de los coches de 2026: morro largo y bajo que se apoya en el alerón, piloto adelantado,
+  // pontones con la boca alta y estrecha que caen hacia atrás, aleta triangular y alerón trasero de tres planos.
+  // casco: [x, y del centro, medio ancho, alto por arriba, alto por abajo]
+  const spine = [[3.05, 0.15, 0.07, 0.03, 0.03], [2.9, 0.165, 0.1, 0.045, 0.04], [2.6, 0.2, 0.125, 0.06, 0.05], [2.2, 0.27, 0.15, 0.085, 0.07], [1.8, 0.37, 0.19, 0.15, 0.13],
+    [1.4, 0.43, 0.25, 0.19, 0.18], [1.0, 0.46, 0.31, 0.22, 0.22], [0.6, 0.47, 0.37, 0.23, 0.26], [0.2, 0.48, 0.4, 0.24, 0.29], [-0.1, 0.5, 0.39, 0.3, 0.3],
+    [-0.5, 0.52, 0.34, 0.33, 0.31], [-1.0, 0.5, 0.27, 0.3, 0.28], [-1.5, 0.45, 0.2, 0.24, 0.22], [-2.0, 0.4, 0.13, 0.17, 0.15], [-2.4, 0.37, 0.07, 0.1, 0.08]];
   // el hueco del habitáculo va en negro
   skin(c, spine.map((q) => sec(q[0], q[1], 0, q[2], q[3], q[4])), (u, r) => (r >= 6 && r <= 8 && deg(u) < 40 ? BLACK : livery(deg(u))));
-  // pontones: boca detrás de las ruedas delanteras y cintura de botella hacia atrás
   for (const s of [1, -1]) {
-    skin(c, [[0.86, 0.5, 0.52, 0.2, 0.12, 0.13], [0.8, 0.5, 0.52, 0.225, 0.14, 0.15], [0.45, 0.47, 0.52, 0.285, 0.19, 0.2], [-0.15, 0.44, 0.5, 0.3, 0.2, 0.22], [-0.8, 0.38, 0.42, 0.27, 0.17, 0.18], [-1.4, 0.31, 0.3, 0.2, 0.12, 0.12], [-1.95, 0.26, 0.2, 0.1, 0.07, 0.06]]
-      .map((q) => sec(q[0], q[1], q[2] * s, q[3], q[4], q[5], 3.2, 16)), (u, r) => (r === 0 ? BLACK : livery(deg(u))));
-    // deflector tras la rueda delantera y aleta del borde del suelo
-    plate([[1.38, 0.1], [1.38, 0.43], [0.98, 0.37], [0.92, 0.1]], 0.5 * s, 0.02, BLACK);
-    plate([[0.9, 0.09], [0.86, 0.17], [-1.1, 0.15], [-1.2, 0.09]], 0.8 * s, 0.018, BLACK);
+    // pontón: boca apaisada y alta, vientre recogido (se ve el suelo por debajo) y lomo que baja hasta el suelo
+    skin(c, [[0.72, 0.56, 0.52, 0.25, 0.085, 0.09], [0.66, 0.555, 0.52, 0.275, 0.1, 0.11], [0.35, 0.5, 0.53, 0.3, 0.15, 0.2], [-0.2, 0.43, 0.52, 0.3, 0.17, 0.2], [-0.8, 0.33, 0.45, 0.26, 0.14, 0.14], [-1.3, 0.24, 0.36, 0.18, 0.08, 0.07], [-1.7, 0.19, 0.28, 0.08, 0.04, 0.04]]
+      .map((q) => sec(q[0], q[1], q[2] * s, q[3], q[4], q[5], 3.4, 16)), (u, r) => (r === 0 ? BLACK : livery(deg(u))));
+    // deflectores tras la rueda delantera y aleta del borde del suelo
+    plate([[1.36, 0.1], [1.36, 0.4], [1.0, 0.44], [0.9, 0.1]], 0.5 * s, 0.02, BLACK);
+    plate([[1.2, 0.1], [1.2, 0.3], [0.95, 0.3], [0.9, 0.1]], 0.66 * s, 0.018, BLACK);
+    plate([[0.9, 0.09], [0.86, 0.16], [-1.1, 0.14], [-1.2, 0.09]], 0.8 * s, 0.018, BLACK);
   }
-  // toma de aire sobre el piloto, cámara de tele y aleta de la tapa del motor
-  skin(c, [[-0.02, 0.98, 0.11, 0.12, 0.1], [-0.08, 0.985, 0.125, 0.13, 0.11], [-0.4, 1.0, 0.13, 0.13, 0.13], [-0.9, 0.93, 0.1, 0.11, 0.15], [-1.5, 0.8, 0.05, 0.06, 0.1]]
+  // toma de aire sobre el piloto, cámara de tele y aleta triangular de la tapa del motor
+  skin(c, [[0.0, 0.98, 0.115, 0.11, 0.1], [-0.06, 0.985, 0.13, 0.12, 0.11], [-0.4, 0.99, 0.13, 0.11, 0.13], [-0.9, 0.9, 0.1, 0.09, 0.15], [-1.5, 0.74, 0.05, 0.05, 0.1]]
     .map((q) => sec(q[0], q[1], 0, q[2], q[3], q[4], 2.2, 14)), (u, r) => (r === 0 ? BLACK : TEAM));
-  part(0.3, 0.045, 0.11, -0.4, 1.185, 0, BLACK, [0.5, 0.6], [1, 1]); part(0.06, 0.07, 0.03, -0.4, 1.14, 0, BLACK);
-  plate([[-0.8, 0.62], [-0.72, 1.0], [-1.2, 1.035], [-2.02, 0.98], [-2.3, 0.52]], 0, 0.03, TEAM);
+  part(0.06, 0.09, 0.03, -0.3, 1.13, 0, BLACK); part(0.26, 0.04, 0.34, -0.3, 1.185, 0, BLACK, [0.5, 0.8], [1, 1]);
+  plate([[-0.75, 0.6], [-0.6, 1.07], [-1.0, 1.05], [-1.82, 0.84], [-1.97, 0.5]], 0, 0.03, TEAM);
   // fondo plano (con su forma en planta), difusor y estructura trasera con la luz de lluvia
-  plateXZ([[1.78, 0.2], [1.3, 0.52], [1.0, 0.79], [-1.15, 0.8], [-1.32, 0.6], [-2.25, 0.56], [-2.25, -0.56], [-1.32, -0.6], [-1.15, -0.8], [1.0, -0.79], [1.3, -0.52], [1.78, -0.2]], 0.06, 0.035, BLACK);
-  part(0.7, 0.2, 1.1, -2.2, 0.17, 0, BLACK, [0.2, 1, -0.08], [1, 1]);
-  for (const z of [-0.36, -0.12, 0.12, 0.36]) plate([[-1.9, 0.08], [-2.52, 0.1], [-2.52, 0.27]], z, 0.014, BLACK); // aletas del difusor
-  part(0.5, 0.1, 0.16, -2.72, 0.33, 0, BLACK, [1, 1], [0.6, 0.7]); part(0.05, 0.11, 0.13, -2.98, 0.34, 0, RED);
+  plateXZ([[1.78, 0.2], [1.3, 0.52], [1.0, 0.79], [-1.15, 0.8], [-1.32, 0.6], [-2.1, 0.56], [-2.1, -0.56], [-1.32, -0.6], [-1.15, -0.8], [1.0, -0.79], [1.3, -0.52], [1.78, -0.2]], 0.06, 0.035, BLACK);
+  part(0.7, 0.2, 1.1, -2.0, 0.17, 0, BLACK, [0.2, 1, -0.08], [1, 1]);
+  for (const z of [-0.36, -0.12, 0.12, 0.36]) plate([[-1.7, 0.08], [-2.34, 0.1], [-2.34, 0.27]], z, 0.014, BLACK); // aletas del difusor
+  c.add(new THREE.CylinderGeometry(0.07, 0.085, 0.5, 10).rotateZ(Math.PI / 2).translate(-2.4, 0.36, 0), BLACK); part(0.05, 0.11, 0.13, -2.67, 0.36, 0, RED);
   // habitáculo: casco del piloto con su visera, halo y retrovisores
   { const g = new THREE.SphereGeometry(0.135, 16, 12).toNonIndexed(), p = g.attributes.position, cl = new Float32Array(p.count * 3);
     for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i), z = p.getZ(i); cl.set(x > 0.035 && y > -0.03 && y < 0.06 ? [0, 0.02, 0] : Math.abs(z) < 0.035 && y > 0 ? ACC : WHITE, i * 3); }
-    g.setAttribute("color", new THREE.BufferAttribute(cl, 3)); c.raw(g.translate(0.22, 0.79, 0)); }
-  tube([[-0.3, 0.9, 0.31], [0.25, 0.93, 0.3], [0.68, 0.88, 0.21], [0.88, 0.82, 0], [0.68, 0.88, -0.21], [0.25, 0.93, -0.3], [-0.3, 0.9, -0.31]], 0.037, TEAM2);
-  tube([[0.88, 0.82, 0], [0.98, 0.74, 0], [1.08, 0.64, 0]], 0.03, TEAM2);
+    g.setAttribute("color", new THREE.BufferAttribute(cl, 3)); c.raw(g.translate(0.5, 0.79, 0)); }
+  tube([[-0.05, 0.9, 0.31], [0.45, 0.93, 0.3], [0.85, 0.88, 0.21], [1.05, 0.82, 0], [0.85, 0.88, -0.21], [0.45, 0.93, -0.3], [-0.05, 0.9, -0.31]], 0.04, TEAM2);
+  tube([[1.05, 0.82, 0], [1.14, 0.75, 0], [1.24, 0.64, 0]], 0.03, TEAM2);
   for (const s of [1, -1]) {
-    const g = new THREE.SphereGeometry(1, 10, 8).scale(0.05, 0.045, 0.1).toNonIndexed(), cl = new Float32Array(g.attributes.position.count * 3);
+    const g = new THREE.SphereGeometry(1, 10, 8).scale(0.05, 0.05, 0.11).toNonIndexed(), cl = new Float32Array(g.attributes.position.count * 3);
     for (let i = 0; i < cl.length; i += 3) cl.set(TEAM, i);
-    g.setAttribute("color", new THREE.BufferAttribute(cl, 3)); c.raw(g.translate(0.8, 0.79, 0.57 * s));
-    strut([0.8, 0.66, 0.38 * s], [0.8, 0.78, 0.5 * s], 0.025, BLACK);
+    g.setAttribute("color", new THREE.BufferAttribute(cl, 3)); c.raw(g.translate(0.95, 0.74, 0.66 * s));
+    strut([0.95, 0.66, 0.36 * s], [0.95, 0.73, 0.58 * s], 0.025, BLACK);
   }
-  // alerón delantero: plano principal de lado a lado, dos flaps por lado que suben hacia atrás y derivas
-  wing([-0.95, -0.7, -0.45, -0.2, 0, 0.2, 0.45, 0.7, 0.95].map((z) => { const t = Math.abs(z) / 0.95; return [z, 3.02 - 0.17 * t, 0.085 + 0.02 * t, 0.34 - 0.05 * t, 4 * DEG]; }), TEAM);
+  // alerón delantero: plano principal en V de lado a lado (el morro se apoya en él), dos flaps por lado y derivas con su aleta
+  const fwX = (z) => 3.0 - 0.3 * Math.abs(z) / 0.95, fwY = (z) => 0.085 + 0.025 * Math.abs(z) / 0.95;
+  wing([-0.95, -0.7, -0.45, -0.2, 0, 0.2, 0.45, 0.7, 0.95].map((z) => [z, fwX(z), fwY(z), 0.34, 4 * DEG]), TEAM);
   for (const s of [1, -1]) {
-    wing([0.17, 0.4, 0.66, 0.94].map((z) => { const t = (z - 0.17) / 0.77; return [z * s, 2.76 - 0.13 * t, 0.145 + 0.02 * t, 0.23, 15 * DEG]; }), TEAM2);
-    wing([0.19, 0.42, 0.67, 0.94].map((z) => { const t = (z - 0.19) / 0.75; return [z * s, 2.58 - 0.11 * t, 0.205 + 0.03 * t, 0.2, 26 * DEG]; }), ACC);
-    plate([[2.99, 0.05], [2.97, 0.2], [2.62, 0.35], [2.38, 0.35], [2.4, 0.05]], 0.955 * s, 0.02, TEAM);
-    part(0.24, 0.1, 0.02, 2.93, 0.14, 0.07 * s, BLACK); // soportes del morro
+    wing([0.14, 0.4, 0.66, 0.93].map((z) => [z * s, fwX(z) - 0.27, fwY(z) + 0.06, 0.22, 16 * DEG]), TEAM2);
+    wing([0.16, 0.42, 0.67, 0.93].map((z) => [z * s, fwX(z) - 0.45, fwY(z) + 0.125, 0.19, 28 * DEG]), ACC);
+    plate([[2.74, 0.05], [2.72, 0.2], [2.4, 0.36], [2.05, 0.38], [2.05, 0.05]], 0.945 * s, 0.02, TEAM);
+    part(0.34, 0.016, 0.1, 2.36, 0.23, 0.995 * s, TEAM, [0.6, 0.6], [1, 1, 0.03]);
+    part(0.5, 0.016, 0.08, 2.36, 0.055, 0.99 * s, BLACK);
   }
-  // alerón trasero: plano principal en cuchara, flap, derivas, pilares y ala inferior
-  const spoon = (z) => 0.05 * (1 - (z / 0.6) ** 2);
+  // alerón trasero: tres planos entre dos derivas que se estrechan hacia abajo, sobre dos pilares
+  const spoon = (z) => 0.035 * (1 - (z / 0.6) ** 2);
   const span = [-0.6, -0.4, -0.2, 0, 0.2, 0.4, 0.6];
-  wing(span.map((z) => [z, -2.42, 0.97 - spoon(z), 0.4, 10 * DEG]), BLACK);
-  wing(span.map((z) => [z, -2.75, 1.035 - spoon(z) * 0.6, 0.21, 32 * DEG]), TEAM);
-  wing([-0.5, -0.25, 0, 0.25, 0.5].map((z) => [z, -2.5, 0.46, 0.26, 12 * DEG]), BLACK);
+  wing(span.map((z) => [z, -1.98, 0.81 - spoon(z), 0.38, 8 * DEG]), BLACK);
+  wing(span.map((z) => [z, -2.34, 0.865 - spoon(z) * 0.6, 0.2, 24 * DEG]), BLACK);
+  wing(span.map((z) => [z, -2.5, 0.935 - spoon(z) * 0.3, 0.13, 38 * DEG]), TEAM);
   for (const s of [1, -1]) {
-    plate([[-2.3, 0.44], [-2.3, 1.1], [-3.0, 1.17], [-3.02, 0.74], [-2.8, 0.44]], 0.615 * s, 0.02, TEAM);
-    strut([-2.15, 0.48, 0.07 * s], [-2.55, 0.94, 0.07 * s], 0.035, BLACK);
+    plate([[-1.9, 0.56], [-1.88, 0.99], [-2.62, 1.04], [-2.66, 0.6], [-2.46, 0.3], [-2.22, 0.3]], 0.61 * s, 0.02, TEAM);
+    plate([[-1.84, 0.42], [-2.02, 0.81], [-2.15, 0.81], [-2.0, 0.42]], 0.07 * s, 0.02, BLACK);
   }
   // suspensión: dos triángulos por rueda y la barra de dirección o el palier
   for (const s of [1, -1]) {
     const fw = [1.8, 0.36, 0.7 * s], rw = [-1.7, 0.36, 0.68 * s];
-    for (const y of [0.5, 0.26]) {
-      strut([2.15, y, 0.19 * s], [fw[0], y - 0.03, fw[2]], 0.035, BLACK); strut([1.35, y, 0.27 * s], [fw[0], y - 0.03, fw[2]], 0.035, BLACK);
-      strut([-1.25, y - 0.02, 0.24 * s], [rw[0], y - 0.03, rw[2]], 0.035, BLACK); strut([-2.1, y - 0.04, 0.13 * s], [rw[0], y - 0.03, rw[2]], 0.035, BLACK);
+    for (const y of [0.47, 0.27]) {
+      strut([2.15, y - 0.06, 0.15 * s], [fw[0], y - 0.01, fw[2]], 0.035, BLACK); strut([1.35, y + 0.02, 0.24 * s], [fw[0], y - 0.01, fw[2]], 0.035, BLACK);
+      strut([-1.25, y - 0.02, 0.22 * s], [rw[0], y - 0.03, rw[2]], 0.035, BLACK); strut([-2.05, y - 0.06, 0.12 * s], [rw[0], y - 0.03, rw[2]], 0.035, BLACK);
     }
-    strut([1.6, 0.4, 0.26 * s], [1.72, 0.38, fw[2]], 0.025, BLACK);
+    strut([1.6, 0.36, 0.2 * s], [1.72, 0.38, fw[2]], 0.025, BLACK);
+    strut([1.75, 0.5, 0.2 * s], [1.8, 0.24, 0.62 * s], 0.03, BLACK); // tirante
     strut([-1.7, 0.36, 0.16 * s], rw, 0.045, BLACK);
   }
   return c.done();
@@ -544,9 +550,9 @@ const NUM_COLS = 8, NUM_ROWS = 4;
 const DECAL_GEO = (() => {
   const pos = [], uv = [];
   const quad = (a, b, c, d) => { pos.push(...a, ...b, ...c, ...a, ...c, ...d); uv.push(0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1); };
-  quad([2.02, 0.492, 0.12], [2.02, 0.492, -0.12], [2.4, 0.4, -0.12], [2.4, 0.4, 0.12]);         // morro, se lee desde delante
-  quad([-1.72, 0.74, 0.021], [-1.26, 0.74, 0.021], [-1.26, 0.99, 0.021], [-1.72, 0.99, 0.021]);     // aleta, lado derecho
-  quad([-1.26, 0.74, -0.021], [-1.72, 0.74, -0.021], [-1.72, 0.99, -0.021], [-1.26, 0.99, -0.021]); // aleta, lado izquierdo
+  quad([2.0, 0.45, 0.09], [2.0, 0.45, -0.09], [2.36, 0.335, -0.085], [2.36, 0.335, 0.085]);         // morro, se lee desde delante
+  quad([-1.5, 0.75, 0.021], [-1.12, 0.75, 0.021], [-1.12, 0.92, 0.021], [-1.5, 0.92, 0.021]);     // aleta, lado derecho
+  quad([-1.12, 0.75, -0.021], [-1.5, 0.75, -0.021], [-1.5, 0.92, -0.021], [-1.12, 0.92, -0.021]); // aleta, lado izquierdo
   const g = new THREE.BufferGeometry();
   g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
   g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
@@ -1479,7 +1485,7 @@ function draw3d(dt, now) {
     world.decals.setMatrixAt(i, m4);
     const ci = world.carIdx.get(c.id);
     world.cell.array[i] = ci; world.col2.array[i * 3] = world.c2src[ci * 3]; world.col2.array[i * 3 + 1] = world.c2src[ci * 3 + 1]; world.col2.array[i * 3 + 2] = world.c2src[ci * 3 + 2];
-    mL.makeRotationX(-steer * 2.4).setPosition(0.6, 0.67, 0); mW.multiplyMatrices(m4, mL); world.steer.setMatrixAt(i, mW);
+    mL.makeRotationX(-steer * 2.4).setPosition(0.88, 0.66, 0); mW.multiplyMatrices(m4, mL); world.steer.setMatrixAt(i, mW);
     mL.makeScale(dr, dr, dr).setPosition(p.px, p.py + 0.3, p.pz); discs.setMatrixAt(i, mL); discs.setColorAt(i, _col.set(c.team.color));
     // spray: estela de agua detrás de cada coche sobre asfalto mojado
     const mi = track.msOfPoint[Math.min(T.n - 1, Math.floor(mod(p.s, T.L) / T.ds))], offLine = Math.min(1, Math.abs(p.lat) / 0.3);
