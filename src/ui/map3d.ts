@@ -14,6 +14,7 @@ import { ShaderPass } from "three/addons/postprocessing/ShaderPass.js";
 import { GTAOPass } from "three/addons/postprocessing/GTAOPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
+import { toCreasedNormals } from "three/addons/utils/BufferGeometryUtils.js";
 import { rainAt } from "../sim/weather";
 
 const CAMS = ["circuito", "seguir", "tele", "abordo"];
@@ -189,7 +190,7 @@ const DET = { asfalto: detailTex("asfalto"), hierba: detailTex("hierba"), grava:
 // uniformes que comparten la pista, los coches y la lluvia
 const U = {
   uW: { value: 20 }, uDetail: { value: 0 }, uL: { value: 5000 }, uFlood: { value: 0 }, uLight: { value: 0.2 },
-  uCloud: { value: null }, uTexR: { value: 3000 },
+  uCloud: { value: null }, uTexR: { value: 3000 }, uTime: { value: 0 },
 };
 const CN = 48, cloudData = new Uint8Array(CN * CN * 4);
 const cloudTex = new THREE.DataTexture(cloudData, CN, CN, THREE.RGBAFormat);
@@ -220,7 +221,7 @@ transformed.y += aY * (aY > 0.0 ? uW / 6.5 : 1.0);
 vU = aU; vV = aV; vWet = aWet; vWetOff = aWetOff; vKerb = aKerb; vDash = aDash; vLine = aLine; vEdge = aEdge; vXZ = transformed.xz;
 `;
 const RIB_FH = `` + GLSL_NOISE + `
-uniform float uW, uDetail, uL, uFlood, uTexR; uniform sampler2D uCloud, uAds, uDet;
+uniform float uW, uDetail, uL, uFlood, uTexR, uTime; uniform sampler2D uCloud, uAds, uDet;
 varying float vU, vV, vWet, vWetOff, vKerb, vDash, vLine; varying vec3 vEdge; varying vec2 vXZ;
 `;
 // Cada cinta compila solo su rama (RMODE): 0 muro liso, 1 pista, 2 calle de boxes, 3 hierba, 4 grava, 5 barrera, 6 valla, 7 publicidad.
@@ -244,12 +245,28 @@ float cloudS = texture2D(uCloud, vXZ / (2.0 * uTexR) + 0.5).g;
     float rub = exp(-dl * dl) * (0.35 + 0.65 * uDetail) * (0.8 + 0.4 * vn(vec2(vV * 0.15, vU * 4.0)));
     col *= 1.0 - 0.42 * rub; rough -= 0.2 * rub; dn *= 1.0 - 0.5 * rub;
     col *= 0.9 + 0.1 * smoothstep(0.0, 0.7, a);
-    // agua: oscurece, alisa y, donde se encharca, hace de espejo del cielo
-    float wet = mix(vWetOff, vWet, exp(-dl * dl * 0.5)) * uDetail;
-    float pud = smoothstep(0.42, 0.8, wet * 1.2 + (d2.r - 0.5) * 0.7 + (big - 0.5) * 0.5);
-    col *= mix(vec3(1.0), vec3(0.42, 0.46, 0.52), wet);
-    rough = mix(rough, mix(0.22, 0.04, pud), smoothstep(0.0, 0.5, wet));
-    dn *= 1.0 - 0.9 * pud * smoothstep(0.0, 0.5, wet);
+    // Agua. Las dos rodadas (y algo menos el carril entre ellas) llevan el agua de la trazada; el resto, la de fuera.
+    float t1 = (vU - vLine - 0.12) / 0.075, t2 = (vU - vLine + 0.12) / 0.075;
+    float lineK = max(max(exp(-t1 * t1), exp(-t2 * t2)), 0.6 * exp(-dl * dl * 0.6));
+    float wet = mix(vWetOff, vWet, lineK) * uDetail;
+    // No se moja ni se seca por igual: cada punto tiene su umbral (poros, parches, badenes), así que el asfalto
+    // se seca a corros. Tres fases: húmedo (oscuro y mate), película de agua (brilla) y charco (espejo).
+    float low = vn(vXZ * 0.19 + 7.0), thr = 0.5 * d2.r + 0.3 * big + 0.2 * low;
+    float damp = smoothstep(0.03 + 0.5 * thr, 0.2 + 0.5 * thr, wet);
+    float film = smoothstep(0.36 + 0.4 * thr, 0.66 + 0.4 * thr, wet);
+    float pud = smoothstep(0.62, 0.9, wet * 1.1 + (0.5 - low) * 0.7 + (0.5 - d2.r) * 0.35 + 0.22 * smoothstep(0.45, 0.8, a)) * film;
+    col *= mix(vec3(1.0), vec3(0.4, 0.44, 0.5), max(damp * 0.85, film));
+    rough = mix(rough, 0.6, damp); rough = mix(rough, 0.17, film); rough = mix(rough, 0.03, pud);
+    dn *= (1.0 - 0.65 * film) * (1.0 - pud);
+    // ondas de las gotas en los charcos y en la película, solo de cerca y mientras llueve
+    float rainK = texture2D(uCloud, vXZ / (2.0 * uTexR) + 0.5).r * clamp(1.0 - px * 9.0, 0.0, 1.0) * max(pud, film * 0.4);
+    if (rainK > 0.01) {
+      vec2 cell = floor(vXZ * 2.6), f = fract(vXZ * 2.6) - 0.5;
+      float hh = h21(cell), ph = fract(uTime * (0.9 + hh) + hh * 7.0);
+      vec2 o = f - (vec2(h21(cell + 3.1), h21(cell + 8.7)) - 0.5) * 0.4;
+      float dist = length(o), ring = dist - ph * 0.3;
+      dn += normalize(o + 1e-4) * sin(ring * 70.0) * exp(-ring * ring * 500.0) * (1.0 - ph) * rainK * step(0.45, hh) * 0.8;
+    }
     col = mix(col, SR(vec3(0.27, 0.59, 0.94)), vWet * (1.0 - uDetail) * 0.85);
     float dash = vDash > 0.5 ? step(0.45, fract(vV / (uW * 4.0))) : 1.0;
     float stripe = step(0.5, fract(vV / (uW * 0.5)));
@@ -266,7 +283,7 @@ float cloudS = texture2D(uCloud, vXZ / (2.0 * uTexR) + 0.5).g;
     col = mix(col, SR(vec3(0.93)), slot);
     // la pintura es más lisa que el asfalto (y brilla más mojada)
     float paint = max(em, max(sl, slot));
-    rough = mix(rough, min(rough, 0.55), paint); dn *= 1.0 - 0.7 * paint;
+    rough = mix(rough, min(rough, mix(0.55, 0.12, film)), paint); dn *= 1.0 - 0.7 * paint;
   #else
     col = mix(col, SR(vec3(0.92)), edge * (0.3 + 0.6 * uDetail));
   #endif
@@ -361,36 +378,28 @@ function collect() {
   };
 }
 /**
- * Superficie curva a lo largo del coche: une secciones [x, y centro, z centro, medio ancho, medio alto]
- * con forma de superelipse. col(ángulo, índice de sección) da el color de cada vértice (ángulo 0 = arriba).
+ * Piel tendida entre anillos de puntos [x, y, z] (todos con el mismo número de puntos): carrocería, alerones…
+ * col(u, r) da el color del punto u (0..1 alrededor del anillo) del anillo r. Las aristas vivas (borde de salida
+ * de un alerón, tapas) se quedan vivas y el resto se sombrea suave.
  */
-function loft(c, secs, col, N = 14, expo = 2.6) {
-  const pos = [], colr = [], idx = [], R = secs.length;
-  for (let r = 0; r < R; r++) {
-    const [x, yc, zc, hw, hh] = secs[r];
-    for (let j = 0; j < N; j++) {
-      const a = (j / N) * Math.PI * 2, cy = Math.cos(a), sz = Math.sin(a);
-      const k = Math.pow(Math.pow(Math.abs(cy), expo) + Math.pow(Math.abs(sz), expo), -1 / expo);
-      pos.push(x, yc + hh * cy * k, zc + hw * sz * k);
-      colr.push(...col(a > Math.PI ? Math.PI * 2 - a : a, r));
-    }
-  }
+function skin(c, rings, col, crease = 0.75) {
+  const R = rings.length, N = rings[0].length, pos = [], colr = [], idx = [];
+  for (let r = 0; r < R; r++) for (let j = 0; j < N; j++) { pos.push(...rings[r][j]); colr.push(...col(j / N, r)); }
   for (let r = 0; r < R - 1; r++) for (let j = 0; j < N; j++) {
     const a = r * N + j, b = r * N + ((j + 1) % N), d = a + N, e = b + N;
     idx.push(a, b, d, b, e, d);
   }
-  // tapas delante y detrás
   for (const r of [0, R - 1]) {
-    const cI = pos.length / 3, s = secs[r];
-    pos.push(s[0], s[1], s[2]); colr.push(...col(Math.PI, r));
+    const cI = pos.length / 3, m = [0, 0, 0];
+    for (const p of rings[r]) { m[0] += p[0] / N; m[1] += p[1] / N; m[2] += p[2] / N; }
+    pos.push(...m); colr.push(...col(0.5, r));
     for (let j = 0; j < N; j++) idx.push(cI, r * N + j, r * N + ((j + 1) % N));
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
   g.setAttribute("color", new THREE.Float32BufferAttribute(colr, 3));
   g.setIndex(idx);
-  g.computeVertexNormals(); // normales suaves: la carrocería no se ve a facetas
-  c.raw(g.toNonIndexed());
+  c.raw(toCreasedNormals(g, crease));
 }
 // Monoplaza genérico con las proporciones del reglamento de 2026 (x hacia delante, y arriba, z a la derecha; metros).
 function carGeometry() {
@@ -412,83 +421,111 @@ function carGeometry() {
     g.applyMatrix4(new THREE.Matrix4().makeRotationFromQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(1, 0, 0), d.normalize())));
     c.add(g.translate((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2), colr);
   };
-  const tube = (pts, rad, colr) => c.add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts.map((p) => new THREE.Vector3(...p))), 18, rad, 6, false), colr);
-  // decoración por altura: arriba el color del equipo, una línea clara en el costado y debajo un tono más oscuro
-  const livery = (a) => (a < 78 * DEG ? TEAM : a < 100 * DEG ? ACC : a < 150 * DEG ? TEAM2 : BLACK);
+  const tube = (pts, rad, colr) => {
+    const g = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts.map((p) => new THREE.Vector3(...p))), 20, rad, 8, false);
+    const n = g.toNonIndexed(), cl = new Float32Array(n.attributes.position.count * 3);
+    for (let i = 0; i < cl.length; i += 3) cl.set(colr, i);
+    n.setAttribute("color", new THREE.BufferAttribute(cl, 3)); c.raw(n); // con sus normales: tubo redondo
+  };
+  /** Sección de carrocería: superelipse con distinto alto por arriba (hT) y por abajo (hB). */
+  const sec = (x, yc, zc, hw, hT, hB, e = 2.6, N = 20) => {
+    const ring = [];
+    for (let j = 0; j < N; j++) {
+      const a = (j / N) * Math.PI * 2, cy = Math.cos(a), sz = Math.sin(a);
+      const k = Math.pow(Math.pow(Math.abs(cy), e) + Math.pow(Math.abs(sz), e), -1 / e);
+      ring.push([x, yc + (cy >= 0 ? hT : hB) * cy * k, zc + hw * sz * k]);
+    }
+    return ring;
+  };
+  const deg = (u) => { const a = u * 360; return a > 180 ? 360 - a : a; }; // 0 = arriba, 180 = abajo
+  // decoración por altura: arriba el color del equipo, una línea del segundo color, un tono más oscuro y fibra de carbono abajo
+  const livery = (a) => (a < 64 ? TEAM : a < 80 ? ACC : a < 124 ? TEAM2 : BLACK);
+  /** Perfil de ala (10 puntos, cuerda 1 hacia atrás) y ala tendida entre estaciones [z, x del borde de ataque, y, cuerda, ángulo]. */
+  const FOIL = [[0, 0], [0.04, 0.05], [0.22, 0.085], [0.52, 0.07], [0.82, 0.03], [1, 0], [0.82, -0.012], [0.52, -0.022], [0.22, -0.028], [0.04, -0.025]];
+  const wing = (st, colr) => skin(c, st.map(([z, x0, y0, ch, th]) => FOIL.map(([px, py]) => [x0 - px * ch * Math.cos(th), y0 + px * ch * Math.sin(th) + py * ch, z])), () => colr, 0.9);
+  /** Chapa fina recortada: contorno en el plano x-y (a la altura z) o en planta x-z (a la altura y). */
+  const plate = (pts, z, t, colr) => c.add(new THREE.ExtrudeGeometry(new THREE.Shape(pts.map(([x, y]) => new THREE.Vector2(x, y))), { depth: t, bevelEnabled: false }).translate(0, 0, z - t / 2), colr);
+  const plateXZ = (pts, y, t, colr) => c.add(new THREE.ExtrudeGeometry(new THREE.Shape(pts.map(([x, z]) => new THREE.Vector2(x, z))), { depth: t, bevelEnabled: false }).rotateX(Math.PI / 2).translate(0, y + t, 0), colr);
 
-  // casco: morro bajo y fino, monocasco que sube hasta el habitáculo y tapa del motor que cae hacia atrás
-  const spine = [[3.08, 0.2, 0, 0.09, 0.04], [2.75, 0.25, 0, 0.15, 0.07], [2.25, 0.33, 0, 0.2, 0.11], [1.75, 0.42, 0, 0.25, 0.15], [1.25, 0.48, 0, 0.31, 0.2],
-    [0.8, 0.5, 0, 0.38, 0.23], [0.25, 0.52, 0, 0.41, 0.25], [-0.25, 0.6, 0, 0.36, 0.33], [-0.8, 0.62, 0, 0.29, 0.35], [-1.4, 0.54, 0, 0.21, 0.27], [-2.0, 0.44, 0, 0.13, 0.18], [-2.5, 0.4, 0, 0.06, 0.09]];
+  // casco: morro bajo y fino, monocasco que sube hasta el habitáculo y tapa del motor que se afila hacia atrás
+  const spine = [[3.12, 0.2, 0.06, 0.025, 0.025], [3.0, 0.21, 0.105, 0.045, 0.04], [2.7, 0.25, 0.145, 0.065, 0.055], [2.3, 0.31, 0.185, 0.09, 0.08], [1.9, 0.38, 0.225, 0.125, 0.12],
+    [1.5, 0.43, 0.27, 0.165, 0.17], [1.1, 0.46, 0.325, 0.2, 0.22], [0.7, 0.47, 0.375, 0.22, 0.26], [0.3, 0.48, 0.4, 0.235, 0.29], [-0.1, 0.5, 0.39, 0.3, 0.3],
+    [-0.5, 0.52, 0.35, 0.34, 0.31], [-1.0, 0.51, 0.29, 0.33, 0.29], [-1.5, 0.47, 0.22, 0.27, 0.24], [-2.0, 0.42, 0.14, 0.19, 0.17], [-2.45, 0.38, 0.07, 0.1, 0.09]];
   // el hueco del habitáculo va en negro
-  loft(c, spine, (a, r) => (r >= 5 && r <= 6 && a < 40 * DEG ? BLACK : livery(a)));
-  // pontones: boca ancha detrás de las ruedas delanteras y cintura estrecha hacia atrás
+  skin(c, spine.map((q) => sec(q[0], q[1], 0, q[2], q[3], q[4])), (u, r) => (r >= 6 && r <= 8 && deg(u) < 40 ? BLACK : livery(deg(u))));
+  // pontones: boca detrás de las ruedas delanteras y cintura de botella hacia atrás
   for (const s of [1, -1]) {
-    loft(c, [[0.78, 0.44, 0.6 * s, 0.2, 0.15], [0.45, 0.43, 0.63 * s, 0.26, 0.2], [-0.2, 0.41, 0.62 * s, 0.27, 0.2], [-0.9, 0.36, 0.52 * s, 0.22, 0.15], [-1.5, 0.3, 0.4 * s, 0.14, 0.1], [-1.95, 0.26, 0.3 * s, 0.07, 0.06]],
-      (a, r) => (r === 0 ? BLACK : livery(a)), 12, 3.2);
+    skin(c, [[0.86, 0.5, 0.52, 0.2, 0.12, 0.13], [0.8, 0.5, 0.52, 0.225, 0.14, 0.15], [0.45, 0.47, 0.52, 0.285, 0.19, 0.2], [-0.15, 0.44, 0.5, 0.3, 0.2, 0.22], [-0.8, 0.38, 0.42, 0.27, 0.17, 0.18], [-1.4, 0.31, 0.3, 0.2, 0.12, 0.12], [-1.95, 0.26, 0.2, 0.1, 0.07, 0.06]]
+      .map((q) => sec(q[0], q[1], q[2] * s, q[3], q[4], q[5], 3.2, 16)), (u, r) => (r === 0 ? BLACK : livery(deg(u))));
+    // deflector tras la rueda delantera y aleta del borde del suelo
+    plate([[1.38, 0.1], [1.38, 0.43], [0.98, 0.37], [0.92, 0.1]], 0.5 * s, 0.02, BLACK);
+    plate([[0.9, 0.09], [0.86, 0.17], [-1.1, 0.15], [-1.2, 0.09]], 0.8 * s, 0.018, BLACK);
   }
   // toma de aire sobre el piloto, cámara de tele y aleta de la tapa del motor
-  loft(c, [[-0.12, 0.98, 0, 0.13, 0.11], [-0.5, 0.98, 0, 0.14, 0.12], [-1.0, 0.9, 0, 0.1, 0.09], [-1.5, 0.78, 0, 0.05, 0.05]], (a, r) => (r === 0 ? BLACK : TEAM), 10, 2.2);
-  part(0.34, 0.045, 0.12, -0.36, 1.2, 0, BLACK); part(0.06, 0.1, 0.03, -0.36, 1.13, 0, BLACK);
-  part(1.5, 0.34, 0.03, -1.55, 0.82, 0, TEAM, [1, 1], [0.25, 1, -0.12]);
-  // fondo plano con el borde levantado y difusor
-  part(3.5, 0.035, 1.62, -0.35, 0.07, 0, BLACK, [1, 0.62], [1, 0.95]);
+  skin(c, [[-0.02, 0.98, 0.11, 0.12, 0.1], [-0.08, 0.985, 0.125, 0.13, 0.11], [-0.4, 1.0, 0.13, 0.13, 0.13], [-0.9, 0.93, 0.1, 0.11, 0.15], [-1.5, 0.8, 0.05, 0.06, 0.1]]
+    .map((q) => sec(q[0], q[1], 0, q[2], q[3], q[4], 2.2, 14)), (u, r) => (r === 0 ? BLACK : TEAM));
+  part(0.3, 0.045, 0.11, -0.4, 1.185, 0, BLACK, [0.5, 0.6], [1, 1]); part(0.06, 0.07, 0.03, -0.4, 1.14, 0, BLACK);
+  plate([[-0.8, 0.62], [-0.72, 1.0], [-1.2, 1.035], [-2.02, 0.98], [-2.3, 0.52]], 0, 0.03, TEAM);
+  // fondo plano (con su forma en planta), difusor y estructura trasera con la luz de lluvia
+  plateXZ([[1.78, 0.2], [1.3, 0.52], [1.0, 0.79], [-1.15, 0.8], [-1.32, 0.6], [-2.25, 0.56], [-2.25, -0.56], [-1.32, -0.6], [-1.15, -0.8], [1.0, -0.79], [1.3, -0.52], [1.78, -0.2]], 0.06, 0.035, BLACK);
   part(0.7, 0.2, 1.1, -2.2, 0.17, 0, BLACK, [0.2, 1, -0.08], [1, 1]);
-  for (const s of [1, -1]) part(2.2, 0.09, 0.03, -0.6, 0.12, 0.8 * s, BLACK, [0.5, 1], [1, 1]);
-  // habitáculo: casco del piloto, halo y retrovisores
-  c.add(new THREE.SphereGeometry(0.135, 10, 8).translate(0.22, 0.79, 0), WHITE);
+  for (const z of [-0.36, -0.12, 0.12, 0.36]) plate([[-1.9, 0.08], [-2.52, 0.1], [-2.52, 0.27]], z, 0.014, BLACK); // aletas del difusor
+  part(0.5, 0.1, 0.16, -2.72, 0.33, 0, BLACK, [1, 1], [0.6, 0.7]); part(0.05, 0.11, 0.13, -2.98, 0.34, 0, RED);
+  // habitáculo: casco del piloto con su visera, halo y retrovisores
+  { const g = new THREE.SphereGeometry(0.135, 16, 12).toNonIndexed(), p = g.attributes.position, cl = new Float32Array(p.count * 3);
+    for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i), z = p.getZ(i); cl.set(x > 0.035 && y > -0.03 && y < 0.06 ? [0, 0.02, 0] : Math.abs(z) < 0.035 && y > 0 ? ACC : WHITE, i * 3); }
+    g.setAttribute("color", new THREE.BufferAttribute(cl, 3)); c.raw(g.translate(0.22, 0.79, 0)); }
   tube([[-0.3, 0.9, 0.31], [0.25, 0.93, 0.3], [0.68, 0.88, 0.21], [0.88, 0.82, 0], [0.68, 0.88, -0.21], [0.25, 0.93, -0.3], [-0.3, 0.9, -0.31]], 0.037, TEAM2);
-  tube([[0.88, 0.82, 0], [0.98, 0.72, 0], [1.06, 0.6, 0]], 0.03, TEAM2);
-  for (const s of [1, -1]) { part(0.06, 0.09, 0.17, 0.8, 0.78, 0.56 * s, TEAM); strut([0.8, 0.68, 0.4 * s], [0.8, 0.76, 0.52 * s], 0.025, BLACK); }
-  // alerón delantero: tres planos que suben hacia atrás y placas en los extremos
-  part(0.42, 0.028, 1.9, 2.96, 0.1, 0, BLACK, [0.8, 0.96], [1, 1]);
+  tube([[0.88, 0.82, 0], [0.98, 0.74, 0], [1.08, 0.64, 0]], 0.03, TEAM2);
   for (const s of [1, -1]) {
-    part(0.3, 0.026, 0.82, 2.74, 0.17, 0.55 * s, TEAM, [1, 1, -0.02], [1, 1, 0.02]);
-    part(0.24, 0.026, 0.8, 2.56, 0.25, 0.56 * s, ACC, [1, 1, -0.02], [1, 1, 0.03]);
-    part(0.62, 0.3, 0.03, 2.74, 0.21, 0.96 * s, TEAM, [0.45, 1, -0.06], [1, 1]);
-    part(0.3, 0.02, 0.2, 2.62, 0.08, 1.05 * s, BLACK);
+    const g = new THREE.SphereGeometry(1, 10, 8).scale(0.05, 0.045, 0.1).toNonIndexed(), cl = new Float32Array(g.attributes.position.count * 3);
+    for (let i = 0; i < cl.length; i += 3) cl.set(TEAM, i);
+    g.setAttribute("color", new THREE.BufferAttribute(cl, 3)); c.raw(g.translate(0.8, 0.79, 0.57 * s));
+    strut([0.8, 0.66, 0.38 * s], [0.8, 0.78, 0.5 * s], 0.025, BLACK);
   }
-  // alerón trasero: plano principal, flap, placas, soportes y ala inferior
-  part(0.46, 0.04, 1.24, -2.62, 0.9, 0, BLACK);
-  part(0.3, 0.17, 1.24, -2.8, 1.02, 0, TEAM, [0.25, 1, -0.05], [0.25, 1, 0.07]);
+  // alerón delantero: plano principal de lado a lado, dos flaps por lado que suben hacia atrás y derivas
+  wing([-0.95, -0.7, -0.45, -0.2, 0, 0.2, 0.45, 0.7, 0.95].map((z) => { const t = Math.abs(z) / 0.95; return [z, 3.02 - 0.17 * t, 0.085 + 0.02 * t, 0.34 - 0.05 * t, 4 * DEG]; }), TEAM);
   for (const s of [1, -1]) {
-    part(0.72, 0.6, 0.03, -2.62, 0.78, 0.63 * s, TEAM, [0.75, 1, 0.07], [1, 1]);
-    strut([-2.15, 0.45, 0.07 * s], [-2.5, 0.88, 0.07 * s], 0.03, BLACK);
+    wing([0.17, 0.4, 0.66, 0.94].map((z) => { const t = (z - 0.17) / 0.77; return [z * s, 2.76 - 0.13 * t, 0.145 + 0.02 * t, 0.23, 15 * DEG]; }), TEAM2);
+    wing([0.19, 0.42, 0.67, 0.94].map((z) => { const t = (z - 0.19) / 0.75; return [z * s, 2.58 - 0.11 * t, 0.205 + 0.03 * t, 0.2, 26 * DEG]; }), ACC);
+    plate([[2.99, 0.05], [2.97, 0.2], [2.62, 0.35], [2.38, 0.35], [2.4, 0.05]], 0.955 * s, 0.02, TEAM);
+    part(0.24, 0.1, 0.02, 2.93, 0.14, 0.07 * s, BLACK); // soportes del morro
   }
-  part(0.3, 0.035, 1.0, -2.56, 0.44, 0, BLACK);
-  part(0.5, 0.1, 0.16, -2.72, 0.33, 0, BLACK); part(0.05, 0.11, 0.13, -2.98, 0.34, 0, RED);
+  // alerón trasero: plano principal en cuchara, flap, derivas, pilares y ala inferior
+  const spoon = (z) => 0.05 * (1 - (z / 0.6) ** 2);
+  const span = [-0.6, -0.4, -0.2, 0, 0.2, 0.4, 0.6];
+  wing(span.map((z) => [z, -2.42, 0.97 - spoon(z), 0.4, 10 * DEG]), BLACK);
+  wing(span.map((z) => [z, -2.75, 1.035 - spoon(z) * 0.6, 0.21, 32 * DEG]), TEAM);
+  wing([-0.5, -0.25, 0, 0.25, 0.5].map((z) => [z, -2.5, 0.46, 0.26, 12 * DEG]), BLACK);
+  for (const s of [1, -1]) {
+    plate([[-2.3, 0.44], [-2.3, 1.1], [-3.0, 1.17], [-3.02, 0.74], [-2.8, 0.44]], 0.615 * s, 0.02, TEAM);
+    strut([-2.15, 0.48, 0.07 * s], [-2.55, 0.94, 0.07 * s], 0.035, BLACK);
+  }
   // suspensión: dos triángulos por rueda y la barra de dirección o el palier
   for (const s of [1, -1]) {
     const fw = [1.8, 0.36, 0.7 * s], rw = [-1.7, 0.36, 0.68 * s];
     for (const y of [0.5, 0.26]) {
-      strut([2.15, y, 0.2 * s], [fw[0], y - 0.03, fw[2]], 0.035, BLACK); strut([1.35, y, 0.27 * s], [fw[0], y - 0.03, fw[2]], 0.035, BLACK);
-      strut([-1.25, y - 0.02, 0.24 * s], [rw[0], y - 0.03, rw[2]], 0.035, BLACK); strut([-2.1, y - 0.04, 0.14 * s], [rw[0], y - 0.03, rw[2]], 0.035, BLACK);
+      strut([2.15, y, 0.19 * s], [fw[0], y - 0.03, fw[2]], 0.035, BLACK); strut([1.35, y, 0.27 * s], [fw[0], y - 0.03, fw[2]], 0.035, BLACK);
+      strut([-1.25, y - 0.02, 0.24 * s], [rw[0], y - 0.03, rw[2]], 0.035, BLACK); strut([-2.1, y - 0.04, 0.13 * s], [rw[0], y - 0.03, rw[2]], 0.035, BLACK);
     }
     strut([1.6, 0.4, 0.26 * s], [1.72, 0.38, fw[2]], 0.025, BLACK);
     strut([-1.7, 0.36, 0.16 * s], rw, 0.045, BLACK);
-    // deflector tras la rueda delantera
-    part(0.5, 0.26, 0.025, 1.12, 0.26, 0.5 * s, BLACK, [0.5, 1], [1, 1]);
   }
   return c.done();
 }
-/** Rueda: neumático con los hombros redondeados, tapacubos y la banda del compuesto en el flanco. */
+/** Rueda: neumático de hombros redondos, tapacubos con el aro metálico y la banda del compuesto en el flanco. */
 function wheelGeometry() {
-  const c = collect(), K = [0, 0.05, 0]; // r = color del compuesto, g = gris fijo
-  const prof = [[0.2, -0.17], [0.31, -0.17], [0.345, -0.15], [0.36, -0.11], [0.36, 0.11], [0.345, 0.15], [0.31, 0.17], [0.2, 0.17]].map(([r, a]) => new THREE.Vector2(r, a));
-  const tyre = new THREE.LatheGeometry(prof, 22).rotateX(Math.PI / 2);
-  tyre.computeVertexNormals();
-  const n = tyre.toNonIndexed(), cnt = n.attributes.position.count, cols = new Float32Array(cnt * 3);
-  for (let i = 0; i < cnt; i++) cols.set(K, i * 3);
-  n.setAttribute("color", new THREE.BufferAttribute(cols, 3));
-  c.raw(n);
+  const c = collect(); // r = color del compuesto, g = gris fijo, b = metal
+  const prof = [[0.2, -0.168], [0.295, -0.172], [0.33, -0.163], [0.35, -0.14], [0.36, -0.1], [0.36, 0.1], [0.35, 0.14], [0.33, 0.163], [0.295, 0.172], [0.2, 0.168]].map(([r, a]) => new THREE.Vector2(r, a));
+  const flat = (g, colr) => { const n = g.index ? g.toNonIndexed() : g, cl = new Float32Array(n.attributes.position.count * 3); for (let i = 0; i < cl.length; i += 3) cl.set(colr, i); n.setAttribute("color", new THREE.BufferAttribute(cl, 3)); c.raw(n); };
+  flat(new THREE.LatheGeometry(prof, 28).rotateX(Math.PI / 2), [0, 0.05, 0]);
   for (const sz of [1, -1]) {
-    const ring = new THREE.RingGeometry(0.235, 0.275, 22); if (sz < 0) ring.rotateY(Math.PI);
-    c.add(ring.translate(0, 0, sz * 0.172), [1, 0, 0]);   // banda del compuesto
-    const hub = new THREE.CircleGeometry(0.225, 18); if (sz < 0) hub.rotateY(Math.PI);
-    c.add(hub.translate(0, 0, sz * 0.168), [0, 0.13, 0]);
-    const cap = new THREE.CircleGeometry(0.07, 10); if (sz < 0) cap.rotateY(Math.PI);
-    c.add(cap.translate(0, 0, sz * 0.174), [0, 0.3, 0]);
-    for (let k = 0; k < 5; k++) c.add(new THREE.BoxGeometry(0.17, 0.03, 0.006).translate(0.13, 0, sz * 0.171).rotateZ((k * Math.PI * 2) / 5), [0, 0.26, 0]);
-    for (let k = 0; k < 2; k++) c.add(new THREE.BoxGeometry(0.09, 0.022, 0.006).translate(0.31, 0, sz * 0.165).rotateZ(k * Math.PI + 0.4), [1, 0, 0]);
+    const face = (g) => (sz < 0 ? g.rotateY(Math.PI) : g);
+    flat(face(new THREE.RingGeometry(0.245, 0.285, 28)).translate(0, 0, sz * 0.173), [1, 0, 0]);   // banda del compuesto
+    flat(face(new THREE.RingGeometry(0.2, 0.228, 28)).translate(0, 0, sz * 0.169), [0, 0.55, 1]);   // aro de la llanta
+    flat(face(new THREE.CircleGeometry(0.2, 24)).translate(0, 0, sz * 0.16), [0, 0.1, 0]);          // tapacubos
+    flat(face(new THREE.CircleGeometry(0.055, 12)).translate(0, 0, sz * 0.166), [0, 0.45, 1]);      // tuerca
+    for (let k = 0; k < 2; k++) c.add(new THREE.BoxGeometry(0.09, 0.022, 0.006).translate(0.31, 0, sz * 0.166).rotateZ(k * Math.PI + 0.4), [1, 0, 0]);
   }
   return c.done();
 }
@@ -507,7 +544,7 @@ const NUM_COLS = 8, NUM_ROWS = 4;
 const DECAL_GEO = (() => {
   const pos = [], uv = [];
   const quad = (a, b, c, d) => { pos.push(...a, ...b, ...c, ...a, ...c, ...d); uv.push(0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1); };
-  quad([2.05, 0.492, 0.15], [2.05, 0.492, -0.15], [2.42, 0.44, -0.15], [2.42, 0.44, 0.15]);         // morro, se lee desde delante
+  quad([2.02, 0.492, 0.12], [2.02, 0.492, -0.12], [2.4, 0.4, -0.12], [2.4, 0.4, 0.12]);         // morro, se lee desde delante
   quad([-1.72, 0.74, 0.021], [-1.26, 0.74, 0.021], [-1.26, 0.99, 0.021], [-1.72, 0.99, 0.021]);     // aleta, lado derecho
   quad([-1.26, 0.74, -0.021], [-1.72, 0.74, -0.021], [-1.72, 0.99, -0.021], [-1.26, 0.99, -0.021]); // aleta, lado izquierdo
   const g = new THREE.BufferGeometry();
@@ -531,12 +568,25 @@ CAR_MAT.onBeforeCompile = (sh) => {
     .replace("vec3 totalEmissiveRadiance = emissive;", "vec3 totalEmissiveRadiance = emissive + vColor.rgb * uFlood * 0.6 + vec3(7.0, 0.25, 0.1) * vGlow;");
 };
 const WHEEL_MAT = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.82 });
-WHEEL_MAT.onBeforeCompile = (sh) => { sh.vertexShader = sh.vertexShader.replace("#include <color_vertex>", "vColor = vec4(instanceColor.rgb * color.r + vec3(pow(color.g, 2.2)), 1.0);"); };
+WHEEL_MAT.onBeforeCompile = (sh) => {
+  sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nvarying float vMetal;")
+    .replace("#include <color_vertex>", "vColor = vec4(instanceColor.rgb * color.r + vec3(pow(color.g, 2.2)), 1.0); vMetal = color.b;");
+  sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nvarying float vMetal;")
+    .replace("#include <roughnessmap_fragment>", "float roughnessFactor = mix(roughness, 0.3, vMetal);")
+    .replace("#include <metalnessmap_fragment>", "float metalnessFactor = vMetal;");
+};
 const BLOB_GEO = new THREE.PlaneGeometry(6.6, 3.0).rotateX(-Math.PI / 2);
 const BLOB_MAT = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.3, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6 });
 const RING_GEO = new THREE.RingGeometry(1.0, 1.13, 48).rotateX(-Math.PI / 2);
 const SPRAY_GEO = new THREE.ConeGeometry(1, 1, 7, 1, true).translate(0, -0.5, 0).rotateZ(-Math.PI / 2);
-const SPRAY_MAT = new THREE.MeshBasicMaterial({ color: 0xc3ced9, transparent: true, opacity: 0.13, depthWrite: false, side: THREE.DoubleSide });
+const SPRAY_MAT = new THREE.MeshBasicMaterial({ color: 0xc3ced9, transparent: true, opacity: 0.22, depthWrite: false, side: THREE.DoubleSide });
+// la estela nace fina pegada al coche, se abre y se deshace en jirones hacia atrás
+SPRAY_MAT.onBeforeCompile = (sh) => {
+  sh.uniforms.uTime = U.uTime;
+  sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nvarying vec3 vSp;").replace("#include <begin_vertex>", "#include <begin_vertex>\nvSp = position;");
+  sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nvarying vec3 vSp; uniform float uTime;" + GLSL_NOISE)
+    .replace("#include <color_fragment>", "float sl = -vSp.x; diffuseColor.a *= smoothstep(0.0, 0.18, sl) * (1.0 - smoothstep(0.3, 1.0, sl)) * (0.35 + 0.9 * vn(vec2(sl * 7.0 - uTime * 9.0, atan(vSp.y, vSp.z) * 2.5)));");
+};
 
 // ------------------------------------------------------------------ pista
 function vnoise(x, y) {
@@ -1371,6 +1421,7 @@ function draw3d(dt, now) {
   U.uW.value = W;
   U.uDetail.value = clamp((T.Wov * 0.8 - W) / Math.max(1, T.Wov * 0.8 - W_REAL), 0, 1);
   updateWet(now); updateCloud(now); updateLight(now);
+  if (!opt.paused()) U.uTime.value = (U.uTime.value + dt) % 1000;
   U.uLight.value = rainHere > 0.3 ? (Math.floor(now / 160) % 2 ? 1 : 0.1) : 0.25;
   const { cars, wheels, blobs, spray, discs } = world;
   const dr = W * 0.6 * far;
