@@ -21,7 +21,7 @@ import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js"
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { toCreasedNormals } from "three/addons/utils/BufferGeometryUtils.js";
 import { rainAt } from "../sim/weather";
-import { BRANDS, FONT, SECOND, collect, skin, carGeometry, wheelGeometry, liveryTexture, makeCarMaterial, makeWheelMaterial } from "./car3d";
+import { BRANDS, FONT, SECOND, collect, skin, carGeometry, carMinGeometry, wheelGeometry, liveryTexture, makeCarMaterial, makeWheelMaterial } from "./car3d";
 
 // las cuatro del botón (se van rotando) y las de «Más cámaras» (manteniendo pulsado el botón)
 const CAMS = ["circuito", "seguir", "tele", "abordo"];
@@ -76,6 +76,7 @@ scene.fog = fog;
 const sun = new THREE.DirectionalLight(0xfff3dd, 3);
 scene.add(sun, sun.target);
 sun.shadow.bias = -0.0004;
+sun.shadow.camera.layers.enable(1); // la sombra ve también la capa 1: cosas que solo dan sombra (manzanas cercanas)
 const camera = new THREE.PerspectiveCamera(36, 1, 5, 80000);
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap;
 const GLSL_NOISE = `
@@ -413,7 +414,7 @@ function ribbonMat(color, mode, po) {
 }
 
 // dos mallas: la fina para verlo de cerca y una ligera para la vista de circuito y los dispositivos justos
-const CAR_GEO = carGeometry(true), WHEEL_GEO = wheelGeometry(true), CAR_LO = carGeometry(false), WHEEL_LO = wheelGeometry(false);
+const CAR_GEO = carGeometry(true), WHEEL_GEO = wheelGeometry(true), CAR_LO = carGeometry(false), WHEEL_LO = wheelGeometry(false), CAR_MIN = carMinGeometry();
 // volante con las manos del piloto (gira con la dirección)
 const STEER_GEO = (() => {
   const c = collect();
@@ -806,6 +807,8 @@ const PROP_VB = `vec3 transformed = aAnc + aSd * (uW * aLw) + position * uS; vPa
 const PROP_FH = GLSL_NOISE + `uniform float uFlood, uTexR; uniform sampler2D uCloud, uSigns; varying vec4 vPat; varying vec2 vWXZ;
 // al anochecer las ventanas se encienden poco a poco: cada una a partir de su propio umbral
 float winOn(vec2 c){ return smoothstep(0.0, 0.06, uFlood * 1.3 - 0.05 - h21(c + 7.31) * 0.9) * 0.8; }
+// lo mismo de media, para cuando las ventanas no se distinguen
+float winAvg(){ return 0.8 * clamp((uFlood * 1.3 - 0.05) / 0.9, 0.0, 1.0); }
 vec3 hsv(float h, float s, float v){ vec3 k = clamp(abs(fract(h + vec3(0.0, 2.0 / 3.0, 1.0 / 3.0)) * 6.0 - 3.0) - 1.0, 0.0, 1.0); return v * mix(vec3(1.0), k, s); }
 vec3 signAt(float cell, vec2 uv){
   float cy = floor((cell + 0.5) / 4.0); vec2 c = vec2(floor(cell + 0.5) - 4.0 * cy, cy);
@@ -856,7 +859,7 @@ if (P > 0.5 && P < 1.5) {
     float aw = step(3.3, uv.y) * step(uv.y, 3.8);
     col = mix(col, SR(hsv(h21(vec2(floor(uv.x / 5.0), sd)), 0.6, 0.6)), aw);
     glowC = SR(vec3(1.0, 0.85, 0.6)) * sh * (0.15 + uFlood * 1.5);
-  } else {
+  } else if (px < 3.0) {
     vec2 g = vec2(uv.x / 2.7, (uv.y - 4.0) / 3.1), c = floor(g), f = fract(g);
     float win = step(0.3, f.x) * step(f.x, 0.7) * step(0.2, f.y) * step(f.y, 0.85);
     float shut = (step(0.17, f.x) * step(f.x, 0.3) + step(0.7, f.x) * step(f.x, 0.83)) * step(0.2, f.y) * step(f.y, 0.85) * step(0.4, h21(vec2(sd, 3.0)));
@@ -866,7 +869,11 @@ if (P > 0.5 && P < 1.5) {
     col = mix(col, SR(vec3(0.08, 0.09, 0.11)), win * k);
     col = mix(col, SR(vec3(0.15)), balc * k);
     rough = mix(rough, 0.12, win * k);
-    glowC = SR(vec3(1.0, 0.82, 0.55)) * win * step(0.55, h21(c + sd)) * winOn(c + sd) * 1.4;
+    // cuando cada ventana ocupa menos de medio píxel, poco a poco un brillo uniforme: sin parpadeos al moverse. Es un
+    // tercio del medio de verdad: puntos de luz sueltos se ven más oscuros que la misma luz repartida
+    glowC = SR(vec3(1.0, 0.82, 0.55)) * mix(win * step(0.55, h21(c + sd)) * winOn(c + sd), 0.04 * winAvg(), smoothstep(2.0, 3.0, px)) * 1.4;
+  } else {
+    glowC = SR(vec3(1.0, 0.82, 0.55)) * 0.04 * winAvg() * 1.4;
   }
 } else if (P < 6.5) {
   // torre de oficinas: muro cortina con su retícula, de noche con medio edificio encendido
@@ -922,18 +929,27 @@ PROP_DEPTH.customProgramCacheKey = () => "decorado-sombra";
  * Constructor del decorado. at(s, lado) se sitúa en el punto s de la pista; los vértices van en el sistema de ese punto:
  * x a lo largo de la pista, y arriba, z hacia fuera (metros, crecen de lejos), más lw (medias anchuras de pista) y lm
  * (metros fijos hacia fuera, p. ej. la escapatoria).
+ * Niveles de detalle: todo se apunta en el tramo de pista (de unos 400 m) donde está anclado, y lo que se añade dentro
+ * de near(fn) (rótulos, balcones, pilares, banderas…) solo se dibuja con el tramo cerca (ver propLod).
  */
+const PROP_CHUNK = 400;
 function propBuilder() {
-  const P = [], AN = [], SD = [], LW = [], CO = [], PA = [], f = mkS();
-  let tx = 1, tz = 0, wr = 1, sg = 1;
+  const P = [], AN = [], SD = [], LW = [], CO = [], PA = [], CH = [], LV = [], f = mkS();
+  const NCH = Math.max(1, Math.round(T.L / PROP_CHUNK)), CHL = T.L / NCH;
+  let tx = 1, tz = 0, wr = 1, sg = 1, ch = 0, lv = 0;
   const col = new THREE.Color();
   const B = {
-    at(s, side = 1) { sample(s, f); const h = Math.hypot(f.tx, f.tz) || 1; tx = f.tx / h; tz = f.tz / h; wr = arrAt(T.wr, s); sg = side; return B; },
+    at(s, side = 1) {
+      sample(s, f); const h = Math.hypot(f.tx, f.tz) || 1; tx = f.tx / h; tz = f.tz / h; wr = arrAt(T.wr, s); sg = side;
+      ch = Math.min(NCH - 1, Math.floor(mod(s, T.L) / CHL)); return B;
+    },
     v(x, y, z, lw, lm, c, pat, cell, u, v) {
       const rx = f.rx * sg, rz = f.rz * sg;
       AN.push(f.x + rx * lm, f.y, f.z + rz * lm); SD.push(f.rx, 0, f.rz); LW.push(lw * sg * wr);
-      P.push(tx * x + rx * z, y, tz * x + rz * z); CO.push(c.r, c.g, c.b); PA.push(pat, cell, u, v);
+      P.push(tx * x + rx * z, y, tz * x + rz * z); CO.push(c.r, c.g, c.b); PA.push(pat, cell, u, v); CH.push(ch); LV.push(lv);
     },
+    /** Lo que se añade en fn solo se ve de cerca. */
+    near(fn) { const o = lv; lv = 1; try { fn(); } finally { lv = o; } },
     /** Cuadrilátero; cada esquina es [x, y, z, lw, lm, u, v]. */
     quad(a, b, c, d, hex, pat = 0, cell = 0) {
       col.set(hex);
@@ -958,7 +974,7 @@ function propBuilder() {
       B.quad([x0, y0, z, lw, lm, u0, 0], [x1, y0, z, lw, lm, u1, 0], [x1, y1, z, lw, lm, u1, 1], [x0, y1, z, lw, lm, u0, 1], 0xffffff, 4, cell);
     },
     mark: () => P.length,
-    undo(m) { for (const a of [P, AN, SD, CO]) a.length = m; LW.length = m / 3; PA.length = (m / 3) * 4; },
+    undo(m) { for (const a of [P, AN, SD, CO]) a.length = m; LW.length = CH.length = LV.length = m / 3; PA.length = (m / 3) * 4; },
     /** ¿Lo añadido desde m queda fuera de la pista (de cerca, a media distancia y de lejos)? */
     clear(m, margin = 1.5, near = false) {
       for (const W of near ? [W_REAL, W_REAL * 1.5] : [W_REAL, (W_REAL + T.Wov) / 2, T.Wov]) {
@@ -970,17 +986,46 @@ function propBuilder() {
       }
       return true;
     },
+    /**
+     * La malla, con los vértices ordenados por tramo y, dentro de cada tramo, primero lo que se ve siempre y luego lo
+     * de cerca. Cada tramo lleva su caja (la que ocupa a cualquier escala: la forma crece de lejos con la pista).
+     */
     mesh() {
+      const nv = CH.length, nt = nv / 3, cnt = new Uint32Array(NCH * 2);
+      for (let t = 0; t < nt; t++) cnt[CH[t * 3] * 2 + LV[t * 3]] += 3;
+      const at0 = new Uint32Array(NCH * 2), chunks = [];
+      for (let c = 0, o = 0; c < NCH; c++) {
+        chunks.push({ start: o, n0: cnt[c * 2], n1: cnt[c * 2 + 1], box: new THREE.Box3() });
+        at0[c * 2] = o; at0[c * 2 + 1] = o + cnt[c * 2]; o += cnt[c * 2] + cnt[c * 2 + 1];
+      }
+      const P2 = new Float32Array(nv * 3), AN2 = new Float32Array(nv * 3), SD2 = new Float32Array(nv * 3), CO2 = new Float32Array(nv * 3), LW2 = new Float32Array(nv), PA2 = new Float32Array(nv * 4);
+      const kMax = T.Wov / W_REAL, v3 = new THREE.Vector3();
+      for (let t = 0; t < nt; t++) {
+        const b = t * 3, slot = CH[b] * 2 + LV[b], box = chunks[CH[b]].box;
+        for (let j = 0; j < 3; j++) {
+          const i = b + j, d = at0[slot]++;
+          for (let a = 0; a < 3; a++) { P2[d * 3 + a] = P[i * 3 + a]; AN2[d * 3 + a] = AN[i * 3 + a]; SD2[d * 3 + a] = SD[i * 3 + a]; CO2[d * 3 + a] = CO[i * 3 + a]; }
+          LW2[d] = LW[i]; for (let a = 0; a < 4; a++) PA2[d * 4 + a] = PA[i * 4 + a];
+          // la posición va en línea recta con la anchura de la pista: basta con los dos extremos
+          for (const [W, k] of [[W_REAL, 1], [T.Wov, kMax]]) box.expandByPoint(v3.set(AN[i * 3] + SD[i * 3] * W * LW[i] + P[i * 3] * k, AN[i * 3 + 1] + P[i * 3 + 1] * k, AN[i * 3 + 2] + SD[i * 3 + 2] * W * LW[i] + P[i * 3 + 2] * k));
+        }
+      }
+      for (const c of chunks) if (!c.box.isEmpty()) c.box.expandByScalar(kMax * 1.5); // las banderas ondean
       const g = new THREE.BufferGeometry();
-      g.setAttribute("position", new THREE.Float32BufferAttribute(P, 3));
-      g.setAttribute("normal", new THREE.Float32BufferAttribute(new Float32Array(P.length).fill(0), 3));
-      g.setAttribute("aAnc", new THREE.Float32BufferAttribute(AN, 3));
-      g.setAttribute("aSd", new THREE.Float32BufferAttribute(SD, 3));
-      g.setAttribute("aLw", new THREE.Float32BufferAttribute(LW, 1));
-      g.setAttribute("color", new THREE.Float32BufferAttribute(CO, 3));
-      g.setAttribute("aPat", new THREE.Float32BufferAttribute(PA, 4));
+      g.setAttribute("position", new THREE.BufferAttribute(P2, 3));
+      g.setAttribute("normal", new THREE.BufferAttribute(new Float32Array(nv * 3), 3));
+      g.setAttribute("aAnc", new THREE.BufferAttribute(AN2, 3));
+      g.setAttribute("aSd", new THREE.BufferAttribute(SD2, 3));
+      g.setAttribute("aLw", new THREE.BufferAttribute(LW2, 1));
+      g.setAttribute("color", new THREE.BufferAttribute(CO2, 3));
+      g.setAttribute("aPat", new THREE.BufferAttribute(PA2, 4));
+      // índices que se rehacen cuando cambia qué tramos se ven y a qué nivel (propLod)
+      const idx = new THREE.BufferAttribute(new Uint32Array(Math.max(3, nv)), 1).setUsage(THREE.DynamicDrawUsage);
+      for (let i = 0; i < nv; i++) idx.array[i] = i;
+      g.setIndex(idx); g.setDrawRange(0, nv);
       const m = new THREE.Mesh(g, propMat());
       m.customDepthMaterial = PROP_DEPTH; m.castShadow = m.receiveShadow = true; m.frustumCulled = false; m.renderOrder = 6;
+      m.userData.lod = { chunks, state: new Uint8Array(NCH).fill(255), nv };
       return m;
     },
   };
@@ -1035,7 +1080,7 @@ let standS = []; // gradas para el sonido del público: [s del centro, lado, lar
 const srgb = (t) => { t.colorSpace = THREE.SRGBColorSpace; return t; };
 function buildWorld() {
   standS = [];
-  if (world) for (const o of world.all) { scene.remove(o); o.geometry && o.geometry.dispose(); }
+  if (world) for (const o of world.all) { scene.remove(o); o.geometry && o.geometry.dispose(); if (o.userData.far) { o.userData.near.dispose(); o.userData.far.dispose(); } }
   const all = [], n = T.n, tmp = mkS(), E = T.E, street = T.street;
   const add = (o) => { scene.add(o); all.push(o); return o; };
   const SH = street ? 1.22 : 1.7; // hasta dónde llega el arcén (en medias anchuras)
@@ -1235,7 +1280,7 @@ function buildWorld() {
     if (t.wet || t.d < (street ? T.SH * T.Wov + 40 : T.Wov * 3.4 + 45)) continue;
     trees.push([x, t.h - 1.5, z, 0.75 + rnd() * 0.7, rnd()]);
   }
-  const tgc = collect();
+  let tgc = collect();
   // dos especies mezcladas en la misma malla: frondosa (copa de varios volúmenes) y conífera (tres pisos)
   const blob = (r, x, y, z, shade) => {
     // copa de pocas caras (20) con la normal de una esfera: se ve redonda y pesa poco (hay cientos de árboles, y cuentan
@@ -1256,7 +1301,13 @@ function buildWorld() {
   };
   blob(0.36, 0, 0.82, 0, 1); blob(0.27, 0.22, 0.66, 0.1, 0.9); blob(0.26, -0.2, 0.7, -0.12, 1.08); blob(0.22, 0.02, 1.08, 0.06, 1.14); blob(0.2, -0.05, 0.62, 0.22, 0.95);
   tgc.add(new THREE.CylinderGeometry(0.05, 0.07, 0.55, 6).translate(0, 0.27, 0), [0.5, 0.36, 0.26]);
-  const treeMesh = add(new THREE.InstancedMesh(tgc.done(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, metalness: 0 }), trees.length));
+  const treeGeo = tgc.done();
+  // de muy lejos (vista general), una sola copa algo mayor y un tronco de tres caras: 26 triángulos en vez de 124
+  tgc = collect();
+  blob(0.47, 0, 0.8, 0, 1);
+  tgc.add(new THREE.CylinderGeometry(0.05, 0.07, 0.45, 3, 1, true).translate(0, 0.22, 0), [0.5, 0.36, 0.26]);
+  const treeFar = tgc.done();
+  const treeMesh = add(new THREE.InstancedMesh(treeGeo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, metalness: 0 }), trees.length));
   const m4 = new THREE.Matrix4(), col = new THREE.Color(), c2 = new THREE.Color(0x5c9a50);
   trees.forEach((t, i) => {
     const s = T.Wov * 1.05 * t[3];
@@ -1264,6 +1315,7 @@ function buildWorld() {
     treeMesh.setColorAt(i, col.setHex(0x3a6e3c).lerp(c2, t[4]));
   });
   treeMesh.frustumCulled = false; treeMesh.castShadow = true; treeMesh.receiveShadow = true; treeMesh.name = "arboles";
+  treeMesh.userData = { near: treeGeo, far: treeFar };
 
   // ---- focos (solo de noche)
   const nP = Math.floor(T.L / 130), lampPos = [];
@@ -1350,16 +1402,16 @@ function buildWorld() {
           B.quad(Q(x0, 0.03, 0, 0, 0), Q(x1, 0.03, 0, 0, 0), Q(x1, 0.03, Dg, 0, 0), Q(x0, 0.03, Dg, 0, 0), 0x9aa0a8, 9, 0);
           B.box(x0, x1, -3, 5.2, Dg, D, lw, 0, tm.color, { front: [3, 0], back: [9, 0], top: [8, 0] }, uo);
           B.quad(Q(x0, 5.2, 0, 0, 0), Q(x1, 5.2, 0, 0, 0), Q(x1, 5.2, Dg, 0, 0), Q(x0, 5.2, Dg, 0, 0), 0x2a2d31, 0, 0);
-          for (const zz of [Dg * 0.3, Dg * 0.7]) B.box(x0 + 0.6, x1 - 0.6, 5.0, 5.12, zz - 0.15, zz + 0.15, lw, 0, 0xffffff, { front: [10, 0], top: [10, 0] });
+          B.near(() => { for (const zz of [Dg * 0.3, Dg * 0.7]) B.box(x0 + 0.6, x1 - 0.6, 5.0, 5.12, zz - 0.15, zz + 0.15, lw, 0, 0xffffff, { front: [10, 0], top: [10, 0] }); });
           B.box(x0, x1, -3, 0, 0, Dg, lw, 0, 0x9aa0a8, { front: [9, 0] }, uo);
         } else B.box(x0, x1, -3, 5.2, 0, D, lw, 0, 0xd9dde2, { front: [9, 0], back: [9, 0], top: [8, 0] }, uo);
-        B.box(x0 - 0.15, x0 + 0.3, -3, 5.2, -0.35, 0.05, lw, 0, 0xc9ced4, { front: [9, 0] }, uo);
+        B.near(() => B.box(x0 - 0.15, x0 + 0.3, -3, 5.2, -0.35, 0.05, lw, 0, 0xc9ced4, { front: [9, 0] }, uo));
         // cartel sobre la puerta: el equipo o una marca
         B.box(x0, x1, 5.2, 6.7, -0.5, 1.2, lw, 0, 0xd0d4d9, { front: [9, 0], top: [9, 0] }, uo);
-        B.panel(x0, x1, 5.35, 6.55, -0.52, lw, 0, open ? SIGN_TEAM0 + ti : (Math.floor(uo / 30) * 5) % 16, (uo + x0) / 5.4, (uo + x1) / 5.4);
+        B.near(() => B.panel(x0, x1, 5.35, 6.55, -0.52, lw, 0, open ? SIGN_TEAM0 + ti : (Math.floor(uo / 30) * 5) % 16, (uo + x0) / 5.4, (uo + x1) / 5.4));
         // dos plantas de cristal (hospitalidad), retranqueadas, con balcón, y la cubierta en voladizo
         B.box(x0, x1, 6.7, 6.95, -0.6, 2.0, lw, 0, 0xcfd3d8, { front: [9, 0], top: [9, 0] }, uo);
-        B.box(x0, x1, 6.95, 7.9, -0.62, -0.55, lw, 0, 0x9aa3ad, { front: [9, 0] }, uo);
+        B.near(() => B.box(x0, x1, 6.95, 7.9, -0.62, -0.55, lw, 0, 0x9aa3ad, { front: [9, 0] }, uo));
         const hT = D > 8 ? 14 : 10.4;
         B.box(x0, x1, 6.95, 10.4, 1.4, D, lw, 0, 0xffffff, { front: [2, k % 7], back: [9, 0], top: [9, 0] }, uo);
         if (D > 8) {
@@ -1369,11 +1421,11 @@ function buildWorld() {
         B.box(x0 - 0.05, x1 + 0.05, hT, hT + 0.5, -2.0, D + 1.5, lw, 0, 0x8d949c, { front: [9, 0], top: [8, 0] }, uo);
       }, 1.5, D === 5)) break; // el último intento (urbanos estrechos) solo tiene que caber de cerca
       // el puesto de cada equipo en el muro del pit-lane, delante de su garaje
-      if (open && Math.abs(sc - tc) < segL * 0.55) tryAdd(() => {
+      if (open && Math.abs(sc - tc) < segL * 0.55) tryAdd(() => B.near(() => {
         B.at(tc, PS);
         B.box(-3.2, 3.2, 0, 2.3, -0.6, 0.8, wallLw, 0, 0x2a2e34, { front: [9, 0] });
         B.box(-3.5, 3.5, 2.3, 2.6, -1.3, 1.4, wallLw, 0, tm.color, { front: [9, 0] });
-      });
+      }));
       // motorhome del equipo en el paddock, detrás de su garaje
       if (open && Math.abs(sc - tc) < segL * 0.55) tryAdd(() => {
         B.at(tc, PS);
@@ -1386,11 +1438,13 @@ function buildWorld() {
     tryAdd(() => {
       B.at(sc, PS);
       B.box(-5, 5, -3, 24, 21, 31, lw, 0, 0xe4e7ea, { front: [9, 0], top: [9, 0] });
-      B.panel(-4.6, 4.6, 19.8, 22.6, 20.95, lw, 0, 3, 0, 1.6);
+      B.near(() => B.panel(-4.6, 4.6, 19.8, 22.6, 20.95, lw, 0, 3, 0, 1.6));
       B.box(-6.5, 6.5, 24, 29, 19.5, 32.5, lw, 0, 0xffffff, { front: [2, 3], top: [9, 0] });
       B.box(-7, 7, 29, 29.6, 19, 33, lw, 0, 0x6d747c, { front: [9, 0], top: [8, 0] });
-      B.box(-0.15, 0.15, 29.6, 36, 25.8, 26.2, lw, 0, 0xb8bec5);
-      B.box(-0.5, 0.5, 36, 36.6, 25.5, 26.5, lw, 0, 0xffffff, { front: [10, 0], top: [10, 0] });
+      B.near(() => {
+        B.box(-0.15, 0.15, 29.6, 36, 25.8, 26.2, lw, 0, 0xb8bec5);
+        B.box(-0.5, 0.5, 36, 36.6, 25.5, 26.5, lw, 0, 0xffffff, { front: [10, 0], top: [10, 0] });
+      });
     }, 1);
   }
   // gradas: el perfil de verdad (muro con publicidad, asientos en pendiente con público, muro trasero y cubierta en
@@ -1405,21 +1459,24 @@ function buildWorld() {
       if (tryAdd(() => {
         B.at(sc, sg);
         B.box(-L2, L2, -2.5, 2.4, 0, 0.5, lw, lm, 0xd5d9de, { front: [9, 0], top: [9, 0] }, uo);
-        B.panel(-L2, L2, 0.55, 2.15, -0.02, lw, lm, (ci * 5 + k) % 16, 0, 1);
+        B.near(() => B.panel(-L2, L2, 0.55, 2.15, -0.02, lw, lm, (ci * 5 + k) % 16, 0, 1));
         const Q = (x, y, z, u, v) => [x, y, z, lw, lm, u, v];
         B.quad(Q(-L2, 2.4, 0.5, uo - L2, 0), Q(L2, 2.4, 0.5, uo + L2, 0), Q(L2, H, D, uo + L2, sl), Q(-L2, H, D, uo - L2, sl), seat, 1, ci);
         B.box(-L2, L2, -2.5, H + 1.2, D, D + 0.5, lw, lm, 0xc4c9cf, { front: [9, 0], top: [9, 0] }, uo);
         const ra = [D + 0.8, H + 5.6], rb = [-1.4, H + 4.3];
         B.quad(Q(-L2, rb[1], rb[0], uo - L2, 0), Q(L2, rb[1], rb[0], uo + L2, 0), Q(L2, ra[1], ra[0], uo + L2, 1), Q(-L2, ra[1], ra[0], uo - L2, 1), 0x9aa1a9, 8, 0);
-        B.quad(Q(-L2, rb[1] - 0.35, rb[0], 0, 0), Q(L2, rb[1] - 0.35, rb[0], 0, 0), Q(L2, ra[1] - 0.35, ra[0], 0, 0), Q(-L2, ra[1] - 0.35, ra[0], 0, 0), 0x5a6068, 0, 0);
-        B.box(-L2, L2, rb[1] - 0.35, rb[1], rb[0] - 0.05, rb[0] + 0.05, lw, lm, 0x5a6068);
-        if (k % 2 === 0) B.box(-0.25, 0.25, H + 1.2, ra[1] - 0.2, D + 0.05, D + 0.45, lw, lm, 0x7a8088, { front: [9, 0] });
-        // banderas de los aficionados, que ondean
-        for (let fq = 0; fq < 2; fq++) if (rnd2() < 0.55) {
-          const fx0 = (rnd2() * 2 - 1) * (L2 - 1.5), ff = 0.15 + rnd2() * 0.75, fz = 0.5 + ff * (D - 0.5), fy = 2.4 + ff * (H - 2.4), seed = Math.floor(rnd2() * 40);
-          B.box(fx0 - 0.03, fx0 + 0.03, fy, fy + 2.3, fz - 0.03, fz + 0.03, lw, lm, 0x333333);
-          B.quad(Q(fx0, fy + 1.5, fz, 0, 0), Q(fx0 + 1.3, fy + 1.5, fz, 1, 0), Q(fx0 + 1.3, fy + 2.3, fz, 1, 1), Q(fx0, fy + 2.3, fz, 0, 1), 0xffffff, 11, seed);
-        }
+        // de lejos, sin la cara de abajo de la cubierta, la viga, los pilares ni las banderas
+        B.near(() => {
+          B.quad(Q(-L2, rb[1] - 0.35, rb[0], 0, 0), Q(L2, rb[1] - 0.35, rb[0], 0, 0), Q(L2, ra[1] - 0.35, ra[0], 0, 0), Q(-L2, ra[1] - 0.35, ra[0], 0, 0), 0x5a6068, 0, 0);
+          B.box(-L2, L2, rb[1] - 0.35, rb[1], rb[0] - 0.05, rb[0] + 0.05, lw, lm, 0x5a6068);
+          if (k % 2 === 0) B.box(-0.25, 0.25, H + 1.2, ra[1] - 0.2, D + 0.05, D + 0.45, lw, lm, 0x7a8088, { front: [9, 0] });
+          // banderas de los aficionados, que ondean
+          for (let fq = 0; fq < 2; fq++) if (rnd2() < 0.55) {
+            const fx0 = (rnd2() * 2 - 1) * (L2 - 1.5), ff = 0.15 + rnd2() * 0.75, fz = 0.5 + ff * (D - 0.5), fy = 2.4 + ff * (H - 2.4), seed = Math.floor(rnd2() * 40);
+            B.box(fx0 - 0.03, fx0 + 0.03, fy, fy + 2.3, fz - 0.03, fz + 0.03, lw, lm, 0x333333);
+            B.quad(Q(fx0, fy + 1.5, fz, 0, 0), Q(fx0 + 1.3, fy + 1.5, fz, 1, 0), Q(fx0 + 1.3, fy + 2.3, fz, 1, 1), Q(fx0, fy + 2.3, fz, 0, 1), 0xffffff, 11, seed);
+          }
+        });
         for (const [kk, x] of [[0, -L2], [nS - 1, L2]]) if (k === kk) B.quad(Q(x, -2.5, 0.5, 0, 0), Q(x, 2.4, 0.5, 0, 0), Q(x, H + 1.2, D, 0, 0), Q(x, -2.5, D, 0, 0), 0xc4c9cf, 9, 0);
       })) ok++;
     }
@@ -1437,8 +1494,10 @@ function buildWorld() {
       if (tryAdd(() => {
         B.at(cs, sg);
         B.box(-a, a, -2, h, -a, a, lw, lm, 0xffffff, { front: [7, 0], side: [7, 0], top: [9, 0] });
-        B.box(-a - 0.4, a + 0.4, h, h + 0.25, -a - 0.4, a + 0.4, lw, lm, 0x5b6169, { front: [9, 0], top: [9, 0] });
-        B.box(-0.3, 0.5, h + 0.25, h + 0.9, -0.3, 0.3, lw, lm, 0x1a1c20);
+        B.near(() => {
+          B.box(-a - 0.4, a + 0.4, h, h + 0.25, -a - 0.4, a + 0.4, lw, lm, 0x5b6169, { front: [9, 0], top: [9, 0] });
+          B.box(-0.3, 0.5, h + 0.25, h + 0.9, -0.3, 0.3, lw, lm, 0x1a1c20);
+        });
       }, st ? -1 : 0.5) && st) busy[1].push([cs - 6, cs + 6]); // en la calle, las casas dejan sitio a la torre
     } }
   // puentes de publicidad sobre las rectas
@@ -1480,7 +1539,7 @@ function buildWorld() {
             B.at(sc, sg);
             B.box(-len / 2, len / 2, -4, h, 0, dd, lw, lm, c, { front: [tower ? 6 : 5, seed], top: [8, 0] });
             if (roof) B.box(-len / 2 - 0.3, len / 2 + 0.3, h, h + 0.7, -0.4, dd + 0.4, lw, lm, 0xa65a3a, { front: [9, 0], top: [8, 0] });
-            if (!tower && rnd2() < 0.25) B.panel(-len / 2 + 1, Math.min(len / 2 - 1, -len / 2 + 9), 4.2, 5.8, -0.05, lw, lm, Math.floor(rnd2() * 16), 0, 1);
+            if (!tower && rnd2() < 0.25) B.near(() => B.panel(-len / 2 + 1, Math.min(len / 2 - 1, -len / 2 + 9), 4.2, 5.8, -0.05, lw, lm, Math.floor(rnd2() * 16), 0, 1));
           }, 1)) break;
         }
         s += len;
@@ -1503,13 +1562,21 @@ function buildWorld() {
       } else h = 9 + rnd2() * 12 + (T.env ? 26 * sstep(15, 110, T.env.abs(x, z)) : 0);
       h = Math.min(h, 14 + (dist - need) * (tower ? 1.3 : 0.6));
       take(x, z, Math.min(w, d) * 0.45);
-      list.push([x, terr(x, z, 0).h, z, w, h, d, ang, PAL[Math.floor(rnd2() * PAL.length)]]);
+      list.push([x, terr(x, z, 0).h, z, w, h, d, ang, PAL[Math.floor(rnd2() * PAL.length)], dist - need]);
     }
     if (list.length) {
+      // primero las que están cerca de la pista: solo esas dan sombra, con una copia que se dibuja únicamente en la
+      // sombra (capa 1; la cámara solo ve la 0). Las de lejos no se ven con detalle y su sombra no se aprecia.
+      list.sort((a, b) => a[8] - b[8]);
       const city = add(new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), cityMat(tower ? 6 : 5), list.length));
       const qq = new THREE.Quaternion(), vv = new THREE.Vector3(), sc3 = new THREE.Vector3(), yAx = new THREE.Vector3(0, 1, 0);
       list.forEach(([x, y, z, w, h, d, a, c], k) => { m4.compose(vv.set(x, y - 3, z), qq.setFromAxisAngle(yAx, a), sc3.set(w, h + 3, d)); city.setMatrixAt(k, m4); city.setColorAt(k, col.setHex(c)); });
-      city.castShadow = city.receiveShadow = true; city.frustumCulled = false;
+      city.castShadow = false; city.receiveShadow = true; city.frustumCulled = false;
+      const nNear = list.filter((b) => b[8] < 140).length;
+      if (nNear) {
+        const cs = add(new THREE.InstancedMesh(city.geometry, city.material, nNear));
+        cs.instanceMatrix = city.instanceMatrix; cs.instanceColor = city.instanceColor; cs.count = nNear; cs.layers.set(1); cs.castShadow = true; cs.frustumCulled = false;
+      }
     }
   }
   // torres de focos de las carreras de noche: un poste junto a la valla cada 85 m, alternando lados, con la batería de
@@ -1522,7 +1589,7 @@ function buildWorld() {
     if (tryAdd(() => {
       B.at(s, sg);
       B.box(-0.22, 0.22, -1, 13, -0.22, 0.22, lw, lm, 0x4a4f57, { front: [9, 0], top: [9, 0] });
-      B.box(-0.12, 0.12, 12.6, 12.85, -3.4, 0.1, lw, lm, 0x4a4f57, { front: [9, 0] });
+      B.near(() => B.box(-0.12, 0.12, 12.6, 12.85, -3.4, 0.1, lw, lm, 0x4a4f57, { front: [9, 0] }));
       B.box(-1.1, 1.1, 12.1, 12.55, -3.6, -2.4, lw, lm, 0x2a2d31, { front: [9, 0], top: [9, 0] });
       B.box(-1.0, 1.0, 12.05, 12.1, -3.5, -2.5, lw, lm, 0xffffff, { front: [10, 0], top: [10, 0] });
     }, -4.5, true)) towers.push({ s, sg, lw: lw * arrAt(T.wr, s), lm, z: -3.0, y: 12.0 });
@@ -1533,7 +1600,7 @@ function buildWorld() {
     const s = 190 + k * 380, sg = -PS, lw = T.SH, lm = run(sg, iOf(s)) + 4.0;
     if (tryAdd(() => { B.at(s, sg); B.box(-1.3, 1.3, -1, 2.3, -1, 1, lw, lm, 0xe8791f, { front: [9, 0], top: [9, 0] }); }, 0.5)) posts.push({ s, sg, lw: lw * arrAt(T.wr, s), lm });
   }
-  add(B.mesh());
+  const props = add(B.mesh());
   const flags = add(new THREE.InstancedMesh(FLAG_GEO, FLAG_MAT, Math.max(1, posts.length)));
   flags.frustumCulled = false; flags.castShadow = true; flags.count = 0;
   for (let k = 0; k < posts.length; k++) flags.setColorAt(k, col.set(0xffd200));
@@ -1563,6 +1630,8 @@ function buildWorld() {
     g.setAttribute("aLiv", new THREE.InstancedBufferAttribute(livSrc.slice(), 1).setUsage(THREE.DynamicDrawUsage));
     g.setAttribute("aDmg", new THREE.InstancedBufferAttribute(new Float32Array(NC), 1).setUsage(THREE.DynamicDrawUsage));
   }
+  // el coche mínimo (vista general) comparte con la ligera los datos de cada coche: se cambia una malla por otra
+  for (const a of ["aCol2", "aLiv", "aDmg"]) CAR_MIN.setAttribute(a, CAR_LO.attributes[a]);
   const steer = inst(STEER_GEO, STEER_MAT, NC, 10);
   const crewS = inst(CREW_STAND, CREW_MAT, NC * 12, 10), crewC = inst(CREW_CROUCH, CREW_MAT, NC * 4, 10), jacks = inst(JACK_GEO, JACK_MAT, NC * 2, 10);
   const loose = inst(WHEEL_GEO, WHEEL_MAT, NC * 8, 10);
@@ -1659,7 +1728,7 @@ function buildWorld() {
     const pts = add(new THREE.Points(g, m)); pts.frustumCulled = false; pts.visible = false; pts.name = "pueblos";
     return pts;
   })();
-  world = { all, townLights, sparkMesh, fists, chk, beams, towers, night, lampPos, debris, marsh, crane, blank, gant, glit, markMesh, posts, flags, scCar, scBar, road, cars, wheels, crewS, crewC, jacks, loose, puffs, blobs, spray, discs, rings, lamps, poles, halos, decals, steer, carIdx, c2src: c2a.slice(), carsHi, wheelsHi, col2: CAR_LO.attributes.aCol2, livSrc, liv: CAR_LO.attributes.aLiv, dmg: CAR_LO.attributes.aDmg, col2H: CAR_GEO.attributes.aCol2, livH: CAR_GEO.attributes.aLiv, dmgH: CAR_GEO.attributes.aDmg, cell: dg.attributes.aCell };
+  world = { all, props, trees: treeMesh, townLights, sparkMesh, fists, chk, beams, towers, night, lampPos, debris, marsh, crane, blank, gant, glit, markMesh, posts, flags, scCar, scBar, road, cars, wheels, crewS, crewC, jacks, loose, puffs, blobs, spray, discs, rings, lamps, poles, halos, decals, steer, carIdx, c2src: c2a.slice(), carsHi, wheelsHi, col2: CAR_LO.attributes.aCol2, livSrc, liv: CAR_LO.attributes.aLiv, dmg: CAR_LO.attributes.aDmg, col2H: CAR_GEO.attributes.aCol2, livH: CAR_GEO.attributes.aLiv, dmgH: CAR_GEO.attributes.aDmg, cell: dg.attributes.aCell };
   U.uL.value = T.L;
   wetT = cloudT = lightT = -1e9;
   applyQuality();
@@ -2653,6 +2722,35 @@ function drawFlags(now, W, k) {
     chk.getObjectByName("brazo").rotation.x = Math.sin(now / 160) * 0.7;
   }
 }
+// Niveles de detalle del decorado: cada fotograma se mira qué tramos caen en la vista o en la caja de sombras y, de
+// esos, cuáles están lejos (la distancia se divide por lo que ha crecido la maqueta). Solo si algo cambia se rehacen los
+// índices: sigue siendo una única llamada de dibujo (y otra para la sombra).
+const PROP_FAR = [170, 220, 300, 380]; // metros (a escala real) a partir de los que un tramo va sin detalle, por calidad
+const _fr = new THREE.Frustum(), _pm = new THREE.Matrix4();
+function propLod(uS) {
+  const pm = world.props, L = pm.userData.lod, { chunks, state } = L;
+  _pm.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse); _fr.setFromProjectionMatrix(_pm);
+  let sf = null;
+  if (sun.castShadow) { sun.updateMatrixWorld(); sun.target.updateMatrixWorld(); sun.shadow.updateMatrices(sun); sf = sun.shadow.getFrustum(); }
+  const far2 = ((DBG.propFar ?? PROP_FAR[q]) * uS) ** 2;
+  let changed = false;
+  for (let c = 0; c < chunks.length; c++) {
+    const ch = chunks[c], b = ch.box;
+    const st = b.isEmpty() || !(DBG.noCull || _fr.intersectsBox(b) || (sf && sf.intersectsBox(b))) ? 0 : b.distanceToPoint(camera.position) ** 2 > far2 ? 1 : 2;
+    if (st !== state[c]) { state[c] = st; changed = true; }
+  }
+  if (!changed) return;
+  const idx = pm.geometry.index, a = idx.array;
+  let k = 0;
+  for (let c = 0; c < chunks.length; c++) {
+    if (!state[c]) continue;
+    const ch = chunks[c], e = ch.start + ch.n0 + (state[c] === 2 ? ch.n1 : 0);
+    for (let i = ch.start; i < e; i++) a[k++] = i;
+  }
+  pm.geometry.setDrawRange(0, k);
+  idx.clearUpdateRanges(); idx.addUpdateRange(0, Math.max(1, k)); idx.needsUpdate = true;
+  DBG.props = { verts: L.nv, drawn: k, state: Array.from(state).join("") };
+}
 let screenPts = [], rainClock = 0;
 function draw3d(dt, now) {
   const list = updatePoses(dt);
@@ -2662,12 +2760,18 @@ function draw3d(dt, now) {
   const far = placeCars(list, W);
   record(list, W);
   U.uW.value = W; U.uS.value = Math.max(1, W / W_REAL);
+  if (!DBG.noLod) propLod(U.uS.value);
   U.uDetail.value = clamp((T.Wov * 0.8 - W) / Math.max(1, T.Wov * 0.8 - W_REAL), 0, 1);
   updateWet(now); updateCloud(now); updateLight(now);
   if (!isPaused()) U.uTime.value = (U.uTime.value + dt * (replay ? REPLAY_SPEED : 1)) % 1000;
   U.uLight.value = rainHere > 0.3 ? (Math.floor(now / 160) % 2 ? 1 : 0.1) : 0.25;
   const { cars, wheels, blobs, spray, discs } = world;
-  // malla fina solo de cerca y con calidad alta
+  // malla fina solo de cerca y con calidad alta; de muy lejos (vista general), la mínima con las ruedas dentro
+  const tiny = far > (cars.geometry === CAR_MIN ? 0.6 : 0.7);
+  if ((cars.geometry === CAR_MIN) !== tiny) {
+    cars.geometry = tiny ? CAR_MIN : CAR_LO; wheels.visible = !tiny;
+    const tr = world.trees; if (tr) tr.geometry = tiny ? tr.userData.far : tr.userData.near; // los árboles, igual
+  }
   const fine = q >= 2 && far < 0.5, { carsHi, wheelsHi } = world, _zero = mS.clone().makeScale(0, 0, 0);
   let nH = 0;
   const dr = W * 0.6 * far;

@@ -20,11 +20,11 @@ Tamaño: **P** pequeño (un PR corto), **M** medio, **G** grande (varios PR).
 | 3.5 Objetivos de la directiva | 🟡 Hecho a medias (falta lo que depende de 3.4) | `src/sim/objectives.ts`, `hubs.ts` |
 | 4.1 Más cámaras | ✅ Hecho | `map3d.ts` (`MORE_CAMS`, `camList`, `setCamera`), `sessionView.ts` |
 | 4.2 Rótulos de tele | ✅ Hecho | `sessionView.ts` (`tvTick`, `tvShow`), `style.css` |
-| 5.1 Niveles de detalle | ⏳ Pendiente | — |
+| 5.1 Niveles de detalle | ✅ Hecho | `map3d.ts` (`propBuilder`, `propLod`, manzanas, árboles), `car3d.ts` (`carMinGeometry`) |
 | 5.2 Nubes y lluvia | 🟡 A medias (cortinas, relámpagos y trueno) | `map3d.ts` (cielo, `updateStorm`), `audio.ts` (`thunder`) |
 | 5.3 Hora del día | ✅ Hecho | `map3d.ts` (`winOn`, `uCity`, `townLights`, caja de sombras) |
 
-**Lo que queda, en este orden:** 5.1 → resto de 5.2 → 3.1 (en tandas) → 3.4 (y con ella, el resto de 3.5).
+**Lo que queda, en este orden:** resto de 5.2 → 3.1 (en tandas) → 3.4 (y con ella, el resto de 3.5).
 
 ## Reglas para quien lo haga
 
@@ -236,16 +236,42 @@ Referencia medida (página de prueba, Singapur de noche, vista «horizonte», 80
 | 2 | 55 | 1 051 545 |
 | 3 | 60 | 1 107 349 |
 
-### 5.1 Niveles de detalle en el decorado (M) · ⏳ Pendiente
-- El decorado anclado a la pista (`propBuilder` en `map3d.ts`) es una sola malla con todo. Partirlo por tramos de
-  pista (~400 m) para que se pueda recortar (`frustumCulled` con su caja calculada para la anchura de pista máxima)
-  y, de lejos, cambiar a una versión simple (cajas sin balcones, gradas sin banderas ni pilares, sin rótulos).
-- Manzanas de ciudad (`cityMat`): de lejos, sin ventanas (color medio), y no proyectan sombra salvo las cercanas.
-- Coches: hoy hay malla fina para los 8 más cercanos y ligera para el resto. Añadir un tercer nivel muy simple
-  (~300 triángulos) para la vista general.
-- Lo ahorrado se puede gastar en detalle de cerca: alerones con más perfil, suspensión, el piloto girando la cabeza.
-- Ojo: la pista y el decorado engordan al alejar la cámara (escala de maqueta, `curW`): las cajas de recorte tienen
-  que cubrir la anchura máxima (`T.Wov`).
+### 5.1 Niveles de detalle en el decorado (M) · ✅ Hecho
+- Decorado por tramos: `propBuilder` apunta cada vértice en su tramo de pista (`PROP_CHUNK`, ~400 m) y lo que se añade
+  dentro de `B.near(fn)` solo se ve de cerca (rótulos, balcones, pilares, luces del garaje, puestos del muro, banderas,
+  bajos y pilares de las cubiertas, remate de las torres de tele, brazo de los focos). `mesh()` ordena los vértices por
+  tramo (primero lo de siempre, luego lo de cerca) y calcula la caja de cada tramo en los dos extremos de la escala
+  (`W_REAL` y `T.Wov`: la posición va en línea recta con la anchura).
+- `propLod` (cada fotograma, tras la cámara): tramo fuera de la vista **y** de la caja de sombras → fuera; lejos
+  (`PROP_FAR` por calidad: 170/220/300/380 m, divididos por lo que crece la maqueta) → sin lo de cerca. Sigue siendo
+  **una sola llamada** (y otra en la sombra): se rehacen los índices solo cuando cambia algún tramo.
+- Manzanas (`cityMat`): solo las que están a menos de 140 m de lo que deben dejar libre dan sombra, con una copia que
+  comparte las matrices y solo se dibuja en la sombra (capa 1; `sun.shadow.camera.layers.enable(1)`). Las fachadas de
+  Mónaco, cuando cada ventana ocupa menos de medio píxel (`px` de 2 a 3), cambian sus ventanas encendidas por un brillo
+  uniforme (un tercio del medio: el medio de verdad se veía como una mancha naranja). En las torres de Singapur se probó
+  lo mismo y quedaba peor: no se ha tocado.
+- Coches: tercer nivel `carMinGeometry()` (296 triángulos con las ruedas dentro) para la vista general (`far` > 0,7;
+  vuelve con < 0,6): se cambia la geometría de la misma malla (`cars`) y se ocultan las ruedas, sin llamadas nuevas.
+  Comparte con la ligera los datos de cada coche (`aCol2`, `aLiv`, `aDmg`). Los árboles hacen lo mismo (una copa y
+  tronco de tres caras: 26 triángulos en vez de 124).
+- Arreglado de paso el error de sombreador de `instanceColor` (`INST_COL` en `car3d.ts`).
+- Lo que más pesa ahora son los árboles (~99 000 triángulos de cerca), el terreno y los coches ligeros. Lo ahorrado no
+  se ha gastado en detalle de cerca (alerones, suspensión, cabeza del piloto): queda como idea.
+- Medido (página de prueba, 800 × 450, SwiftShader; llamadas / triángulos):
+
+| Vista | Antes | Después |
+|---|---|---|
+| Singapur, horizonte, 21 h, C0 | 30 / 312 244 | 30 / 307 876 |
+| Singapur, horizonte, 21 h, C1 | 35 / 496 266 | 35 / 462 442 |
+| Singapur, horizonte, 21 h, C2 | 55 / 1 051 545 | 55 / 1 017 721 |
+| Singapur, horizonte, 21 h, C3 | 60 / 1 107 349 | 60 / 1 073 525 |
+| Spa, general, C0 | 32 / 337 074 | 31 / 130 766 |
+| Spa, general, C1 | 37 / 479 580 | 35 / 145 440 |
+| Spa, medio, C1 | 34 / 478 948 | 34 / 455 860 |
+| Mónaco, general, C1 | 39 / 461 614 | 37 / 152 666 |
+| Mónaco, horizonte, C1 | 36 / 460 982 | 36 / 446 070 |
+| Silverstone, cerca, C1 | 32 / 470 624 | 32 / 464 308 |
+| Monza, horizonte, C0 | 29 / 326 500 | 29 / 324 434 |
 
 ### 5.2 Nubes y lluvia (M) · 🟡 A medias
 - ✅ Cortinas de lluvia lejanas: franjas verticales en el cielo bajo los chubascos, que se mueven con el viento
@@ -282,10 +308,13 @@ Referencia medida (página de prueba, Singapur de noche, vista «horizonte», 80
     la simulación avanza despacio (los semáforos tardan mucho).
   - En libres tu piloto puede seguir en el garaje: muchas cosas (motores en 2D, cámaras que siguen) necesitan un
     coche en pista.
-- **Error conocido**, anterior a este trabajo: en el 3D sale un error de sombreador (`instanceColor` sin declarar,
-  en `car3d.ts`) en algunos materiales. No rompe nada visible, pero conviene mirarlo.
+- El error de sombreador de `instanceColor` (mallas de coche o ruedas sin color por instancia) ya está arreglado.
+- La página de prueba admite además `nolod=1`, `nocull=1` y `far=<m>` (pasan a `debug.noLod`, `debug.noCull` y
+  `debug.propFar`) y deja en `debug.props` cuántos vértices del decorado se dibujan y el estado de cada tramo
+  (0 fuera, 1 lejos, 2 cerca). **No editar el código mientras se mide:** Vite recarga la página a mitad y salen
+  capturas raras (edificios claros, sin ventanas) que no son un fallo.
 
 ## Orden recomendado (lo que queda)
 
-5.1 → resto de 5.2 → 3.1 (en tandas, cuando haya tiempo: es sobre todo trabajo de datos) → 3.4 (toca casi todo:
+resto de 5.2 → 3.1 (en tandas, cuando haya tiempo: es sobre todo trabajo de datos) → 3.4 (toca casi todo:
 temporada, mercado, guardado) y, con ella, el resto de 3.5.

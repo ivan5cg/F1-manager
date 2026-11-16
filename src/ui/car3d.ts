@@ -215,6 +215,33 @@ export function carGeometry(hi) {
   }
   return c.done();
 }
+/**
+ * Coche mínimo (unos 300 triángulos, ruedas incluidas) para la vista general, donde cada coche ocupa unos pocos
+ * píxeles: casco, pontones, tapa del motor, casco del piloto, alerones, fondo y cuatro ruedas negras. La librea sale
+ * igual que en los otros (se proyecta según la forma).
+ */
+export function carMinGeometry() {
+  const c = collect();
+  const box = (lx, ly, lz, x, y, z, colr, back = null) => {
+    const g = new THREE.BoxGeometry(lx, ly, lz), p = g.attributes.position;
+    if (back) for (let i = 0; i < p.count; i++) if (p.getX(i) < 0) { p.setY(i, p.getY(i) * back[0] + back[2]); p.setZ(i, p.getZ(i) * back[1]); }
+    c.add(g.translate(x, y, z), colr);
+  };
+  // casco: seis puntos por sección y siete secciones, del morro a la caja de cambios
+  const sec = (x, yc, hw, hT, hB) => [[x, yc + hT, 0], [x, yc + hT * 0.55, hw], [x, yc - hB * 0.6, hw * 0.9], [x, yc - hB, 0], [x, yc - hB * 0.6, -hw * 0.9], [x, yc + hT * 0.55, -hw]];
+  const spine = [[3.05, 0.15, 0.07, 0.03, 0.03], [2.2, 0.27, 0.15, 0.085, 0.07], [1.4, 0.43, 0.25, 0.19, 0.18], [0.6, 0.47, 0.37, 0.23, 0.26], [-0.1, 0.5, 0.39, 0.3, 0.3], [-1.0, 0.5, 0.27, 0.3, 0.28], [-2.4, 0.37, 0.07, 0.1, 0.08]];
+  skin(c, spine.map((q) => sec(q[0], q[1], q[2], q[3], q[4])), (u) => (u > 0.3 && u < 0.7 ? [0, 0.04, 0] : [1, 0, 0]), 0.6);
+  for (const s of [1, -1]) box(2.2, 0.32, 0.36, -0.4, 0.38, 0.55 * s, [1, 0, 0], [0.5, 0.7, -0.1]); // pontones
+  box(1.6, 0.34, 0.26, -0.6, 0.88, 0, [1, 0, 0], [0.4, 0.5, -0.12]); // tapa del motor
+  box(0.26, 0.24, 0.24, 0.5, 0.79, 0, [0, 0.85, 0]); // casco del piloto
+  box(4.2, 0.04, 1.5, -0.15, 0.06, 0, [0, 0.04, 0]); // fondo
+  box(0.5, 0.26, 1.24, -2.35, 0.9, 0, [0, 0.04, 0]); // alerón trasero
+  c.part = 1;
+  box(0.34, 0.05, 1.95, 2.85, 0.1, 0, [1, 0, 0]); // alerón delantero (el que se rompe)
+  c.part = 0;
+  for (const [x, z] of [[1.8, 0.83], [1.8, -0.83], [-1.7, 0.82], [-1.7, -0.82]]) c.add(new THREE.CylinderGeometry(0.36, 0.36, 0.34, 8).rotateX(Math.PI / 2).translate(x, 0.36, z), [0, 0.05, 0]);
+  return c.done();
+}
 /** Rueda: neumático de flanco abombado, tapacubos ligeramente cónico con el aro metálico y la banda del compuesto. */
 export function wheelGeometry(hi) {
   const c = collect(), SEG = hi ? 48 : 16; // r = color del compuesto, g = gris fijo, b = metal
@@ -382,12 +409,15 @@ vec3 liveryAt(vec3 p, vec3 n, float cell){
 // Carrocería: pintura con barniz (dos capas de brillo) que refleja el cielo. La geometría mezcla pintura, fibra de
 // carbono, casco y luz trasera: vPaint dice cuánto de pintura tiene cada punto y el resto sale mate y sin barniz.
 /** Material de la carrocería; U aporta uFlood (luz de los focos) y uLight (luz de lluvia trasera). */
+// color de cada coche (o de cada rueda: el compuesto); las mallas que aún no lo tienen (la fina con calidad baja, las
+// ruedas sueltas antes de la primera parada) se compilan sin él: así no falla el sombreador
+const INST_COL_DEF = "\n#ifdef USE_INSTANCING_COLOR\n#define INST_COL instanceColor.rgb\n#else\n#define INST_COL vec3(1.0)\n#endif\n";
 export function makeCarMaterial(livTex, U) {
 const uLiv = { value: livTex };
 const CAR_MAT = new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.45, metalness: 0.15, clearcoat: 1, clearcoatRoughness: 0.05, side: THREE.DoubleSide });
 CAR_MAT.onBeforeCompile = (sh) => {
   Object.assign(sh.uniforms, { uFlood: U.uFlood, uLight: U.uLight, uLiv });
-  sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nuniform float uLight; attribute vec3 aCol2; attribute float aLiv, aPart, aDmg; varying float vPaint, vGlow, vShade, vLiv; varying vec3 vLP, vLN;")
+  sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\n" + INST_COL_DEF + "uniform float uLight; attribute vec3 aCol2; attribute float aLiv, aPart, aDmg; varying float vPaint, vGlow, vShade, vLiv; varying vec3 vLP, vLN;")
     .replace("#include <begin_vertex>", `#include <begin_vertex>
       // alerón delantero: con daño, el lado derecho se descuelga hasta casi rozar el suelo; sin él (cambio de morro), no se dibuja
       if (aPart > 0.5 && aDmg != 0.0) {
@@ -397,7 +427,7 @@ CAR_MAT.onBeforeCompile = (sh) => {
           transformed.x -= 0.1 * k; }
       }`)
     .replace("#include <color_vertex>", `float kr = pow(color.r, 2.2), kb = pow(color.b, 2.2), red = step(color.g, -0.5);
-      vColor = vec4(instanceColor.rgb * kr + aCol2 * kb + vec3(pow(max(color.g, 0.0), 2.2)) + vec3(0.25, 0.0, 0.0) * red, 1.0);
+      vColor = vec4(INST_COL * kr + aCol2 * kb + vec3(pow(max(color.g, 0.0), 2.2)) + vec3(0.25, 0.0, 0.0) * red, 1.0);
       vPaint = step(0.25, color.r + color.b); vGlow = red * uLight; vShade = max(kr, kb); vLiv = aLiv; vLP = position; vLN = normal;`);
   sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nuniform float uFlood; varying float vPaint, vGlow, vShade, vLiv; varying vec3 vLP, vLN;" + LIV_GLSL)
     .replace("#include <color_fragment>", "#include <color_fragment>\nif (vPaint > 0.5) diffuseColor.rgb = liveryAt(vLP, normalize(vLN), floor(vLiv + 0.5)) * vShade;")
@@ -412,8 +442,8 @@ return CAR_MAT;
 export function makeWheelMaterial() {
 const WHEEL_MAT = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.82 });
 WHEEL_MAT.onBeforeCompile = (sh) => {
-  sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nvarying float vMetal;")
-    .replace("#include <color_vertex>", "vColor = vec4(instanceColor.rgb * color.r + vec3(pow(color.g, 2.2)), 1.0); vMetal = color.b;");
+  sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\n" + INST_COL_DEF + "varying float vMetal;")
+    .replace("#include <color_vertex>", "vColor = vec4(INST_COL * color.r + vec3(pow(color.g, 2.2)), 1.0); vMetal = color.b;");
   sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nvarying float vMetal;")
     .replace("#include <roughnessmap_fragment>", "float roughnessFactor = mix(roughness, 0.3, vMetal);")
     .replace("#include <metalnessmap_fragment>", "float metalnessFactor = vMetal;");
