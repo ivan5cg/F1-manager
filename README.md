@@ -226,6 +226,11 @@ siguen la pista.
 
 La carrera se lee como en la tele:
 - La cámara *Tele* corta sola al coche que hace un trompo, se sale o se estrella.
+- **Rótulos de tele** sobre el 3D (se apagan en Ajustes): al acabar una vuelta de clasificación, sus tres sectores
+  frente a los de la pole (morado, más rápido; verde, a menos de una décima); «Récord del circuito» si alguien baja de
+  la pole de referencia; batallas (dos coches a menos de 0,5 s en meta tres vueltas seguidas, con los huecos; como
+  mucho una cada 4 vueltas, salvo las de tus pilotos); los neumáticos de los cinco primeros cada 10 vueltas, y la
+  radio de tus pilotos unos segundos.
 - Con coche de seguridad, el coche (plateado, con la barra de luces encendida) va delante del líder y entra por el
   pit-lane en su última vuelta. Con coche de seguridad o VSC los bordes de toda la pista se marcan en amarillo. Tras un
   percance solo se marca el tramo afectado y los comisarios agitan la bandera amarilla, o la roja si hay bandera roja.

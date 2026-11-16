@@ -228,6 +228,8 @@ export interface Prefs {
   mapa3d?: boolean;
   /** Comentarios de Antonio Lobato en la sesión (por defecto, sí). */
   lobato?: boolean;
+  /** Rótulos de tele sobre el mapa 3D: sectores, récords, batallas, neumáticos y radio (por defecto, sí). */
+  rotulos?: boolean;
   /** Medidor de rendimiento del mapa 3D (fps, calidad, triángulos). */
   rendimiento3d?: boolean;
   /** Calidad del mapa 3D fijada a mano (0 a 3); sin ella, automática. */
@@ -259,6 +261,7 @@ export function loadPrefs(): Prefs {
       if (o.mapa3d === true) p.mapa3d = true;
       if (o.lobato === false) p.lobato = false;
       if (o.rendimiento3d === true) p.rendimiento3d = true;
+      if (o.rotulos === false) p.rotulos = false;
       if ([0, 1, 2, 3].includes(o.calidad3d as number)) p.calidad3d = o.calidad3d;
       if (o.exportadas && typeof o.exportadas === "object") p.exportadas = o.exportadas;
       if (typeof o.ultimaExportacion === "number") p.ultimaExportacion = o.ultimaExportacion;

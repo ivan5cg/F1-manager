@@ -83,7 +83,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     <div class="main"><div class="bigban" id="bigban" aria-live="polite"></div>
       <div class="leftcol"><div class="tower" id="tower"></div><div class="toast" id="toast" title="Dirección de carrera y meteo"></div></div>
       <div class="side${race ? "" : " timed"}">
-        <div class="mapbox"><canvas id="map" title="Toca un coche para seguirlo. Línea discontinua: zona de modo adelantamiento · naranja: frenada donde se adelanta${race ? " · círculo discontinuo: dónde estaría tu piloto si parase ahora" : ""}"></canvas><canvas id="map3d" hidden aria-label="Mapa 3D"></canvas><div class="lbl3d" id="lbl3d" hidden></div><button class="perf3" id="perf3" hidden title="Rendimiento del mapa 3D. Toca para cambiar la calidad (automática, 0, 1, 2, 3)"></button><div class="flyov" id="flyov"></div><div class="selchip" id="selchip"></div><button class="camb" id="camb" title="Cámara: sigue de cerca a tu piloto (o al coche que sigues). En 3D, mantenlo pulsado para ver todas las cámaras" aria-label="Cámara que sigue"><svg viewBox="0 0 20 16" width="20" height="16" aria-hidden="true"><rect x="1" y="3" width="13" height="10" rx="2" fill="currentColor"/><path d="M14.5 7 19 4.5v7L14.5 9z" fill="currentColor"/></svg><span id="camn"></span></button><button class="repb" id="repb" hidden title="Volver a ver el último percance a cámara lenta" aria-label="Repetición del último percance">↺</button><button class="m3b" id="m3b" title="Cambia entre el mapa 2D y el 3D" aria-label="Mapa en 3D" aria-pressed="false">3D</button><button class="bigb" id="bigb" title="Amplía el mapa sobre la clasificación" aria-label="Ampliar el mapa" aria-pressed="false"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" fill="none" stroke="currentColor" stroke-width="2"/></svg></button></div>
+        <div class="mapbox"><canvas id="map" title="Toca un coche para seguirlo. Línea discontinua: zona de modo adelantamiento · naranja: frenada donde se adelanta${race ? " · círculo discontinuo: dónde estaría tu piloto si parase ahora" : ""}"></canvas><canvas id="map3d" hidden aria-label="Mapa 3D"></canvas><div class="lbl3d" id="lbl3d" hidden></div><button class="perf3" id="perf3" hidden title="Rendimiento del mapa 3D. Toca para cambiar la calidad (automática, 0, 1, 2, 3)"></button><div class="flyov" id="flyov"></div><div class="tvg" id="tvg" hidden></div><div class="selchip" id="selchip"></div><button class="camb" id="camb" title="Cámara: sigue de cerca a tu piloto (o al coche que sigues). En 3D, mantenlo pulsado para ver todas las cámaras" aria-label="Cámara que sigue"><svg viewBox="0 0 20 16" width="20" height="16" aria-hidden="true"><rect x="1" y="3" width="13" height="10" rx="2" fill="currentColor"/><path d="M14.5 7 19 4.5v7L14.5 9z" fill="currentColor"/></svg><span id="camn"></span></button><button class="repb" id="repb" hidden title="Volver a ver el último percance a cámara lenta" aria-label="Repetición del último percance">↺</button><button class="m3b" id="m3b" title="Cambia entre el mapa 2D y el 3D" aria-label="Mapa en 3D" aria-pressed="false">3D</button><button class="bigb" id="bigb" title="Amplía el mapa sobre la clasificación" aria-label="Ampliar el mapa" aria-pressed="false"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" fill="none" stroke="currentColor" stroke-width="2"/></svg></button></div>
         ${race ? `<canvas id="gapstrip" class="gapstrip" title="Toda la parrilla en una vuelta: el líder a la izquierda. El círculo discontinuo es dónde saldría tu piloto si parase ahora."></canvas>` : ""}
         <div class="wxbox" id="wx"></div>
         <div id="lapban"></div>
@@ -336,6 +336,83 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     banner({ cls: "fl", title: "Vuelta rápida", sub: `${c.d.abrev} · ${fmtLap(sess.bestLap)}`, ms: 2000 });
   }
 
+  // ------------------------------------------------------------- rótulos de tele (3D)
+  // Sobre el mapa 3D, con el estilo de la tele: récord del circuito, batallas, neumáticos de los primeros, la radio de
+  // tus pilotos y, al acabar una vuelta de clasificación, los sectores frente a la pole. Se apagan en Ajustes.
+  const tvOn = () => view3d && !!m3 && !wide && prefs.rotulos !== false;
+  let tvCur: { html: string; until: number; prio: number } | null = null, tvShown = "";
+  const tvQueue: { html: string; ms: number; prio: number }[] = [];
+  function tvShow(html: string, ms: number, prio = 1) {
+    if (!tvOn()) return;
+    if (tvCur && tvCur.prio < prio) tvCur.until = 0; // lo más importante se ve antes
+    tvQueue.push({ html, ms, prio });
+    tvQueue.sort((a, b) => b.prio - a.prio);
+    if (tvQueue.length > 4) tvQueue.length = 4;
+  }
+  const sgn = (x: number, d = 2) => `${x <= 0 ? "−" : "+"}${Math.abs(x).toFixed(d).replace(".", ",")}`;
+  /** Sectores de la vuelta que acaba de dar frente a los de la pole (morado: mejor que la pole). */
+  function sectorsVsPole(c: Car): string {
+    const pole = sess.timingOrder().filter((x) => !x.eliminated && Number.isFinite(x.best))[0];
+    const ps = pole?.bestSecs, ms = c.secLast;
+    if (!pole || pole === c || !ps || ps.length < 3 || ms.some((x) => !Number.isFinite(x))) return "";
+    return `<div class="fsec">${[0, 1, 2].map((j) => { const d = ms[j] - ps[j]; return `<span class="${d < 0 ? "pb" : d < 0.1 ? "ok" : "slow"}">S${j + 1} ${sgn(d)}</span>`; }).join("")}</div>`;
+  }
+  let tvLap = -1, tvTyreLap = -1, recordShown = false, lastBattle = -99;
+  const battleSeen = new Map<string, number>();
+  function tvTick(now: number) {
+    const el = $("#tvg");
+    const on = tvOn();
+    if (el.hidden === on) el.hidden = !on;
+    if (!on) { tvQueue.length = 0; tvCur = null; if (tvShown) { el.innerHTML = ""; tvShown = ""; } return; }
+    // récord del circuito: mejor que la pole de referencia (la real)
+    const rec = def.poleObjetivo as number | undefined;
+    if (!recordShown && rec && sess.bestLap < rec) {
+      const c = sess.cars.find((x) => Math.abs(x.best - sess.bestLap) < 1e-9);
+      if (c) { recordShown = true; tvShow(`<div class="tvbox rec"><span class="tvtab">Récord del circuito</span><div class="tvrow"><b>${nameFlag(c)}</b><span class="mono">${fmtLap(sess.bestLap)}</span></div><div class="tvsub">antes ${fmtLap(rec)}</div></div>`, 5000, 3); }
+    }
+    if (race && started && sess.leaderLap !== tvLap) {
+      tvLap = sess.leaderLap;
+      const ord = sess.order().filter((c) => c.loc === "track" || c.loc === "pit");
+      // neumáticos de los cinco primeros, cada 10 vueltas
+      if (tvLap >= 5 && tvLap % 10 === 0 && tvLap !== tvTyreLap && tvLap < sess.laps) {
+        tvTyreLap = tvLap;
+        tvShow(`<div class="tvbox"><span class="tvtab">Neumáticos · vuelta ${tvLap}</span>${ord.slice(0, 5).map((c, i) => `<div class="tvrow"><span class="tvpos">${i + 1}</span><b>${esc(c.d.abrev)}</b>${c.tyres ? `${tyreHtml(c.tyres.c)}<span class="mono dim">${c.tyres.laps} v</span>` : ""}</div>`).join("")}</div>`, 8000, 1);
+      }
+      // batalla: dos coches seguidos a menos de 0,5 s en meta tres vueltas seguidas
+      const N = sess.N;
+      let best: { a: Car; b: Car; gaps: number[]; pos: number; score: number } | null = null;
+      for (let i = 0; i + 1 < Math.min(ord.length, 14); i++) {
+        const a = ord[i], b = ord[i + 1], done = Math.floor(Math.max(0, b.msK) / N);
+        if (done < 4) continue;
+        const gaps: number[] = [];
+        for (let L = done - 2; L <= done; L++) { const ta = a.cross[L * N], tb = b.cross[L * N]; if (ta === undefined || tb === undefined) break; gaps.push(tb - ta); }
+        if (gaps.length < 3 || gaps.some((g) => g <= 0 || g >= 0.5)) continue;
+        const key = `${a.id}-${b.id}`;
+        if (tvLap - (battleSeen.get(key) ?? -99) < 8) continue;
+        const score = (a.player || b.player ? 100 : 0) - i;
+        if (!best || score > best.score) best = { a, b, gaps, pos: i + 1, score };
+      }
+      // como mucho una batalla cada 4 vueltas, salvo si es de tus pilotos
+      if (best && (best.score >= 100 || tvLap - lastBattle >= 4)) {
+        lastBattle = tvLap;
+        battleSeen.set(`${best.a.id}-${best.b.id}`, tvLap);
+        tvShow(`<div class="tvbox"><span class="tvtab">Batalla por la P${best.pos}</span><div class="tvrow"><span class="tvpos">${best.pos}</span><b>${esc(best.a.d.abrev)}</b><span class="tvpos">${best.pos + 1}</span><b>${esc(best.b.d.abrev)}</b></div><div class="tvsub mono">${best.gaps.map((g) => g.toFixed(2).replace(".", ",")).join(" · ")} s</div></div>`, 7000, best.a.player || best.b.player ? 2 : 1);
+      }
+    }
+    // el rótulo de ahora: dura lo suyo y pasa al siguiente
+    if (tvCur && now > tvCur.until) tvCur = null;
+    if (!tvCur && tvQueue.length) { const n = tvQueue.shift()!; tvCur = { html: n.html, until: now + n.ms, prio: n.prio }; }
+    const html = tvCur ? tvCur.html : "";
+    if (html !== tvShown) { el.innerHTML = html; tvShown = html; }
+  }
+  /** Radio de tus pilotos, en el estilo de la tele, unos segundos. */
+  function tvRadio(e: RaceEvent) {
+    if (e.kind !== "radio" || e.carId === undefined) return;
+    const c = sess.carById(e.carId);
+    if (!c.player) return;
+    tvShow(`<div class="tvbox radio"><span class="tvtab">Radio · ${esc(c.d.abrev)}</span><div class="tvtxt">${esc(plain(e.text))}</div></div>`, 4500, 2);
+  }
+
   // ------------------------------------------------------------- semáforo
   /** Cinco luces rojas que se encienden una a una y se apagan de golpe; luego, carrera. */
   function lightsOut(done: () => void) {
@@ -367,6 +444,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     if (e.kind === "control" || e.kind === "weather") lastCtlReal = performance.now();
     if (prefs.lobato !== false) lob.onEvent(e);
     soundEvent(e);
+    tvRadio(e);
     const mineEv = isMineEv(e) && e.kind !== "control" && e.kind !== "weather";
     // la meteo informa pero no para; dirección de carrera y lo de tus pilotos, sí, según lo que
     // el jugador haya dejado activado en Ajustes (cada tipo de aviso por separado)
@@ -1629,7 +1707,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       if (showResult && r) {
         const d = r.valid && r.ref ? r.time - r.ref.time : null;
         out.push(`<div class="fly">${name}<div class="ft"><span class="mono">${fmtLap(r.time)}</span>${r.valid ? `<span class="fpos">${r.pos}</span>` : ""}</div>
-          <div class="fr">${!r.valid ? `<span class="fd bad">Vuelta anulada</span>` : r.pos === 1 ? `<span class="fd fast">Mejor tiempo</span>` : r.ref && r.ref.car !== c ? `${refBox(r.ref)}${deltaBox(d!)}` : ""}</div></div>`);
+          <div class="fr">${!r.valid ? `<span class="fd bad">Vuelta anulada</span>` : r.pos === 1 ? `<span class="fd fast">Mejor tiempo</span>` : r.ref && r.ref.car !== c ? `${refBox(r.ref)}${deltaBox(d!)}` : ""}</div>${r.valid && tvOn() ? sectorsVsPole(c) : ""}</div>`);
         continue;
       }
       if (!st.active) continue;
@@ -1939,6 +2017,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       <div class="row" style="gap:4px;margin:8px 0"><button id="pall" class="grow">Todas</button><button id="pnone" class="grow">Ninguna</button></div>
       <h2>Retransmisión</h2>
       <label class="optrow"><input type="checkbox" id="plob" ${prefs.lobato !== false ? "checked" : ""}><span><b>Comentarios de Antonio Lobato</b><br><span class="small dim">Comenta adelantamientos, banderas, paradas, la pole y cómo va la carrera. Salen en la caja de la izquierda y en Radio.</span></span></label>
+      <label class="optrow"><input type="checkbox" id="prot" ${prefs.rotulos !== false ? "checked" : ""}><span><b>Rótulos de tele en 3D</b><br><span class="small dim">Sectores frente a la pole al acabar una vuelta de clasificación, récord del circuito, batallas, neumáticos de los cinco primeros y la radio de tus pilotos.</span></span></label>
       <h2>Sonido</h2>
       <label class="optrow"><input type="checkbox" id="psnd" ${prefs.sonido.sonido ? "checked" : ""}><span><b>Sonido</b><br><span class="small dim">Motores, público, lluvia, viento, paradas, semáforos y choques. Empieza al tocar la velocidad, el 3D o la salida.</span></span></label>
       ${([["volumen", "Volumen general"], ["motores", "Motores"], ["ambiente", "Ambiente"], ["radio", "Radio"]] as const).map(([k, n]) => `<label class="optrow volrow"><span class="grow">${n}</span><input type="range" min="0" max="100" step="5" data-vol="${k}" value="${Math.round(prefs.sonido[k] * 100)}" aria-label="${n}"></label>`).join("")}
@@ -1955,6 +2034,8 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       el.querySelector<HTMLButtonElement>("#pnone")!.onclick = () => all(false);
       const lb = el.querySelector<HTMLInputElement>("#plob")!;
       lb.onchange = () => { prefs.lobato = lb.checked; savePrefs(prefs); lastLeft = ""; renderMessages(); };
+      const pr = el.querySelector<HTMLInputElement>("#prot")!;
+      pr.onchange = () => { prefs.rotulos = pr.checked; savePrefs(prefs); };
       const ps = el.querySelector<HTMLInputElement>("#psnd")!;
       ps.onchange = () => { prefs.sonido.sonido = ps.checked; if (ps.checked) unlockAudio(); soundPrefsChanged(); };
       el.querySelectorAll<HTMLInputElement>("[data-vol]").forEach((r) => (r.oninput = () => { prefs.sonido[r.dataset.vol as "volumen"] = Number(r.value) / 100; soundPrefsChanged(); }));
@@ -2231,6 +2312,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
         renderTop(); renderMessages(); renderSel();
         { const rb = $("#repb"), can = view3d && !!m3 && (m3.replaying() || !!m3.lastIncident()); if (rb.hidden === can) rb.hidden = !can; }
         renderPerf();
+        tvTick(now);
         if (!sheetOpen) renderDrivers();
         else if (sheetTick && now - lastSheet > 1000) { lastSheet = now; sheetTick(); }
       }
