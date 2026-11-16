@@ -79,7 +79,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     <div class="main"><div class="bigban" id="bigban" aria-live="polite"></div>
       <div class="leftcol"><div class="tower" id="tower"></div><div class="toast" id="toast" title="Dirección de carrera y meteo"></div></div>
       <div class="side${race ? "" : " timed"}">
-        <div class="mapbox"><canvas id="map" title="Toca un coche para seguirlo. Línea discontinua: zona de modo adelantamiento · naranja: frenada donde se adelanta${race ? " · círculo discontinuo: dónde estaría tu piloto si parase ahora" : ""}"></canvas><canvas id="map3d" hidden aria-label="Mapa 3D"></canvas><div class="lbl3d" id="lbl3d" hidden></div><div class="flyov" id="flyov"></div><div class="selchip" id="selchip"></div><button class="camb" id="camb" title="Cámara: sigue de cerca a tu piloto (o al coche que sigues)" aria-label="Cámara que sigue"><svg viewBox="0 0 20 16" width="20" height="16" aria-hidden="true"><rect x="1" y="3" width="13" height="10" rx="2" fill="currentColor"/><path d="M14.5 7 19 4.5v7L14.5 9z" fill="currentColor"/></svg><span id="camn"></span></button><button class="repb" id="repb" hidden title="Volver a ver el último percance a cámara lenta" aria-label="Repetición del último percance">↺</button><button class="m3b" id="m3b" title="Cambia entre el mapa 2D y el 3D" aria-label="Mapa en 3D" aria-pressed="false">3D</button><button class="bigb" id="bigb" title="Amplía el mapa sobre la clasificación" aria-label="Ampliar el mapa" aria-pressed="false"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" fill="none" stroke="currentColor" stroke-width="2"/></svg></button></div>
+        <div class="mapbox"><canvas id="map" title="Toca un coche para seguirlo. Línea discontinua: zona de modo adelantamiento · naranja: frenada donde se adelanta${race ? " · círculo discontinuo: dónde estaría tu piloto si parase ahora" : ""}"></canvas><canvas id="map3d" hidden aria-label="Mapa 3D"></canvas><div class="lbl3d" id="lbl3d" hidden></div><button class="perf3" id="perf3" hidden title="Rendimiento del mapa 3D. Toca para cambiar la calidad (automática, 0, 1, 2, 3)"></button><div class="flyov" id="flyov"></div><div class="selchip" id="selchip"></div><button class="camb" id="camb" title="Cámara: sigue de cerca a tu piloto (o al coche que sigues)" aria-label="Cámara que sigue"><svg viewBox="0 0 20 16" width="20" height="16" aria-hidden="true"><rect x="1" y="3" width="13" height="10" rx="2" fill="currentColor"/><path d="M14.5 7 19 4.5v7L14.5 9z" fill="currentColor"/></svg><span id="camn"></span></button><button class="repb" id="repb" hidden title="Volver a ver el último percance a cámara lenta" aria-label="Repetición del último percance">↺</button><button class="m3b" id="m3b" title="Cambia entre el mapa 2D y el 3D" aria-label="Mapa en 3D" aria-pressed="false">3D</button><button class="bigb" id="bigb" title="Amplía el mapa sobre la clasificación" aria-label="Ampliar el mapa" aria-pressed="false"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" fill="none" stroke="currentColor" stroke-width="2"/></svg></button></div>
         ${race ? `<canvas id="gapstrip" class="gapstrip" title="Toda la parrilla en una vuelta: el líder a la izquierda. El círculo discontinuo es dónde saldría tu piloto si parase ahora."></canvas>` : ""}
         <div class="wxbox" id="wx"></div>
         <div id="lapban"></div>
@@ -401,7 +401,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
           canvas: $<HTMLCanvasElement>("#map3d"), labels: $("#lbl3d"), box: document.querySelector<HTMLElement>(".mapbox")!, sess,
           mine, selId: () => selId,
           alpha: () => (paused ? 1 : Math.min(1, leftover / sess.dt)),
-          paused: () => paused, speed: () => (ff ? FF_SPEED : speed),
+          paused: () => paused, speed: () => (ff ? FF_SPEED : speed), quality: prefs.calidad3d,
           ghosts: () => mine().flatMap((c) => { const gh = ghosts.get(c.id); const sNow = c.s + (paused ? 0 : c.v * leftover); return gh ? [{ s: sNow - metersBack(sNow, gh.loss), text: `${c.d.abrev} P${gh.pos}`, color: c.team.color }] : []; }),
         });
       } catch (err) {
@@ -420,9 +420,34 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     $("#m3b").classList.toggle("on", view3d); $("#m3b").setAttribute("aria-pressed", String(view3d));
     cam3d(view3d ? "Circuito" : "");
     if (view3d) { while (m3!.cam() !== "circuito") m3!.cycleCam(); m3!.resize(); m3!.idle(); } else drawMap();
+    renderPerf();
     if (save) { prefs.mapa3d = view3d; savePrefs(prefs); }
   }
   $("#m3b").onclick = (e) => { e.stopPropagation(); void set3d(!view3d); };
+  // medidor de rendimiento del 3D (se enciende en Ajustes): fps, calidad, resolución, llamadas y triángulos
+  const QNAME = ["baja", "media", "alta", "máxima"];
+  function renderPerf() {
+    const el = $("#perf3"), on = view3d && !!m3 && !!prefs.rendimiento3d;
+    if (el.hidden === on) el.hidden = !on;
+    if (!on) return;
+    const st = m3!.stats() as { fps: number; q: number; scale: number; pr: number; calls: number; tris: number; fixed: boolean };
+    const k = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)} M` : n >= 1e3 ? `${Math.round(n / 1e3)} k` : String(n));
+    el.innerHTML = `<b>${paused ? "pausa" : `${Math.round(st.fps)} fps`}</b> · C${st.q}${st.fixed ? "" : " auto"} · ×${(st.pr).toFixed(2).replace(".", ",")}${st.scale < 1 ? ` (${Math.round(st.scale * 100)} %)` : ""}<br>${k(st.tris)} triáng. · ${st.calls} llam.`;
+  }
+  /** Calidad del 3D: undefined = automática. Se guarda y se aplica al momento. */
+  function setQuality3d(v: number | undefined) {
+    if (v === undefined) delete prefs.calidad3d; else prefs.calidad3d = v;
+    savePrefs(prefs);
+    m3?.setQuality(v);
+    renderPerf();
+  }
+  // tocar el medidor pasa a la calidad siguiente: automática → 0 → 1 → 2 → 3 → automática
+  $("#perf3").onclick = (e) => {
+    e.stopPropagation();
+    const c = prefs.calidad3d;
+    setQuality3d(c === undefined ? 0 : c >= 3 ? undefined : c + 1);
+    showToast(`Mapa 3D: calidad ${prefs.calidad3d === undefined ? "automática" : `${prefs.calidad3d} (${QNAME[prefs.calidad3d]})`}.`, 2000, "Mapa");
+  };
   // repetición del último percance (solo en 3D): la sesión se para mientras se ve y luego sigue como estaba
   let repWasPaused = true;
   $("#repb").onclick = (e) => {
@@ -1889,6 +1914,10 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       <div class="row" style="gap:4px;margin:8px 0"><button id="pall" class="grow">Todas</button><button id="pnone" class="grow">Ninguna</button></div>
       <h2>Retransmisión</h2>
       <label class="optrow"><input type="checkbox" id="plob" ${prefs.lobato !== false ? "checked" : ""}><span><b>Comentarios de Antonio Lobato</b><br><span class="small dim">Comenta adelantamientos, banderas, paradas, la pole y cómo va la carrera. Salen en la caja de la izquierda y en Radio.</span></span></label>
+      <h2>Mapa 3D</h2>
+      <label class="optrow"><input type="checkbox" id="pperf" ${prefs.rendimiento3d ? "checked" : ""}><span><b>Mostrar rendimiento del 3D</b><br><span class="small dim">Fotogramas por segundo, calidad, resolución y triángulos, en una esquina del mapa. Tocándolo cambia la calidad.</span></span></label>
+      <div class="optrow" style="display:block"><b>Calidad del 3D</b><br><span class="small dim">Automática: empieza alta y baja sola si el dispositivo no llega. 0: sin sombras ni efectos · 1: sombras · 2: resplandor · 3: oclusión ambiental y desenfoque.</span>
+        <div class="row qsel" style="gap:4px;margin-top:6px">${[["auto", "Auto"], ["0", "0"], ["1", "1"], ["2", "2"], ["3", "3"]].map(([v, n]) => `<button class="grow${(prefs.calidad3d === undefined ? "auto" : String(prefs.calidad3d)) === v ? " on" : ""}" data-q="${v}">${n}</button>`).join("")}</div></div>
       <div class="small dim">Un aviso que para la sesión se reanuda tocándolo o con ▶. La velocidad que elijas se recuerda para la próxima sesión. ⏩ avanza a toda velocidad hasta que pasa algo de tus pilotos (sale o vuelve, marca tiempo, para, un aviso del ingeniero) o de dirección de carrera.<br>Teclado: espacio pausa, 1-6 o −/+ velocidad, F hasta lo siguiente, P pilotos, M muro, R radar, D radio, T columna de la torre, Esc cierra.</div>
       <button data-close style="width:100%;margin-top:8px">Cerrar</button>`, (el) => {
       const boxes = el.querySelectorAll<HTMLInputElement>("[data-p]");
@@ -1898,6 +1927,13 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       el.querySelector<HTMLButtonElement>("#pnone")!.onclick = () => all(false);
       const lb = el.querySelector<HTMLInputElement>("#plob")!;
       lb.onchange = () => { prefs.lobato = lb.checked; savePrefs(prefs); lastLeft = ""; renderMessages(); };
+      const pf = el.querySelector<HTMLInputElement>("#pperf")!;
+      pf.onchange = () => { prefs.rendimiento3d = pf.checked; savePrefs(prefs); renderPerf(); };
+      const qb = el.querySelectorAll<HTMLButtonElement>("[data-q]");
+      qb.forEach((b) => (b.onclick = () => {
+        setQuality3d(b.dataset.q === "auto" ? undefined : Number(b.dataset.q));
+        qb.forEach((x) => x.classList.toggle("on", x === b));
+      }));
     });
   }
   function menuSheet() {
@@ -2100,6 +2136,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
         if (now >= towerAnimUntil) renderTower();
         renderTop(); renderMessages(); renderSel();
         { const rb = $("#repb"), can = view3d && !!m3 && (m3.replaying() || !!m3.lastIncident()); if (rb.hidden === can) rb.hidden = !can; }
+        renderPerf();
         if (!sheetOpen) renderDrivers();
         else if (sheetTick && now - lastSheet > 1000) { lastSheet = now; sheetTick(); }
       }

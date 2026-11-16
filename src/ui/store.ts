@@ -52,7 +52,12 @@ export async function initStore(): Promise<void> {
     // partidas de versiones anteriores, en localStorage: se copian y, solo con la copia hecha, se borran
     const old = SLOT_KEYS.map((k) => [k, lsGet(k)] as [string, string | null]).filter((e): e is [string, string] => e[1] !== null);
     if (old.length) {
-      try { await db.setMany(old); } catch { return; } // si no se puede copiar, todo sigue en localStorage
+      try {
+        await db.setMany(old);
+        // se comprueba leyendo de vuelta antes de borrar nada
+        const back = await db.all();
+        if (old.some(([k, v]) => back.get(k) !== v)) return;
+      } catch { return; } // si no se puede copiar, todo sigue en localStorage
       for (const [k, v] of old) { mem.set(k, v); lsDel(k); }
     }
   }
@@ -199,6 +204,10 @@ export interface Prefs {
   mapa3d?: boolean;
   /** Comentarios de Antonio Lobato en la sesión (por defecto, sí). */
   lobato?: boolean;
+  /** Medidor de rendimiento del mapa 3D (fps, calidad, triángulos). */
+  rendimiento3d?: boolean;
+  /** Calidad del mapa 3D fijada a mano (0 a 3); sin ella, automática. */
+  calidad3d?: number;
 }
 /** Velocidades de la sesión (× tiempo real). */
 export const SPEEDS = [1, 2, 4, 8, 16, 64];
@@ -216,6 +225,8 @@ export function loadPrefs(): Prefs {
       if (SPEEDS.includes(o.velSesion as number)) p.velSesion = o.velSesion as number;
       if (o.mapa3d === true) p.mapa3d = true;
       if (o.lobato === false) p.lobato = false;
+      if (o.rendimiento3d === true) p.rendimiento3d = true;
+      if ([0, 1, 2, 3].includes(o.calidad3d as number)) p.calidad3d = o.calidad3d;
     } else if (localStorage.getItem("autopausa") === "0") {
       // ajuste antiguo (todo o nada)
       for (const k of Object.keys(p.pausas) as (keyof PausePrefs)[]) p.pausas[k] = false;

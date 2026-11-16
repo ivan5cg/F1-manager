@@ -35,10 +35,10 @@ const sstep = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t 
  * opt: { canvas, labels, box, sess, mine(), selId(), alpha(), paused(), speed(), ghosts(), quality? }
  *  · alpha(): cuánto del paso de simulación en curso ha pasado ya (0..1), para interpolar posiciones;
  *  · ghosts(): [{ s, text, color }] con los fantasmas de parada;
- *  · quality (opcional): calidad fija de 0 a 3, sin memoria (para pruebas);
+ *  · quality (opcional): calidad fija de 0 a 3, sin memoria y sin bajar sola (pruebas, o fijada a mano en Ajustes);
  *  · debug (opcional, solo pruebas): { view: { pos, look, fov, s? } } pone la cámara a mano, relativa al coche seguido
  *    (o al punto s de la pista); en el mismo objeto se dejan algunos datos internos para comprobarlos.
- * Devuelve { beforeStep, draw, resize, cycleCam, pick, selChanged, dispose }.
+ * Devuelve { beforeStep, draw, resize, cycleCam, pick, selChanged, stats, setQuality, dispose }.
  */
 export function createMap3d(opt) {
 const sess = opt.sess, track = sess.track;
@@ -48,8 +48,9 @@ let W_REAL = 6.5; // media anchura media de la pista (m); cada circuito pone la 
 // Calidad: 0 baja … 3 máxima. Baja sola si el dispositivo no puede y lo que aguantó se recuerda una semana, para
 // no repetir los tirones en cada sesión. Los táctiles empiezan en 2: la oclusión ambiental a pantalla completa les pesa.
 const Q_KEY = "muro-mapa3d-calidad";
+let fixedQ = opt.quality; // calidad puesta a mano (undefined: automática)
 function startQuality() {
-  if (opt.quality !== undefined) return opt.quality;
+  if (fixedQ !== undefined) return fixedQ;
   let q0 = matchMedia("(pointer: coarse)").matches ? 2 : 3;
   try { const m = JSON.parse(localStorage.getItem(Q_KEY) || "null"); if (m && Date.now() - m.t < 7 * 864e5) q0 = Math.min(q0, m.q); } catch (e) { /* sin memoria */ }
   return q0;
@@ -1792,9 +1793,10 @@ function makePost() {
   for (const p of [new TexturePass(rt.texture), ao, dof, bloom, new OutputPass()]) composer.addPass(p);
   return { rt, composer, ao, dof, bloom };
 }
+let lastInfo = { calls: 0, tris: 0, q };
 function render() {
   renderer.info.autoReset = false; renderer.info.reset();
-  try { render2(); } finally { DBG.info = { calls: renderer.info.render.calls, tris: renderer.info.render.triangles, q }; renderer.info.autoReset = true; }
+  try { render2(); } finally { DBG.info = lastInfo = { calls: renderer.info.render.calls, tris: renderer.info.render.triangles, q }; renderer.info.autoReset = true; }
 }
 function render2() {
   if (q < 2 || !post) { renderer.render(scene, camera); return; }
@@ -1848,10 +1850,11 @@ function applyQuality() {
 }
 /** El dispositivo no llega: primero fuera la oclusión y el desenfoque, luego menos resolución, luego sin efectos y al final sin sombras. */
 function lowerQuality() {
+  if (fixedQ !== undefined) return; // puesta a mano: no se toca
   if (q === 2 && prScale > 0.7) prScale -= 0.15;
   else if (q > 0) { q--; if (q < 2) prScale = 1; }
   else return;
-  if (opt.quality === undefined) try { localStorage.setItem(Q_KEY, JSON.stringify({ q, t: Date.now() })); } catch (e) { /* sin memoria */ }
+  try { localStorage.setItem(Q_KEY, JSON.stringify({ q, t: Date.now() })); } catch (e) { /* sin memoria */ }
   applyQuality();
 }
 
@@ -2785,7 +2788,7 @@ function resize() {
   fitOverview(); camSnap = true;
 }
 resize();
-let fN = 0, fT = performance.now(), lowSecs = 0, warm = 0;
+let fN = 0, fT = performance.now(), lowSecs = 0, warm = 0, fps = 0;
 return {
   /** Antes de cada paso de la simulación: guarda dónde estaba cada coche, para interpolar. */
   beforeStep: remember,
@@ -2797,17 +2800,27 @@ return {
       photoNow = shot; curW = W_REAL; draw3d(0, now); grabPhoto(shot); photoNow = null; camSnap = true;
     }
     draw3d(dt, now);
-    if (opt.paused()) { fN = 0; fT = now; lowSecs = 0; return; } // en pausa se dibuja poco a propósito: no cuenta
+    if (opt.paused()) { fN = 0; fT = now; lowSecs = 0; fps = 0; return; } // en pausa se dibuja poco a propósito: no cuenta
     // calidad automática: si no llega a 40 fps tres segundos seguidos, baja un escalón (ver lowerQuality)
     fN++;
     if (now - fT >= 1000) {
-      const fps = (fN * 1000) / (now - fT);
+      fps = (fN * 1000) / (now - fT);
       if (++warm > 3) { lowSecs = fps < 40 ? lowSecs + 1 : 0; if (lowSecs >= 3) { lowSecs = 0; lowerQuality(); } }
       fN = 0; fT = now;
     }
   },
   /** Tras una pausa larga del dibujo (pestaña oculta, mapa tapado): que no cuente como fotogramas lentos. */
-  idle() { fN = 0; fT = performance.now(); lowSecs = 0; },
+  idle() { fN = 0; fT = performance.now(); lowSecs = 0; fps = 0; },
+  /** Para el medidor de rendimiento: fotogramas por segundo (media del último segundo; 0 en pausa), calidad, escala de
+   *  resolución (sobre la de la calidad), llamadas de dibujo y triángulos del último fotograma, y si la calidad es fija. */
+  stats: () => ({ fps, q, scale: q >= 2 ? prScale : 1, pr: renderer.getPixelRatio(), calls: lastInfo.calls, tris: lastInfo.tris, fixed: fixedQ !== undefined }),
+  /** Fija la calidad (0 a 3) o la deja automática (undefined): la automática empieza en la que recuerda el dispositivo. */
+  setQuality(v) {
+    fixedQ = v === undefined || v === null ? undefined : clamp(Math.round(v), 0, 3);
+    q = startQuality(); prScale = 1; lowSecs = 0; warm = 0;
+    if (q >= 2 && !canPost) q = 1;
+    applyQuality(); busyUntil = performance.now() + 400;
+  },
   /** La cámara está cambiando de sitio: hay que seguir dibujando aunque la sesión esté en pausa. */
   moving: () => camFrom !== null || camSnap || !!replay || performance.now() < busyUntil,
   /** El último percance que se puede volver a ver ({ id, abrev }) o null. */

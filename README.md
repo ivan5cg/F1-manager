@@ -173,6 +173,9 @@ arrancar, sin descargar nada. Hay cuatro escalones de calidad y, si el dispositi
 40 fps, baja solo: primero quita la oclusión ambiental y el desenfoque de la cámara de tele,
 luego resolución, luego el resplandor y el búfer HDR, y al final las sombras. Solo los coches cercanos (hasta 8) usan
 la malla fina; los reflejos de los focos en mojado necesitan calidad 2 y las sombras de los árboles, la máxima.
+En Ajustes se puede fijar la calidad a mano (0 a 3, o automática; fijada no baja sola) y encender un medidor de
+rendimiento: fotogramas por segundo (media del último segundo), calidad, escala de resolución y triángulos y llamadas
+de dibujo por fotograma. Tocando el medidor se pasa a la calidad siguiente.
 
 Alrededor de la pista hay edificio de boxes con un garaje por equipo (con su cartel), puestos en el muro y
 motorhomes en el paddock, torre de control, tribunas con su perfil de verdad (gradas en pendiente con público y cubierta
