@@ -135,6 +135,7 @@ export function createLobato(sess: Session, gp: string) {
         if (a && b) return say(`¡${sur(a)} y ${sur(b)} se tocan y se van largos! Por poco no acaban los dos fuera.`, true);
       }
       if ((m = t.match(/Pinchazo de (\w+)/))) { const c = byAbrev(m[1]); if (c) return say(`¡Pinchazo para ${sur(c)}! Vuelta entera con la goma destrozada. ¡Qué drama!`, true); }
+      if ((m = t.match(/(\w+) hace un trompo/))) { const c = byAbrev(m[1]); if (c && (c.player || spanish(c) || Math.random() < 0.4)) return say(pick([`¡Trompo de ${sur(c)}! Ha hecho un trescientos sesenta... y sigue, pero cuánto tiempo ha perdido.`, `¡Se le ha ido el coche a ${sur(c)}! Vuelta completa, ¡qué susto!`])); }
       if ((m = t.match(/(\w+) se sale de pista/))) { const c = byAbrev(m[1]); if (c && (c.player || spanish(c) || Math.random() < 0.4)) return say(pick([`¡Se va largo ${sur(c)}! Por la escapatoria... ha perdido mucho tiempo.`, `¡Uy! ¡${sur(c)} fuera de pista! Ese error le cuesta caro.`])); }
       return null;
     }

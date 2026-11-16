@@ -172,10 +172,25 @@ arrancar, sin descargar nada. Hay cuatro escalones de calidad y, si el dispositi
 40 fps, baja solo: primero quita la oclusión ambiental y el desenfoque de la cámara de tele,
 luego resolución, luego el resplandor y el búfer HDR, y al final las sombras.
 
-Posiciones, paradas, compuestos, lluvia, nubes, hora y agua en pista (con el carril seco al
+Alrededor de la pista hay edificio de boxes con un garaje por equipo (con su cartel), puestos en el muro y
+motorhomes en el paddock, torre de control, tribunas con su perfil de verdad (gradas en pendiente con público y cubierta
+en voladizo) que siguen la curva, torres de las cámaras de tele y puentes de publicidad sobre las rectas. Mónaco y
+Singapur son ciudades: filas de edificios pegadas a la acera y manzanas detrás (pisos con contraventanas en Mónaco,
+torres de cristal en Singapur, con las ventanas encendidas de noche). Todo lo que va junto a la pista se ensancha con
+ella al alejar la cámara y se comprueba que no la pise a ninguna escala.
+
+Cada equipo lleva su librea pintada en una textura: un dibujo propio a partir de sus colores y tres patrocinadores
+inventados (en los pontones, el alerón trasero, el morro y la tapa del motor). En las paradas el coche se para delante
+de su garaje, sube en los gatos y los mecánicos (del color del equipo) quitan las ruedas viejas y ponen las nuevas, del
+compuesto que toca. Los percances de la simulación se ven: el trompo gira el coche con humo de goma, la salida de pista
+lo lleva a la escapatoria levantando polvo de la grava o de la hierba, el bloqueo echa humo de la rueda delantera y el
+accidente deja el coche contra la barrera un par de minutos.
+
+Posiciones, paradas, compuestos, percances, lluvia, nubes, hora y agua en pista (con el carril seco al
 secarse) salen de la simulación. La altitud, la anchura y el lado de los boxes salen de los datos
 de cada circuito (`relieve`, `ancho`, `boxes.lado`), que genera `python3 scripts/relieve.py`. La
-trazada, el cabeceo de los coches, las escapatorias, los árboles y los edificios son solo dibujo.
+trazada, el cabeceo de los coches, las escapatorias, los árboles, los edificios, las libreas y cómo se ve cada
+parada y cada percance son solo dibujo.
 
 ## Simular sin interfaz
 

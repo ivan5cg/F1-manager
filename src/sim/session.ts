@@ -144,6 +144,8 @@ export interface Car {
   wing: number;
   floor: number;
   delay: number;
+  /** Solo para dibujar (mapa 3D): el último percance y cuándo fue (segundos de sesión). No cambia nada de la carrera. */
+  fx?: { k: "spin" | "off" | "lock" | "crash"; t: number; loss?: number };
   msK: number;
   cross: number[];
   lapTimes: number[];
@@ -1431,6 +1433,7 @@ export class Session {
     const r = this.rng.next();
     const crashP = 0.05 + 0.06 * Math.min(1, water);
     if (r < crashP) {
+      c.fx = { k: "crash", t: this.t };
       this.retire(c, "accidente", 0.7);
     } else if (r < crashP + 0.2) {
       const loss = this.rng.range(1.8, 6);
@@ -1438,8 +1441,12 @@ export class Session {
       c.lapValid = false;
       let dmg = "";
       if (this.rng.chance(0.15)) { c.wing += this.rng.range(0.008, 0.03); dmg = " y daña el alerón"; }
-      this.log({ kind: "incident", text: `↩️ ${c.d.abrev} se sale de pista en el sector ${m.sector + 1}${dmg} (−${loss.toFixed(1)} s)`, carId: c.id, important: c.player });
+      // los que más tiempo pierden son los que han trompeado (solo cambia el texto y el dibujo)
+      const spin = loss > 3.6;
+      c.fx = { k: spin ? "spin" : "off", t: this.t, loss };
+      this.log({ kind: "incident", text: spin ? `🌀 ${c.d.abrev} hace un trompo en el sector ${m.sector + 1}${dmg} (−${loss.toFixed(1)} s)` : `↩️ ${c.d.abrev} se sale de pista en el sector ${m.sector + 1}${dmg} (−${loss.toFixed(1)} s)`, carId: c.id, important: c.player });
     } else if (r < crashP + 0.35) {
+      c.fx = { k: "lock", t: this.t };
       c.delay += this.rng.range(0.3, 0.8);
       tyres.flatSpot = Math.min(1, tyres.flatSpot + this.rng.range(0.3, 0.8));
       // la rueda bloqueada arrastra goma por el asfalto: pico de temperatura en la superficie (que con
@@ -1519,9 +1526,11 @@ export class Session {
     } else if (r < 0.93) {
       c.delay += this.rng.range(2, 5);
       a.delay += this.rng.range(2, 5);
+      c.fx = { k: "off", t: this.t, loss: c.delay }; a.fx = { k: "off", t: this.t, loss: a.delay };
       this.log({ kind: "incident", text: `💢 ${c.d.abrev} y ${a.d.abrev} se tocan y se van largos`, carId: c.id, important: c.player || a.player });
     } else {
       const victim = this.rng.chance(0.5) ? a : c;
+      victim.fx = { k: "crash", t: this.t };
       this.retire(victim, `accidente con ${victim === a ? c.d.abrev : a.d.abrev}`, 0.8);
     }
   }
