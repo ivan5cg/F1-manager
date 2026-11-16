@@ -88,12 +88,12 @@ vec3 SR(vec3 c){ return pow(c, vec3(2.2)); }
 // cielo: degradado del horizonte al cénit, bruma hacia el sol, nubes con volumen que se mueven y el disco del sol.
 // El mismo material pinta el entorno que reflejan los coches y el asfalto mojado (uEnv = 1: sin disco, con suelo).
 const skyU = { uZen: { value: new THREE.Color() }, uHor: { value: new THREE.Color() }, uSun: { value: new THREE.Vector3(0, 1, 0) }, uSunCol: { value: new THREE.Color() },
-  uCloudCol: { value: new THREE.Color() }, uGround: { value: new THREE.Color() }, uNight: { value: 0 },
+  uCloudCol: { value: new THREE.Color() }, uGround: { value: new THREE.Color() }, uNight: { value: 0 }, uCity: { value: 0 },
   uWx: { value: null }, uWxR: { value: 40000 }, uCam: { value: new THREE.Vector2() }, uWind: { value: new THREE.Vector2() } };
 const skyMat = (env) => new THREE.ShaderMaterial({
   uniforms: { ...skyU, uEnv: { value: env } }, side: THREE.BackSide, fog: false, depthWrite: false,
   vertexShader: `varying vec3 vDir; void main(){ vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-  fragmentShader: `uniform vec3 uZen, uHor, uSun, uSunCol, uCloudCol, uGround; uniform float uEnv, uNight, uWxR; uniform vec2 uCam, uWind; uniform sampler2D uWx; varying vec3 vDir;` + GLSL_NOISE + `
+  fragmentShader: `uniform vec3 uZen, uHor, uSun, uSunCol, uCloudCol, uGround; uniform float uEnv, uNight, uWxR, uCity; uniform vec2 uCam, uWind; uniform sampler2D uWx; varying vec3 vDir;` + GLSL_NOISE + `
     // ruido de gradiente con transición suave (no deja ver la rejilla) y octavas giradas
     vec2 g2(vec2 p){ float a = h21(p) * 6.2831853; return vec2(cos(a), sin(a)); }
     float gn(vec2 p){ vec2 i = floor(p), f = fract(p), u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
@@ -108,6 +108,8 @@ const skyMat = (env) => new THREE.ShaderMaterial({
       // bruma: el cielo se aclara hacia el sol, sobre todo cerca del horizonte
       col += uSunCol * (pow(s, 6.0) * 0.10 + pow(s, 40.0) * 0.22) * (1.0 - 0.6 * up);
       float disc = smoothstep(0.99955, 0.9998, s) * 30.0 + pow(s, 900.0) * 3.0;
+      // de noche, el resplandor anaranjado de la ciudad sobre el horizonte (más en los urbanos)
+      col += vec3(1.0, 0.55, 0.25) * uCity * uNight * exp(-up * 9.0) * 0.12;
       // estrellas
       if (uNight > 0.01 && uEnv < 0.5) {
         vec2 sq = d.xz / (d.y + 0.35) * 150.0; float st = h21(floor(sq));
@@ -798,6 +800,8 @@ const PROP_VH = `attribute vec3 aAnc, aSd; attribute float aLw; attribute vec4 a
 const PROP_VB = `vec3 transformed = aAnc + aSd * (uW * aLw) + position * uS; vPat = aPat; vWXZ = transformed.xz;
   if (abs(aPat.x - 11.0) < 0.5) transformed += aSd * sin(uTime * 7.0 - aPat.z * 4.0 + aPat.y) * 0.22 * aPat.z * uS; // banderas del público`;
 const PROP_FH = GLSL_NOISE + `uniform float uFlood, uTexR; uniform sampler2D uCloud, uSigns; varying vec4 vPat; varying vec2 vWXZ;
+// al anochecer las ventanas se encienden poco a poco: cada una a partir de su propio umbral
+float winOn(vec2 c){ return smoothstep(0.0, 0.06, uFlood * 1.3 - 0.05 - h21(c + 7.31) * 0.9) * 0.8; }
 vec3 hsv(float h, float s, float v){ vec3 k = clamp(abs(fract(h + vec3(0.0, 2.0 / 3.0, 1.0 / 3.0)) * 6.0 - 3.0) - 1.0, 0.0, 1.0); return v * mix(vec3(1.0), k, s); }
 vec3 signAt(float cell, vec2 uv){
   float cy = floor((cell + 0.5) / 4.0); vec2 c = vec2(floor(cell + 0.5) - 4.0 * cy, cy);
@@ -829,7 +833,7 @@ if (P > 0.5 && P < 1.5) {
   float fr = max(step(f.x, 0.05), step(f.y, 0.08)) * step(px, 0.6);
   col = mix(SR(vec3(0.12, 0.17, 0.22)), SR(vec3(0.62, 0.64, 0.67)), fr);
   rough = mix(0.06, 0.5, fr); metal = mix(0.2, 0.6, fr);
-  glowC = SR(vec3(1.0, 0.86, 0.62)) * step(0.35, h21(c + sd)) * (1.0 - fr) * uFlood * 2.2;
+  glowC = SR(vec3(1.0, 0.86, 0.62)) * step(0.35, h21(c + sd)) * (1.0 - fr) * winOn(c + sd) * 2.2;
 } else if (P < 3.5) {
   // garaje abierto: dentro en penumbra con el color del equipo al fondo y la fila de luces del techo
   // garaje abierto: en penumbra, con el color del equipo en los paneles del fondo, estanterías de ruedas y luces en el techo
@@ -858,7 +862,7 @@ if (P > 0.5 && P < 1.5) {
     col = mix(col, SR(vec3(0.08, 0.09, 0.11)), win * k);
     col = mix(col, SR(vec3(0.15)), balc * k);
     rough = mix(rough, 0.12, win * k);
-    glowC = SR(vec3(1.0, 0.82, 0.55)) * win * step(0.55, h21(c + sd)) * uFlood * 1.4;
+    glowC = SR(vec3(1.0, 0.82, 0.55)) * win * step(0.55, h21(c + sd)) * winOn(c + sd) * 1.4;
   }
 } else if (P < 6.5) {
   // torre de oficinas: muro cortina con su retícula, de noche con medio edificio encendido
@@ -866,7 +870,7 @@ if (P > 0.5 && P < 1.5) {
   float sp = step(f.y, 0.22), fr = step(f.x, 0.06);
   col = mix(col * 0.32, SR(vec3(0.7)), max(sp * 0.6, fr) * step(px, 0.8));
   rough = mix(0.05, 0.6, sp); metal = 0.5;
-  glowC = SR(mix(vec3(0.75, 0.85, 1.0), vec3(1.0, 0.86, 0.62), step(0.5, h21(vec2(c.y, sd))))) * step(0.55, h21(vec2(floor(c.x / 3.0), c.y) + sd)) * (1.0 - sp) * uFlood * 1.2;
+  glowC = SR(mix(vec3(0.75, 0.85, 1.0), vec3(1.0, 0.86, 0.62), step(0.5, h21(vec2(c.y, sd))))) * step(0.55, h21(vec2(floor(c.x / 3.0), c.y) + sd)) * (1.0 - sp) * winOn(vec2(floor(c.x / 3.0), c.y) + sd) * 1.2;
 } else if (P < 7.5) {
   // celosía de tubos (torres de televisión, puentes): huecos de verdad de cerca
   vec2 f = fract(uv / 1.4);
@@ -1633,7 +1637,25 @@ function buildWorld() {
   // el dorsal y el segundo color son de cada coche, pero los coches se dibujan por orden en pista: se copian a su hueco en cada fotograma
   const carIdx = new Map(sess.cars.map((c, i) => [c.id, i]));
   DBG.towers = towers;
-  world = { all, sparkMesh, fists, chk, beams, towers, night, lampPos, debris, marsh, crane, blank, gant, glit, markMesh, posts, flags, scCar, scBar, road, cars, wheels, crewS, crewC, jacks, loose, puffs, blobs, spray, discs, rings, lamps, poles, halos, decals, steer, carIdx, c2src: c2a.slice(), carsHi, wheelsHi, col2: CAR_LO.attributes.aCol2, livSrc, liv: CAR_LO.attributes.aLiv, dmg: CAR_LO.attributes.aDmg, col2H: CAR_GEO.attributes.aCol2, livH: CAR_GEO.attributes.aLiv, dmgH: CAR_GEO.attributes.aDmg, cell: dg.attributes.aCell };
+  // ---- de noche, luces de pueblos y ciudades en el borde del terreno, en grupos (se encienden con la noche, más abajo)
+  const townLights = (() => {
+    const NP = street ? 900 : 520, pos = [], cols = [];
+    let rs3 = 777 + n; const r3 = () => ((rs3 = (rs3 * 1664525 + 1013904223) >>> 0) / 4294967296);
+    const towns = Array.from({ length: street ? 22 : 14 }, () => ({ a: r3() * Math.PI * 2, R: E * (2.0 + r3() * 1.0), w: 0.03 + r3() * 0.08 }));
+    for (let k = 0; k < NP; k++) {
+      const tw = towns[Math.floor(r3() * towns.length)], a = tw.a + (r3() - 0.5) * tw.w * 2, R0 = tw.R * (1 + (r3() - 0.5) * 0.06);
+      const x = Math.cos(a) * R0, z = Math.sin(a) * R0, t = terr(x, z, 0);
+      if (t.wet) continue;
+      pos.push(x, t.h + E * 0.02 + 4 + r3() * 10, z); // algo por encima: que no las tapen las lomas de delante
+      cols.push(...(r3() < 0.75 ? [1, 0.7, 0.4] : [0.85, 0.9, 1]));
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute("color", new THREE.Float32BufferAttribute(cols, 3));
+    const m = new THREE.PointsMaterial({ size: 2.2, sizeAttenuation: false, vertexColors: true, transparent: true, opacity: 0, fog: false, depthWrite: false, blending: THREE.AdditiveBlending });
+    const pts = add(new THREE.Points(g, m)); pts.frustumCulled = false; pts.visible = false; pts.name = "pueblos";
+    return pts;
+  })();
+  world = { all, townLights, sparkMesh, fists, chk, beams, towers, night, lampPos, debris, marsh, crane, blank, gant, glit, markMesh, posts, flags, scCar, scBar, road, cars, wheels, crewS, crewC, jacks, loose, puffs, blobs, spray, discs, rings, lamps, poles, halos, decals, steer, carIdx, c2src: c2a.slice(), carsHi, wheelsHi, col2: CAR_LO.attributes.aCol2, livSrc, liv: CAR_LO.attributes.aLiv, dmg: CAR_LO.attributes.aDmg, col2H: CAR_GEO.attributes.aCol2, livH: CAR_GEO.attributes.aLiv, dmgH: CAR_GEO.attributes.aDmg, cell: dg.attributes.aCell };
   U.uL.value = T.L;
   wetT = cloudT = lightT = -1e9;
   applyQuality();
@@ -1753,6 +1775,9 @@ function updateLight(now) {
   scene.environmentIntensity = 1 + 0.6 * (1 - day) + 0.6 * warm;
   updateEnv(now, [sunDir.x, sunDir.y, sunDir.z, zen.r, zen.g, zen.b, hor.r, hor.g, hor.b, cloud, wxMean, Math.min(rainHere, 3) / 2].map((v) => v.toFixed(2)).join());
   U.uFlood.value = (1 - day) * 0.8;
+  skyU.uCity.value = T.street ? 1 : 0.3;
+  // luces de los pueblos en el horizonte: con la noche (solo en calidad 2 y 3)
+  if (world.townLights) { const k = sstep(0.25, 0.75, 1 - day); world.townLights.visible = q >= 2 && k > 0.01; world.townLights.material.opacity = k; }
   world.lamps.visible = world.poles.visible = world.halos.visible = day < 0.5 && !world.night;
 }
 
@@ -2383,7 +2408,9 @@ function updateCamera(dt, now) {
   fog.near = Math.max(dist * 1.3, 220); fog.far = Math.max(dist * 6, 3800);
   // el sol ilumina (y da sombra) alrededor de lo que mira la cámara
   // el tamaño va a saltos y el centro se mueve de téxel en téxel: así el borde de las sombras no tiembla al mover la cámara
-  const S0 = onboard ? 75 : clamp(halfH * 2.1, 40, T.E * 0.9), S = Math.pow(2, Math.ceil(Math.log2(S0) * 3) / 3), sc = sun.shadow.camera;
+  // con el sol bajo (atardecer) las sombras son largas: la caja de sombras se agranda para que no se corten
+  const lowSun = 1 + 0.9 * (1 - sstep(0.18, 0.55, sunDir.y));
+  const S0 = (onboard ? 75 : clamp(halfH * 2.1, 40, T.E * 0.9)) * lowSun, S = Math.pow(2, Math.ceil(Math.log2(S0) * 3) / 3), sc = sun.shadow.camera;
   const texel = (2 * S) / sun.shadow.mapSize.x;
   _sr.crossVectors(_up, sunDir).normalize(); _su.crossVectors(sunDir, _sr);
   _sc.copy(sunDir).multiplyScalar(cur.look.dot(sunDir)).addScaledVector(_sr, Math.round(cur.look.dot(_sr) / texel) * texel).addScaledVector(_su, Math.round(cur.look.dot(_su) / texel) * texel);

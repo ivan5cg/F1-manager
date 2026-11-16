@@ -225,6 +225,10 @@ cuesta arriba, parques, y en Singapur cada torre con la altura que da el modelo 
 siguen la pista.
 
 La carrera se lee como en la tele:
+- **Hora del día:** con el sol bajo la caja de las sombras se agranda para que las sombras largas del atardecer no se
+  corten; al anochecer las ventanas de los edificios se encienden poco a poco (cada una con su umbral) y, de noche,
+  hay un resplandor anaranjado sobre el horizonte (más en Singapur y Mónaco) y, en calidad 2 y 3, las luces de los
+  pueblos en el borde del terreno.
 - La cámara *Tele* corta sola al coche que hace un trompo, se sale o se estrella.
 - **Rótulos de tele** sobre el 3D (se apagan en Ajustes): al acabar una vuelta de clasificación, sus tres sectores
   frente a los de la pole (morado, más rápido; verde, a menos de una décima); «Récord del circuito» si alguien baja de
