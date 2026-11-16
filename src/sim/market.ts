@@ -126,8 +126,9 @@ export interface GridChange { team: string; out: string; in: string; what: "pilo
 /**
  * Parrilla de una temporada del modo «crear equipo» tras `round` carreras: los 11 equipos con sus
  * sustitutos y sus valores reales, y el tuyo al final. `changes` cuenta quién ha tenido que cubrir a quién.
+ * ownDev: el coche del jugador evoluciona por piezas (development.ts) y aquí no gana nada solo.
  */
-export function buildGrid(base: TeamDef[], m: Market, spec: CustomTeam, seed: number, round: number): { teams: TeamDef[]; changes: GridChange[] } {
+export function buildGrid(base: TeamDef[], m: Market, spec: CustomTeam, seed: number, round: number, ownDev = false): { teams: TeamDef[]; changes: GridChange[] } {
   const signed = new Set(spec.pilotos);
   const used = new Set(spec.pilotos);
   for (const t of base) for (const p of t.pilotos) if (!signed.has(p.abrev)) used.add(p.abrev);
@@ -173,7 +174,9 @@ export function buildGrid(base: TeamDef[], m: Market, spec: CustomTeam, seed: nu
   const e = em.real;
   teams.push({
     id: PLAYER_TEAM_ID, nombre: spec.nombre, motor: e.nombre, color: spec.color,
-    agarre: td.diseno + NEW_TEAM.agarre + (td.desarrollo * devBudgetMult(m, spec) - dm) * round,
+    // con desarrollo por piezas (development.ts) lo que gana el coche lo ponen las piezas que lleguen; si no
+    // (temporadas de antes), mejora solo según su director técnico y lo que quedó del techo de gasto
+    agarre: td.diseno + NEW_TEAM.agarre + ((ownDev ? 0 : td.desarrollo * devBudgetMult(m, spec)) - dm) * round,
     potencia: e.potencia,
     resistencia: td.resistencia,
     desgaste: td.desgaste,

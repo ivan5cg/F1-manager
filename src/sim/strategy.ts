@@ -445,7 +445,7 @@ export function aiDecide(sess: Session, car: Car, adviceOnly = false): string | 
 /** Modos de ritmo y motor de la IA. */
 export function aiModes(sess: Session, car: Car, left: number) {
   if (!car.tyres) return;
-  const fuelLaps = car.fuel / sess.fuelPerLap;
+  const fuelLaps = car.fuel / sess.fuelLap(car);
   const sp = COMPOUNDS[car.tyres.c];
   const wear = setWear(car.tyres);
   const stint = car.plan.stints[car.stops];

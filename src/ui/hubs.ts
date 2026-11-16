@@ -1,5 +1,6 @@
 import type { SessionSnapshot } from "../sim/snapshot";
-import { TEAMS, BASE_TEAMS, CIRCUITS, ROUNDS, DRIVERS, GRID_CHANGES, getTrack, calendarOf } from "./data";
+import { TEAMS, BASE_TEAMS, CIRCUITS, ROUNDS, DRIVERS, GRID_CHANGES, getTrack, calendarOf, devContext } from "./data";
+import { DEV_AREAS, DEV_SIZES, DEV_RIVAL, MOTOR_CAP, DevArea, DevSize, devLeft, devExpect, orderPart, newDev, isWorks, devGains } from "../sim/development";
 import { myTeamPanel, puSummary, puPanel, wirePu, PLAYER_TEAM_ID } from "./teamBuilder";
 import { $, esc, fmtLap, fmtRace, tyreHtml, fmtDate, sheet, setLabel, groupSets, flagHtml, setBack } from "./common";
 import { SeasonState, RoundResult, RaceSummary, driverStandings, teamStandings, RACE_POINTS, SPRINT_POINTS } from "../sim/season";
@@ -192,6 +193,8 @@ export function teamPickerScreen(nav: Nav, slot: number) {
 
 // --------------------------------------------------------------- temporada
 export function seasonScreen(nav: Nav, s: SeasonState) {
+  // temporadas empezadas antes del desarrollo por piezas: si aún no se ha corrido nada, se les pone ya
+  if (!s.dev && s.round === 0 && !s.rounds.length) { s.dev = newDev(devContext(s).left); saveSeason(s); }
   const ds = driverStandings(s, DRIVERS.length);
   const ts = teamStandings(s, TEAMS);
   const ROUNDS_S = calendarOf(s);
@@ -210,6 +213,7 @@ export function seasonScreen(nav: Nav, s: SeasonState) {
     </div></div>
     ${s.equipo ? myTeamPanel(s, TEAMS) : ""}
     ${s.equipo && s.pu ? `<div class="panel"><div class="hd"><span class="t">Unidades de potencia</span></div><div class="bd">${puSummary(s.pu, DRIVERS.filter((d) => d.team.id === PLAYER_TEAM_ID).map((d) => d.id), DRIVERS.filter((d) => d.team.id === PLAYER_TEAM_ID).map((d) => d.d.abrev))}<div class="small dim" style="margin-top:4px">Porcentaje de vida gastada de cada unidad (en amarillo, la montada; tachadas, las rotas).</div></div></div>` : ""}
+    ${devPanel(s, myTeam, ROUNDS_S, done)}
     ${s.equipo && GRID_CHANGES.length ? `<div class="panel"><div class="hd"><span class="t">La parrilla tras tus fichajes</span></div><div class="bd small">${GRID_CHANGES.map((c) => `${esc(c.team)}: ${c.what === "piloto" ? `${esc(c.in)} por ${esc(c.out)}` : `interino por ${esc(c.out)}`}`).join("<br>")}</div></div>` : ""}
     <div class="panel"><div class="hd"><span class="t">Calendario</span></div><div class="bd" style="padding:0">
       <div class="calstrip" id="calstrip">${ROUNDS_S.map((id, i) => {
@@ -261,6 +265,50 @@ export function seasonScreen(nav: Nav, s: SeasonState) {
     nav.weekend();
   };
   else $("#again").onclick = () => nav.home();
+  wireDev(s, () => { const y = window.scrollY; seasonScreen(nav, s); window.scrollTo(0, y); });
+}
+
+// --------------------------------------------------------------- desarrollo
+// Lo que gana el coche, en tiempo por vuelta aproximado (un circuito medio, de 90 s): 1 de agarre son ~0,38 s y
+// 1 de potencia, ~0,15 s. Para la fiabilidad, cuánto bajan las averías.
+const AERO_S = 0.38, POWER_S = 0.15;
+const fmtS = (x: number) => `${x >= 0 ? "−" : "+"}${Math.abs(x).toFixed(2).replace(".", ",")} s`;
+function devGainText(area: DevArea, x: number): string {
+  if (area === "aero") return `${fmtS(x * AERO_S)}/vuelta`;
+  if (area === "motor") return `${fmtS(x * POWER_S)}/vuelta`;
+  return `−${Math.round(x * 100)} % averías`;
+}
+function devPanel(s: SeasonState, team: TeamDef, cal: string[], done: boolean): string {
+  const d = s.dev;
+  if (!d) return "";
+  const ctx = devContext(s), left = devLeft(d);
+  const gp = (r: number) => (r < cal.length ? esc(CIRCUITS[cal[r]].gp.replace("Gran Premio de ", "GP de ").replace(/ \(.*\)$/, "")) : "después de la última carrera");
+  const now = devGains(d, s.round, isWorks(team));
+  const cap = isWorks(team) ? MOTOR_CAP.works : MOTOR_CAP.client;
+  const order = done ? "" : `<div class="devorder">${(Object.keys(DEV_AREAS) as DevArea[]).map((a) => `<div class="devrow"><div><b>${DEV_AREAS[a].name}</b><br><span class="small dim">${DEV_AREAS[a].what}${a === "motor" ? ` (tope de la temporada: ${devGainText("motor", cap)}${isWorks(team) ? "" : ", eres cliente"})` : ""}</span></div><div class="seg">${([1, 2, 3] as DevSize[]).map((z) => {
+      const sz = DEV_SIZES[z], ready = s.round + sz.delay, ok = left >= sz.cost && ready < cal.length;
+      return `<button data-dev="${a}" data-size="${z}"${ok ? "" : " disabled"} title="${sz.name}: ${sz.cost} M, llega para el ${gp(ready)}">${sz.name}<br><span class="small">${sz.cost} M · ${devGainText(a, devExpect(a, z, ctx.pubK))}</span></button>`;
+    }).join("")}</div></div>`).join("")}</div>`;
+  const parts = d.parts.slice().sort((a, b) => b.id - a.id);
+  return `<div class="panel"><div class="hd"><span class="t">Desarrollo del coche</span><span class="small">Quedan <b>${String(left).replace(".", ",")} M</b> de ${d.budget} M</span></div><div class="bd">
+    <div class="small" style="margin-bottom:6px">Pide piezas con el presupuesto de la temporada: las pequeñas y medianas tardan 2 rondas en llegar y las grandes, 3. Una de cada cuatro rinde menos de lo que esperaban tus ingenieros. ${s.equipo ? "Los rivales evolucionan según su director técnico." : `Los rivales mejoran por su cuenta (unos ${fmtS(DEV_RIVAL * AERO_S).slice(1)} por ronda): si no pides piezas, te quedas atrás.`}</div>
+    ${now.aero || now.motor || now.fiab ? `<div class="small" style="margin-bottom:6px">Ya en el coche: ${[now.aero ? `aerodinámica ${devGainText("aero", now.aero)}` : "", now.motor ? `motor ${devGainText("motor", now.motor)}` : "", now.fiab ? `fiabilidad ${devGainText("fiab", now.fiab)}` : ""].filter(Boolean).join(" · ")}.</div>` : ""}
+    ${order}
+    ${parts.length ? `<div class="devparts">${parts.map((p) => {
+      const arrived = p.ready <= s.round, k = p.real / Math.max(1e-9, p.expect);
+      const verdict = !arrived ? `<span class="dim">en fábrica: llega al ${gp(p.ready)}</span>` : `montada: <b class="${k < 0.75 ? "red" : k > 1.12 ? "green" : ""}">${devGainText(p.area, p.real)}</b>${k < 0.75 ? " (decepciona)" : k > 1.12 ? " (mejor de lo esperado)" : ""}`;
+      return `<div class="devpart"><b>${DEV_AREAS[p.area].name}</b> <span class="dim">· ${DEV_SIZES[p.size].name.toLowerCase()} · se esperaba ${devGainText(p.area, p.expect)}</span><br><span class="small">${verdict}</span></div>`;
+    }).join("")}</div>` : ""}
+  </div></div>`;
+}
+function wireDev(s: SeasonState, redraw: () => void) {
+  if (!s.dev) return;
+  const ctx = devContext(s);
+  document.querySelectorAll<HTMLButtonElement>("[data-dev]").forEach((b) => (b.onclick = () => {
+    const a = b.dataset.dev as DevArea, z = Number(b.dataset.size) as DevSize, sz = DEV_SIZES[z];
+    if (!confirm(`¿Pedir una pieza ${sz.name.toLowerCase()} de ${DEV_AREAS[a].name.toLowerCase()} por ${sz.cost} M? Llega en ${sz.delay} rondas.`)) return;
+    if (orderPart(s.dev!, a, z, s.round, s.seed, ctx.pubK, ctx.realK)) { saveSeason(s); redraw(); }
+  }));
 }
 
 /**

@@ -80,6 +80,8 @@ export interface TeamDef {
   agarre: number; potencia: number; resistencia: number; desgaste: number;
   boxes: number; fiabilidad: number; estrategia: number; meteo: number;
   pilotos: DriverDef[];
+  /** Consumo de combustible frente al de referencia (1); lo baja el desarrollo del motor (development.ts). */
+  consumo?: number;
   /** Decoración del coche (solo dibujo, equipo propio): dibujo, segundo color y tres patrocinadores (índices de marca). */
   librea?: Librea;
 }
@@ -417,6 +419,8 @@ export class Session {
   }
 
   get L() { return this.track.length; }
+  /** Combustible por vuelta de un coche (kg): el de referencia del circuito por el consumo de su equipo. */
+  fuelLap(c: Car) { return this.fuelPerLap * (c.team.consumo ?? 1); }
   carById(id: number) { return this.cars.find((c) => c.id === id)!; }
 
   log(e: Omit<RaceEvent, "t" | "lap">) {
@@ -465,8 +469,8 @@ export class Session {
       c.loc = "track";
       c.gridS = -12 - i * 8;
       c.s = c.gridS;
-      c.fuel = this.fuelPerLap * this.laps * this.rng.range(0.985, 1.01) + 0.8;
-      if (c.player) c.fuel = this.fuelPerLap * this.laps + 0.5;
+      c.fuel = this.fuelLap(c) * this.laps * this.rng.range(0.985, 1.01) + 0.8;
+      if (c.player) c.fuel = this.fuelLap(c) * this.laps + 0.5;
     });
     for (const c of this.cars) {
       if (!grid.includes(c.id)) { c.loc = "out"; c.retireReason = "no sale"; continue; }
@@ -519,10 +523,10 @@ export class Session {
   }
   setFuel(c: Car, marginLaps: number) {
     if (this.t > 0) return;
-    c.fuel = this.fuelPerLap * (this.laps + marginLaps) + 0.5;
+    c.fuel = this.fuelLap(c) * (this.laps + marginLaps) + 0.5;
   }
   fuelMargin(c: Car) {
-    return (c.fuel - 0.5) / this.fuelPerLap - this.laps;
+    return (c.fuel - 0.5) / this.fuelLap(c) - this.laps;
   }
 
   /** Orden: carreras por distancia; libres/clasificación por mejor vuelta. */
@@ -984,7 +988,7 @@ export class Session {
     if (treadT(tyres.F) > lim) heat[0] += dt;
     if (treadT(tyres.R) > lim) heat[1] += dt;
     const underFlag = this.flag !== "green" || ph.speed < 1;
-    c.fuel -= (this.fuelPerLap * ENGINE_FUEL[c.engine] * PUSH_FUEL[c.push] * (underFlag ? 0.5 : 1) * move) / L;
+    c.fuel -= (this.fuelLap(c) * ENGINE_FUEL[c.engine] * PUSH_FUEL[c.push] * (underFlag ? 0.5 : 1) * move) / L;
     if (!underFlag) {
       const dE = this.ersLap * this.ersIn[m.i] - (this.ersLap - ERS_NET[c.ers]) * this.ersOut[m.i]; // MJ en este minisector
       c.soc = clamp(c.soc + (dE / this.tRef[m.i]) * dt, 0, SOC_MAX);
@@ -1241,7 +1245,7 @@ export class Session {
       this.log({ kind: "radio", carId: c.id, text: `📻 ${c.d.abrev}: "Los neumáticos se están acabando, noto cómo caen."`, pause: true, important: true });
     }
     const lapsLeft = this.laps - lap;
-    const fuelLaps = c.fuel / this.fuelPerLap;
+    const fuelLaps = c.fuel / this.fuelLap(c);
     // regla de los dos compuestos: se avisa a tiempo de parar (y otra vez al final)
     if (this.kind === "RACE" && !this.autoPlayers && (lapsLeft === 12 || lapsLeft === 4) && !ruleSatisfied(c))
       this.log({ kind: "radio", carId: c.id, text: `📻 Ingeniero: ${c.d.abrev} aún no ha usado un segundo compuesto de seco. Si no para a montar otro, le descalifican.`, important: true, pause: true });
@@ -1644,7 +1648,7 @@ export class Session {
         const back = minGap - gapM;
         b.s -= back;
         // esa distancia se volverá a recorrer: no debe gastar combustible dos veces
-        b.fuel += (this.fuelPerLap * ENGINE_FUEL[b.engine] * PUSH_FUEL[b.push] * back) / L;
+        b.fuel += (this.fuelLap(b) * ENGINE_FUEL[b.engine] * PUSH_FUEL[b.push] * back) / L;
         b.followGap = minGap / Math.max(20, b.v);
       }
     }
@@ -1694,7 +1698,7 @@ export class Session {
     const frac = Math.min(1, p.t / p.total);
     c.s = p.entryS + p.dist * frac;
     c.v = this.track.pit.limit;
-    c.fuel -= ((0.2 * this.fuelPerLap) / this.lapRefRace) * dt;
+    c.fuel -= ((0.2 * this.fuelLap(c)) / this.lapRefRace) * dt;
     if (!p.changed && frac > 0.5) {
       p.changed = true;
       const set = c.e.sets.find((s) => s.id === p.setId)!;

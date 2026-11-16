@@ -21,7 +21,7 @@ export const SETUP_MIN = -2, SETUP_MAX = 2;
 /** Cuánto se mueve el óptimo con la pista empapada (en pasos). */
 export const WET_SHIFT: Setup = { a: 1.0, r: 1.2 };
 /** Segundos por vuelta (de referencia) por paso² fuera del óptimo. */
-export const SETUP_Q: Setup = { a: 0.18, r: 0.12 };
+export const SETUP_Q: Setup = { a: 0.09, r: 0.06 };
 /** Agarre en curva por paso de carga (por la parte que viene de la carga) y por paso de altura (curvas rápidas). */
 export const SETUP_GRIP: Setup = { a: 0.008, r: 0.004 };
 

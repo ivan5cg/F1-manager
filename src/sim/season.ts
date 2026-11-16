@@ -4,6 +4,7 @@ import type { WeekendState } from "./weekend";
 import type { Compound } from "./tyres";
 import type { CustomTeam } from "./market";
 import type { PuState } from "./powerunit";
+import type { DevState } from "./development";
 
 export const RACE_POINTS = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
 export const SPRINT_POINTS = [8, 7, 6, 5, 4, 3, 2, 1];
@@ -45,6 +46,8 @@ export interface SeasonState {
   equipo?: CustomTeam;
   /** Modo «crear equipo»: unidades de potencia de cada piloto tras la última carrera. */
   pu?: Record<number, PuState>;
+  /** Desarrollo del coche por piezas (las temporadas de antes no lo tienen: su coche mejora solo, como entonces). */
+  dev?: DevState;
 }
 
 export function pointsFor(rows: ResultRow[] | undefined, table: number[]): Map<number, number> {

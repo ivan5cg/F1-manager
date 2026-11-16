@@ -13,7 +13,8 @@ import sepang from "../../data/circuitos/sepang.json";
 import market from "../../data/mercado-2026.json";
 import { buildTrack, Track } from "../sim/track";
 import type { TeamDef, DriverDef } from "../sim/session";
-import { buildGrid, GridChange, Market } from "../sim/market";
+import { buildGrid, GridChange, Market, PLAYER_TEAM_ID, costOf, trueTech } from "../sim/market";
+import { applyDev, DEV_RIVAL } from "../sim/development";
 import type { SeasonState } from "../sim/season";
 
 /** Los 11 equipos reales (modo clásico y base del modo «crear equipo»). */
@@ -43,8 +44,25 @@ setTeams(BASE_TEAMS);
 
 /** Parrilla de una temporada tras `round` carreras. */
 export function gridOf(s: SeasonState | null, round = s?.round ?? 0): { teams: TeamDef[]; changes: GridChange[] } {
-  if (!s?.equipo) return { teams: BASE_TEAMS, changes: [] };
-  return buildGrid(BASE_TEAMS, MARKET, s.equipo, s.seed, Math.min(round, calendarOf(s).length - 1));
+  if (!s) return { teams: BASE_TEAMS, changes: [] };
+  const r = Math.min(round, calendarOf(s).length - 1);
+  if (!s.equipo) {
+    // equipo real: con desarrollo por piezas, los rivales mejoran a un ritmo fijo y el tuyo, con lo que pidas
+    if (!s.dev) return { teams: BASE_TEAMS, changes: [] };
+    return { teams: BASE_TEAMS.map((t) => (t.id === s.playerTeam ? applyDev(t, s.dev, r) : { ...t, agarre: t.agarre + DEV_RIVAL * r })), changes: [] };
+  }
+  const g = buildGrid(BASE_TEAMS, MARKET, s.equipo, s.seed, r, !!s.dev);
+  if (s.dev) g.teams = g.teams.map((t) => (t.id === PLAYER_TEAM_ID ? applyDev(t, s.dev, r) : t));
+  return g;
+}
+
+/** Desarrollo: lo que queda del techo de gasto («crear equipo»; null con un equipo real) y el ritmo de tu director
+ *  técnico frente al medio (lo publicado, para lo que se espera; lo real, para lo que rinde). */
+export function devContext(s: SeasonState): { left: number | null; pubK: number; realK: number } {
+  if (!s.equipo) return { left: null, pubK: 1, realK: 1 };
+  const tech = MARKET.tecnicos.find((x) => x.nombre === s.equipo!.tecnico);
+  const pub = tech?.desarrollo ?? 0.06, real = tech ? trueTech(tech, s.seed).desarrollo : pub;
+  return { left: MARKET.techo - costOf(MARKET, s.equipo), pubK: pub / 0.06, realK: real / 0.06 };
 }
 /** Deja como activa la parrilla de la temporada (llamar al cargarla y al pasar de ronda). */
 export function useSeason(s: SeasonState | null) {

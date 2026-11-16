@@ -1289,7 +1289,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       const ga = ahead && c.loc === "track" ? sess.gapBetween(ahead, c) : NaN;
       const gb = behind && behind.loc === "track" ? sess.gapBetween(c, behind) : NaN;
       const f = (g: number) => (!isFinite(g) ? "—" : g > sess.lapRefRace * 0.95 ? "1V+" : g.toFixed(1));
-      const d = c.fuel / sess.fuelPerLap - (sess.laps - sess.lapsDone(c));
+      const d = c.fuel / sess.fuelLap(c) - (sess.laps - sess.lapsDone(c));
       const soc = Math.round((c.soc / SOC_MAX) * 100);
       // verde si el hueco mejora (te acercas al de delante o te alejas del de atrás), amarillo si empeora
       return cell(`▲ ${ahead ? ahead.d.abrev : ""}`, f(ga), gapTrend(c.id * 2, ahead?.id, ga, -1)) + cell(`▼ ${behind ? behind.d.abrev : ""}`, f(gb), gapTrend(c.id * 2 + 1, behind?.id, gb, 1))
@@ -1512,7 +1512,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
         return `<div class="ax" style="border-color:${col}"><span class="lb">${name}</span><b class="tt mono" style="color:${col}">${a.tBulk.toFixed(0)}°</b><span class="dt mono">sup. ${a.tSurf.toFixed(0)}° · ${Math.round((1 - a.wear) * 100)} %</span><span class="fl">${feelHtml(c, k) || "&nbsp;"}</span></div>`;
       };
       const seg = (key: string, label: string, names: string[], cur: number, auto?: boolean) => `<span class="sl">${label}</span><div class="seg" data-k="${key}" data-i="${idx}">${auto !== undefined ? `<button data-v="auto" class="${auto ? "on" : ""}">Auto</button>` : ""}${names.map((n, i) => `<button data-v="${i}" class="${!auto && cur === i ? "on" : ""}" title="${n}">${n}</button>`).join("")}</div>`;
-      const fuelDelta = race ? c.fuel / sess.fuelPerLap - (sess.laps - sess.lapsDone(c)) : 0;
+      const fuelDelta = race ? c.fuel / sess.fuelLap(c) - (sess.laps - sess.lapsDone(c)) : 0;
       const plan = race ? c.plan.stints.slice(c.stops).map((s, i, arr) => `${tyreHtml(s.c)}${i < arr.length - 1 ? ` v${s.endLap}` : ""}`).join(" → ") : "";
       const cell = (k: string, v: string, wide = false) => `<div class="${wide ? "w2" : ""}"><i>${k}</i><b class="mono">${v}</b></div>`;
       const sp = t ? COMPOUNDS[t.c] : null;

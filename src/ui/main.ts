@@ -2,7 +2,8 @@ import "./style.css";
 
 // tema visual (las fichas de color están en style.css)
 document.documentElement.dataset.tema = "grafito";
-import { TEAMS, CIRCUITS, ROUNDS, DRIVERS, getTrack, useSeason } from "./data";
+import { TEAMS, CIRCUITS, ROUNDS, DRIVERS, getTrack, useSeason, devContext } from "./data";
+import { newDev } from "../sim/development";
 import { builderScreen, PLAYER_TEAM_ID } from "./teamBuilder";
 import { loadSeason, saveSeason, loadSession, clearSession, isParked, setActiveSlot, deleteSlot, initStore, roomyStorage, askPersist, slotList } from "./store";
 import type { SessionSnapshot } from "../sim/snapshot";
@@ -110,6 +111,7 @@ function enter() {
 
 /** Temporada nueva en una partida: lo que hubiera en ella se borra. */
 function newSeason(slot: number, s: SeasonState) {
+  s.dev = newDev(devContext(s).left); // presupuesto de desarrollo de la temporada
   // la primera partida: se pide al navegador que no borre los datos por su cuenta
   if (!slotList().some((x) => x.season)) askPersist();
   deleteSlot(slot);

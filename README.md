@@ -49,6 +49,14 @@ En la realidad, en 2026 el GP de Baréin no se corrió en Sakhir: se trasladó a
 
 - **Formato normal:** Libres 1, Libres 2, Libres 3, Clasificación (Q1 18', Q2 15', Q3 12'; caen 6 y 6; con tu equipo hay 24 coches y en Q1 caen 7) y Carrera.
 - **Formato sprint:** Libres 1, Clasificación sprint (SQ1 12', SQ2 10', SQ3 8'; medios en SQ1 y SQ2, blandos en SQ3), Sprint (21 vueltas en Singapur y 24 en Interlagos), Clasificación y Carrera.
+- **Desarrollo del coche** (en la pantalla de temporada): un presupuesto por temporada (40 M con un equipo real; en
+  «crea tu equipo», de 25 a 50 M según lo que quedó del techo de gasto) para pedir piezas de aerodinámica (agarre),
+  motor y eficiencia (potencia y algo menos de consumo, con un tope en la temporada más bajo si el motor es de
+  cliente) y fiabilidad (menos averías). Pequeñas (4 M) y medianas (8 M) tardan 2 rondas en llegar; grandes (14 M),
+  3. Una de cada cuatro rinde menos de lo esperado y el resto, entre algo menos y algo más; se decide con la semilla
+  de la temporada. Con un equipo real los rivales mejoran por su cuenta a un ritmo fijo (el mismo que da de media
+  gastar el presupuesto en aerodinámica); en «crea tu equipo» siguen evolucionando según su director técnico, y el
+  tuyo marca cuánto rinde cada M. Las temporadas empezadas antes de esto siguen como estaban.
 - **Puntos:** 25-18-15-12-10-8-6-4-2-1 en carrera; 8-7-6-5-4-3-2-1 en la sprint. Mundial de pilotos y de constructores.
 - La partida se guarda sola al terminar cada sesión y también a mitad de una: cada pocos segundos y al salir de la app. Si se cierra el navegador o entra una llamada, al volver la sesión sigue exactamente donde estaba.
 - Hay **3 partidas** (en el inicio: seguir, exportar o borrar cada una). Todo se guarda en el navegador del dispositivo, sin cuenta ni servidor: para hacer una copia de seguridad o seguir en otro dispositivo, «Exportar a un archivo» y luego «Importar partida» allí.
