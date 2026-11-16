@@ -12,7 +12,8 @@ import { SeasonState, driverStandings, teamStandings, pointsFor, RACE_POINTS, SP
 import { podiumHtml, standingsHtml, animateCounts, shareSheet } from "./podium";
 import { Weekend } from "../sim/weekend";
 import { Session, SessionKind, SESSION_NAMES, isRaceKind } from "../sim/session";
-import { raceSummaryHtml, drawRaceSummary, buildSummary } from "./summary";
+import { raceSummaryHtml, drawRaceSummary, buildSummary, photosHtml } from "./summary";
+import { takeLastPhotos } from "./photos";
 import { runToEnd } from "./simulate";
 import { esc, setBack } from "./common";
 
@@ -56,6 +57,9 @@ function finishSession(wk: Weekend, kind: SessionKind, sess: Session) {
     const t = sess.pointsTable();
     extra = `<div class="panel"><div class="hd"><span class="t">Carrera acortada</span></div><div class="bd small">Suspendida y no reanudada: cuenta la clasificación al final de la vuelta ${sess.shortened.laps} de ${sess.laps} (${Math.round((100 * sess.shortened.laps) / sess.laps)} %). ${!t ? "Puntos completos (más del 75 %)." : t.length ? `Puntos reducidos: ${t.join("-")}.` : "Sin puntos: no se completaron dos vueltas en verde."}</div></div>` + extra;
   }
+  // fotos de la carrera (si se vio en 3D): solo para esta pantalla
+  const pics = sum ? takeLastPhotos() : [];
+  if (pics.length) extra = photosHtml(pics) + extra;
   if (sum) extra = raceSummaryHtml(sum) + extra;
   saveSeason(s);
   const rows = sess.results();

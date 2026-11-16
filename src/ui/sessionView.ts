@@ -1,4 +1,5 @@
 import { $, esc, fmtLap, fmtClock, tyreHtml, setLabel, sheet, dirName, flagHtml, lifeLeft, wearColor, groupSets, keepAwake, setBack, closeTopSheet, closeAllSheets, anySheetOpen } from "./common";
+import { setLastPhotos, type Photo } from "./photos";
 import { CIRCUITS } from "./data";
 import { puLife } from "../sim/powerunit";
 import { knowledgeTable, longRunsPanel, weekendLongRuns, setPills } from "./hubs";
@@ -78,7 +79,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     <div class="main"><div class="bigban" id="bigban" aria-live="polite"></div>
       <div class="leftcol"><div class="tower" id="tower"></div><div class="toast" id="toast" title="Dirección de carrera y meteo"></div></div>
       <div class="side${race ? "" : " timed"}">
-        <div class="mapbox"><canvas id="map" title="Toca un coche para seguirlo. Línea discontinua: zona de modo adelantamiento · naranja: frenada donde se adelanta${race ? " · círculo discontinuo: dónde estaría tu piloto si parase ahora" : ""}"></canvas><canvas id="map3d" hidden aria-label="Mapa 3D"></canvas><div class="lbl3d" id="lbl3d" hidden></div><div class="flyov" id="flyov"></div><div class="selchip" id="selchip"></div><button class="camb" id="camb" title="Cámara: sigue de cerca a tu piloto (o al coche que sigues)" aria-label="Cámara que sigue"><svg viewBox="0 0 20 16" width="20" height="16" aria-hidden="true"><rect x="1" y="3" width="13" height="10" rx="2" fill="currentColor"/><path d="M14.5 7 19 4.5v7L14.5 9z" fill="currentColor"/></svg><span id="camn"></span></button><button class="m3b" id="m3b" title="Cambia entre el mapa 2D y el 3D" aria-label="Mapa en 3D" aria-pressed="false">3D</button><button class="bigb" id="bigb" title="Amplía el mapa sobre la clasificación" aria-label="Ampliar el mapa" aria-pressed="false"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" fill="none" stroke="currentColor" stroke-width="2"/></svg></button></div>
+        <div class="mapbox"><canvas id="map" title="Toca un coche para seguirlo. Línea discontinua: zona de modo adelantamiento · naranja: frenada donde se adelanta${race ? " · círculo discontinuo: dónde estaría tu piloto si parase ahora" : ""}"></canvas><canvas id="map3d" hidden aria-label="Mapa 3D"></canvas><div class="lbl3d" id="lbl3d" hidden></div><div class="flyov" id="flyov"></div><div class="selchip" id="selchip"></div><button class="camb" id="camb" title="Cámara: sigue de cerca a tu piloto (o al coche que sigues)" aria-label="Cámara que sigue"><svg viewBox="0 0 20 16" width="20" height="16" aria-hidden="true"><rect x="1" y="3" width="13" height="10" rx="2" fill="currentColor"/><path d="M14.5 7 19 4.5v7L14.5 9z" fill="currentColor"/></svg><span id="camn"></span></button><button class="repb" id="repb" hidden title="Volver a ver el último percance a cámara lenta" aria-label="Repetición del último percance">↺</button><button class="m3b" id="m3b" title="Cambia entre el mapa 2D y el 3D" aria-label="Mapa en 3D" aria-pressed="false">3D</button><button class="bigb" id="bigb" title="Amplía el mapa sobre la clasificación" aria-label="Ampliar el mapa" aria-pressed="false"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" fill="none" stroke="currentColor" stroke-width="2"/></svg></button></div>
         ${race ? `<canvas id="gapstrip" class="gapstrip" title="Toda la parrilla en una vuelta: el líder a la izquierda. El círculo discontinuo es dónde saldría tu piloto si parase ahora."></canvas>` : ""}
         <div class="wxbox" id="wx"></div>
         <div id="lapban"></div>
@@ -422,6 +423,18 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     if (save) { prefs.mapa3d = view3d; savePrefs(prefs); }
   }
   $("#m3b").onclick = (e) => { e.stopPropagation(); void set3d(!view3d); };
+  // repetición del último percance (solo en 3D): la sesión se para mientras se ve y luego sigue como estaba
+  let repWasPaused = true;
+  $("#repb").onclick = (e) => {
+    e.stopPropagation();
+    if (!m3 || !view3d) return;
+    if (m3.replaying()) { m3.stopReplay(); return; }
+    const inc = m3.lastIncident() as { id: number } | null;
+    if (!inc) return;
+    repWasPaused = paused; paused = true; updSpeed();
+    if (!m3.replay(inc.id, () => { paused = repWasPaused; updSpeed(); $("#repb").classList.remove("on"); })) { paused = repWasPaused; updSpeed(); return; }
+    $("#repb").classList.add("on");
+  };
   $("#bigb").onclick = (e) => {
     e.stopPropagation();
     const on = document.querySelector(".main")!.classList.toggle("mapbig");
@@ -1980,6 +1993,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     cancelAnimationFrame(raf);
     window.onresize = null;
     mapObs.disconnect();
+    if (m3 && race) setLastPhotos(m3.photos() as Photo[]);
     m3?.dispose(); m3 = null;
     keepAwake(false);
   }
@@ -2085,6 +2099,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
         if (started && !paused && prefs.lobato !== false) lob.tick();
         if (now >= towerAnimUntil) renderTower();
         renderTop(); renderMessages(); renderSel();
+        { const rb = $("#repb"), can = view3d && !!m3 && (m3.replaying() || !!m3.lastIncident()); if (rb.hidden === can) rb.hidden = !can; }
         if (!sheetOpen) renderDrivers();
         else if (sheetTick && now - lastSheet > 1000) { lastSheet = now; sheetTick(); }
       }

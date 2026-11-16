@@ -79,7 +79,10 @@ export interface TeamDef {
   agarre: number; potencia: number; resistencia: number; desgaste: number;
   boxes: number; fiabilidad: number; estrategia: number; meteo: number;
   pilotos: DriverDef[];
+  /** Decoración del coche (solo dibujo, equipo propio): dibujo, segundo color y tres patrocinadores (índices de marca). */
+  librea?: Librea;
 }
+export interface Librea { estilo: string; color2: string; marcas: number[] }
 export interface DriverDef {
   nombre: string; abrev: string; numero: number;
   ritmo: number; regularidad: number; neumaticos: number; lluvia: number;
@@ -271,6 +274,15 @@ export class Session {
   hidden: HiddenTyre;
   finished = false;
   chequered = false;
+  /** Segundos que lleva la parrilla esperando a que se apaguen los semáforos (solo carreras con salida parada). */
+  startHold = 0;
+  /** Cuánto dura la secuencia: 5 s de luces y una espera de 0,4 a 2,6 s que cambia de una carrera a otra (sin azar). */
+  startHoldMax() { return 5.4 + ((this.laps * 37 + this.N * 11) % 23) / 10; }
+  /** Semáforos encendidos ahora mismo (0 a 5): se encienden en la parrilla y se apagan todos a la vez en la salida. */
+  startLights() {
+    if (!isRaceKind(this.kind) || this.t > 0 || this.flag !== "green" || this.startHold >= this.startHoldMax()) return 0;
+    return Math.min(5, Math.floor(this.startHold + 1e-6));
+  }
   leaderLap = 0;
   lapRefRace: number;
   secPerGrip: number;
@@ -556,6 +568,13 @@ export class Session {
   step() {
     if (this.finished) return;
     const dt = this.dt;
+    // salida parada: los cinco semáforos se encienden de uno en uno (1 s cada uno) y se apagan tras una espera.
+    // Mientras tanto no corre nada (ni el reloj, ni el tiempo, ni los coches): los resultados no cambian.
+    if (isRaceKind(this.kind) && this.t === 0 && this.flag === "green" && (this.startHold ?? 0) < this.startHoldMax()) {
+      this.startHold = (this.startHold ?? 0) + dt;
+      if (this.startHold >= this.startHoldMax()) this.log({ kind: "control", text: "🟢 ¡Se apagan los semáforos! Arranca la carrera." });
+      return;
+    }
     this.wall += dt;
     this.weatherAcc += dt;
     if (this.weatherAcc >= 5) {

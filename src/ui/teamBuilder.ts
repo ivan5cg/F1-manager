@@ -1,6 +1,7 @@
 // Modo «crear equipo»: pantalla de fichajes, panel de tu equipo y panel de unidades de potencia.
 import { BASE_TEAMS, MARKET, ROUNDS, getTrack } from "./data";
 import { $, esc, setBack } from "./common";
+import { BRANDS, LIV_STYLES, LIV_NAMES } from "./livery";
 import type { TeamDef } from "../sim/session";
 import type { SeasonState } from "../sim/season";
 import type { WeekendState } from "../sim/weekend";
@@ -70,7 +71,23 @@ const priceHtml = (x: { equipo: string | null; salario: number; rol?: "titular" 
 
 // ------------------------------------------------------------------ pantalla de fichajes
 export function builderScreen(onCancel: () => void, onCreate: (spec: CustomTeam) => void) {
-  const spec: CustomTeam = { nombre: "Escudería Muro", color: COLORS[0], pilotos: [], jefe: "", tecnico: "", motor: "" };
+  const spec: CustomTeam = { nombre: "Escudería Muro", color: COLORS[0], pilotos: [], jefe: "", tecnico: "", motor: "", librea: { estilo: "aguja", color2: "#16181c", marcas: [0, 7, 11] } };
+  // vista previa del coche en 3D: se carga aparte (three.js) y su lienzo pasa de un render al siguiente
+  let preview: { canvas: HTMLCanvasElement; update(t: unknown): void } | null = null, previewKey = "", previewFailed = false;
+  const C2 = ["#16181c", "#F5F5F5", ...COLORS.filter((c) => c !== "#F5F5F5")];
+  const showPreview = () => {
+    const box = document.getElementById("carprev");
+    if (!box || previewFailed) return;
+    const team = { id: "propio", nombre: spec.nombre, color: spec.color, librea: spec.librea }, key = JSON.stringify([spec.color, spec.librea]);
+    if (preview) { box.appendChild(preview.canvas); if (key !== previewKey) { previewKey = key; preview.update(team); } return; }
+    import("./car3d").then((m) => {
+      if (!box.isConnected || preview) return;
+      const cv = document.createElement("canvas");
+      cv.setAttribute("aria-label", "Vista previa del coche (arrastra para girarlo)");
+      box.appendChild(cv);
+      try { preview = m.createCarPreview(cv, team); previewKey = key; } catch (e) { previewFailed = true; cv.remove(); box.hidden = true; }
+    }).catch(() => { previewFailed = true; box.hidden = true; });
+  };
   let tab: "pilotos" | "jefe" | "tecnico" | "motor" = "pilotos";
   let filt: "todos" | "titular" | "reserva" | "libre" = "todos";
   const render = () => {
@@ -104,6 +121,11 @@ export function builderScreen(onCancel: () => void, onCreate: (spec: CustomTeam)
       <div class="panel"><div class="hd"><span class="t">Crea tu equipo</span><button id="cancel">Volver</button></div><div class="bd">
         <div class="row" style="gap:6px"><input id="tname" maxlength="24" value="${esc(spec.nombre)}" class="grow" aria-label="Nombre del equipo"></div>
         <div class="row wrap" style="gap:6px;margin-top:8px">${COLORS.map((c) => `<button class="swatch${spec.color === c ? " on" : ""}" data-color="${c}" style="background:${c}" aria-label="Color ${c}"></button>`).join("")}</div>
+        <div class="small dim" style="margin-top:10px">Librea: el dibujo, el segundo color y tus patrocinadores</div>
+        <div class="carprev" id="carprev"></div>
+        <div class="row wrap" style="gap:4px">${LIV_STYLES.map((st) => `<button class="${spec.librea!.estilo === st ? "on" : ""}" data-liv="${st}">${LIV_NAMES[st]}</button>`).join("")}</div>
+        <div class="row wrap" style="gap:6px;margin-top:6px">${C2.map((c) => `<button class="swatch${spec.librea!.color2 === c ? " on" : ""}" data-c2="${c}" style="background:${c}" aria-label="Segundo color ${c}"></button>`).join("")}</div>
+        <div class="row wrap" style="gap:6px;margin-top:6px">${[0, 1, 2].map((k) => `<label class="small">${k ? "Patrocinador" : "Principal"} <select data-sp="${k}">${BRANDS.map(([n], i) => `<option value="${i}"${spec.librea!.marcas[k] === i ? " selected" : ""}>${n}</option>`).join("")}</select></label>`).join("")}</div>
         <div class="budget${over ? " over" : ""}"><div class="row"><b class="grow">Techo de gasto</b><b class="mono">${fmtM(cost)} / ${fmtM(M.techo)}</b></div>
           <div class="progress"><i style="width:${Math.min(100, (cost / M.techo) * 100)}%"></i></div>
           <div class="small ${over ? "redt" : "dim"}">${over ? `Te pasas ${fmtM(-left)}.` : `Quedan ${fmtM(left)} para evoluciones: el coche se desarrolla ×${fx(mult, 2)} de rápido que con el presupuesto normal.`}</div></div>
@@ -117,6 +139,11 @@ export function builderScreen(onCancel: () => void, onCreate: (spec: CustomTeam)
     $("#cancel").onclick = onCancel;
     $<HTMLInputElement>("#tname").oninput = (e) => { spec.nombre = (e.target as HTMLInputElement).value; };
     document.querySelectorAll<HTMLElement>("[data-color]").forEach((b) => (b.onclick = () => { spec.color = b.dataset.color!; render(); }));
+    const rerender = () => { const y = window.scrollY; render(); window.scrollTo(0, y); };
+    document.querySelectorAll<HTMLElement>("[data-liv]").forEach((b) => (b.onclick = () => { spec.librea!.estilo = b.dataset.liv!; rerender(); }));
+    document.querySelectorAll<HTMLElement>("[data-c2]").forEach((b) => (b.onclick = () => { spec.librea!.color2 = b.dataset.c2!; rerender(); }));
+    document.querySelectorAll<HTMLSelectElement>("[data-sp]").forEach((el) => (el.onchange = () => { spec.librea!.marcas[+el.dataset.sp!] = +el.value; rerender(); }));
+    showPreview();
     document.querySelectorAll<HTMLElement>("[data-tab]").forEach((b) => (b.onclick = () => { tab = b.dataset.tab as typeof tab; render(); }));
     document.querySelectorAll<HTMLElement>("[data-filt]").forEach((b) => (b.onclick = () => { filt = b.dataset.filt as typeof filt; render(); }));
     document.querySelectorAll<HTMLElement>("[data-pick]").forEach((el) => (el.onclick = () => {
@@ -135,7 +162,7 @@ export function builderScreen(onCancel: () => void, onCreate: (spec: CustomTeam)
     $("#go").onclick = () => {
       if (!(complete && !over)) return;
       spec.nombre = spec.nombre.trim() || "Escudería Muro";
-      onCreate({ ...spec, pilotos: [...spec.pilotos] });
+      onCreate({ ...spec, pilotos: [...spec.pilotos], librea: { ...spec.librea!, marcas: [...spec.librea!.marcas] } });
     };
   };
   setBack(onCancel);

@@ -875,3 +875,14 @@ html[data-tema] .dcard .cl i { color: #aab0ba; }
 .pc-c .seg { margin: 0; flex-wrap: nowrap; }
 .pc-c .seg button { flex: 1 1 0; min-width: 0; min-height: 34px; padding: 3px 1px; font-size: clamp(8px, 2.5vw, 11.5px); line-height: 1.05; white-space: nowrap; overflow: hidden; letter-spacing: 0; }
 .sheet .pc-close { width: 100%; min-height: 36px; }
+
+/* vista previa del coche en el creador de equipo */
+.carprev { height: 170px; margin: 4px 0 6px; border-radius: 8px; background: radial-gradient(ellipse at 50% 70%, rgba(255,255,255,.10), rgba(0,0,0,0) 70%); }
+.carprev canvas { width: 100%; height: 100%; display: block; touch-action: pan-y; cursor: grab; }
+.repb { position: absolute; right: 50px; bottom: 4px; z-index: 3; height: 30px; min-height: 0; min-width: 36px; padding: 0 8px; background: rgba(8, 9, 11, .7); border: 1px solid rgba(255, 255, 255, .18); color: #cfd3da; font-size: 16px; font-weight: 900; }
+.repb.on { background: var(--gl-gold); color: #000; border-color: transparent; }
+.rep3 { position: absolute; left: 8px; top: 8px; z-index: 4; padding: 3px 10px; background: rgba(8, 9, 11, .8); color: #fff; font-size: 11px; font-weight: 900; letter-spacing: .12em; text-transform: uppercase; border-left: 4px solid var(--gl-gold); }
+.photostrip { display: flex; gap: 8px; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 4px; }
+.photostrip figure { margin: 0; flex: 0 0 78%; max-width: 320px; scroll-snap-align: start; }
+.photostrip img { width: 100%; aspect-ratio: 16 / 9; display: block; border-radius: 6px; background: #111; }
+.photostrip figcaption { font-size: 12px; margin-top: 4px; line-height: 1.3; }

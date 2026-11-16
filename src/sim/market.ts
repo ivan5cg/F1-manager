@@ -22,7 +22,7 @@ export interface MarketEngine { id: string; nombre: string; potencia: number; fi
 export interface Market { techo: number; pilotos: MarketDriver[]; jefes: MarketBoss[]; tecnicos: MarketTech[]; motores: MarketEngine[] }
 
 /** Lo que ficha el jugador. */
-export interface CustomTeam { nombre: string; color: string; pilotos: string[]; jefe: string; tecnico: string; motor: string }
+export interface CustomTeam { nombre: string; color: string; pilotos: string[]; jefe: string; tecnico: string; motor: string; librea?: import("./session").Librea }
 
 export const PLAYER_TEAM_ID = "propio";
 /** Un equipo nuevo empieza con menos infraestructura: coche, mecánicos y fiabilidad. */
@@ -182,6 +182,7 @@ export function buildGrid(base: TeamDef[], m: Market, spec: CustomTeam, seed: nu
     estrategia: Math.round(j.estrategia),
     meteo: Math.round(j.meteo),
     pilotos: spec.pilotos.map((a) => trueDriver(m, base, a, seed)),
+    ...(spec.librea ? { librea: spec.librea } : {}),
   });
   return { teams, changes };
 }

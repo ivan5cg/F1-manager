@@ -170,7 +170,8 @@ cielo de cada momento (hora, nubes) se fotografía en un cubo y da la luz ambien
 de la carrocería y del asfalto mojado. Las texturas de asfalto, hierba y grava se calculan al
 arrancar, sin descargar nada. Hay cuatro escalones de calidad y, si el dispositivo no llega a
 40 fps, baja solo: primero quita la oclusión ambiental y el desenfoque de la cámara de tele,
-luego resolución, luego el resplandor y el búfer HDR, y al final las sombras.
+luego resolución, luego el resplandor y el búfer HDR, y al final las sombras. Solo los coches cercanos (hasta 8) usan
+la malla fina; los reflejos de los focos en mojado necesitan calidad 2 y las sombras de los árboles, la máxima.
 
 Alrededor de la pista hay edificio de boxes con un garaje por equipo (con su cartel), puestos en el muro y
 motorhomes en el paddock, torre de control, tribunas con su perfil de verdad (gradas en pendiente con público y cubierta
@@ -206,8 +207,23 @@ La carrera se lee como en la tele:
   barrera.
 - En la parrilla, las cinco luces del pórtico se encienden de una en una y se apagan al darse la salida.
 - En las gradas los aficionados agitan banderas. De lejos el público es un tono apagado.
+- Con el botón ↺ (en 3D, tras un trompo, una salida o un accidente) se vuelve a ver a cámara lenta desde el borde de la
+  pista; la sesión se para mientras tanto.
+- Al terminar, un comisario agita la bandera a cuadros sobre el muro, los coches dan la vuelta de honor despacio (los tres
+  primeros con el puño en alto) y entran a su garaje.
+- Saltan chispas de debajo de los coches en las rectas rápidas y en los cambios de rasante, sobre todo de noche.
+- A bordo, con lluvia, las gotas se quedan en la cámara y se escurren; con las vueltas y cada salida se ensucia.
+- Un alerón tocado se ve descolgado, y en el cambio de morro se quita y se pone.
+- Si la carrera se ve en 3D, se hacen fotos (cámara de tele) de los adelantamientos, tus paradas y los percances, y salen
+  en el resumen («La carrera en imágenes»). Solo duran hasta esa pantalla: no se guardan con la partida.
 - En Singapur y Baréin hay torres de focos a lo largo de la pista, y con el asfalto mojado cada foco se refleja como
   una estela.
+
+En las salidas paradas, la simulación enciende los cinco semáforos de uno en uno y arranca la carrera al apagarlos; esa
+espera no cuenta en el tiempo de carrera y no cambia ningún resultado.
+
+En «Crea tu equipo» se elige también la librea (dibujo, segundo color y tres patrocinadores de las 16 marcas inventadas),
+con el coche en 3D girando al lado.
 
 Posiciones, paradas, compuestos, percances, banderas, coche de seguridad, lluvia, nubes, hora y agua en pista (con el
 carril seco al secarse) salen de la simulación. La altitud, la anchura y el lado de los boxes salen de los datos
