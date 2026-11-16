@@ -2641,7 +2641,9 @@ function draw3d(dt, now) {
     if (q > 0 && c.loc === "track" && p.simDt > 0 && c.v > 62) {
       // más en las rectas rápidas y donde toca abajo; menos con la pista mojada (el agua las apaga)
       const i2 = Math.min(T.n - 1, Math.floor(mod(p.s, T.L) / T.ds)), wetK = 1 - Math.min(1, (sess.water[track.msOfPoint[i2]] || 0) * 2);
-      const rate = (sstep(62, 88, c.v) * 18 + Math.min(60, T.dip[i2] * 9000)) * wetK, x = rate * p.simDt;
+      // el reglaje: un coche bajo toca más el suelo (el doble con dos pasos por debajo de 0) y uno alto, casi nada
+      const ride = c.setup ? clamp(1 - 0.45 * c.setup.r, 0.2, 2) : 1;
+      const rate = (sstep(62, 88, c.v) * 18 + Math.min(60, T.dip[i2] * 9000)) * wetK * ride, x = rate * p.simDt;
       const nn = Math.min(10, Math.floor(x) + (Math.random() < x % 1 ? 1 : 0));
       for (let j = 0; j < nn; j++) {
         _mw.set(-0.9 - Math.random() * 1.1, 0.03, (Math.random() - 0.5) * 0.8).applyMatrix4(m4);

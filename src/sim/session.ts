@@ -5,6 +5,7 @@
 // distancias reales entre coches.
 import { Rng, clamp } from "./rng";
 import { Track, Minisector, msTimeAtGrip, MIN_MASS, REF_CAR } from "./track";
+import { type Setup, type SessionSetup, WET_SHIFT, SETUP_Q, SETUP_GRIP } from "./setup";
 import { Compound, COMPOUNDS, DRY, HiddenTyre, TyreSet, setGrip, updateSet, axleGrip, warmBlankets, setWear, bestWaterGrip, WET, treadT, blisterT, grainT, driverRough } from "./tyres";
 import { WeatherState, stepWeather, rainAt, evaporation, waterStep, windNow } from "./weather";
 import { PU_WEAR, puLife, puPowerLoss, puHazard } from "./powerunit";
@@ -206,6 +207,7 @@ export interface Car {
   stintLog: { c: Compound; from: number; used: boolean }[]; // carrera: neumáticos montados y desde qué vuelta
   puKm: number; // km de desgaste que suma a su unidad de potencia en esta sesión (ponderados por el modo de motor)
   puBroken?: boolean; // la unidad de potencia se ha roto
+  setup?: Setup; // reglaje (carga y altura, -2 … 2); sin él, el coche de referencia de siempre
 }
 
 export type FlagState = "green" | "vsc" | "sc" | "sc_in" | "red";
@@ -235,6 +237,7 @@ export interface SessionOptions {
   laps?: number; // carreras
   sprintWeekend: boolean;
   restore?: boolean; // se va a volcar una instantánea encima: sin preparar parrilla ni programas
+  setup?: SessionSetup; // reglajes (ver setup.ts); sin ellos, todos con el coche de referencia
 }
 
 /** Una tanda larga de libres, resumida: ritmo medio sin combustible y caída por vuelta. */
@@ -325,6 +328,8 @@ export class Session {
   ersLap = 6;
   private ersIn: number[] = [];
   private ersOut: number[] = [];
+  /** Reglajes: lo que no cambia en la sesión (ver setup.ts y setupAt). */
+  private setupK: { opt: Setup; dragPerA: number; aeroMean: number; lapRef: number; mean: { wk: number; v: number }[] } | null = null;
 
   constructor(public opt: SessionOptions) {
     this.kind = opt.kind;
@@ -362,6 +367,18 @@ export class Session {
     this.towTrack = bestNet < -0.05 && bestG < 1.4;
     this.outLapGap = this.towTrack ? Math.max(0.8, bestG) : 2.5;
     this.secStart = [0, this.track.ms.findIndex((m) => m.sector === 1), this.track.ms.findIndex((m) => m.sector === 2)];
+    if (opt.setup) {
+      // carga: lo que se gana en curva por paso se pierde en recta (la resistencia se ajusta para que la vuelta quede
+      // igual); altura: el fondo ayuda donde pesa la carga y estorba en las curvas lentas (media pesada por el agarre)
+      let gain = 0, dd = 0, wSum = 0, aSum = 0;
+      for (const m of this.track.ms) {
+        gain += msTimeAtGrip(m, 1) - msTimeAtGrip(m, 1 + SETUP_GRIP.a * m.aero);
+        dd += m.dDrag;
+        const w = msTimeAtGrip(m, 1) - msTimeAtGrip(m, 1.01);
+        wSum += w; aSum += w * m.aero;
+      }
+      this.setupK = { opt: opt.setup.opt, dragPerA: dd > 0 ? gain / dd : 0, aeroMean: wSum > 0 ? aSum / wSum : 0.4, lapRef: this.tRef.reduce((a, b) => a + b, 0), mean: [] };
+    }
     let t0 = 0, t1 = 0;
     for (const m of this.track.ms) { t0 += msTimeAtGrip(m, 1); t1 += msTimeAtGrip(m, 0.99); }
     this.secPerGrip = t1 - t0;
@@ -390,6 +407,8 @@ export class Session {
         queue: [], eliminated: false, sessionLaps: 0, stintW0: 0, stintL0: 0, learnedLap: -99, lastImpede: -1,
         secCur: [NaN, NaN, NaN], secLast: [NaN, NaN, NaN], secBest: [Infinity, Infinity, Infinity], lastLapValid: true, bestTyreByPart: [], bestSecs: [], bestSecsByPart: [], stintLog: [], puKm: 0,
       };
+      const su = opt.setup?.cars[e.id];
+      if (su) car.setup = { a: su.a, r: su.r };
       this.cars.push(car);
     }
     if (opt.restore) { /* el estado llega de una instantánea */ }
@@ -848,7 +867,9 @@ export class Session {
     const tyres = c.tyres!;
     const wetSkill = water > 0.05 ? 1 + (c.d.lluvia - 80) * 0.0012 * Math.min(1, water / 0.6) : 1;
     let grip = setGrip(tyres, water) * c.pace * wetSkill * PUSH_GRIP[c.push] * (1 + 0.018 * this.rubber) * (1 - c.wing - c.floor);
-    if (c.aheadId >= 0) grip *= 1 - DIRTY_AIR * m.aero * m.cornerSens * dirtyAir(c.followGap);
+    const su = this.setupAt(c, m, water);
+    if (su) grip *= 1 + SETUP_GRIP.a * su.ea * m.aero - SETUP_GRIP.r * su.er * (m.aero - this.setupK!.aeroMean);
+    if (c.aheadId >= 0) grip *= 1 - DIRTY_AIR * m.aero * m.cornerSens * dirtyAir(c.followGap) * (su ? 1 + 0.06 * su.ea : 1);
     // viento: de cara frena en recta pero da carga en curva; de cola, al revés
     const air = this.windAir[m.i];
     grip *= 1 + 0.5 * m.aero * m.cornerSens * air;
@@ -860,10 +881,37 @@ export class Session {
     let dragCut = -c.team.resistencia - WATER_DRAG * Math.min(3, water);
     if (c.aheadId >= 0) dragCut += tow(c.followGap) * m.throttle;
     dragCut -= 100 * air;
+    if (su) dragCut -= this.setupK!.dragPerA * su.ea;
     t -= scale * (m.dPower * power + m.dDrag * dragCut);
     t += m.dMass * (MIN_MASS + c.fuel - REF_CAR.mass);
+    if (su) t *= 1 + su.pen;
     t *= 1 + c.noise;
     return { t, grip };
+  }
+
+  /**
+   * Reglaje del coche en este minisector: lo lejos que está del óptimo (que con agua pide más carga y más altura) y lo
+   * que cuesta en tiempo (fracción), medido contra la media de la parrilla para que el ritmo medio no cambie.
+   */
+  setupAt(c: Car, m: Minisector, water: number): { ea: number; er: number; pen: number } | null {
+    const K = this.setupK;
+    if (!K || !c.setup) return null;
+    const wk = Math.min(1, water / 0.8);
+    const oa = K.opt.a + WET_SHIFT.a * wk, or = K.opt.r + WET_SHIFT.r * wk;
+    const cost = (s: Setup) => { const ea = s.a - oa, er = s.r - or; return SETUP_Q.a * ea * ea + SETUP_Q.r * er * er * (er < 0 ? 1.3 : 1); };
+    let mean = K.mean[m.i];
+    if (!mean || mean.wk !== wk) {
+      let sum = 0, n = 0;
+      for (const o of this.cars) if (o.setup) { sum += cost(o.setup); n++; }
+      mean = K.mean[m.i] = { wk, v: n ? sum / n : 0 };
+    }
+    return { ea: c.setup.a - oa, er: c.setup.r - or, pen: (cost(c.setup) - mean.v) / K.lapRef };
+  }
+
+  /** Desgaste por el reglaje: con más carga el coche desliza menos; muy bajo, rebota y castiga la goma. */
+  private setupWear(c: Car, m: Minisector, water: number): number {
+    const su = this.setupAt(c, m, water);
+    return su ? clamp(1 - 0.025 * su.ea - 0.02 * su.er, 0.9, 1.1) : 1;
   }
 
   /** Factor de ritmo según la fase de la tanda (libres/clasificación). */
@@ -927,7 +975,7 @@ export class Session {
       trackT: this.weather.trackT, airT: this.weather.airT, water,
       eF: relE(m.energyF) * slow * (c.followGap < 1.2 ? 1 + 0.12 * (1 - c.followGap / 1.2) * m.cornerSens : 1),
       eR: relE(m.energyR) * slow,
-      push: PUSH_ENERGY[c.push], carWear: c.wearMult, abrasiveness: this.track.abrasiveness,
+      push: PUSH_ENERGY[c.push], carWear: c.wearMult * this.setupWear(c, m, water), abrasiveness: this.track.abrasiveness,
       rubber: this.rubber, slideF: 2 * dirty, slideR: 0.5 * dirty, rough: driverRough(c.d.neumaticos),
     }, dt, this.lapRefRace, this.hidden);
     // la telemetría mide la temperatura de la banda: cuánto rato pasa por encima del límite

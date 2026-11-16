@@ -10,6 +10,7 @@ import { saveFile, helmetSvg, circuitSvg, skyGradient, lightAt, reducedMotion, f
 import { SESSION_NAMES, SessionKind, ResultRow, isRaceKind, isQualiKind, Car, Session, LongRun, TeamDef, DriverDef } from "../sim/session";
 import { COMPOUNDS, DRY, ALL, setWear, Compound, TyreSet } from "../sim/tyres";
 import { stintProfile } from "../sim/strategy";
+import { setupEstimate, carSetup, proposedSetup, WET_SHIFT, SETUP_MIN, SETUP_MAX, type Setup } from "../sim/setup";
 import type { Track } from "../sim/track";
 import { SCENARIO_NAMES } from "../sim/weather";
 import { saveSeason, loadSeason, slotList, getActiveSlot, deleteSlot, exportSlot, checkImport, importInto, SLOTS, storageUse } from "./store";
@@ -466,6 +467,7 @@ export function weekendScreen(nav: Nav, s: SeasonState, pending: SessionSnapshot
       }).join("")}
       <div class="small dim" style="padding:6px 10px">${next ? `Previsión de tu meteorólogo (fiabilidad ${team.meteo}/100): probabilidad de lluvia durante la sesión y temperaturas. ` : ""}Clima típico: ${esc(def.clima.fuente)}.${past.length ? ` Hasta ahora: ${past.map(({ d, i }) => `${DAY_NAMES[i].toLowerCase()}, ${SCENARIO_NAMES[d.scenario].toLowerCase()}`).join("; ")}.` : ""}${pending ? ` <span class="yellow">Tienes ${SESSION_NAMES[pending.kind].toLowerCase()} a medias: «Reanudar» la retoma donde la dejaste.</span>` : ""}</div>
     </div></div>
+    ${setupPanel(wk, team, mine.map((e) => ({ id: e.id, name: e.d.nombre })), !!pending)}
     ${puPanel(st, mine.map((e) => e.id), mine.map((e) => e.d.nombre), team, def.vueltas, track.length / 1000)}
     ${longRunsPanel(weekendLongRuns(st), s.playerTeam)}
     <div class="panel"><div class="hd"><span class="t">Lo que saben tus ingenieros</span></div><div class="bd" style="padding:0">
@@ -477,7 +479,9 @@ export function weekendScreen(nav: Nav, s: SeasonState, pending: SessionSnapshot
     </div></div>
   </div>`;
   drawMini($<HTMLCanvasElement>("#mini"), track, true, lightAt(heroClock) === "noche");
-  wirePu(st, () => { saveSeason(s); const y = window.scrollY; weekendScreen(nav, s, pending); window.scrollTo(0, y); });
+  const redraw = () => { saveSeason(s); const y = window.scrollY; weekendScreen(nav, s, pending); window.scrollTo(0, y); };
+  wirePu(st, redraw);
+  wireSetup(wk, team, redraw);
   setBack(() => nav.season());
   $("#back").onclick = () => nav.season();
   if (next && pending) $("#resume").onclick = () => nav.session(pending.kind, pending);
@@ -491,6 +495,46 @@ export function weekendScreen(nav: Nav, s: SeasonState, pending: SessionSnapshot
     };
   }
   document.querySelectorAll<HTMLElement>("[data-res]").forEach((b) => (b.onclick = () => { const kind = b.dataset.res as SessionKind; resultsSheet(kind, st.results[kind]!, s.playerTeam, st.scoring?.[kind], st.summaries?.[kind]); }));
+}
+
+// ------------------------------------------------------------ reglajes
+const fmtStep = (x: number) => { const r = Math.round(x * 10) / 10; return (r > 0 ? "+" : r < 0 ? "−" : "") + Math.abs(r).toFixed(1).replace(".", ","); };
+const SETUP_ROWS: { k: keyof Setup; name: string; lo: string; hi: string }[] = [
+  { k: "a", name: "Carga aerodinámica", lo: "Menos", hi: "Más" },
+  { k: "r", name: "Altura", lo: "Baja", hi: "Alta" },
+];
+/** Carga y altura de tus coches, con lo que cree el ingeniero. Desde la primera clasificación, parque cerrado. */
+function setupPanel(wk: Weekend, team: TeamDef, mine: { id: number; name: string }[], pending: boolean): string {
+  const ss = wk.st.setup;
+  if (!ss) return "";
+  const locked = wk.setupLocked(), est = setupEstimate(ss, team), prop = proposedSetup(ss, team);
+  const laps = ss.teams[team.id]?.laps ?? 0, h = 1.3 * est.sigma;
+  const range = (x: number) => `entre ${fmtStep(Math.max(-2.5, x - h))} y ${fmtStep(Math.min(2.5, x + h))}`;
+  const steps = Array.from({ length: SETUP_MAX - SETUP_MIN + 1 }, (_, i) => SETUP_MIN + i);
+  const can = !locked && !pending;
+  return `<div class="panel"><div class="hd"><span class="t">Reglajes</span>${locked ? `<span class="small yellow">Parque cerrado</span>` : ""}</div><div class="bd">
+    <div class="small" style="margin-bottom:6px">El ingeniero cree que el óptimo en seco está ${`en carga <b>${range(est.a)}</b> y en altura <b>${range(est.r)}</b>`} (${laps ? `${laps} vueltas de libres` : "sin vueltas de libres todavía"}; cuantas más, más afina). Con la pista mojada pide más carga (unos ${fmtStep(WET_SHIFT.a)}) y más altura (${fmtStep(WET_SHIFT.r)}).</div>
+    ${mine.map(({ id, name }) => {
+      const cur = carSetup(ss, id, team, true);
+      return `<div class="setrow"><b>${esc(name)}</b>${SETUP_ROWS.map(({ k, name: n, lo, hi }) => `<div class="setline"><span class="small dim">${n}</span><span class="small dim">${lo}</span><div class="seg">${steps.map((v) =>
+        `<button data-su="${id}" data-k="${k}" data-v="${v}" class="${cur[k] === v ? "on" : ""}${prop[k] === v ? " prop" : ""}"${can ? "" : " disabled"}>${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v)}</button>`).join("")}</div><span class="small dim">${hi}</span></div>`).join("")}</div>`;
+    }).join("")}
+    ${can && mine.some(({ id }) => ss.cars[id]) ? `<button id="suprop" style="width:100%">Volver a lo que propone el ingeniero</button>` : ""}
+    <div class="small dim" style="margin-top:6px">${locked ? "Desde la clasificación el coche no se toca: es el mismo para la carrera." : pending ? "Termina la sesión a medias para cambiar el reglaje." : "El punto marca la propuesta del ingeniero. Más carga: más paso por curva y menos punta, gasta menos goma y sufre más detrás de otro. Más baja: más agarre en las curvas rápidas, pero toca el suelo en las lentas y gasta más. Se fija al empezar la clasificación."}</div>
+  </div></div>`;
+}
+function wireSetup(wk: Weekend, team: TeamDef, redraw: () => void) {
+  const ss = wk.st.setup;
+  if (!ss) return;
+  document.querySelectorAll<HTMLButtonElement>("[data-su]").forEach((b) => (b.onclick = () => {
+    const id = Number(b.dataset.su), k = b.dataset.k as keyof Setup;
+    const cur = { ...carSetup(ss, id, team, true) };
+    cur[k] = Number(b.dataset.v);
+    ss.cars[id] = cur;
+    redraw();
+  }));
+  const rp = document.getElementById("suprop");
+  if (rp) rp.onclick = () => { ss.cars = {}; redraw(); };
 }
 
 /** El circuito de la portada: se dibuja solo de la salida a la meta (y, de noche, con el halo de los focos). */

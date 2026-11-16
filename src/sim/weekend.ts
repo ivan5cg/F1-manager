@@ -10,6 +10,7 @@ import { TeamKnowledge, buildKnowledge } from "./strategy";
 import { SessionSnapshot, snapshotConditions, applySnapshot } from "./snapshot";
 import type { RaceSummary } from "./season";
 import { PuState, autoFit, bestSpare, clonePu, fitUnit, newPu, puPenalty } from "./powerunit";
+import { SetupState, SessionSetup, newSetupState, carSetup } from "./setup";
 
 export interface WeekendState {
   round: number;
@@ -28,6 +29,7 @@ export interface WeekendState {
   longRuns?: Partial<Record<SessionKind, LongRun[]>>; // tandas largas de cada libre
   summaries?: Partial<Record<SessionKind, RaceSummary>>; // resumen de las carreras ya corridas (para volver a verlas)
   pu?: Record<number, PuState>; // modo «crear equipo»: unidades de potencia de cada piloto
+  setup?: SetupState; // reglajes (carga y altura): óptimo oculto, lo que sabe cada equipo y lo que elige el jugador
 }
 
 /**
@@ -74,7 +76,23 @@ export function newWeekend(round: number, def: any, teams: TeamDef[], seed: numb
 }
 
 export class Weekend {
-  constructor(public st: WeekendState, public track: Track, public teams: TeamDef[], public playerTeam: string) {}
+  /** opts.setups = false: todos con el coche de referencia, sin reglajes (para comparar en los scripts). */
+  constructor(public st: WeekendState, public track: Track, public teams: TeamDef[], public playerTeam: string, public opts: { setups?: boolean } = {}) {
+    // fines de semana de antes de los reglajes (o recién creados): se crean aquí, con su propio azar
+    if (opts.setups !== false && !st.setup) st.setup = newSetupState(track, teams, st.seed);
+  }
+
+  /** ¿Ya está el parque cerrado? (desde la primera clasificación del fin de semana) */
+  setupLocked(): boolean { return !!this.st.setup?.locked; }
+
+  /** Reglajes para una sesión; la primera clasificación cierra el parque y desde ahí no cambian. */
+  private sessionSetup(kind: SessionKind): SessionSetup | undefined {
+    const ss = this.st.setup;
+    if (!ss || this.opts.setups === false) return undefined;
+    const ents = this.entrants();
+    if ((kind === "Q" || kind === "SQ") && !ss.locked) ss.locked = Object.fromEntries(ents.map((e) => [e.id, carSetup(ss, e.id, e.team, e.player)]));
+    return { opt: ss.opt, cars: Object.fromEntries(ents.map((e) => [e.id, carSetup(ss, e.id, e.team, e.player)])) };
+  }
 
   get def() { return this.track.def; }
   sessions(): SessionKind[] { return this.st.sprint ? SPRINT_SESSIONS : NORMAL_SESSIONS; }
@@ -155,6 +173,7 @@ export class Weekend {
       minutes: 60,
       laps: kind === "SPRINT" ? this.def.vueltasSprint : this.def.vueltas,
       sprintWeekend: this.st.sprint,
+      setup: this.sessionSetup(kind),
     });
     if (kind === "RACE") {
       for (const [id, n] of Object.entries(this.penalties())) {
@@ -183,6 +202,7 @@ export class Weekend {
       laps: kind === "SPRINT" ? this.def.vueltasSprint : this.def.vueltas,
       sprintWeekend: this.st.sprint,
       restore: true,
+      setup: this.sessionSetup(kind),
     });
     applySnapshot(sess, snap);
     return sess;
@@ -209,6 +229,8 @@ export class Weekend {
     if (table) this.st.scoring = { ...this.st.scoring, [sess.kind]: table };
     this.st.rubber = sess.rubber;
     if (sess.kind.startsWith("FP")) {
+      // las vueltas de libres afinan lo que sabe cada equipo del reglaje
+      if (this.st.setup) for (const c of sess.cars) { const k = this.st.setup.teams[c.team.id]; if (k) k.laps += c.sessionLaps; }
       const n = sess.kind === "FP3" ? 2 : 1;
       for (const sets of Object.values(this.st.sets)) {
         const used = sets.filter((s) => !s.returned && s.laps > 0 && DRY.includes(s.c)).sort((a, b) => setWear(b) - setWear(a));

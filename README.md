@@ -59,6 +59,15 @@ En la realidad, en 2026 el GP de Baréin no se corrió en Sakhir: se trasladó a
 ## Qué decides
 
 - **Libres:** qué tandas hace cada piloto (instalación, simulación de clasificación, tanda larga de 5-16 vueltas) y con qué juego, o dejarlo en automático. Cada tanda larga **mide el desgaste real** y reduce el error de lo que saben tus ingenieros, pero gasta neumáticos. Las tandas largas de todos (tuyas y de los rivales) salen comparadas por compuesto: ritmo medio corregido a depósito vacío y lo que pierde cada uno por vuelta. Con pista mojada los equipos no salen con slicks: esperan en el garaje si cae fuerte o va a escampar, o ruedan unas vueltas con intermedios o de lluvia sin gastar juegos nuevos a la ligera; si les pilla la lluvia en pista, vuelven a boxes.
+- **Reglajes** (en la pantalla del fin de semana, hasta la clasificación): carga aerodinámica y altura de cada coche,
+  en 5 pasos. Cada circuito tiene un óptimo que nadie conoce; el ingeniero da una horquilla que se estrecha con las
+  vueltas de libres (y que depende de lo bueno que sea el equipo en estrategia), y con la pista mojada el óptimo pide
+  más carga y más altura. Más carga: más paso por curva y menos punta, menos desgaste y más pérdida en aire sucio.
+  Más baja: más agarre en las curvas rápidas, pero toca el suelo en las lentas (más chispas en el 3D) y gasta más
+  goma. Alejarse del óptimo cuesta tiempo (hasta algo más de un segundo con dos pasos de error en los dos). Los rivales
+  montan lo que creen sus ingenieros. Desde la primera clasificación (o la sprint), parque cerrado: no se toca hasta
+  la carrera. La parrilla se mide contra su propia media, así que el ritmo medio es el de antes de los reglajes
+  (`npx tsx scripts/reglajes.ts <circuito> [semillas]` lo compara; con `--vuelta`, la vuelta con cada reglaje).
 - **Clasificación:** cuándo sale cada piloto, con qué juego y cuántas vueltas lanzadas, mirando el reloj, el tráfico y el radar.
   - **Vuelta lanzada como en la tele:** sobre el mapa, el rótulo de cada piloto con el cronómetro corriendo, el parcial al pasar por cada sector y la diferencia con la referencia (verde si va más rápido, amarillo si va más lento). Al cruzar la meta, el tiempo, la posición que logra y la diferencia final.
   - **La referencia:** el primero, en caja roja. Si tu piloto está fuera del corte, el último que se salva (por ejemplo, el 16.º en Q1), en caja gris. Los parciales se comparan con los de la mejor vuelta de esa referencia.
