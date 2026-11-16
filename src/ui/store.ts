@@ -2,6 +2,7 @@ import type { SeasonState } from "../sim/season";
 import { stripForSave } from "../sim/weekend";
 import { parseSnapshot, SessionSnapshot, replacer, reviver } from "../sim/snapshot";
 import * as db from "./db";
+import { DEFAULT_SOUND, type SoundPrefs } from "./audio";
 
 // ---------------------------------------------------------------- partidas
 // Hay SLOTS partidas guardadas, cada una con su temporada, su sesión a medias y su marca de
@@ -208,14 +209,16 @@ export interface Prefs {
   rendimiento3d?: boolean;
   /** Calidad del mapa 3D fijada a mano (0 a 3); sin ella, automática. */
   calidad3d?: number;
+  /** Sonido de la sesión: sí/no y volúmenes (0 a 1). */
+  sonido: SoundPrefs;
 }
 /** Velocidades de la sesión (× tiempo real). */
 export const SPEEDS = [1, 2, 4, 8, 16, 64];
 const PKEY = "muro-preferencias";
-const DEFAULT_PREFS: Prefs = { pausas: { control: true, partes: true, estratega: true, radio: true, garaje: true }, velCarrera: 4, velSesion: 16 };
+const DEFAULT_PREFS: Prefs = { pausas: { control: true, partes: true, estratega: true, radio: true, garaje: true }, velCarrera: 4, velSesion: 16, sonido: DEFAULT_SOUND };
 
 export function loadPrefs(): Prefs {
-  const p: Prefs = { ...DEFAULT_PREFS, pausas: { ...DEFAULT_PREFS.pausas } };
+  const p: Prefs = { ...DEFAULT_PREFS, pausas: { ...DEFAULT_PREFS.pausas }, sonido: { ...DEFAULT_SOUND } };
   try {
     const raw = localStorage.getItem(PKEY);
     if (raw) {
@@ -227,6 +230,11 @@ export function loadPrefs(): Prefs {
       if (o.lobato === false) p.lobato = false;
       if (o.rendimiento3d === true) p.rendimiento3d = true;
       if ([0, 1, 2, 3].includes(o.calidad3d as number)) p.calidad3d = o.calidad3d;
+      if (o.sonido && typeof o.sonido === "object") {
+        const so = o.sonido as Partial<SoundPrefs>;
+        if (typeof so.sonido === "boolean") p.sonido.sonido = so.sonido;
+        for (const k of ["volumen", "motores", "ambiente", "radio"] as const) if (typeof so[k] === "number") p.sonido[k] = Math.max(0, Math.min(1, so[k]!));
+      }
     } else if (localStorage.getItem("autopausa") === "0") {
       // ajuste antiguo (todo o nada)
       for (const k of Object.keys(p.pausas) as (keyof PausePrefs)[]) p.pausas[k] = false;

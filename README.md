@@ -236,6 +236,25 @@ de cada circuito (`relieve`, `ancho`, `boxes.lado`), que genera `python3 scripts
 trazada, el cabeceo de los coches, las escapatorias, los árboles, los edificios, las libreas y cómo se ve cada
 parada y cada percance son solo dibujo.
 
+## Sonido
+
+Todo generado al vuelo con Web Audio, sin archivos de audio (`src/ui/audio.ts`). Solo interfaz: no cambia la
+simulación. El sonido empieza al tocar la velocidad, el 3D o la salida (los navegadores no dejan sonar nada antes de
+un toque) y se calla en pausa, al salir de la sesión y con la app en segundo plano. En Ajustes: sonido sí/no y
+volumen general, de motores, de ambiente y de radio.
+
+- **Motores:** hasta 6 coches a la vez, los más cercanos a la cámara en 3D (en la vista general y en 2D, el coche
+  seguido y los que tiene cerca en pista). Cada uno con tres osciladores en armónicos de las explosiones del V6
+  (régimen según la velocidad y una caja de 8 marchas, con su caída al subir de marcha), un paso bajo que se abre con
+  el acelerador y algo de ruido de escape. Volumen por distancia, panorama a izquierda y derecha y Doppler simple.
+  Petardeo al soltar el acelerador. A bordo, solo el propio coche, más fuerte y con más graves. A ×4 y ×8, menos
+  coches y más bajos; por encima de ×8, sin motores.
+- **Ambiente:** público según las gradas que haya cerca (en 2D, fijo y bajo), que se levanta con los adelantamientos,
+  la salida y la bandera a cuadros; lluvia según la que cae y viento según el que sopla.
+- **Efectos:** las pistolas de la parada al quitar y al apretar las ruedas (en 2D, al entrar a boxes uno de tus
+  pilotos), un pitido por cada semáforo que se enciende y medio segundo de silencio antes del rugido de la salida, y
+  golpe seco y crujido en los accidentes.
+
 ## Simular sin interfaz
 
 ```bash

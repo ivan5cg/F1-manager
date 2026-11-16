@@ -16,6 +16,7 @@ import { Rng } from "../sim/rng";
 import { snapshotSession, SessionSnapshot } from "../sim/snapshot";
 import { stopOptions, undercut, gapHistory, pitLoss, StopOption } from "../sim/pitwall";
 import { createLobato } from "./lobato";
+import { createAudio, type CarHeard, type PitStopHeard } from "./audio";
 import { saveSession, loadPrefs, savePrefs, setParked, PausePrefs, SPEEDS } from "./store";
 
 type TowerMode = "int" | "gap" | "last" | "tyre";
@@ -57,7 +58,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     saveSession(snapshotSession(sess, wk.st));
   };
   setParked(false); // está dentro de la sesión: si se cierra la app, al volver se retoma sola
-  const onHide = () => { if (document.visibilityState === "hidden") persist(); };
+  const onHide = () => { if (document.visibilityState === "hidden") { persist(); hush(); } };
   document.addEventListener("visibilitychange", onHide);
   window.addEventListener("pagehide", persist);
   const mine = () => sess.cars.filter((c) => c.player).sort((a, b) => a.id - b.id);
@@ -66,6 +67,9 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   const nameFlag = (c: Car) => { const f = driverFlag(c.d.nombre); return f ? `${tvName(c)}<span class="nfl">${flagHtml(f)}</span>` : tvName(c); };
   const clean = (t: string) => t.replace(/^[\p{Extended_Pictographic}\u{1F1E6}-\u{1F1FF}\uFE0F\u200D\s]+/u, "");
   const TAB: Record<RaceEvent["kind"], string> = { radio: "Radio del equipo", control: "Dirección de carrera", pit: "Boxes", info: "Carrera", weather: "Meteo", incident: "Incidente" };
+  /** Sonido (audio.ts): el AudioContext se crea con el primer toque en la velocidad, el 3D o la salida. */
+  const audio = createAudio(prefs.sonido);
+  const unlockAudio = () => audio.unlock();
   /** Antonio Lobato comenta la sesión (solo interfaz: no cambia nada de la simulación). */
   const lob = createLobato(sess, def.gp ?? def.nombre);
   const LOB_TAB = "Antonio Lobato";
@@ -92,6 +96,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
 
   // ------------------------------------------------------------- controles
   const spEl = $("#speed");
+  spEl.addEventListener("pointerdown", unlockAudio);
   // Controles compactos: pausa/seguir, velocidad con − y +, y «hasta lo siguiente». (⏭ simular hasta
   // el final vive en el menú ☰, donde no se pulsa sin querer.) Iconos en SVG: el emoji ⏸ no sale
   // igual en todos los móviles.
@@ -188,6 +193,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   // espacio: pausa · 1-6: velocidad · P/M/R/D: pilotos, muro, radar, radio · Esc: cierra la hoja
   const onKey = (e: KeyboardEvent) => {
     if (ended || e.ctrlKey || e.metaKey || e.altKey) return;
+    unlockAudio();
     const tag = (e.target as HTMLElement | null)?.tagName;
     if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
     if (e.key === "Escape") { if (closeTopSheet()) e.preventDefault(); else if (selId !== null) select(null); return; }
@@ -360,6 +366,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     bannerFor(e);
     if (e.kind === "control" || e.kind === "weather") lastCtlReal = performance.now();
     if (prefs.lobato !== false) lob.onEvent(e);
+    soundEvent(e);
     const mineEv = isMineEv(e) && e.kind !== "control" && e.kind !== "weather";
     // la meteo informa pero no para; dirección de carrera y lo de tus pilotos, sí, según lo que
     // el jugador haya dejado activado en Ajustes (cada tipo de aviso por separado)
@@ -423,7 +430,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     renderPerf();
     if (save) { prefs.mapa3d = view3d; savePrefs(prefs); }
   }
-  $("#m3b").onclick = (e) => { e.stopPropagation(); void set3d(!view3d); };
+  $("#m3b").onclick = (e) => { e.stopPropagation(); unlockAudio(); void set3d(!view3d); };
   // medidor de rendimiento del 3D (se enciende en Ajustes): fps, calidad, resolución, llamadas y triángulos
   const QNAME = ["baja", "media", "alta", "máxima"];
   function renderPerf() {
@@ -1914,6 +1921,9 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       <div class="row" style="gap:4px;margin:8px 0"><button id="pall" class="grow">Todas</button><button id="pnone" class="grow">Ninguna</button></div>
       <h2>Retransmisión</h2>
       <label class="optrow"><input type="checkbox" id="plob" ${prefs.lobato !== false ? "checked" : ""}><span><b>Comentarios de Antonio Lobato</b><br><span class="small dim">Comenta adelantamientos, banderas, paradas, la pole y cómo va la carrera. Salen en la caja de la izquierda y en Radio.</span></span></label>
+      <h2>Sonido</h2>
+      <label class="optrow"><input type="checkbox" id="psnd" ${prefs.sonido.sonido ? "checked" : ""}><span><b>Sonido</b><br><span class="small dim">Motores, público, lluvia, viento, paradas, semáforos y choques. Empieza al tocar la velocidad, el 3D o la salida.</span></span></label>
+      ${([["volumen", "Volumen general"], ["motores", "Motores"], ["ambiente", "Ambiente"], ["radio", "Radio"]] as const).map(([k, n]) => `<label class="optrow volrow"><span class="grow">${n}</span><input type="range" min="0" max="100" step="5" data-vol="${k}" value="${Math.round(prefs.sonido[k] * 100)}" aria-label="${n}"></label>`).join("")}
       <h2>Mapa 3D</h2>
       <label class="optrow"><input type="checkbox" id="pperf" ${prefs.rendimiento3d ? "checked" : ""}><span><b>Mostrar rendimiento del 3D</b><br><span class="small dim">Fotogramas por segundo, calidad, resolución y triángulos, en una esquina del mapa. Tocándolo cambia la calidad.</span></span></label>
       <div class="optrow" style="display:block"><b>Calidad del 3D</b><br><span class="small dim">Automática: empieza alta y baja sola si el dispositivo no llega. 0: sin sombras ni efectos · 1: sombras · 2: resplandor · 3: oclusión ambiental y desenfoque.</span>
@@ -1927,6 +1937,9 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       el.querySelector<HTMLButtonElement>("#pnone")!.onclick = () => all(false);
       const lb = el.querySelector<HTMLInputElement>("#plob")!;
       lb.onchange = () => { prefs.lobato = lb.checked; savePrefs(prefs); lastLeft = ""; renderMessages(); };
+      const ps = el.querySelector<HTMLInputElement>("#psnd")!;
+      ps.onchange = () => { prefs.sonido.sonido = ps.checked; if (ps.checked) unlockAudio(); soundPrefsChanged(); };
+      el.querySelectorAll<HTMLInputElement>("[data-vol]").forEach((r) => (r.oninput = () => { prefs.sonido[r.dataset.vol as "volumen"] = Number(r.value) / 100; soundPrefsChanged(); }));
       const pf = el.querySelector<HTMLInputElement>("#pperf")!;
       pf.onchange = () => { prefs.rendimiento3d = pf.checked; savePrefs(prefs); renderPerf(); };
       const qb = el.querySelectorAll<HTMLButtonElement>("[data-q]");
@@ -2014,10 +2027,70 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       el.querySelector<HTMLButtonElement>("#predata")!.onclick = () => dataSheet();
     };
     wire();
-    el.querySelector<HTMLButtonElement>("#lights")!.onclick = () => { close(); lightsOut(start); };
+    el.querySelector<HTMLButtonElement>("#lights")!.onclick = () => { unlockAudio(); close(); lightsOut(start); };
     const ex = el.querySelector<HTMLButtonElement>("#preexit");
     if (ex) ex.onclick = () => { close(); exitSession(); };
   }
+
+  // ---------------------------------------------------------- sonido
+  // Desde dónde se oye: en 3D, la cámara (map3d.audioView); en 2D, el coche seguido (o tu primer piloto) y los que
+  // tenga cerca en la pista. Los avisos de la sesión (adelantamientos, paradas, choques, semáforos) suenan aparte.
+  const QUIET_FRAME = { running: false, speed: 1, simDt: 0, cars: [], crowd: 0, rain: 0, wind: 0, stops: [] };
+  const hush = () => audio.frame(QUIET_FRAME, performance.now());
+  let lastLights = 0, wasChequered = sess.chequered;
+  const fxSeen = new Map<number, unknown>(sess.cars.map((c) => [c.id, c.fx]));
+  let heardNow: CarHeard[] = [];
+  function soundEvent(e: RaceEvent) {
+    if (!audio.ready()) return;
+    if (e.kind === "info" && /adelanta a/.test(e.text)) audio.cheer(/P[1-3]\b/.test(e.text) ? 0.75 : 0.5);
+    else if (e.kind === "pit" && /entra a boxes/.test(e.text) && !view3d && e.carId !== undefined && sess.carById(e.carId).player) audio.pitIn();
+  }
+  function soundFrame(now: number, simDt: number) {
+    if (!audio.ready()) return;
+    const running = !paused && !skipping && !ended && document.visibilityState === "visible";
+    const w = sess.weather, wind = windNow(w).speed;
+    let cars: CarHeard[] = [], stops: PitStopHeard[] = [], crowd = 0.25, rain = Math.min(1, sess.rainOnTrack() / 4);
+    if (view3d && m3 && !wide) {
+      const av = m3.audioView(now) as { cars: CarHeard[]; stops: PitStopHeard[]; crowd: number; rain: number };
+      cars = av.cars; stops = av.stops; crowd = 0.1 + 0.9 * av.crowd; rain = Math.max(rain * 0.5, av.rain);
+    } else {
+      // el coche seguido o tu primer piloto en pista; si no hay ninguno fuera, el primero que esté rodando
+      const live = (c: Car | null | undefined) => !!c && (c.loc === "track" || c.loc === "pit" || c.loc === "lane_out" || c.loc === "lane_in");
+      const me = [selCar(), ...mine()].find(live) ?? sess.order().find((c) => c.loc === "track");
+      const L = track.length, sp = paused ? 0 : ff ? FF_SPEED : speed;
+      if (me) {
+        for (const c of sess.cars) {
+          if (c.loc === "garage" || c.loc === "out" || c.loc === "fin") continue;
+          let ds = ((c.s - me.s) % L + L) % L; if (ds > L / 2) ds -= L; // >0: va delante
+          if (Math.abs(ds) > 250) continue;
+          const dist = c === me ? 6 : Math.abs(ds) + 4;
+          // se acerca si el de detrás va más rápido que el de delante
+          const closing = c === me ? 0 : (ds > 0 ? me.v - c.v : c.v - me.v) * sp;
+          cars.push({ id: c.id, dist, closing, pan: c === me ? 0 : Math.sign(ds) * Math.min(0.5, Math.abs(ds) / 80), v: c.v });
+        }
+      }
+    }
+    heardNow = cars;
+    audio.frame({ running, speed: ff ? FF_SPEED : speed, simDt, cars, crowd, rain, wind, stops }, now);
+    if (!running) return;
+    // semáforos: un pitido por cada luz que se enciende; al apagarse, silencio y rugido
+    const lights = sess.startLights();
+    if (lights > lastLights) audio.light();
+    else if (lastLights > 0 && lights === 0 && sess.t > 0) audio.lightsOut();
+    lastLights = lights;
+    if (sess.chequered && !wasChequered) audio.cheer(1, 5);
+    wasChequered = sess.chequered;
+    // choques: golpe seco y crujido, según lo lejos que pille
+    for (const c of sess.cars) {
+      if (fxSeen.get(c.id) === c.fx) continue;
+      fxSeen.set(c.id, c.fx);
+      if (c.fx?.k !== "crash") continue;
+      const h = heardNow.find((x) => x.id === c.id);
+      audio.crash(h ? h.dist : 180, h ? h.pan : 0);
+    }
+  }
+  /** Ajustes de sonido cambiados: se aplican al momento. */
+  function soundPrefsChanged() { savePrefs(prefs); audio.setPrefs(prefs.sonido); }
 
   // ---------------------------------------------------------- bucle
   /** Suelta todo lo que la pantalla tiene enganchado (al terminar o al salir). */
@@ -2031,6 +2104,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     mapObs.disconnect();
     if (m3 && race) setLastPhotos(m3.photos() as Photo[]);
     m3?.dispose(); m3 = null;
+    audio.dispose();
     keepAwake(false);
   }
   function finish() {
@@ -2099,7 +2173,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   // «atrás» (móvil o navegador) abre el menú de la sesión en vez de sacarte de la app
   setBack(() => menuSheet());
   if (prefs.mapa3d) void set3d(true, false);
-  let last = performance.now(), last3d = last;
+  let last = performance.now(), last3d = last, simAdv = 0;
   const loop = (now: number) => {
     const real = Math.min(0.1, (now - last) / 1000);
     last = now;
@@ -2107,6 +2181,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     if (!paused && !sess.finished && !skipping) {
       leftover += real * (ff ? FF_SPEED : speed);
       let n = 0;
+      simAdv = 0;
       // como mucho ~10 ms de simulación por fotograma: si el móvil no da para tanto, la sesión
       // va algo más lenta en vez de dar tirones (y no se acumula retraso)
       const budget = performance.now() + (ff ? 28 : 10);
@@ -2114,6 +2189,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
         if (view3d && m3) m3.beforeStep();
         sess.step();
         leftover -= sess.dt;
+        simAdv += sess.dt;
         n++;
         if (ff) { const why = ffLocChange(); if (why) stopFF(why); }
         if (paused) { leftover = 0; break; }
@@ -2140,6 +2216,8 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
         if (!sheetOpen) renderDrivers();
         else if (sheetTick && now - lastSheet > 1000) { lastSheet = now; sheetTick(); }
       }
+      soundFrame(now, simAdv);
+      simAdv = 0;
     } catch (err) {
       console.error(err); // un fallo de dibujo no puede parar la sesión
     }

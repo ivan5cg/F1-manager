@@ -1021,8 +1021,10 @@ function cityMat(style) {
 }
 
 let world = null, gaV = new Map(), gSlot = 20, startL = null;
+let standS = []; // gradas para el sonido del público: [s del centro, lado, largo]
 const srgb = (t) => { t.colorSpace = THREE.SRGBColorSpace; return t; };
 function buildWorld() {
+  standS = [];
   if (world) for (const o of world.all) { scene.remove(o); o.geometry && o.geometry.dispose(); }
   const all = [], n = T.n, tmp = mkS(), E = T.E, street = T.street;
   const add = (o) => { scene.add(o); all.push(o); return o; };
@@ -1411,7 +1413,7 @@ function buildWorld() {
         for (const [kk, x] of [[0, -L2], [nS - 1, L2]]) if (k === kk) B.quad(Q(x, -2.5, 0.5, 0, 0), Q(x, 2.4, 0.5, 0, 0), Q(x, H + 1.2, D, 0, 0), Q(x, -2.5, D, 0, 0), 0xc4c9cf, 9, 0);
       })) ok++;
     }
-    if (ok) busy[sg === PS ? 0 : 1].push([s0, s1]);
+    if (ok) { busy[sg === PS ? 0 : 1].push([s0, s1]); standS.push([(s0 + s1) / 2, sg, s1 - s0]); }
   };
   grandstand(-170, 140, -PS, street ? 12 : 22, street ? 10 : 15, 0); // tribuna principal, enfrente de los boxes
   const vr2 = brakes.slice().sort((a, b) => vr[a] - vr[b]).slice(0, street ? 3 : 5);
@@ -2789,6 +2791,39 @@ function resize() {
 }
 resize();
 let fN = 0, fT = performance.now(), lowSecs = 0, warm = 0, fps = 0;
+// ------------------------------------------------------------------ sonido (audio.ts): lo que se oye desde la cámara
+const auCam = new THREE.Vector3(), auVel = new THREE.Vector3(), auDir = new THREE.Vector3(), auS = mkS();
+let auT = 0;
+function audioView(now) {
+  const cp = camera.position, dtr = (now - auT) / 1000;
+  if (auT && dtr > 0 && dtr < 0.5) auVel.subVectors(cp, auCam).divideScalar(dtr); else auVel.set(0, 0, 0);
+  auCam.copy(cp); auT = now;
+  camera.getWorldDirection(auDir);
+  const hr = Math.hypot(auDir.x, auDir.z) || 1, rx = -auDir.z / hr, rz = auDir.x / hr; // derecha de la cámara
+  const sp = replay ? REPLAY_SPEED : opt.paused() ? 0 : opt.speed();
+  const tgt = camMode === "abordo" && !replay ? camTarget() : null;
+  // en la vista general la cámara está muy alta: se oye desde el coche seguido (como en el 2D), no desde el cielo
+  const fc = camMode === "circuito" && !replay ? followCar() : null, fp = fc && pose.get(fc.id);
+  const lx = fp ? fp.px : cp.x, ly = fp ? fp.py + 4 : cp.y, lz = fp ? fp.pz : cp.z;
+  if (fp) auVel.set(fp.fx * (fc.v || 0) * sp, 0, fp.fz * (fc.v || 0) * sp);
+  const cars = [], stops = [];
+  for (const p of pose.values()) {
+    if (p.px === undefined || p.gar >= 0.999) continue;
+    const dx = p.px - lx, dy = p.py - ly, dz = p.pz - lz, d = Math.max(fp === p ? 6 : 1, Math.hypot(dx, dy, dz)), v = p.c.v || 0;
+    const vx = p.fx * v * sp - auVel.x, vy = p.fy * v * sp - auVel.y, vz = p.fz * v * sp - auVel.z;
+    const pan = (dx * rx + dz * rz) / d;
+    if (p.pf >= 0) stops.push({ id: p.c.id, u: (p.pf - PIT_A) / (PIT_B - PIT_A), dist: d, pan });
+    if (p.c.loc === "out") continue;
+    cars.push({ id: p.c.id, dist: d, closing: -(vx * dx + vy * dy + vz * dz) / d, pan, v, onboard: !!tgt && tgt.id === p.c.id });
+  }
+  let crowd = 0;
+  for (const [s0, sg, len] of standS) {
+    sample(s0, auS);
+    const off = curW + 14, d = Math.hypot(auS.x + auS.rx * sg * off - lx, auS.z + auS.rz * sg * off - lz);
+    crowd += (len / 300) / (1 + (d / 120) ** 2);
+  }
+  return { cars, stops, crowd: clamp(crowd, 0, 1), rain: clamp(rainHere / 2.5, 0, 1), onboard: !!tgt };
+}
 return {
   /** Antes de cada paso de la simulación: guarda dónde estaba cada coche, para interpolar. */
   beforeStep: remember,
@@ -2811,6 +2846,8 @@ return {
   },
   /** Tras una pausa larga del dibujo (pestaña oculta, mapa tapado): que no cuente como fotogramas lentos. */
   idle() { fN = 0; fT = performance.now(); lowSecs = 0; fps = 0; },
+  /** Para el sonido: coches cerca de la cámara ({ id, dist, closing, pan, v, onboard }), paradas en curso, público y lluvia. */
+  audioView,
   /** Para el medidor de rendimiento: fotogramas por segundo (media del último segundo; 0 en pausa), calidad, escala de
    *  resolución (sobre la de la calidad), llamadas de dibujo y triángulos del último fotograma, y si la calidad es fija. */
   stats: () => ({ fps, q, scale: q >= 2 ? prScale : 1, pr: renderer.getPixelRatio(), calls: lastInfo.calls, tris: lastInfo.tris, fixed: fixedQ !== undefined }),
