@@ -18,6 +18,7 @@ export interface RaceSummary {
   mine: number[]; // ids de los pilotos del jugador
   key: { lap: number; text: string }[]; // momentos clave
   fl?: { id: number; t: number; lap: number }; // vuelta rápida
+  photos?: { src: string; text: string; lap: number }[]; // fotos del 3D (máx. 10), si se vio en 3D y hay sitio
 }
 
 export interface RoundResult {

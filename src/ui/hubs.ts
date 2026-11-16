@@ -12,8 +12,8 @@ import { COMPOUNDS, DRY, ALL, setWear, Compound, TyreSet } from "../sim/tyres";
 import { stintProfile } from "../sim/strategy";
 import type { Track } from "../sim/track";
 import { SCENARIO_NAMES } from "../sim/weather";
-import { saveSeason, loadSeason, slotList, getActiveSlot, deleteSlot, exportSlot, checkImport, importInto, SLOTS } from "./store";
-import { raceSummaryHtml, drawRaceSummary } from "./summary";
+import { saveSeason, loadSeason, slotList, getActiveSlot, deleteSlot, exportSlot, checkImport, importInto, SLOTS, storageUse } from "./store";
+import { raceSummaryHtml, drawRaceSummary, photosHtml } from "./summary";
 
 export interface Nav {
   home(): void;
@@ -86,7 +86,7 @@ export function startScreen(nav: Nav, notice = "") {
           <button data-more="${slot}" aria-label="Más opciones de la partida ${slot}">⋯</button><button class="${slot === active ? "red" : ""}" data-open="${slot}">Seguir</button></div>`;
       }).join("")}
       ${notice ? `<div class="small green" style="padding:6px 10px">${notice}</div>` : ""}
-      <div class="small dim" style="padding:6px 10px">Las partidas se guardan en este navegador. Para no perderlas o llevarlas a otro dispositivo, expórtalas (⋯) e impórtalas allí.</div>
+      <div class="small dim" style="padding:6px 10px">Las partidas se guardan en este navegador. Para no perderlas o llevarlas a otro dispositivo, expórtalas (⋯) e impórtalas allí.<span id="stuse"></span></div>
     </div></div>` : ""}
     <div class="panel"><div class="hd"><span class="t">Nueva temporada</span></div><div class="bd">
       <div class="newcards">
@@ -114,6 +114,13 @@ export function startScreen(nav: Nav, notice = "") {
       startScreen(nav, `Importada en la partida ${slot}: ${esc(t.name)}, ${slotWhere(chk.season)}.`);
     });
   };
+  // espacio que ocupa el juego (se sabe un poco después)
+  void storageUse().then((u) => {
+    const el = document.getElementById("stuse");
+    if (!u || !el) return;
+    const mb = u.used / 1048576;
+    el.textContent = ` Ocupan ${mb < 0.1 ? "menos de 0,1" : mb.toFixed(1).replace(".", ",")} MB${u.persisted ? "; el navegador no las borrará por su cuenta" : ""}.`;
+  });
   const cur = list[active - 1].season;
   setBack(cur ? () => nav.open(active) : null);
   // la carrera de fondo se monta después de pintar la pantalla (tarda unas décimas)
@@ -321,7 +328,7 @@ function drawChampChart(cv: HTMLCanvasElement, s: SeasonState, cal: string[]) {
 function roundSheet(r: RoundResult, playerTeam: string) {
   const c = CIRCUITS[r.circuitId];
   const block = (kind: SessionKind, rows: ResultRow[] | undefined, table?: number[], sum?: RaceSummary) => !rows ? "" :
-    `<h2 style="margin-top:14px">${SESSION_NAMES[kind]}</h2>${resultsTable(kind, rows, playerTeam, table)}${sum ? `<div class="sumwrap" data-sumwrap="${kind}">${raceSummaryHtml(sum)}</div>` : ""}`;
+    `<h2 style="margin-top:14px">${SESSION_NAMES[kind]}</h2>${resultsTable(kind, rows, playerTeam, table)}${sum ? `<div class="sumwrap" data-sumwrap="${kind}">${sum.photos?.length ? photosHtml(sum.photos) : ""}${raceSummaryHtml(sum)}</div>` : ""}`;
   const { el } = sheet(`<div class="row"><h1 class="grow" style="font-size:18px">${flagHtml(c.bandera)} ${esc(c.gp)}</h1><button data-close>Cerrar</button></div>
     ${block("RACE", r.race, r.raceTable, r.summary)}${block("SPRINT", r.sprint, r.sprintTable, r.sprintSummary)}${block("Q", r.q)}
     ${!r.summary ? `<div class="small dim" style="margin-top:8px">De esta carrera no se guardaron las gráficas (se corrió con una versión anterior).</div>` : ""}

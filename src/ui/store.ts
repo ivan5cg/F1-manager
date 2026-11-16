@@ -1,23 +1,86 @@
 import type { SeasonState } from "../sim/season";
 import { stripForSave } from "../sim/weekend";
 import { parseSnapshot, SessionSnapshot, replacer, reviver } from "../sim/snapshot";
+import * as db from "./db";
 
 // ---------------------------------------------------------------- partidas
 // Hay SLOTS partidas guardadas, cada una con su temporada, su sesión a medias y su marca de
 // «aparcada». La 1 usa las claves de siempre (así siguen las partidas de antes); la activa se
 // recuerda entre visitas. Todo vive en este navegador: para llevarla a otro sitio, exportar.
+//
+// Las partidas van en IndexedDB (localStorage se queda en unos 5 MB). Al arrancar, initStore()
+// las carga todas a memoria; desde ahí se leen sin esperar, y cada escritura cambia la memoria y
+// se manda a IndexedDB sin esperar. Sin IndexedDB (algunos modos privados), todo sigue en
+// localStorage como antes. Los ajustes y la partida activa siguen siempre en localStorage: son
+// pequeños y se leen al arrancar.
 export const SLOTS = 3;
 const ACTIVE = "muro-ranura";
 const suffix = (n: number) => (n === 1 ? "" : `-${n}`);
 const seasonKey = (n: number) => `muro-temporada-2026${suffix(n)}`;
 const sessionKey = (n: number) => `muro-sesion-2026${suffix(n)}`;
 const parkedKey = (n: number) => `muro-sesion-aparcada${suffix(n)}`;
+const SLOT_KEYS = Array.from({ length: SLOTS }, (_, i) => [seasonKey(i + 1), sessionKey(i + 1), parkedKey(i + 1)]).flat();
 
-const get = (k: string) => { try { return localStorage.getItem(k); } catch { return null; } };
-const del = (k: string) => { try { localStorage.removeItem(k); } catch { /* nada */ } };
+/** Lo que hay en IndexedDB, en memoria. null: sin IndexedDB (todo en localStorage). */
+let cache: Map<string, string> | null = null;
+
+const lsGet = (k: string) => { try { return localStorage.getItem(k); } catch { return null; } };
+const lsDel = (k: string) => { try { localStorage.removeItem(k); } catch { /* nada */ } };
+const lsSet = (k: string, v: string) => { try { localStorage.setItem(k, v); return true; } catch { return false; } };
+
+const get = (k: string) => (cache ? cache.get(k) ?? null : lsGet(k));
+const del = (k: string) => {
+  if (!cache) return lsDel(k);
+  cache.delete(k);
+  db.del(k).catch(() => { /* se queda en memoria hasta cerrar */ });
+};
+/** Guarda una clave. false solo si no hay sitio en localStorage (con IndexedDB no se espera a saberlo). */
+const put = (k: string, v: string) => {
+  if (!cache) return lsSet(k, v);
+  cache.set(k, v);
+  db.set(k, v).catch(() => { /* sin sitio: dura lo que la pestaña */ });
+  return true;
+};
+
+/** Carga las partidas a memoria (y pasa a IndexedDB las de antes, si las hay). Antes de pintar nada. */
+export async function initStore(): Promise<void> {
+  const ok = await db.openDb();
+  if (!ok) return;
+  let mem: Map<string, string>;
+  try { mem = await db.all(); } catch { return; }
+  if (!mem.size) {
+    // partidas de versiones anteriores, en localStorage: se copian y, solo con la copia hecha, se borran
+    const old = SLOT_KEYS.map((k) => [k, lsGet(k)] as [string, string | null]).filter((e): e is [string, string] => e[1] !== null);
+    if (old.length) {
+      try { await db.setMany(old); } catch { return; } // si no se puede copiar, todo sigue en localStorage
+      for (const [k, v] of old) { mem.set(k, v); lsDel(k); }
+    }
+  }
+  cache = mem;
+}
+
+/** ¿Las partidas van en IndexedDB? (sin ella, no caben cosas grandes como las fotos) */
+export const roomyStorage = () => !!cache;
+
+/** Pide al navegador que no borre los datos por su cuenta (al crear la primera partida). */
+export function askPersist() {
+  try { void navigator.storage?.persist?.(); } catch { /* nada */ }
+}
+
+/** Espacio que usa el juego en este navegador (null si no se puede saber). */
+export async function storageUse(): Promise<{ used: number; persisted: boolean } | null> {
+  try {
+    const e = await navigator.storage?.estimate?.();
+    if (!e || e.usage === undefined) return null;
+    const persisted = (await navigator.storage.persisted?.()) ?? false;
+    return { used: e.usage, persisted };
+  } catch {
+    return null;
+  }
+}
 
 export function getActiveSlot(): number {
-  const n = Number(get(ACTIVE));
+  const n = Number(lsGet(ACTIVE));
   return n >= 1 && n <= SLOTS ? n : 1;
 }
 export function setActiveSlot(n: number) {
@@ -41,11 +104,8 @@ export function loadSeason(slot = getActiveSlot()): SeasonState | null {
 }
 
 export function saveSeason(s: SeasonState) {
-  try {
-    localStorage.setItem(seasonKey(getActiveSlot()), JSON.stringify({ ...s, weekend: s.weekend ? stripForSave(s.weekend) : null }, replacer));
-  } catch {
-    /* sin almacenamiento: la partida dura lo que la pestaña */
-  }
+  // sin almacenamiento: la partida dura lo que la pestaña
+  put(seasonKey(getActiveSlot()), JSON.stringify({ ...s, weekend: s.weekend ? stripForSave(s.weekend) : null }, replacer));
 }
 
 export function clearSeason() {
@@ -91,20 +151,16 @@ export function checkImport(text: string): { ok: true; season: SeasonState; file
 /** Escribe en una partida lo que trae un archivo ya comprobado (sustituye lo que hubiera). */
 export function importInto(n: number, file: ExportFile) {
   deleteSlot(n);
-  try {
-    localStorage.setItem(seasonKey(n), file.temporada);
-    if (file.sesion && parseSnapshot(file.sesion)) localStorage.setItem(sessionKey(n), file.sesion);
-    if (file.sesion && file.aparcada) localStorage.setItem(parkedKey(n), "1");
-    return true;
-  } catch {
-    return false;
-  }
+  if (!put(seasonKey(n), file.temporada)) return false;
+  if (file.sesion && parseSnapshot(file.sesion)) put(sessionKey(n), file.sesion);
+  if (file.sesion && file.aparcada) put(parkedKey(n), "1");
+  return true;
 }
 
 // ---------------------------------------------------------------- sesión a medias
 /** Guarda la instantánea de la sesión en curso. Devuelve false si no cabe o no hay almacenamiento. */
 export function saveSession(raw: string): boolean {
-  try { localStorage.setItem(sessionKey(getActiveSlot()), raw); return true; } catch { return false; }
+  return put(sessionKey(getActiveSlot()), raw);
 }
 
 export function loadSession(): SessionSnapshot | null {
@@ -120,7 +176,7 @@ export function clearSession() {
 // El jugador salió de la sesión a propósito («Salir al fin de semana»): al abrir la app no se
 // vuelve a meter en ella sola; espera en el fin de semana con «Reanudar».
 export function setParked(on: boolean) {
-  try { if (on) localStorage.setItem(parkedKey(getActiveSlot()), "1"); else del(parkedKey(getActiveSlot())); } catch { /* nada */ }
+  if (on) put(parkedKey(getActiveSlot()), "1"); else del(parkedKey(getActiveSlot()));
 }
 export function isParked(): boolean {
   return get(parkedKey(getActiveSlot())) === "1";

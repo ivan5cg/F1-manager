@@ -4,7 +4,7 @@ import "./style.css";
 document.documentElement.dataset.tema = "grafito";
 import { TEAMS, CIRCUITS, ROUNDS, DRIVERS, getTrack, useSeason } from "./data";
 import { builderScreen, PLAYER_TEAM_ID } from "./teamBuilder";
-import { loadSeason, saveSeason, loadSession, clearSession, isParked, setActiveSlot, deleteSlot } from "./store";
+import { loadSeason, saveSeason, loadSession, clearSession, isParked, setActiveSlot, deleteSlot, initStore, roomyStorage, askPersist, slotList } from "./store";
 import type { SessionSnapshot } from "../sim/snapshot";
 import { startScreen, seasonScreen, weekendScreen, resultsScreen, longRunsPanel, teamPickerScreen, Nav } from "./hubs";
 import { sessionView } from "./sessionView";
@@ -17,8 +17,8 @@ import { takeLastPhotos } from "./photos";
 import { runToEnd } from "./simulate";
 import { esc, setBack } from "./common";
 
-let season: SeasonState | null = loadSeason();
-useSeason(season);
+// las partidas se cargan de IndexedDB antes de pintar nada (ver initStore, al final)
+let season: SeasonState | null = null;
 
 /** La sesión guardada a medias, si es la que toca ahora en el fin de semana en curso. */
 function pendingSnap(): SessionSnapshot | null {
@@ -57,9 +57,12 @@ function finishSession(wk: Weekend, kind: SessionKind, sess: Session) {
     const t = sess.pointsTable();
     extra = `<div class="panel"><div class="hd"><span class="t">Carrera acortada</span></div><div class="bd small">Suspendida y no reanudada: cuenta la clasificación al final de la vuelta ${sess.shortened.laps} de ${sess.laps} (${Math.round((100 * sess.shortened.laps) / sess.laps)} %). ${!t ? "Puntos completos (más del 75 %)." : t.length ? `Puntos reducidos: ${t.join("-")}.` : "Sin puntos: no se completaron dos vueltas en verde."}</div></div>` + extra;
   }
-  // fotos de la carrera (si se vio en 3D): solo para esta pantalla
-  const pics = sum ? takeLastPhotos() : [];
-  if (pics.length) extra = photosHtml(pics) + extra;
+  // fotos de la carrera (si se vio en 3D): se guardan con su resumen (si hay sitio) para verlas desde el calendario
+  const pics = sum ? takeLastPhotos().slice(0, 10) : [];
+  if (pics.length) {
+    extra = photosHtml(pics) + extra;
+    if (roomyStorage() && sum) sum.photos = pics;
+  }
   if (sum) extra = raceSummaryHtml(sum) + extra;
   saveSeason(s);
   const rows = sess.results();
@@ -107,6 +110,8 @@ function enter() {
 
 /** Temporada nueva en una partida: lo que hubiera en ella se borra. */
 function newSeason(slot: number, s: SeasonState) {
+  // la primera partida: se pide al navegador que no borre los datos por su cuenta
+  if (!slotList().some((x) => x.season)) askPersist();
   deleteSlot(slot);
   setActiveSlot(slot);
   season = s;
@@ -161,4 +166,8 @@ const nav: Nav = {
 
 declare const __BUILD__: string;
 if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register(`sw.js?v=${__BUILD__}`).catch(() => {});
-enter();
+void initStore().then(() => {
+  season = loadSeason();
+  useSeason(season);
+  enter();
+});

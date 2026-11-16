@@ -52,6 +52,7 @@ En la realidad, en 2026 el GP de Baréin no se corrió en Sakhir: se trasladó a
 - **Puntos:** 25-18-15-12-10-8-6-4-2-1 en carrera; 8-7-6-5-4-3-2-1 en la sprint. Mundial de pilotos y de constructores.
 - La partida se guarda sola al terminar cada sesión y también a mitad de una: cada pocos segundos y al salir de la app. Si se cierra el navegador o entra una llamada, al volver la sesión sigue exactamente donde estaba.
 - Hay **3 partidas** (en el inicio: seguir, exportar o borrar cada una). Todo se guarda en el navegador del dispositivo, sin cuenta ni servidor: para hacer una copia de seguridad o seguir en otro dispositivo, «Exportar a un archivo» y luego «Importar partida» allí.
+- Las partidas van en IndexedDB (sin el límite de unos 5 MB de localStorage). Al arrancar se cargan a memoria y cada cambio se escribe sin esperar. Las partidas de versiones anteriores, que estaban en localStorage, se copian solas la primera vez y solo entonces se borran de allí. Si el navegador no tiene IndexedDB (algunos modos privados), todo sigue en localStorage como antes. Al crear la primera partida se pide al navegador que no borre los datos por su cuenta, y en el inicio se ve cuánto ocupan. Los ajustes y la partida activa siguen en localStorage.
 - En la sesión, **⏩ hasta lo siguiente** avanza a toda velocidad y se para en cuanto pasa algo de tus pilotos (sale o vuelve al garaje, marca tiempo, entra a boxes, un aviso del ingeniero o del estratega) o de dirección de carrera. Teclas: espacio pausa, 1-6 o −/+ velocidad, F hasta lo siguiente.
 - En el fin de semana, **¿Y ahora qué?** resume lo siguiente que conviene hacer: compuestos que tus ingenieros aún no han medido, blandos nuevos que quedan, previsión de lluvia, parrilla y sanciones.
 
@@ -215,7 +216,8 @@ La carrera se lee como en la tele:
 - A bordo, con lluvia, las gotas se quedan en la cámara y se escurren; con las vueltas y cada salida se ensucia.
 - Un alerón tocado se ve descolgado, y en el cambio de morro se quita y se pone.
 - Si la carrera se ve en 3D, se hacen fotos (cámara de tele) de los adelantamientos, tus paradas y los percances, y salen
-  en el resumen («La carrera en imágenes»). Solo duran hasta esa pantalla: no se guardan con la partida.
+  en el resumen («La carrera en imágenes»). Se guardan con la partida (hasta 10 por carrera) y se vuelven a ver al abrir
+  esa carrera desde el calendario; sin IndexedDB no caben y solo duran hasta esa pantalla.
 - En Singapur y Baréin hay torres de focos a lo largo de la pista, y con el asfalto mojado cada foco se refleja como
   una estela.
 
