@@ -154,3 +154,9 @@ function drawStints(sum: RaceSummary, root: ParentNode) {
   g.fillStyle = "#9aa5b4"; g.textAlign = "center"; g.font = FONT(600, 10);
   for (let l = 0; l <= laps; l += Math.max(5, Math.ceil(laps / 6 / 5) * 5)) g.fillText(l === 0 ? "" : `V${l}`, x(l), H - 8);
 }
+
+/** Las fotos de la carrera (cámara de tele en los momentos clave), en una tira que se desliza. */
+export function photosHtml(pics: { src: string; text: string; lap: number }[]): string {
+  return `<div class="panel"><div class="hd"><span class="t">La carrera en imágenes</span></div><div class="bd"><div class="photostrip">${pics.map((p) =>
+    `<figure><img src="${p.src}" alt="${esc(p.text)}" loading="lazy"><figcaption><span class="mono dim">V${p.lap}</span> ${esc(p.text)}</figcaption></figure>`).join("")}</div></div></div>`;
+}
