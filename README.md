@@ -229,6 +229,10 @@ La carrera se lee como en la tele:
   corten; al anochecer las ventanas de los edificios se encienden poco a poco (cada una con su umbral) y, de noche,
   hay un resplandor anaranjado sobre el horizonte (más en Singapur y Mónaco) y, en calidad 2 y 3, las luces de los
   pueblos en el borde del terreno.
+- **Tormentas:** bajo los chubascos lejanos se ven cortinas de lluvia en el horizonte, franjas que se mueven con el
+  viento. Con una célula de tormenta (más de 15 mm/h) a menos de 30 km caen rayos de vez en cuando: el cielo y la luz
+  ambiente destellan unas décimas, a veces dos veces, y el trueno llega después según lo lejos que esté (a la
+  velocidad del sonido).
 - La cámara *Tele* corta sola al coche que hace un trompo, se sale o se estrella.
 - **Rótulos de tele** sobre el 3D (se apagan en Ajustes): al acabar una vuelta de clasificación, sus tres sectores
   frente a los de la pole (morado, más rápido; verde, a menos de una décima); «Récord del circuito» si alguien baja de

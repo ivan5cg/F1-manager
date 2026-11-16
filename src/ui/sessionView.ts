@@ -2158,8 +2158,9 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     const w = sess.weather, wind = windNow(w).speed;
     let cars: CarHeard[] = [], stops: PitStopHeard[] = [], crowd = 0.25, rain = Math.min(1, sess.rainOnTrack() / 4);
     if (view3d && m3 && !wide) {
-      const av = m3.audioView(now) as { cars: CarHeard[]; stops: PitStopHeard[]; crowd: number; rain: number };
-      cars = av.cars; stops = av.stops; crowd = 0.1 + 0.9 * av.crowd; rain = Math.max(rain * 0.5, av.rain);
+      const av = m3.audioView(now) as { cars: CarHeard[]; stops: PitStopHeard[]; crowd: number; rain: number; thunders: { dist: number }[] };
+      cars = av.cars; stops = av.stops;
+      for (const th of av.thunders) audio.thunder(th.dist); crowd = 0.1 + 0.9 * av.crowd; rain = Math.max(rain * 0.5, av.rain);
     } else {
       // el coche seguido o tu primer piloto en pista; si no hay ninguno fuera, el primero que esté rodando
       const live = (c: Car | null | undefined) => !!c && (c.loc === "track" || c.loc === "pit" || c.loc === "lane_out" || c.loc === "lane_in");

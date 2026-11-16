@@ -88,12 +88,12 @@ vec3 SR(vec3 c){ return pow(c, vec3(2.2)); }
 // cielo: degradado del horizonte al cénit, bruma hacia el sol, nubes con volumen que se mueven y el disco del sol.
 // El mismo material pinta el entorno que reflejan los coches y el asfalto mojado (uEnv = 1: sin disco, con suelo).
 const skyU = { uZen: { value: new THREE.Color() }, uHor: { value: new THREE.Color() }, uSun: { value: new THREE.Vector3(0, 1, 0) }, uSunCol: { value: new THREE.Color() },
-  uCloudCol: { value: new THREE.Color() }, uGround: { value: new THREE.Color() }, uNight: { value: 0 }, uCity: { value: 0 },
+  uCloudCol: { value: new THREE.Color() }, uGround: { value: new THREE.Color() }, uNight: { value: 0 }, uCity: { value: 0 }, uFlash: { value: 0 },
   uWx: { value: null }, uWxR: { value: 40000 }, uCam: { value: new THREE.Vector2() }, uWind: { value: new THREE.Vector2() } };
 const skyMat = (env) => new THREE.ShaderMaterial({
   uniforms: { ...skyU, uEnv: { value: env } }, side: THREE.BackSide, fog: false, depthWrite: false,
   vertexShader: `varying vec3 vDir; void main(){ vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-  fragmentShader: `uniform vec3 uZen, uHor, uSun, uSunCol, uCloudCol, uGround; uniform float uEnv, uNight, uWxR, uCity; uniform vec2 uCam, uWind; uniform sampler2D uWx; varying vec3 vDir;` + GLSL_NOISE + `
+  fragmentShader: `uniform vec3 uZen, uHor, uSun, uSunCol, uCloudCol, uGround; uniform float uEnv, uNight, uWxR, uCity, uFlash; uniform vec2 uCam, uWind; uniform sampler2D uWx; varying vec3 vDir;` + GLSL_NOISE + `
     // ruido de gradiente con transición suave (no deja ver la rejilla) y octavas giradas
     vec2 g2(vec2 p){ float a = h21(p) * 6.2831853; return vec2(cos(a), sin(a)); }
     float gn(vec2 p){ vec2 i = floor(p), f = fract(p), u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
@@ -108,6 +108,8 @@ const skyMat = (env) => new THREE.ShaderMaterial({
       // bruma: el cielo se aclara hacia el sol, sobre todo cerca del horizonte
       col += uSunCol * (pow(s, 6.0) * 0.10 + pow(s, 40.0) * 0.22) * (1.0 - 0.6 * up);
       float disc = smoothstep(0.99955, 0.9998, s) * 30.0 + pow(s, 900.0) * 3.0;
+      // relámpago: todo el cielo se ilumina un instante (más hacia el horizonte, bajo la tormenta)
+      col += vec3(0.75, 0.8, 1.0) * uFlash * (0.35 + 0.65 * (1.0 - up));
       // de noche, el resplandor anaranjado de la ciudad sobre el horizonte (más en los urbanos)
       col += vec3(1.0, 0.55, 0.25) * uCity * uNight * exp(-up * 9.0) * 0.12;
       // estrellas
@@ -130,8 +132,10 @@ const skyMat = (env) => new THREE.ShaderMaterial({
         cc += uSunCol * pow(s, 8.0) * 0.35 * (1.0 - th);
         cc = mix(cc, uHor, smoothstep(0.14, 0.0, d.y) * 0.55); // se pierden en la calima del horizonte
         col = mix(col, cc, c * 0.97);
-        // cortinas de lluvia bajo los chubascos lejanos
-        col = mix(col, uCloudCol * 0.36, rainK * smoothstep(0.24, 0.02, d.y) * 0.75);
+        // cortinas de lluvia bajo los chubascos lejanos: franjas verticales que se mueven con el viento
+        float az = atan(d.z, d.x), fall = smoothstep(0.24, 0.02, d.y);
+        float streak = 0.45 + 0.55 * smoothstep(-0.25, 0.35, gn(vec2(az * 160.0 + uWind.x * 6.0, d.y * 5.0 + uWind.y * 2.0)) + 0.3 * gn(vec2(az * 520.0, 1.7)));
+        col = mix(col, uCloudCol * 0.36, rainK * fall * 0.8 * (uEnv > 0.5 ? 1.0 : streak));
       }
       col += uSunCol * disc * (1.0 - c) * (1.0 - uEnv);
       // por debajo del horizonte: lo que hay de verdad es suelo (solo importa en los reflejos)
@@ -1745,7 +1749,37 @@ let lightT = -1e9, dayK = 1;
 const sunDir = new THREE.Vector3(0.4, 0.7, 0.4);
 const C = (h) => new THREE.Color(h), _c1 = C(0), _c2 = C(0), _c3 = C(0);
 const SKY = { zDay: C(0x3d7bc8), zDusk: C(0x34447c), zNight: C(0x04060c), zGrey: C(0x7f8a96), hDay: C(0xc3d8ea), hDusk: C(0xf0a56c), hNight: C(0x0c111d), hGrey: C(0xaab3bc) };
+// ------------------------------------------------------------------ relámpagos
+// Bajo las células de tormenta (más de 15 mm/h a menos de 30 km) caen rayos de vez en cuando: el cielo y la luz
+// ambiente destellan ~0,2 s (con un segundo golpe a veces) y el trueno llega después, según lo lejos que esté
+// (audio.ts, vía audioView). Solo dibujo: usa Math.random().
+let flashAt = -1e9, flash2 = false, stormK = 0, lastStormT = 0;
+const thunders = [];
+function flashK(now) {
+  const t = (now - flashAt) / 1000;
+  if (t < 0 || t > 0.6) return 0;
+  const a = Math.exp(-t / 0.06) * (t < 0.2 ? 1 : 0.3), b = flash2 && t > 0.12 ? Math.exp(-(t - 0.12) / 0.07) * 0.8 : 0;
+  return Math.min(1.2, a + b);
+}
+function updateStorm(now) {
+  const dtr = Math.min(0.25, Math.max(0, (now - lastStormT) / 1000)); lastStormT = now;
+  if (replay || opt.paused() || dtr <= 0) return;
+  let best = null, bestK = 0;
+  for (const c of sess.weather.cells) {
+    const d = Math.hypot(c.x, c.y), k = Math.max(0, (c.peak - 15) / 25) * (d < 30 ? 1 : 0);
+    if (k > bestK) { bestK = k; best = { d }; }
+  }
+  stormK = bestK;
+  // un rayo cada 6-20 s reales en una tormenta fuerte (a ×1); no más a velocidades altas
+  if (best && Math.random() < dtr * Math.min(0.18, 0.05 + 0.1 * bestK)) {
+    flashAt = now; flash2 = Math.random() < 0.5;
+    const dist = Math.max(0.4, best.d + (Math.random() - 0.5) * 6);
+    thunders.push({ dist });
+    if (thunders.length > 4) thunders.shift(); // nadie los escucha (2D o sin sonido): no se acumulan
+  }
+}
 function updateLight(now) {
+  updateStorm(now);
   if (now - lightT < 700) return;
   lightT = now;
   const h = sess.weather.clock / 60, lat = track.def.clima?.latitud ?? 45, DEG = Math.PI / 180;
@@ -1772,7 +1806,8 @@ function updateLight(now) {
   SPRAY_MAT.uniforms.uCol.value.setRGB(0.8, 0.84, 0.88).lerp(hor, 0.35).multiplyScalar(0.2 + 0.7 * day);
   renderer.setClearColor(hor, 1);
   // al atardecer y de noche el cielo apenas alumbra: sube un poco lo que aporta el entorno para que se siga viendo
-  scene.environmentIntensity = 1 + 0.6 * (1 - day) + 0.6 * warm;
+  scene.environmentIntensity = (1 + 0.6 * (1 - day) + 0.6 * warm) * (1 + 2.5 * flashK(now));
+  skyU.uFlash.value = flashK(now) * (0.6 + 0.6 * (1 - day));
   updateEnv(now, [sunDir.x, sunDir.y, sunDir.z, zen.r, zen.g, zen.b, hor.r, hor.g, hor.b, cloud, wxMean, Math.min(rainHere, 3) / 2].map((v) => v.toFixed(2)).join());
   U.uFlood.value = (1 - day) * 0.8;
   skyU.uCity.value = T.street ? 1 : 0.3;
@@ -2892,7 +2927,7 @@ function audioView(now) {
     const off = curW + 14, d = Math.hypot(auS.x + auS.rx * sg * off - lx, auS.z + auS.rz * sg * off - lz);
     crowd += (len / 300) / (1 + (d / 120) ** 2);
   }
-  return { cars, stops, crowd: clamp(crowd, 0, 1), rain: clamp(rainHere / 2.5, 0, 1), onboard: !!tgt };
+  return { cars, stops, crowd: clamp(crowd, 0, 1), rain: clamp(rainHere / 2.5, 0, 1), onboard: !!tgt, thunders: thunders.splice(0) };
 }
 return {
   /** Antes de cada paso de la simulación: guarda dónde estaba cada coche, para interpolar. */

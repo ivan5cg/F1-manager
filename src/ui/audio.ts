@@ -325,6 +325,19 @@ export function createAudio(initial: SoundPrefs) {
       burst(sfxBus, t, 0.25, 0.8 * g, "lowpass", 900, 0.9, pan);
       for (let i = 0; i < 6; i++) burst(sfxBus, t + 0.04 + Math.random() * 0.35, 0.05 + Math.random() * 0.08, 0.35 * g, "highpass", 2500 + Math.random() * 3000, 0.8, pan);
     },
+    /** Trueno de un rayo a `km` kilómetros: llega a la velocidad del sonido, más grave y más flojo cuanto más lejos. */
+    thunder(km: number) {
+      if (!ctx || !want) return;
+      const c = ctx, delay = Math.min(14, km / 0.343), g = Math.min(0.9, 1.6 / (1 + km * 0.6));
+      setTimeout(() => {
+        if (ctx !== c || !want) return;
+        const t = c.currentTime;
+        // el chasquido (cerca) y el retumbo largo
+        if (km < 2.5) burst(sfxBus, t, 0.25, g * 0.8, "highpass", 1500, 0.7);
+        tone(sfxBus, t + 0.05, 2.6, 70, g * 0.6, "sine", 35);
+        for (let i = 0; i < 7; i++) burst(sfxBus, t + 0.1 + Math.random() * 2.2, 0.6 + Math.random() * 1.2, g * (0.5 - i * 0.05), "lowpass", 180 + Math.random() * 220, 0.8);
+      }, delay * 1000);
+    },
     /** En 2D, al entrar a boxes uno de tus pilotos: las pistolas, de lejos. */
     pitIn() { if (!ctx || !want) return; const t = ctx.currentTime + 0.4; for (let i = 0; i < 4; i++) gun(t + i * 0.04, 0.25, 0); for (let i = 0; i < 4; i++) gun(t + 1.6 + i * 0.04, 0.25, 0); },
     /**
