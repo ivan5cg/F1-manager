@@ -199,11 +199,13 @@ canvas.radar { width: 100%; max-width: 420px; display: block; margin: 0 auto; }
 .main.wide .side { display: none; }
 .trh { display: flex; align-items: center; height: 16px; font-size: 10px; font-weight: 900; color: #000; text-transform: uppercase; letter-spacing: .03em; }
 .trh > span { background: linear-gradient(#fff, #d4d4d4); height: 100%; display: flex; align-items: center; justify-content: flex-end; padding-right: 3px; border-right: 1px solid #999; }
-.trh .p { width: 25px; } .trh .n { width: 44px; justify-content: flex-start; padding-left: 4px; }
+.trh .p { width: 25px; } .trh .n { width: 64px; justify-content: flex-start; padding-left: 4px; }
 .tr.wide { font-size: 12px; }
 .tr.wide .body { padding-left: 4px; }
 .tr.wide .n { width: 34px; }
 .tr.wide .flag { display: none; }
+/* puestos ganados o perdidos: ancho fijo para que no descuadre las columnas (y hueco vacío si no hay cambio) */
+.tr.wide .dl { width: 26px; flex: none; margin-left: 0; }
 .tr .w, .trh .w { width: 46px; text-align: right; padding-right: 3px; }
 .tr .l, .trh .l { width: 60px; text-align: right; padding-right: 3px; }
 .tr .s, .trh .s { flex: 1; min-width: 30px; text-align: right; padding-right: 3px; }
