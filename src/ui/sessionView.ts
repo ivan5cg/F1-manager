@@ -1163,7 +1163,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       const fight = race && started && prev && c.loc === "track" && prev.car.loc === "track" && prev.lapsDown === lapsDown && interval > 0 && interval < 1;
       const cls = `tr${i === 0 ? " lead" : ""}${c.player ? " me" : ""}${c.loc === "out" || c.eliminated ? " out" : ""}${wide ? " wide" : ""}${fight ? " fight" : ""}${c.id === selId ? " sel" : ""}`;
       const gp = gridPos.get(c.id);
-      const dl = gp && c.loc !== "out" && gp !== i + 1 ? `<span class="dl ${gp > i + 1 ? "upp" : "dn"}" title="Desde la parrilla (P${gp})">${gp > i + 1 ? "▲" : "▼"}${Math.abs(gp - i - 1)}</span>` : "";
+      const dl = gp && c.loc !== "out" && gp !== i + 1 ? `<span class="dl ${gp > i + 1 ? "upp" : "dn"}" title="Desde la parrilla (P${gp})">${gp > i + 1 ? "▲" : "▼"}${Math.abs(gp - i - 1)}</span>` : wide ? `<span class="dl"></span>` : ""; // en la tabla ancha siempre ocupa su sitio
       const pre = `<span class="p">${i + 1}</span><span class="c" style="background:${c.team.color}"></span><span class="body"><span class="n">${c.d.abrev}</span>${dl}${statusFlag(c)}`;
       if (wide) {
         let cells = "";
