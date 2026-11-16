@@ -40,8 +40,8 @@ Tamaño: **P** pequeño (un PR corto), **M** medio, **G** grande (varios PR).
 - **Móvil primero.** Medir lo que pese en 3D con `renderer.info` (llamadas y triángulos) por escalón de calidad
   (0 a 3, ver `applyQuality`/`lowerQuality` en `src/ui/map3d.ts`) y no subir los números del escalón 0 y 1.
   Ahora también se ve en el juego: Ajustes → «Mostrar rendimiento del 3D».
-- Para probar el 3D sin jugar una carrera: una página suelta (no se sube) que construya una sesión como
-  `poc3d/entry.ts` y llame a `createMap3d` con `quality` fija y `debug: { view }` (cámara a mano; ver el comentario
+- Para probar el 3D sin jugar una carrera: `poc3d/prueba.html` (ver «Cómo se ha probado»), que construye una sesión como
+  `poc3d/entry.ts` y llama a `createMap3d` con `quality` fija y `debug: { view }` (cámara a mano; ver el comentario
   de `createMap3d`). Capturas con Playwright (ya instalado; `chromium.launch({ args: ['--use-gl=angle',
   '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] })`). Ver «Cómo se ha probado» al final.
 - Ficheros clave: simulación en `src/sim/` (`session.ts`, `weekend.ts`, `season.ts`, `market.ts`, `track.ts`,
@@ -293,7 +293,7 @@ Referencia medida (página de prueba, Singapur de noche, vista «horizonte», 80
 
 ## Cómo se ha probado (para la próxima sesión)
 
-- **Página de prueba del 3D** (no se sube; había una en `poc3d/prueba.html` + `prueba.ts`): construye una carrera con
+- **Página de prueba del 3D** (`poc3d/prueba.html` + `prueba.ts`, y `poc3d/shot.cjs` para las capturas; no entra en la compilación del juego): construye una carrera con
   `Weekend.build("RACE")`, da ~1800 pasos, cambia `sess.weather.clock` si se pide una hora y llama a `createMap3d`
   con `quality` fija, `paused: () => true` y `debug: { view }`. Tras ~40 fotogramas deja `debug.info`
   (`{ calls, tris }`) en `window.__done`. Parámetros útiles: circuito, calidad, hora, vista y una «tormenta» que mete
