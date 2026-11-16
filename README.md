@@ -201,6 +201,12 @@ arrancar, sin descargar nada. Hay cuatro escalones de calidad y, si el dispositi
 40 fps, baja solo: primero quita la oclusión ambiental y el desenfoque de la cámara de tele,
 luego resolución, luego el resplandor y el búfer HDR, y al final las sombras. Solo los coches cercanos (hasta 8) usan
 la malla fina; los reflejos de los focos en mojado necesitan calidad 2 y las sombras de los árboles, la máxima.
+Niveles de detalle: el decorado pegado a la pista va por tramos de unos 400 m y solo se dibujan los que caen en la
+vista o en la caja de las sombras; los lejanos, sin rótulos, balcones, pilares, banderas ni bajos de las cubiertas (todo
+sigue en una sola llamada de dibujo: lo que cambia son los índices, y solo cuando cambia algún tramo). Desde muy lejos
+(la vista general) los coches pasan a una malla mínima de unos 300 triángulos con las ruedas dentro y los árboles a
+una copa sola. En Mónaco y Singapur solo dan sombra las manzanas cercanas a la pista, y las fachadas lejanas, cuando
+cada ventana ocupa menos de medio píxel, cambian sus ventanas encendidas por un brillo uniforme que no parpadea.
 En Ajustes se puede fijar la calidad a mano (0 a 3, o automática; fijada no baja sola) y encender un medidor de
 rendimiento: fotogramas por segundo (media del último segundo), calidad, escala de resolución y triángulos y llamadas
 de dibujo por fotograma. Tocando el medidor se pasa a la calidad siguiente.
