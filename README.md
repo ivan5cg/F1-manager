@@ -57,6 +57,10 @@ En la realidad, en 2026 el GP de Baréin no se corrió en Sakhir: se trasladó a
   de la temporada. Con un equipo real los rivales mejoran por su cuenta a un ritmo fijo (el mismo que da de media
   gastar el presupuesto en aerodinámica); en «crea tu equipo» siguen evolucionando según su director técnico, y el
   tuyo marca cuánto rinde cada M. Las temporadas empezadas antes de esto siguen como estaban.
+- **Objetivos de la directiva:** al empezar la temporada, dos según lo bueno que es tu coche frente a la parrilla
+  (por ejemplo, «acabar entre los 5 primeros de constructores» y «subir 2 veces al podio»; con el peor coche,
+  «puntuar en 2 carreras»). Se ven en la pantalla de temporada con cómo van, y se marcan cuando ya no se pueden
+  cumplir.
 - **Puntos:** 25-18-15-12-10-8-6-4-2-1 en carrera; 8-7-6-5-4-3-2-1 en la sprint. Mundial de pilotos y de constructores.
 - La partida se guarda sola al terminar cada sesión y también a mitad de una: cada pocos segundos y al salir de la app. Si se cierra el navegador o entra una llamada, al volver la sesión sigue exactamente donde estaba.
 - Hay **3 partidas** (en el inicio: seguir, exportar o borrar cada una). Todo se guarda en el navegador del dispositivo, sin cuenta ni servidor: para hacer una copia de seguridad o seguir en otro dispositivo, «Exportar a un archivo» y luego «Importar partida» allí.

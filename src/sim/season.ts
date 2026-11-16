@@ -5,6 +5,7 @@ import type { Compound } from "./tyres";
 import type { CustomTeam } from "./market";
 import type { PuState } from "./powerunit";
 import type { DevState } from "./development";
+import type { Objective } from "./objectives";
 
 export const RACE_POINTS = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
 export const SPRINT_POINTS = [8, 7, 6, 5, 4, 3, 2, 1];
@@ -48,6 +49,8 @@ export interface SeasonState {
   pu?: Record<number, PuState>;
   /** Desarrollo del coche por piezas (las temporadas de antes no lo tienen: su coche mejora solo, como entonces). */
   dev?: DevState;
+  /** Objetivos de la directiva para la temporada (se ponen al abrirla por primera vez). */
+  objetivos?: Objective[];
 }
 
 export function pointsFor(rows: ResultRow[] | undefined, table: number[]): Map<number, number> {

@@ -905,3 +905,4 @@ html[data-tema] .dcard .cl i { color: #aab0ba; }
 .devrow .seg button { line-height: 1.15; padding: 5px 2px; }
 .devrow .seg button .small { font-size: 10px; opacity: .85; }
 .devpart { padding: 5px 0; border-top: 1px solid rgba(255, 255, 255, .08); font-size: 12.5px; }
+.objrow { display: flex; gap: 8px; align-items: flex-start; margin-bottom: 6px; }

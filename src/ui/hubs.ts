@@ -1,5 +1,6 @@
 import type { SessionSnapshot } from "../sim/snapshot";
-import { TEAMS, BASE_TEAMS, CIRCUITS, ROUNDS, DRIVERS, GRID_CHANGES, getTrack, calendarOf, devContext } from "./data";
+import { TEAMS, BASE_TEAMS, CIRCUITS, ROUNDS, DRIVERS, GRID_CHANGES, getTrack, calendarOf, devContext, gridOf } from "./data";
+import { objectivesFor, objectiveStatus } from "../sim/objectives";
 import { DEV_AREAS, DEV_SIZES, DEV_RIVAL, MOTOR_CAP, DevArea, DevSize, devLeft, devExpect, orderPart, newDev, isWorks, devGains } from "../sim/development";
 import { myTeamPanel, puSummary, puPanel, wirePu, PLAYER_TEAM_ID } from "./teamBuilder";
 import { $, esc, fmtLap, fmtRace, tyreHtml, fmtDate, sheet, setLabel, groupSets, flagHtml, setBack } from "./common";
@@ -195,6 +196,8 @@ export function teamPickerScreen(nav: Nav, slot: number) {
 export function seasonScreen(nav: Nav, s: SeasonState) {
   // temporadas empezadas antes del desarrollo por piezas: si aún no se ha corrido nada, se les pone ya
   if (!s.dev && s.round === 0 && !s.rounds.length) { s.dev = newDev(devContext(s).left); saveSeason(s); }
+  // objetivos de la directiva: según cómo era el coche frente a la parrilla al empezar
+  if (!s.objetivos) { s.objetivos = objectivesFor(gridOf(s, 0).teams, s.playerTeam); saveSeason(s); }
   const ds = driverStandings(s, DRIVERS.length);
   const ts = teamStandings(s, TEAMS);
   const ROUNDS_S = calendarOf(s);
@@ -213,6 +216,7 @@ export function seasonScreen(nav: Nav, s: SeasonState) {
     </div></div>
     ${s.equipo ? myTeamPanel(s, TEAMS) : ""}
     ${s.equipo && s.pu ? `<div class="panel"><div class="hd"><span class="t">Unidades de potencia</span></div><div class="bd">${puSummary(s.pu, DRIVERS.filter((d) => d.team.id === PLAYER_TEAM_ID).map((d) => d.id), DRIVERS.filter((d) => d.team.id === PLAYER_TEAM_ID).map((d) => d.d.abrev))}<div class="small dim" style="margin-top:4px">Porcentaje de vida gastada de cada unidad (en amarillo, la montada; tachadas, las rotas).</div></div></div>` : ""}
+    ${objectivesPanel(s, ROUNDS_S.length, done)}
     ${devPanel(s, myTeam, ROUNDS_S, done)}
     ${s.equipo && GRID_CHANGES.length ? `<div class="panel"><div class="hd"><span class="t">La parrilla tras tus fichajes</span></div><div class="bd small">${GRID_CHANGES.map((c) => `${esc(c.team)}: ${c.what === "piloto" ? `${esc(c.in)} por ${esc(c.out)}` : `interino por ${esc(c.out)}`}`).join("<br>")}</div></div>` : ""}
     <div class="panel"><div class="hd"><span class="t">Calendario</span></div><div class="bd" style="padding:0">
@@ -266,6 +270,19 @@ export function seasonScreen(nav: Nav, s: SeasonState) {
   };
   else $("#again").onclick = () => nav.home();
   wireDev(s, () => { const y = window.scrollY; seasonScreen(nav, s); window.scrollTo(0, y); });
+}
+
+// --------------------------------------------------------------- objetivos
+function objectivesPanel(s: SeasonState, races: number, done: boolean): string {
+  if (!s.objetivos?.length) return "";
+  const mine = DRIVERS.filter((d) => d.team.id === s.playerTeam).map((d) => d.id);
+  const st = s.objetivos.map((o) => objectiveStatus(o, s, TEAMS, mine, races));
+  const ICON = { done: "✅", failed: "❌", on: "🟢", off: "🟠" };
+  const ok = st.filter((x) => x.state === "done").length;
+  return `<div class="panel"><div class="hd"><span class="t">Objetivos de la directiva</span>${done ? `<span class="small">${ok} de ${st.length} cumplidos</span>` : ""}</div><div class="bd">
+    ${st.map((x) => `<div class="objrow"><span>${ICON[x.state]}</span><div class="grow"><b>${esc(x.text)}</b><br><span class="small dim">${esc(x.now)}${x.state === "done" ? " · cumplido" : x.state === "failed" ? " · ya no se puede" : x.state === "off" ? " · por ahora, no llegas" : ""}</span></div></div>`).join("")}
+    <div class="small dim" style="margin-top:4px">${done ? (ok === st.length ? "La directiva está contenta con la temporada." : ok ? "La directiva esperaba algo más." : "La directiva no está nada contenta.") : "Los pone la directiva al empezar, según lo bueno que es el coche frente al resto."}</div>
+  </div></div>`;
 }
 
 // --------------------------------------------------------------- desarrollo
