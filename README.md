@@ -186,8 +186,31 @@ compuesto que toca. Los percances de la simulación se ven: el trompo gira el co
 lo lleva a la escapatoria levantando polvo de la grava o de la hierba, el bloqueo echa humo de la rueda delantera y el
 accidente deja el coche contra la barrera un par de minutos.
 
-Posiciones, paradas, compuestos, percances, lluvia, nubes, hora y agua en pista (con el carril seco al
-secarse) salen de la simulación. La altitud, la anchura y el lado de los boxes salen de los datos
+En Mónaco y Singapur el terreno es el de verdad (`entorno`, una rejilla de altitud alrededor del circuito que genera
+`python3 scripts/entorno.py`): el mar y los puertos con yates amarrados, la ladera de Mónaco con los edificios más altos
+cuesta arriba, parques, y en Singapur cada torre con la altura que da el modelo de superficie. Las calles de la ciudad
+siguen la pista.
+
+La carrera se lee como en la tele:
+- La cámara *Tele* corta sola al coche que hace un trompo, se sale o se estrella.
+- Con coche de seguridad, el coche (plateado, con la barra de luces encendida) va delante del líder y entra por el
+  pit-lane en su última vuelta. Con coche de seguridad o VSC los bordes de toda la pista se marcan en amarillo. Tras un
+  percance solo se marca el tramo afectado y los comisarios agitan la bandera amarilla, o la roja si hay bandera roja.
+- Los bloqueos y trompos dejan huellas de goma, la hierba deja surcos y al volver de la grava queda gravilla en el
+  asfalto. Todo se borra poco a poco.
+- En la parada, los mecánicos salen corriendo del garaje, trabajan (las pistolas, agachados) y vuelven. Sobre el morro
+  hay un semáforo que pasa a verde para soltar el coche.
+- En libres y clasificación los coches se ven dentro de su garaje, sobre caballetes y con las mantas puestas, y entran y
+  salen por el pit-lane. Los que abandonan por avería vuelven al garaje.
+- Tras un accidente quedan restos en la pista, llegan los comisarios y una grúa levanta el coche y lo deja detrás de la
+  barrera.
+- En la parrilla, las cinco luces del pórtico se encienden de una en una y se apagan al darse la salida.
+- En las gradas los aficionados agitan banderas. De lejos el público es un tono apagado.
+- En Singapur y Baréin hay torres de focos a lo largo de la pista, y con el asfalto mojado cada foco se refleja como
+  una estela.
+
+Posiciones, paradas, compuestos, percances, banderas, coche de seguridad, lluvia, nubes, hora y agua en pista (con el
+carril seco al secarse) salen de la simulación. La altitud, la anchura y el lado de los boxes salen de los datos
 de cada circuito (`relieve`, `ancho`, `boxes.lado`), que genera `python3 scripts/relieve.py`. La
 trazada, el cabeceo de los coches, las escapatorias, los árboles, los edificios, las libreas y cómo se ve cada
 parada y cada percance son solo dibujo.
@@ -217,4 +240,4 @@ npx tsx scripts/pista.ts spa                         # análisis del circuito
 - Tormentas: [NWS: ciclo de vida de una tormenta](https://www.weather.gov/spotterguide/life), [Royal Meteorological Society: ciclo de vida de una tormenta](https://www.rmets.org/metmatters/life-cycle-thunderstorm).
 - Mojado: [Pirelli: cuándo cambiar de slicks a neumáticos de lluvia](https://www.pirelli.com/global/en-ww/race/when-it-s-time-to-change-from-slick-to-wet-tyres-in-formula-1), [FIA: pole en mojado de Interlagos 2024](https://fia.com/node/54403), [FIA: clasificación sprint de Interlagos 2024](https://fia.com/node/54364).
 - Clima: [24 Horas de Spa (julio)](https://www.crowdstrike24hoursofspa.com/news/1919/what-an-autumn-edition-means-for-the-total-24-hours-of-spa-weather-forecast), [weatherapi.com: Spa](https://www.weatherapi.com/history/july/q/spa-205712), [weatherapi.com: Monza](https://www.weatherapi.com/history/september/q/monza-1281402), [weatheronthisday.com: São Paulo](https://weatheronthisday.com/intl/sao-paulo/november), [weathermonth.com: São Paulo](https://weathermonth.com/en/sao-paulo-weather-in-november). Silverstone en julio es aproximado (no se encontró una normal climática fiable).
-- Altitud de los circuitos: Mapzen/AWS Terrain Tiles (teselas «terrarium»), con el trazado situado sobre el mapa mediante bacinger/f1-circuits.
+- Altitud de los circuitos y del terreno de Mónaco y Singapur (mar, puertos, ladera, altura de las torres): Mapzen/AWS Terrain Tiles (teselas «terrarium»), con el trazado situado sobre el mapa mediante bacinger/f1-circuits.
