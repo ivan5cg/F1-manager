@@ -65,6 +65,10 @@ En la realidad, en 2026 el GP de Baréin no se corrió en Sakhir: se trasladó a
 - La partida se guarda sola al terminar cada sesión y también a mitad de una: cada pocos segundos y al salir de la app. Si se cierra el navegador o entra una llamada, al volver la sesión sigue exactamente donde estaba.
 - Hay **3 partidas** (en el inicio: seguir, exportar o borrar cada una). Todo se guarda en el navegador del dispositivo, sin cuenta ni servidor: para hacer una copia de seguridad o seguir en otro dispositivo, «Exportar a un archivo» y luego «Importar partida» allí.
 - Las partidas van en IndexedDB (sin el límite de unos 5 MB de localStorage). Al arrancar se cargan a memoria y cada cambio se escribe sin esperar. Las partidas de versiones anteriores, que estaban en localStorage, se copian solas la primera vez y solo entonces se borran de allí. Si el navegador no tiene IndexedDB (algunos modos privados), todo sigue en localStorage como antes. Al crear la primera partida se pide al navegador que no borre los datos por su cuenta, y en el inicio se ve cuánto ocupan. Los ajustes y la partida activa siguen en localStorage.
+- Copias de seguridad: en Safari (y en cualquier navegador de iPhone o iPad) sin instalar el juego, el inicio avisa de
+  que Safari borra los datos de las webs que no se usan en 7 días. Y si el juego no está instalado, la pantalla de
+  temporada recuerda exportar la partida cada 2 carreras desde la última copia. Los dos avisos se pueden cerrar para
+  siempre.
 - En la sesión, **⏩ hasta lo siguiente** avanza a toda velocidad y se para en cuanto pasa algo de tus pilotos (sale o vuelve al garaje, marca tiempo, entra a boxes, un aviso del ingeniero o del estratega) o de dirección de carrera. Teclas: espacio pausa, 1-6 o −/+ velocidad, F hasta lo siguiente.
 - En el fin de semana, **¿Y ahora qué?** resume lo siguiente que conviene hacer: compuestos que tus ingenieros aún no han medido, blandos nuevos que quedan, previsión de lluvia, parrilla y sanciones.
 

@@ -15,7 +15,7 @@ import { stintProfile } from "../sim/strategy";
 import { setupEstimate, carSetup, proposedSetup, WET_SHIFT, SETUP_MIN, SETUP_MAX, type Setup } from "../sim/setup";
 import type { Track } from "../sim/track";
 import { SCENARIO_NAMES } from "../sim/weather";
-import { saveSeason, loadSeason, slotList, getActiveSlot, deleteSlot, exportSlot, checkImport, importInto, SLOTS, storageUse } from "./store";
+import { saveSeason, loadSeason, slotList, getActiveSlot, deleteSlot, exportSlot, checkImport, importInto, SLOTS, storageUse, installed, isSafariLike, markExported, exportDue, loadPrefs, savePrefs } from "./store";
 import { raceSummaryHtml, drawRaceSummary, photosHtml } from "./summary";
 
 export interface Nav {
@@ -80,6 +80,7 @@ export function startScreen(nav: Nav, notice = "") {
       <div class="herolive" id="herolive"></div>
       <div class="herotxt"><span class="kick">Temporada 2026</span><h1>Muro de Boxes</h1><div>${ROUNDS.length} grandes premios. Tú decides en el muro.</div></div>
     </div>
+    ${any && isSafariLike() && !installed() && !loadPrefs().sinAvisoSafari ? `<div class="notice" id="safari"><div class="grow small">Instala el juego en la pantalla de inicio (Compartir → «Añadir a pantalla de inicio») o exporta la partida: Safari borra los datos de las webs que no se usan en 7 días.</div><button id="safarix" aria-label="No volver a mostrar">✕</button></div>` : ""}
     ${any ? `<div class="panel"><div class="hd"><span class="t">Tus partidas</span></div><div class="bd" style="padding:0">
       ${list.map(({ slot, season, midSession }) => {
         if (!season) return `<div class="slotrow empty"><span class="slotn">${slot}</span><span class="grow dim small">Vacía</span></div>`;
@@ -100,6 +101,8 @@ export function startScreen(nav: Nav, notice = "") {
     <div style="padding:0 10px"><button id="import" style="width:100%">Importar partida desde un archivo</button><input type="file" id="importf" accept=".json,application/json" hidden></div>
   </div>`;
   $("#real").onclick = () => chooseSlot("Nueva temporada", (slot) => nav.pickTeam(slot));
+  const sx = document.getElementById("safarix");
+  if (sx) sx.onclick = () => { const p = loadPrefs(); p.sinAvisoSafari = true; savePrefs(p); document.getElementById("safari")?.remove(); };
   $("#build").onclick = () => chooseSlot("Nueva temporada", (slot) => nav.build(slot));
   document.querySelectorAll<HTMLElement>("[data-open]").forEach((b) => (b.onclick = () => nav.open(Number(b.dataset.open))));
   document.querySelectorAll<HTMLElement>("[data-more]").forEach((b) => (b.onclick = () => slotSheet(nav, Number(b.dataset.more))));
@@ -130,6 +133,16 @@ export function startScreen(nav: Nav, notice = "") {
   setTimeout(() => { const cv = document.getElementById("herocv") as HTMLCanvasElement | null; if (cv) startAttract(cv, $("#herolive")); }, 80);
 }
 
+/** Guarda una partida en un archivo (y lo anota, para no recordarlo hasta dentro de dos carreras). */
+function exportToFile(slot: number) {
+  const s = loadSeason(slot), txt = exportSlot(slot);
+  if (!s || !txt) return;
+  const t = seasonTeam(s);
+  const base = t.name.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() || "equipo";
+  void saveFile(new File([txt], `muro-de-boxes-${base}-ronda-${Math.min(s.round + 1, calendarOf(s).length)}.json`, { type: "application/json" }));
+  markExported(slot, s.rounds.length);
+}
+
 /** Opciones de una partida guardada: exportarla a un archivo o borrarla. */
 function slotSheet(nav: Nav, slot: number) {
   const s = loadSeason(slot);
@@ -141,13 +154,7 @@ function slotSheet(nav: Nav, slot: number) {
       <button data-m="export"><b>Exportar a un archivo</b><span>Una copia de seguridad, o para seguirla en otro dispositivo con «Importar partida»</span></button>
       <button data-m="delete"><b>Borrar partida</b><span>No se puede deshacer</span></button>
     </div>`);
-  el.querySelector<HTMLButtonElement>('[data-m="export"]')!.onclick = () => {
-    const txt = exportSlot(slot);
-    if (!txt) return;
-    const base = t.name.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() || "equipo";
-    void saveFile(new File([txt], `muro-de-boxes-${base}-ronda-${Math.min(s.round + 1, calendarOf(s).length)}.json`, { type: "application/json" }));
-    close();
-  };
+  el.querySelector<HTMLButtonElement>('[data-m="export"]')!.onclick = () => { exportToFile(slot); close(); };
   el.querySelector<HTMLButtonElement>('[data-m="delete"]')!.onclick = () => {
     if (!confirm(`¿Borrar la partida ${slot} (${t.name})? No se puede deshacer.`)) return;
     deleteSlot(slot);
@@ -216,6 +223,7 @@ export function seasonScreen(nav: Nav, s: SeasonState) {
     </div></div>
     ${s.equipo ? myTeamPanel(s, TEAMS) : ""}
     ${s.equipo && s.pu ? `<div class="panel"><div class="hd"><span class="t">Unidades de potencia</span></div><div class="bd">${puSummary(s.pu, DRIVERS.filter((d) => d.team.id === PLAYER_TEAM_ID).map((d) => d.id), DRIVERS.filter((d) => d.team.id === PLAYER_TEAM_ID).map((d) => d.d.abrev))}<div class="small dim" style="margin-top:4px">Porcentaje de vida gastada de cada unidad (en amarillo, la montada; tachadas, las rotas).</div></div></div>` : ""}
+    ${exportDue(getActiveSlot(), s.rounds.length) ? `<div class="notice" id="expnote"><div class="grow small">Llevas ${s.rounds.length} carreras sin copia de seguridad. Como el juego no está instalado, el navegador podría borrar la partida: expórtala a un archivo.</div><button id="expnow">Exportar</button><button id="expx" title="No volver a recordarlo" aria-label="No volver a recordarlo">✕</button></div>` : ""}
     ${objectivesPanel(s, ROUNDS_S.length, done)}
     ${devPanel(s, myTeam, ROUNDS_S, done)}
     ${s.equipo && GRID_CHANGES.length ? `<div class="panel"><div class="hd"><span class="t">La parrilla tras tus fichajes</span></div><div class="bd small">${GRID_CHANGES.map((c) => `${esc(c.team)}: ${c.what === "piloto" ? `${esc(c.in)} por ${esc(c.out)}` : `interino por ${esc(c.out)}`}`).join("<br>")}</div></div>` : ""}
@@ -270,6 +278,10 @@ export function seasonScreen(nav: Nav, s: SeasonState) {
   };
   else $("#again").onclick = () => nav.home();
   wireDev(s, () => { const y = window.scrollY; seasonScreen(nav, s); window.scrollTo(0, y); });
+  const en = document.getElementById("expnow");
+  if (en) en.onclick = () => { exportToFile(getActiveSlot()); document.getElementById("expnote")?.remove(); };
+  const ex = document.getElementById("expx");
+  if (ex) ex.onclick = () => { if (!confirm("¿No volver a recordar que exportes las partidas?")) return; const p = loadPrefs(); p.sinRecordatorio = true; savePrefs(p); document.getElementById("expnote")?.remove(); };
 }
 
 // --------------------------------------------------------------- objetivos

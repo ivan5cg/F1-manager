@@ -131,6 +131,29 @@ export function slotList(): { slot: number; season: SeasonState | null; midSessi
   });
 }
 
+// ---------------------------------------------------------------- avisos de copia de seguridad
+/** ¿Está instalada en la pantalla de inicio? (entonces el navegador no borra sus datos por no usarse) */
+export const installed = () => { try { return matchMedia("(display-mode: standalone)").matches || (navigator as Navigator & { standalone?: boolean }).standalone === true; } catch { return false; } };
+/** Safari (o cualquier navegador de iPhone/iPad, que por debajo es Safari): borra los datos de las webs que no se usan en 7 días. */
+export function isSafariLike(): boolean {
+  const ua = navigator.userAgent;
+  const ios = /iP(hone|ad|od)/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
+  return ios || (/Safari\//.test(ua) && !/Chrome|Chromium|CriOS|FxiOS|Edg|Android/.test(ua));
+}
+/** Anota que se ha exportado una partida (para no recordarlo hasta dentro de 2 carreras). */
+export function markExported(slot: number, races: number) {
+  const p = loadPrefs();
+  p.exportadas = { ...p.exportadas, [slot]: races };
+  p.ultimaExportacion = Date.now();
+  savePrefs(p);
+}
+/** ¿Toca recordar que se exporte esta partida? (sin instalar, cada 2 carreras desde la última copia) */
+export function exportDue(slot: number, races: number): boolean {
+  const p = loadPrefs();
+  if (p.sinRecordatorio || installed() || races < 2) return false;
+  return races - (p.exportadas?.[slot] ?? 0) >= 2;
+}
+
 // ---------------------------------------------------------------- exportar / importar
 const APP = "muro-de-boxes";
 interface ExportFile { app: string; formato: number; exportado: string; temporada: string; sesion: string | null; aparcada: boolean }
@@ -211,6 +234,13 @@ export interface Prefs {
   calidad3d?: number;
   /** Sonido de la sesión: sí/no y volúmenes (0 a 1). */
   sonido: SoundPrefs;
+  /** Copias de seguridad: carreras que llevaba cada partida (por número) la última vez que se exportó. */
+  exportadas?: Record<number, number>;
+  /** Fecha (ms) de la última exportación. */
+  ultimaExportacion?: number;
+  /** El jugador cerró para siempre el aviso de Safari o el recordatorio de exportar. */
+  sinAvisoSafari?: boolean;
+  sinRecordatorio?: boolean;
 }
 /** Velocidades de la sesión (× tiempo real). */
 export const SPEEDS = [1, 2, 4, 8, 16, 64];
@@ -230,6 +260,10 @@ export function loadPrefs(): Prefs {
       if (o.lobato === false) p.lobato = false;
       if (o.rendimiento3d === true) p.rendimiento3d = true;
       if ([0, 1, 2, 3].includes(o.calidad3d as number)) p.calidad3d = o.calidad3d;
+      if (o.exportadas && typeof o.exportadas === "object") p.exportadas = o.exportadas;
+      if (typeof o.ultimaExportacion === "number") p.ultimaExportacion = o.ultimaExportacion;
+      if (o.sinAvisoSafari === true) p.sinAvisoSafari = true;
+      if (o.sinRecordatorio === true) p.sinRecordatorio = true;
       if (o.sonido && typeof o.sonido === "object") {
         const so = o.sonido as Partial<SoundPrefs>;
         if (typeof so.sonido === "boolean") p.sonido.sonido = so.sonido;
