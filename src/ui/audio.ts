@@ -9,8 +9,10 @@ export interface SoundPrefs {
   motores: number; // 0..1
   ambiente: number; // 0..1
   radio: number; // 0..1
+  voz?: boolean; // leer en voz alta los mensajes importantes de la radio (voz del sistema en español)
+  vozLobato?: boolean; // y los comentarios de Lobato, con otra voz
 }
-export const DEFAULT_SOUND: SoundPrefs = { sonido: true, volumen: 0.7, motores: 0.8, ambiente: 0.7, radio: 0.8 };
+export const DEFAULT_SOUND: SoundPrefs = { sonido: true, volumen: 0.7, motores: 0.8, ambiente: 0.7, radio: 0.8, voz: false, vozLobato: false };
 
 /** Un coche que se oye, visto desde quien escucha (la cámara en 3D, el coche seguido en 2D). */
 export interface CarHeard {
@@ -73,7 +75,7 @@ export type Audio = ReturnType<typeof createAudio>;
 export function createAudio(initial: SoundPrefs) {
   let prefs = { ...initial };
   let ctx: AudioContext | null = null;
-  let master: GainNode, engBus: GainNode, ambBus: GainNode, sfxBus: GainNode, radioBus: GainNode, duckG: GainNode;
+  let master: GainNode, engBus: GainNode, ambBus: GainNode, sfxBus: GainNode, radioBus: GainNode, radioOut: GainNode, duckG: GainNode;
   let noiseBuf: AudioBuffer, pinkBuf: AudioBuffer;
   let crowdG: GainNode, crowdF: BiquadFilterNode, rainG: GainNode, windG: GainNode, windF: BiquadFilterNode;
   const voices: Voice[] = [];
@@ -107,8 +109,10 @@ export function createAudio(initial: SoundPrefs) {
     comp.threshold.value = -12; comp.knee.value = 10; comp.ratio.value = 4; comp.attack.value = 0.005; comp.release.value = 0.2;
     comp.connect(c.destination);
     master = gainN(0, comp);
-    duckG = gainN(1, master); // baja todo menos la radio (la radio del equipo, bloque 2.3)
-    engBus = gainN(1, duckG); ambBus = gainN(1, duckG); sfxBus = gainN(1, duckG); radioBus = gainN(1, master);
+    duckG = gainN(1, master); // baja todo menos la radio mientras habla alguien
+    engBus = gainN(1, duckG); ambBus = gainN(1, duckG); sfxBus = gainN(1, duckG);
+    // la radio suena también con la sesión en pausa (muchos mensajes la paran): va por su lado, sin la puerta de master
+    radioOut = gainN(prefs.sonido ? prefs.volumen : 0, comp); radioBus = gainN(1, radioOut);
     noiseBuf = makeNoise(c, false); pinkBuf = makeNoise(c, true);
     // público: ruido rosa por un paso banda de voces
     crowdF = filt("bandpass", 900, 0.6); crowdG = gainN(0, ambBus); crowdF.connect(crowdG); loop(pinkBuf).connect(crowdF);
@@ -127,7 +131,40 @@ export function createAudio(initial: SoundPrefs) {
     ambBus.gain.setTargetAtTime(prefs.ambiente, t, 0.05);
     sfxBus.gain.setTargetAtTime(Math.max(prefs.ambiente, 0.4) * 0.9, t, 0.05);
     radioBus.gain.setTargetAtTime(prefs.radio, t, 0.05);
+    radioOut.gain.setTargetAtTime(prefs.sonido ? prefs.volumen : 0, t, 0.05);
   }
+
+  // ---- voz (speechSynthesis): la del sistema en español; si no hay, sin voz
+  const synth: SpeechSynthesis | null = typeof window !== "undefined" && "speechSynthesis" in window ? window.speechSynthesis : null;
+  let lastSpeak = -1e9, talking = 0;
+  function spanishVoices(): SpeechSynthesisVoice[] {
+    if (!synth) return [];
+    const vs = synth.getVoices().filter((v) => /^es/i.test(v.lang));
+    return vs.sort((a, b) => Number(/es-ES/i.test(b.lang)) - Number(/es-ES/i.test(a.lang)));
+  }
+  synth?.getVoices(); // algunos navegadores las cargan la primera vez que se piden
+  /** Lee un texto: «radio» (tus pilotos y el ingeniero, como mucho uno cada 8 s) o «lobato» (otra voz). */
+  function speak(text: string, who: "radio" | "lobato"): boolean {
+    if (!synth || !prefs.sonido || (who === "radio" ? !prefs.voz : !prefs.vozLobato)) return false;
+    const now = performance.now();
+    if (synth.speaking || synth.pending || now - lastSpeak < 8000) return false;
+    const vs = spanishVoices();
+    if (!vs.length) return false;
+    const u = new SpeechSynthesisUtterance(text);
+    // Lobato, con otra voz si la hay (y si no, más grave y más deprisa)
+    u.voice = who === "lobato" ? vs[1] ?? vs[0] : vs[0];
+    u.lang = u.voice.lang;
+    u.rate = who === "lobato" ? 1.12 : 1.05;
+    u.pitch = who === "lobato" && !vs[1] ? 0.8 : 1;
+    u.volume = Math.max(0.05, prefs.volumen * (who === "radio" ? prefs.radio : prefs.ambiente));
+    const end = () => { if (--talking <= 0) { talking = 0; duck(false); } };
+    u.onstart = () => { talking++; duck(true); };
+    u.onend = end; u.onerror = end;
+    lastSpeak = now;
+    synth.speak(u);
+    return true;
+  }
+  function duck(on: boolean) { if (ctx) duckG.gain.setTargetAtTime(on ? 0.3 : 1, ctx.currentTime, 0.12); }
 
   function newVoice(): Voice {
     const c = ctx!;
@@ -290,19 +327,30 @@ export function createAudio(initial: SoundPrefs) {
     },
     /** En 2D, al entrar a boxes uno de tus pilotos: las pistolas, de lejos. */
     pitIn() { if (!ctx || !want) return; const t = ctx.currentTime + 0.4; for (let i = 0; i < 4; i++) gun(t + i * 0.04, 0.25, 0); for (let i = 0; i < 4; i++) gun(t + 1.6 + i * 0.04, 0.25, 0); },
-    /** Clic y ruido de radio antes de un mensaje (devuelve los segundos que dura). */
-    radioClick() {
-      if (!ctx || !want) return 0;
-      const t = ctx.currentTime;
+    /**
+     * Mensaje de radio: el clic, el ruido de la radio (bajando lo demás mientras suena) y, si está activada y es
+     * importante, la voz. Suena aunque la sesión esté en pausa.
+     */
+    radio(text: string, important: boolean) {
+      if (!ctx || !prefs.sonido) return;
+      const c = ctx;
+      if (c.state === "suspended") { void c.resume().catch(() => {}); setTimeout(() => { if (!want && ctx === c && c.state === "running") void c.suspend().catch(() => {}); }, 900); }
+      const t = c.currentTime + 0.02;
       tone(radioBus, t, 0.03, 1800, 0.25, "square");
       burst(radioBus, t + 0.02, 0.35, 0.12, "bandpass", 1700, 1.2);
-      return 0.35;
+      duck(true); setTimeout(() => { if (!talking) duck(false); }, 450);
+      if (important) setTimeout(() => speak(text, "radio"), 380);
     },
-    /** Baja todo menos la radio (ducking) mientras habla alguien. */
-    duck(on: boolean) { if (ctx) duckG.gain.setTargetAtTime(on ? 0.3 : 1, ctx.currentTime, 0.12); },
+    /** Un comentario de Lobato, en voz alta si está activado (con su propia voz). */
+    lobato(text: string) { speak(text, "lobato"); },
+    /** Corta la voz (al ocultar la app). */
+    stopVoice() { if (synth && (synth.speaking || synth.pending)) synth.cancel(); },
+    /** ¿Hay voces en español en este dispositivo? */
+    hasVoice: () => spanishVoices().length > 0,
     /** Sale de la sesión: se apaga y suelta el AudioContext. */
     dispose() {
       want = false;
+      if (synth && talking) synth.cancel();
       const c = ctx; ctx = null;
       if (c) void c.close().catch(() => {});
     },

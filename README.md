@@ -274,7 +274,7 @@ parada y cada percance son solo dibujo.
 Todo generado al vuelo con Web Audio, sin archivos de audio (`src/ui/audio.ts`). Solo interfaz: no cambia la
 simulación. El sonido empieza al tocar la velocidad, el 3D o la salida (los navegadores no dejan sonar nada antes de
 un toque) y se calla en pausa, al salir de la sesión y con la app en segundo plano. En Ajustes: sonido sí/no y
-volumen general, de motores, de ambiente y de radio.
+volumen general, de motores, de ambiente y de radio, y las voces de la radio y de Lobato.
 
 - **Motores:** hasta 6 coches a la vez, los más cercanos a la cámara en 3D (en la vista general y en 2D, el coche
   seguido y los que tiene cerca en pista). Cada uno con tres osciladores en armónicos de las explosiones del V6
@@ -287,6 +287,10 @@ volumen general, de motores, de ambiente y de radio.
 - **Efectos:** las pistolas de la parada al quitar y al apretar las ruedas (en 2D, al entrar a boxes uno de tus
   pilotos), un pitido por cada semáforo que se enciende y medio segundo de silencio antes del rugido de la salida, y
   golpe seco y crujido en los accidentes.
+- **Radio del equipo:** cada mensaje de radio de tus pilotos y del ingeniero suena con su clic y su ruido (también con
+  la sesión en pausa, que muchos la paran), bajando el resto mientras dura. Con «Voz en la radio» (Ajustes), los
+  importantes se leen en voz alta con la voz en español del dispositivo (si no tiene, sin voz), como mucho uno cada
+  8 s; con «Voz de Lobato», sus comentarios, con otra voz.
 
 ## Simular sin interfaz
 

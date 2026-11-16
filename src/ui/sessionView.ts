@@ -2020,6 +2020,8 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       <label class="optrow"><input type="checkbox" id="prot" ${prefs.rotulos !== false ? "checked" : ""}><span><b>Rótulos de tele en 3D</b><br><span class="small dim">Sectores frente a la pole al acabar una vuelta de clasificación, récord del circuito, batallas, neumáticos de los cinco primeros y la radio de tus pilotos.</span></span></label>
       <h2>Sonido</h2>
       <label class="optrow"><input type="checkbox" id="psnd" ${prefs.sonido.sonido ? "checked" : ""}><span><b>Sonido</b><br><span class="small dim">Motores, público, lluvia, viento, paradas, semáforos y choques. Empieza al tocar la velocidad, el 3D o la salida.</span></span></label>
+      <label class="optrow"><input type="checkbox" id="pvoz" ${prefs.sonido.voz ? "checked" : ""}><span><b>Voz en la radio</b><br><span class="small dim">Los mensajes importantes de tus pilotos y del ingeniero, en voz alta (uno cada 8 s como mucho), con la voz en español del dispositivo.${audio.hasVoice() ? "" : " <span class=\"yellow\">Este dispositivo no tiene voz en español: sin voz.</span>"}</span></span></label>
+      <label class="optrow"><input type="checkbox" id="pvozl" ${prefs.sonido.vozLobato ? "checked" : ""}><span><b>Voz de Lobato</b><br><span class="small dim">Sus comentarios en voz alta, con otra voz.</span></span></label>
       ${([["volumen", "Volumen general"], ["motores", "Motores"], ["ambiente", "Ambiente"], ["radio", "Radio"]] as const).map(([k, n]) => `<label class="optrow volrow"><span class="grow">${n}</span><input type="range" min="0" max="100" step="5" data-vol="${k}" value="${Math.round(prefs.sonido[k] * 100)}" aria-label="${n}"></label>`).join("")}
       <h2>Mapa 3D</h2>
       <label class="optrow"><input type="checkbox" id="pperf" ${prefs.rendimiento3d ? "checked" : ""}><span><b>Mostrar rendimiento del 3D</b><br><span class="small dim">Fotogramas por segundo, calidad, resolución y triángulos, en una esquina del mapa. Tocándolo cambia la calidad.</span></span></label>
@@ -2038,6 +2040,9 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       pr.onchange = () => { prefs.rotulos = pr.checked; savePrefs(prefs); };
       const ps = el.querySelector<HTMLInputElement>("#psnd")!;
       ps.onchange = () => { prefs.sonido.sonido = ps.checked; if (ps.checked) unlockAudio(); soundPrefsChanged(); };
+      const pv = el.querySelector<HTMLInputElement>("#pvoz")!, pvl = el.querySelector<HTMLInputElement>("#pvozl")!;
+      pv.onchange = () => { prefs.sonido.voz = pv.checked; unlockAudio(); soundPrefsChanged(); };
+      pvl.onchange = () => { prefs.sonido.vozLobato = pvl.checked; unlockAudio(); soundPrefsChanged(); };
       el.querySelectorAll<HTMLInputElement>("[data-vol]").forEach((r) => (r.oninput = () => { prefs.sonido[r.dataset.vol as "volumen"] = Number(r.value) / 100; soundPrefsChanged(); }));
       const pf = el.querySelector<HTMLInputElement>("#pperf")!;
       pf.onchange = () => { prefs.rendimiento3d = pf.checked; savePrefs(prefs); renderPerf(); };
@@ -2135,12 +2140,15 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   // Desde dónde se oye: en 3D, la cámara (map3d.audioView); en 2D, el coche seguido (o tu primer piloto) y los que
   // tenga cerca en la pista. Los avisos de la sesión (adelantamientos, paradas, choques, semáforos) suenan aparte.
   const QUIET_FRAME = { running: false, speed: 1, simDt: 0, cars: [], crowd: 0, rain: 0, wind: 0, stops: [] };
-  const hush = () => audio.frame(QUIET_FRAME, performance.now());
+  const hush = () => { audio.frame(QUIET_FRAME, performance.now()); audio.stopVoice(); };
+  let lobSeen = lob.list.length;
   let lastLights = 0, wasChequered = sess.chequered;
   const fxSeen = new Map<number, unknown>(sess.cars.map((c) => [c.id, c.fx]));
   let heardNow: CarHeard[] = [];
   function soundEvent(e: RaceEvent) {
     if (!audio.ready()) return;
+    // radio de tus pilotos y del ingeniero: clic y ruido; los importantes, en voz alta si está activado
+    if (e.kind === "radio" && e.carId !== undefined && sess.carById(e.carId).player) audio.radio(plain(e.text), !!(e.important || e.pause));
     if (e.kind === "info" && /adelanta a/.test(e.text)) audio.cheer(/P[1-3]\b/.test(e.text) ? 0.75 : 0.5);
     else if (e.kind === "pit" && /entra a boxes/.test(e.text) && !view3d && e.carId !== undefined && sess.carById(e.carId).player) audio.pitIn();
   }
@@ -2170,6 +2178,8 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       }
     }
     heardNow = cars;
+    // Lobato en voz alta (si está activado): su último comentario
+    if (lob.list.length > lobSeen) { lobSeen = lob.list.length; if (prefs.lobato !== false) audio.lobato(plain(lob.list[lob.list.length - 1].text)); }
     audio.frame({ running, speed: ff ? FF_SPEED : speed, simDt, cars, crowd, rain, wind, stops }, now);
     if (!running) return;
     // semáforos: un pitido por cada luz que se enciende; al apagarse, silencio y rugido

@@ -271,6 +271,8 @@ export function loadPrefs(): Prefs {
         const so = o.sonido as Partial<SoundPrefs>;
         if (typeof so.sonido === "boolean") p.sonido.sonido = so.sonido;
         for (const k of ["volumen", "motores", "ambiente", "radio"] as const) if (typeof so[k] === "number") p.sonido[k] = Math.max(0, Math.min(1, so[k]!));
+        if (typeof so.voz === "boolean") p.sonido.voz = so.voz;
+        if (typeof so.vozLobato === "boolean") p.sonido.vozLobato = so.vozLobato;
       }
     } else if (localStorage.getItem("autopausa") === "0") {
       // ajuste antiguo (todo o nada)
