@@ -239,6 +239,11 @@ La carrera se lee como en la tele:
   viento. Con una célula de tormenta (más de 15 mm/h) a menos de 30 km caen rayos de vez en cuando: el cielo y la luz
   ambiente destellan unas décimas, a veces dos veces, y el trueno llega después según lo lejos que esté (a la
   velocidad del sonido).
+- **Nubes y lluvia de cerca:** en calidad 2 y 3 las nubes tienen volumen: cada una sube más cuanto más densa es y,
+  hacia el horizonte, entre los huecos de las bases se ven los costados de las de detrás, con el lado del sol más
+  claro y en sombra donde otra nube le tapa el sol. Con lluvia la carrocería se llena de gotas (de cerca, con su
+  reflejo; tardan en irse cuando para) y al cruzar un charco (en los badenes y a trozos cuando hay mucha agua) la
+  estela de agua salta más alta y más abierta.
 - La cámara *Tele* corta sola al coche que hace un trompo, se sale o se estrella.
 - **Rótulos de tele** sobre el 3D (se apagan en Ajustes): al acabar una vuelta de clasificación, sus tres sectores
   frente a los de la pole (morado, más rápido; verde, a menos de una décima); «Récord del circuito» si alguien baja de

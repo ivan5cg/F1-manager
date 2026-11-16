@@ -21,10 +21,10 @@ Tamaño: **P** pequeño (un PR corto), **M** medio, **G** grande (varios PR).
 | 4.1 Más cámaras | ✅ Hecho | `map3d.ts` (`MORE_CAMS`, `camList`, `setCamera`), `sessionView.ts` |
 | 4.2 Rótulos de tele | ✅ Hecho | `sessionView.ts` (`tvTick`, `tvShow`), `style.css` |
 | 5.1 Niveles de detalle | ✅ Hecho | `map3d.ts` (`propBuilder`, `propLod`, manzanas, árboles), `car3d.ts` (`carMinGeometry`) |
-| 5.2 Nubes y lluvia | 🟡 A medias (cortinas, relámpagos y trueno) | `map3d.ts` (cielo, `updateStorm`), `audio.ts` (`thunder`) |
+| 5.2 Nubes y lluvia | ✅ Hecho | `map3d.ts` (cielo: `cloudSides`, `updateStorm`; `uDrops`; spray `aSpl`), `car3d.ts` (`DROPS_GLSL`), `audio.ts` (`thunder`) |
 | 5.3 Hora del día | ✅ Hecho | `map3d.ts` (`winOn`, `uCity`, `townLights`, caja de sombras) |
 
-**Lo que queda, en este orden:** resto de 5.2 → 3.1 (en tandas) → 3.4 (y con ella, el resto de 3.5).
+**Lo que queda, en este orden:** 3.1 (en tandas) → 3.4 (y con ella, el resto de 3.5).
 
 ## Reglas para quien lo haga
 
@@ -273,14 +273,26 @@ Referencia medida (página de prueba, Singapur de noche, vista «horizonte», 80
 | Silverstone, cerca, C1 | 32 / 470 624 | 32 / 464 308 |
 | Monza, horizonte, C0 | 29 / 326 500 | 29 / 324 434 |
 
-### 5.2 Nubes y lluvia (M) · 🟡 A medias
+### 5.2 Nubes y lluvia (M) · ✅ Hecho
 - ✅ Cortinas de lluvia lejanas: franjas verticales en el cielo bajo los chubascos, que se mueven con el viento
   (sombreador del cielo, sin coste de geometría).
 - ✅ Relámpagos: con una célula de más de 15 mm/h a menos de 30 km (`updateStorm`), destello del cielo (`uFlash`) y
   de la luz ambiente (~0,2 s, a veces doble) y trueno con el retraso de la distancia (`audio.thunder`).
-- ⏳ Nubes con volumen aparente en el cielo (`skyMat` en `map3d.ts`): unos pasos de *ray marching* barato sobre el
-  mismo mapa de nubes del juego (`uWx`), solo en calidad 2-3; en 0-1, como ahora.
-- ⏳ Gotas en el coche y charcos que salpican al pasar (spray más alto en `pud`).
+- ✅ Nubes con volumen (`cloudSides` en el sombreador del cielo, `skyU.uVol` = calidad 2-3; el entorno de los reflejos y
+  la calidad 0-1, como antes). La capa plana de siempre sigue dando la forma y la base; por encima, cuatro pasos de
+  1,6 a 3,0 km con un ruido de tres octavas (`cloudDen3`) y un umbral que sube con la altura (cimas redondas). Solo
+  añade los costados que se ven entre los huecos de las bases, con su sombra propia (una muestra 400 m hacia el sol) y
+  más claros si miran al sol. Se probó a pintar todo el volumen (coger también la base de ahí) y salía plano y
+  desvaído: la forma fina de la capa plana es lo que hace que se vean bien. Con cielo despejado apenas cambia.
+- ✅ Gotas en el coche: `DROPS_GLSL` en `car3d.ts`, casillas de 5 cm en el plano al que mira cada punto, con gota y
+  reflejo (el reflejo solo si la gota ocupa varios píxeles: si no, parece ruido). `U.uDrops` sigue a la lluvia que
+  cae cerca (`rainHere`): sube en ~8 s y baja en ~2 min, al ritmo de la sesión.
+- ✅ Charcos: no se lee lo que pinta el asfalto (con mucha agua casi todo es charco y no se notaría al cruzarlos);
+  hay charco en los badenes (`T.dip`) y a trozos sueltos a lo largo de la pista (`vnoise(s / 22)`), con agua de sobra.
+  Al cruzarlos, `p.spl` sube en 0,08 s y baja en 0,35 s, y el spray (`aSpl`) salta más alto, más abierto y más denso.
+- Sin medir el coste de las nubes en un móvil: son 4 pasos con 2 muestras de ruido por píxel de cielo, solo en
+  calidad 2-3. Si pesa, que `lowerQuality` lo quite antes que la resolución.
+- La página de prueba tiene vistas nuevas (`cielo`, `gotas`, `morro`, `estela`) y `charco=0..1` para forzar el charco.
 
 ### 5.3 Hora del día (P) · ✅ Hecho
 - Con el sol bajo, la caja de sombras crece (hasta ×1,9) para que las sombras largas no se corten.
@@ -316,5 +328,5 @@ Referencia medida (página de prueba, Singapur de noche, vista «horizonte», 80
 
 ## Orden recomendado (lo que queda)
 
-resto de 5.2 → 3.1 (en tandas, cuando haya tiempo: es sobre todo trabajo de datos) → 3.4 (toca casi todo:
+3.1 (en tandas, cuando haya tiempo: es sobre todo trabajo de datos) → 3.4 (toca casi todo:
 temporada, mercado, guardado) y, con ella, el resto de 3.5.

@@ -16,10 +16,14 @@ const VIEWS: Record<string, any> = {
   general: { pos: [-1500, 1800, 900], look: [0, 0, 0], fov: 40 },
   medio: { pos: [-180, 120, 120], look: [0, 0, 0], fov: 40 },
   cerca: { pos: [-14, 4, 6], look: [3, 0.5, 0], fov: 34 },
+  cielo: { pos: [-20, 3, 0], look: [300, 90, 40], fov: 60 },
+  gotas: { pos: [-3.5, 1.7, 2.0], look: [0.3, 0.5, 0], fov: 40 },
+  estela: { pos: [-30, 4, 9], look: [-6, 1, 0], fov: 40 },
+  morro: { pos: [0.2, 1.3, 1.1], look: [1.6, 0.4, 0.2], fov: 45 },
 };
 const v = P.get("v") || "horizonte", view = VIEWS[v] ? { ...VIEWS[v] } : JSON.parse(v);
 if (P.get("s")) view.s = +P.get("s")!;
-const debug: any = { view, noLod: !!P.get("nolod"), noCull: !!P.get("nocull"), propFar: P.get("far") ? +P.get("far")! : undefined };
+const debug: any = { view, noLod: !!P.get("nolod"), noCull: !!P.get("nocull"), propFar: P.get("far") ? +P.get("far")! : undefined, splash: P.get("charco") ? +P.get("charco")! : undefined };
 const m = createMap3d({ canvas: document.getElementById("c"), labels: document.getElementById("lbl"), box: document.querySelector(".mapbox"), sess,
   mine: () => sess.cars.filter((c: any) => c.team.id === TEAMS[0].id), selId: () => sess.cars[0].id, alpha: () => 1, paused: () => true, speed: () => 1,
   ghosts: () => [], quality: q, debug });
