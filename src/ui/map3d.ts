@@ -6,7 +6,10 @@
 // Qué sale de la simulación y qué es solo dibujo:
 //  · de la simulación: posiciones, paradas, compuesto, agua en la trazada y fuera de ella, lluvia, nubes, hora y
 //    percances (trompos, salidas de pista, bloqueos y accidentes, marcados en car.fx);
-//  · de los datos del circuito: altitud («relieve»), anchura («ancho») y lado de los boxes («boxes.lado»);
+//  · de los datos del circuito: altitud («relieve»), anchura («ancho»), lado de los boxes («boxes.lado») y, en los
+//    urbanos, el terreno de alrededor («entorno»: mar, puertos, ladera y altura de las torres);
+//  · de la simulación también: bandera (amarilla, coche de seguridad, VSC, roja), líder y el estado de cada coche en
+//    garaje y calle de boxes;
 //  · solo dibujo: la trazada, el cabeceo y el balanceo, la parada (gatos, mecánicos, cambio de ruedas), cómo se ve cada
 //    percance (humo, polvo, giro), escapatorias, árboles, edificios, gradas, libreas y patrocinadores (marcas inventadas).
 import * as THREE from "three";
@@ -32,7 +35,8 @@ const sstep = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t 
  *  · alpha(): cuánto del paso de simulación en curso ha pasado ya (0..1), para interpolar posiciones;
  *  · ghosts(): [{ s, text, color }] con los fantasmas de parada;
  *  · quality (opcional): calidad fija de 0 a 3, sin memoria (para pruebas);
- *  · debug (opcional, solo pruebas): { view: { pos, look, fov } } pone la cámara a mano, relativa al coche seguido.
+ *  · debug (opcional, solo pruebas): { view: { pos, look, fov, s? } } pone la cámara a mano, relativa al coche seguido
+ *    (o al punto s de la pista); en el mismo objeto se dejan algunos datos internos para comprobarlos.
  * Devuelve { beforeStep, draw, resize, cycleCam, pick, selChanged, dispose }.
  */
 export function createMap3d(opt) {
@@ -194,6 +198,8 @@ const DET = { asfalto: detailTex("asfalto"), hierba: detailTex("hierba"), grava:
 const U = {
   uW: { value: 20 }, uDetail: { value: 0 }, uL: { value: 5000 }, uFlood: { value: 0 }, uLight: { value: 0.2 },
   uCloud: { value: null }, uTexR: { value: 3000 }, uTime: { value: 0 },
+  uYel: { value: new THREE.Vector3(0, 0, 0) }, // zona en amarillo: centro (s), media longitud y cuánto se ve
+  uLamps: { value: Array.from({ length: 16 }, () => new THREE.Vector4()) }, uNL: { value: 0 }, // focos que se reflejan en el agua
 };
 const CN = 48, cloudData = new Uint8Array(CN * CN * 4);
 const cloudTex = new THREE.DataTexture(cloudData, CN, CN, THREE.RGBAFormat);
@@ -242,6 +248,7 @@ const signCanvas = document.createElement("canvas"); signCanvas.width = 2048; si
   });
 }
 if (opt.debug) opt.debug.signCanvas = signCanvas;
+const DBG = opt.debug || {};
 const signTex = new THREE.CanvasTexture(signCanvas); signTex.colorSpace = THREE.SRGBColorSpace;
 U.uAds = { value: adsTex };
 
@@ -249,22 +256,22 @@ U.uAds = { value: adsTex };
 const RIB_VH = `
 attribute vec3 aSide; attribute float aLat, aLatM, aY, aU, aV, aWet, aWetOff, aKerb, aDash, aLine, aWr; attribute vec3 aEdge;
 uniform float uW;
-varying float vU, vV, vWet, vWetOff, vKerb, vDash, vLine; varying vec3 vEdge; varying vec2 vXZ;
+varying float vU, vV, vWet, vWetOff, vKerb, vDash, vLine, vWY; varying vec3 vEdge; varying vec2 vXZ;
 `;
 const RIB_VB = `
 vec3 transformed = position + aSide * (uW * aLat * aWr + aLatM);
 transformed.y += aY * (aY > 0.0 ? uW / 6.5 : 1.0);
-vU = aU; vV = aV; vWet = aWet; vWetOff = aWetOff; vKerb = aKerb; vDash = aDash; vLine = aLine; vEdge = aEdge; vXZ = transformed.xz;
+vU = aU; vV = aV; vWet = aWet; vWetOff = aWetOff; vKerb = aKerb; vDash = aDash; vLine = aLine; vEdge = aEdge; vXZ = transformed.xz; vWY = transformed.y;
 `;
 const RIB_FH = `` + GLSL_NOISE + `
-uniform float uW, uDetail, uL, uFlood, uTexR, uTime; uniform sampler2D uCloud, uAds, uDet;
-varying float vU, vV, vWet, vWetOff, vKerb, vDash, vLine; varying vec3 vEdge; varying vec2 vXZ;
+uniform float uW, uDetail, uL, uFlood, uTexR, uTime, uNL; uniform vec3 uYel; uniform vec4 uLamps[16]; uniform sampler2D uCloud, uAds, uDet;
+varying float vU, vV, vWet, vWetOff, vKerb, vDash, vLine, vWY; varying vec3 vEdge; varying vec2 vXZ;
 `;
 // Cada cinta compila solo su rama (RMODE): 0 muro liso, 1 pista, 2 calle de boxes, 3 hierba, 4 grava, 5 barrera, 6 valla, 7 publicidad.
 // Sale de aquí: col (color), rough (rugosidad), metal y dn (inclinación fina de la superficie, en x/z del mundo).
 const RIB_FB = `
 float px = fwidth(vXZ.x) + fwidth(vXZ.y); // metros por píxel
-vec3 col = diffuse; float rough = 0.9, metal = 0.0, glow = 0.0; vec2 dn = vec2(0.0);
+vec3 col = diffuse; float rough = 0.9, metal = 0.0, glow = 0.0; vec2 dn = vec2(0.0); vec3 refC = vec3(0.0);
 float cloudS = texture2D(uCloud, vXZ / (2.0 * uTexR) + 0.5).g;
 #if RMODE == 1 || RMODE == 2
   float a = abs(vU);
@@ -303,6 +310,19 @@ float cloudS = texture2D(uCloud, vXZ / (2.0 * uTexR) + 0.5).g;
       float dist = length(o), ring = dist - ph * 0.3;
       dn += normalize(o + 1e-4) * sin(ring * 70.0) * exp(-ring * ring * 500.0) * (1.0 - ph) * rainK * step(0.45, hh) * 0.8;
     }
+    // de noche, cada foco se refleja en el agua como una estela alargada hacia quien mira (más fina en los charcos)
+    if (uNL > 0.5 && film > 0.02) {
+      vec3 F = vec3(vXZ.x, vWY, vXZ.y), d1 = normalize(F - cameraPosition);
+      float sgm = mix(0.03, 0.006, pud), acc = 0.0;
+      for (int i = 0; i < 16; i++) {
+        if (float(i) >= uNL) break;
+        vec4 Lp = uLamps[i];
+        vec3 d2 = normalize(vec3(Lp.x, 2.0 * vWY - Lp.y, Lp.z) - cameraPosition), dd = d1 - d2, hx = normalize(cross(d2, vec3(0.0, 1.0, 0.0)));
+        float h = dot(dd, hx), v = length(dd - hx * h);
+        acc += Lp.w * exp(-(h * h) / (sgm * sgm * 0.25) - (v * v) / (sgm * sgm * 14.0));
+      }
+      refC = vec3(1.0, 0.9, 0.74) * acc * max(film * 0.5, pud) * uFlood * 2.5;
+    }
     col = mix(col, SR(vec3(0.27, 0.59, 0.94)), vWet * (1.0 - uDetail) * 0.85);
     float dash = vDash > 0.5 ? step(0.45, fract(vV / (uW * 4.0))) : 1.0;
     float stripe = step(0.5, fract(vV / (uW * 0.5)));
@@ -320,6 +340,10 @@ float cloudS = texture2D(uCloud, vXZ / (2.0 * uTexR) + 0.5).g;
     // la pintura es más lisa que el asfalto (y brilla más mojada)
     float paint = max(em, max(sl, slot));
     rough = mix(rough, min(rough, mix(0.55, 0.12, film)), paint); dn *= 1.0 - 0.7 * paint;
+    // banderas amarillas: el tramo afectado (o toda la pista con coche de seguridad) se marca en los bordes y, de lejos, entero
+    float yd = abs(mod(vV - uYel.x + uL * 0.5, uL) - uL * 0.5), yz = uYel.z * (1.0 - smoothstep(uYel.y, uYel.y + 30.0, yd));
+    float yk = yz * max(edge * 0.85, (1.0 - uDetail) * 0.35) * (0.75 + 0.25 * sin(uTime * 6.0));
+    col = mix(col, SR(vec3(1.0, 0.8, 0.1)), yk); glow = max(glow, yk * 0.5);
   #else
     col = mix(col, SR(vec3(0.92)), edge * (0.3 + 0.6 * uDetail));
   #endif
@@ -379,7 +403,7 @@ function ribbonMat(color, mode, po) {
       .replace("#include <roughnessmap_fragment>", "float roughnessFactor = clamp(rough, 0.04, 1.0);")
       .replace("#include <metalnessmap_fragment>", "float metalnessFactor = metal;")
       .replace("#include <normal_fragment_maps>", "normal = normalize(normal + mat3(viewMatrix) * vec3(dn.x, 0.0, dn.y));")
-      .replace("vec3 totalEmissiveRadiance = emissive;", "vec3 totalEmissiveRadiance = emissive + col * (uFlood * (RMODE > 0 ? 1.0 : 0.3) + glow);");
+      .replace("vec3 totalEmissiveRadiance = emissive;", "vec3 totalEmissiveRadiance = emissive + col * (uFlood * (RMODE > 0 ? 1.0 : 0.3) + glow) + refC;");
   };
   m.customProgramCacheKey = () => "cinta" + mode;
   return m;
@@ -395,7 +419,7 @@ function collect() {
   const pos = [], nor = [], col = [];
   return {
     add(g, c) {
-      const n = g.toNonIndexed(); n.computeVertexNormals();
+      const n = g.index ? g.toNonIndexed() : g; n.computeVertexNormals();
       const p = n.attributes.position.array, qn = n.attributes.normal.array;
       for (let i = 0; i < p.length; i += 3) { pos.push(p[i], p[i + 1], p[i + 2]); nor.push(qn[i], qn[i + 1], qn[i + 2]); col.push(c[0], c[1], c[2]); }
     },
@@ -832,6 +856,45 @@ const SPRAY_MAT = new THREE.ShaderMaterial({
     }`,
 });
 
+// coche de seguridad: un deportivo plateado con la barra de luces en el techo (x hacia delante, metros)
+const SC_GEO = (() => {
+  const c = collect(), SIL = [0.72, 0.74, 0.78], DARK = [0.06, 0.06, 0.07], GLASS = [0.03, 0.04, 0.05], GRN = [0.1, 0.55, 0.3];
+  const ring = (x, yc, hw, hT, hB, e = 3, N = 24) => { const r = []; for (let j = 0; j < N; j++) { const a = (j / N) * Math.PI * 2, cy = Math.cos(a), sz = Math.sin(a), k = Math.pow(Math.pow(Math.abs(cy), e) + Math.pow(Math.abs(sz), e), -1 / e); r.push([x, yc + (cy >= 0 ? hT : hB) * cy * k, hw * sz * k]); } return r; };
+  const body = [[2.35, 0.42, 0.75, 0.1, 0.18], [2.1, 0.47, 0.93, 0.2, 0.28], [1.3, 0.53, 0.98, 0.22, 0.34], [0, 0.56, 0.99, 0.25, 0.37], [-1.3, 0.58, 0.99, 0.27, 0.37], [-2.05, 0.58, 0.95, 0.24, 0.34], [-2.35, 0.58, 0.86, 0.17, 0.28]];
+  skin(c, body.map((q) => ring(...q)), (u, r, p) => (p[1] < 0.32 ? DARK : Math.abs(p[2]) > 0.9 && p[1] < 0.55 && p[1] > 0.45 ? GRN : SIL));
+  const cab = [[1.0, 0.8, 0.78, 0.02, 0.02], [0.45, 1.08, 0.72, 0.1, 0.1], [-0.55, 1.12, 0.7, 0.1, 0.1], [-1.5, 0.84, 0.74, 0.02, 0.02]];
+  skin(c, cab.map((q) => ring(...q)), (u, r, p) => (p[1] > 1.15 ? SIL : GLASS));
+  for (const [x, z] of [[1.42, 0.86], [1.42, -0.86], [-1.45, 0.86], [-1.45, -0.86]]) c.keep(new THREE.CylinderGeometry(0.34, 0.34, 0.26, 16).rotateX(Math.PI / 2).translate(x, 0.34, z), DARK);
+  c.add(new THREE.BoxGeometry(0.22, 0.05, 1.05).translate(-0.35, 1.25, 0), DARK);
+  return c.done();
+})();
+const SC_BAR = new THREE.BoxGeometry(0.2, 0.08, 1.0).translate(-0.35, 1.31, 0);
+// bandera de comisario: mástil (oscuro) y paño que ondea (el color lo pone cada puesto)
+const FLAG_GEO = (() => {
+  const g = new THREE.PlaneGeometry(1.1, 0.75, 8, 2).translate(0.55, 2.05, 0);
+  const pole = new THREE.CylinderGeometry(0.025, 0.025, 2.5, 6).translate(0, 1.25, 0);
+  const c = collect(); c.keep(pole, [0.12, 0.12, 0.12]); c.keep(g, [1, 1, 1]);
+  return c.done();
+})();
+const FLAG_MAT = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8, side: THREE.DoubleSide });
+FLAG_MAT.onBeforeCompile = (sh) => {
+  Object.assign(sh.uniforms, { uTime: U.uTime });
+  sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nuniform float uTime;")
+    .replace("#include <begin_vertex>", "#include <begin_vertex>\nfloat fw = max(position.x, 0.0); transformed.z += sin(uTime * 9.0 - position.x * 5.0) * 0.16 * fw; transformed.y -= 0.06 * fw * fw;");
+};
+// yate (eslora 1, se escala): casco en punta, franja oscura, cubierta de madera y dos cubiertas blancas con cristales
+const BOAT_GEO = (() => {
+  const c = collect();
+  const hull = new THREE.Shape([[-0.5, -0.11], [0.22, -0.11], [0.5, 0], [0.22, 0.11], [-0.5, 0.11]].map(([x, y]) => new THREE.Vector2(x, y)));
+  const ex = (h, y0) => new THREE.ExtrudeGeometry(hull, { depth: h, bevelEnabled: false }).rotateX(-Math.PI / 2).translate(0, y0, 0);
+  c.add(ex(0.04, -0.03), [0.05, 0.08, 0.2]);
+  c.add(ex(0.08, 0.01), [0.92, 0.92, 0.94]);
+  c.add(ex(0.008, 0.09).scale(0.97, 1, 0.92), [0.55, 0.38, 0.22]);
+  c.add(new THREE.BoxGeometry(0.42, 0.07, 0.17).translate(-0.06, 0.13, 0), [0.93, 0.93, 0.95]);
+  c.add(new THREE.BoxGeometry(0.4, 0.025, 0.175).translate(-0.06, 0.135, 0), [0.06, 0.08, 0.1]);
+  c.add(new THREE.BoxGeometry(0.24, 0.05, 0.13).translate(-0.1, 0.19, 0), [0.93, 0.93, 0.95]);
+  return c.done();
+})();
 // ------------------------------------------------------------------ paradas en boxes: mecánicos, gatos y ruedas
 // Figuras sencillas mirando hacia +x: de pie (gatos y los que llevan las ruedas) y agachadas con la pistola.
 // color de vértice: r = cuánto del color del equipo (el mono), g = gris fijo (casco, botas)
@@ -859,6 +922,34 @@ const JACK_GEO = (() => {
   c.add(new THREE.BoxGeometry(1.4, 0.07, 0.08).rotateZ(0.48).translate(0.62, 0.46, 0), [0.75, 0.12, 0.1]);
   c.add(new THREE.BoxGeometry(0.3, 0.12, 0.5).translate(0.05, 0.12, 0), [0.15, 0.15, 0.17]);
   for (const z of [0.2, -0.2]) c.keep(new THREE.CylinderGeometry(0.07, 0.07, 0.05, 10).rotateX(Math.PI / 2).translate(0.05, 0.07, z), [0.05, 0.05, 0.05]);
+  return c.done();
+})();
+// grúa de pista: orugas, cabina y pluma que se estira hacia la pista (z < 0) con el gancho
+const CRANE_GEO = (() => {
+  const c = collect(), Y = [0.95, 0.75, 0.05], D = [0.1, 0.1, 0.11];
+  c.add(new THREE.BoxGeometry(4.2, 0.9, 2.6).translate(0, 0.45, 0), D);
+  c.add(new THREE.BoxGeometry(3.4, 1.4, 2.3).translate(0.2, 1.6, 0), Y);
+  c.add(new THREE.BoxGeometry(1.4, 1.5, 1.1).translate(1.2, 3.0, 0.5), Y);
+  c.add(new THREE.BoxGeometry(1.2, 0.8, 1.0).translate(1.2, 3.1, 0.5).scale(1.02, 1, 1.02), [0.08, 0.1, 0.12]);
+  const boom = new THREE.BoxGeometry(0.5, 0.5, 9.5).translate(0, 0, -4.75);
+  boom.rotateX(0.42).translate(-0.4, 2.6, 0.3); c.add(boom, Y);
+  c.add(new THREE.BoxGeometry(0.05, 3.2, 0.05).translate(-0.4, 4.6, -8.5), D);
+  c.add(new THREE.BoxGeometry(0.4, 0.3, 0.4).translate(-0.4, 3.0, -8.5), D);
+  return c.done();
+})();
+// manta térmica de una rueda (coches en el garaje): negra con una franja del color del equipo
+const BLANKET_GEO = (() => {
+  const c = collect();
+  c.keep(new THREE.CylinderGeometry(0.385, 0.385, 0.4, 20).rotateX(Math.PI / 2), [0, 0.07, 0]);
+  c.keep(new THREE.CylinderGeometry(0.39, 0.39, 0.1, 20, 1, true).rotateX(Math.PI / 2), [1, 0, 0]);
+  return c.done();
+})();
+// semáforo de salida de la parada: poste desde el lado del garaje (z > 0) y brazo sobre el morro
+const GANTRY_GEO = (() => {
+  const c = collect(), D = [0.12, 0.12, 0.13];
+  c.add(new THREE.BoxGeometry(0.12, 3.3, 0.12).translate(0, 1.65, 1.9), D);
+  c.add(new THREE.BoxGeometry(0.12, 0.12, 1.95).translate(0, 3.25, 0.95), D);
+  c.add(new THREE.BoxGeometry(0.4, 0.06, 0.4).translate(0, 0.03, 1.9), D);
   return c.done();
 })();
 const CREW_MAT = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.75 });
@@ -909,6 +1000,29 @@ const PUFF_MAT = new THREE.ShaderMaterial({
     }`,
 });
 
+// ------------------------------------------------------------------ huellas: goma, tierra y grava
+// Cada huella es un tramo entre dos puntos guardados en coordenadas de pista (s y lado en anchuras), así siguen en su
+// sitio aunque la pista se ensanche al alejar la cámara. Se borran poco a poco con el reloj de la sesión.
+const MK = 2400, MK_LIFE = [900, 260, 600]; // goma, grava, tierra (s de sesión)
+const MK_COL = [[0.025, 0.025, 0.03, 0.8], [0.6, 0.53, 0.4, 0.75], [0.14, 0.1, 0.06, 0.7]];
+const marks = { n: 0, head: 0, s0: new Float32Array(MK), l0: new Float32Array(MK), s1: new Float32Array(MK), l1: new Float32Array(MK), w: new Float32Array(MK), t: new Float32Array(MK), k: new Uint8Array(MK), dirty: true };
+function addMark(s0, l0, s1, l1, w, t, kind) {
+  const i = marks.head; marks.head = (marks.head + 1) % MK; marks.n = Math.min(MK, marks.n + 1);
+  marks.s0[i] = s0; marks.l0[i] = l0; marks.s1[i] = s1; marks.l1[i] = l1; marks.w[i] = w; marks.t[i] = t; marks.k[i] = kind; marks.dirty = true;
+}
+const MARK_MAT = new THREE.ShaderMaterial({
+  uniforms: { uLum: PUFF_MAT.uniforms.uLum }, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -5, polygonOffsetUnits: -5,
+  vertexShader: `attribute vec4 aA, aB, aC; varying vec2 vQ; varying vec4 vC;
+    void main(){ vec3 d = aB.xyz - aA.xyz; vec3 sd = normalize(cross(vec3(0.0, 1.0, 0.0), d + vec3(1e-4, 0.0, 0.0)));
+      vec3 p = mix(aA.xyz, aB.xyz, position.x + 0.5) + sd * position.y * aA.w + vec3(0.0, 0.04, 0.0);
+      gl_Position = projectionMatrix * viewMatrix * vec4(p, 1.0); vQ = position.xy * 2.0; vC = aC; }`,
+  fragmentShader: `uniform float uLum; varying vec2 vQ; varying vec4 vC;
+    void main(){ float e = 1.0 - smoothstep(0.55, 1.0, abs(vQ.y)); gl_FragColor = vec4(vC.rgb * uLum, vC.a * e);
+      #include <tonemapping_fragment>
+      #include <colorspace_fragment>
+    }`,
+});
+
 // ------------------------------------------------------------------ pista
 function vnoise(x, y) {
   const xi = Math.floor(x), yi = Math.floor(y), xf = x - xi, yf = y - yi;
@@ -937,6 +1051,23 @@ function buildTrackData(tr, id) {
   let hmin = 1e9, hmean = 0;
   for (let i = 0; i < n; i++) hmin = Math.min(hmin, H[i]);
   for (let i = 0; i < n; i++) { H[i] -= hmin; hmean += H[i] / n; }
+  // terreno real alrededor (urbanos, campo «entorno»): altitud absoluta en una rejilla; el mar sale a 0 m o menos.
+  // La pista del juego va referida a su punto más bajo: el desfase es la mediana de (terreno − pista) bajo el trazado.
+  let env = null;
+  const en = tr.def.entorno;
+  if (en) {
+    const N = en.n, eh = en.h;
+    const abs = (x, z) => {
+      const gx = (x + cx - en.x0) / en.paso, gy = (-z + cy - en.y0) / en.paso;
+      const i = clamp(Math.floor(gx), 0, N - 2), j = clamp(Math.floor(gy), 0, N - 2), fx = clamp(gx - i, 0, 1), fy = clamp(gy - j, 0, 1);
+      return (eh[j * N + i] * (1 - fx) + eh[j * N + i + 1] * fx) * (1 - fy) + (eh[(j + 1) * N + i] * (1 - fx) + eh[(j + 1) * N + i + 1] * fx) * fy;
+    };
+    const dif = [];
+    for (let i = 0; i < n; i += 4) dif.push(abs(X[i], Z[i]) - H[i]);
+    dif.sort((a, b) => a - b);
+    const off = dif[dif.length >> 1];
+    env = { en, abs, at: (x, z) => abs(x, z) - off, sea: -off, wet: (x, z) => abs(x, z) <= 0.6 };
+  }
   let sxx = 0, szz = 0, sxz = 0;
   for (let i = 0; i < n; i++) { sxx += X[i] * X[i]; szz += Z[i] * Z[i]; sxz += X[i] * Z[i]; }
   const axis = 0.5 * Math.atan2(2 * sxz, sxx - szz);
@@ -970,7 +1101,7 @@ function buildTrackData(tr, id) {
     if (inPit) (PS > 0 ? rR : rL)[i] = 0;
   }
   const rP = PS > 0 ? rR : rL, rO = PS > 0 ? rL : rR; // escapatoria del lado de boxes y del otro
-  return { SH: street ? 1.22 : 1.7, n, ds, L, E, Ex: maxx - minx, Ez: maxy - miny, cx, cy, X, Z, H, hmean, axis, line, rP, rO, PS, wr, street, Wov: Math.max(16, E * 0.0115) };
+  return { env, SH: street ? 1.22 : 1.7, n, ds, L, E, Ex: maxx - minx, Ez: maxy - miny, cx, cy, X, Z, H, hmean, axis, line, rP, rO, PS, wr, street, Wov: Math.max(16, E * 0.0115) };
 }
 const _cr = { v: 0, d: 0 };
 function cr(a, i, t, n) {
@@ -1007,8 +1138,9 @@ function pitRamp(s) {
 // separan (aLw) y su forma en metros (position), que también crece de lejos (uS). El dibujo (público, cristal,
 // ventanas, garajes, rótulos…) sale del sombreador según aPat = [dibujo, casilla o semilla, u, v].
 U.uS = { value: 1 };
-const PROP_VH = `attribute vec3 aAnc, aSd; attribute float aLw; attribute vec4 aPat; uniform float uW, uS; varying vec4 vPat; varying vec2 vWXZ;`;
-const PROP_VB = `vec3 transformed = aAnc + aSd * (uW * aLw) + position * uS; vPat = aPat; vWXZ = transformed.xz;`;
+const PROP_VH = `attribute vec3 aAnc, aSd; attribute float aLw; attribute vec4 aPat; uniform float uW, uS, uTime; varying vec4 vPat; varying vec2 vWXZ;`;
+const PROP_VB = `vec3 transformed = aAnc + aSd * (uW * aLw) + position * uS; vPat = aPat; vWXZ = transformed.xz;
+  if (abs(aPat.x - 11.0) < 0.5) transformed += aSd * sin(uTime * 7.0 - aPat.z * 4.0 + aPat.y) * 0.22 * aPat.z * uS; // banderas del público`;
 const PROP_FH = GLSL_NOISE + `uniform float uFlood, uTexR; uniform sampler2D uCloud, uSigns; varying vec4 vPat; varying vec2 vWXZ;
 vec3 hsv(float h, float s, float v){ vec3 k = clamp(abs(fract(h + vec3(0.0, 2.0 / 3.0, 1.0 / 3.0)) * 6.0 - 3.0) - 1.0, 0.0, 1.0); return v * mix(vec3(1.0), k, s); }
 vec3 signAt(float cell, vec2 uv){
@@ -1032,7 +1164,8 @@ if (P > 0.5 && P < 1.5) {
   body = max(body, step(0.15, h) * smoothstep(0.16, 0.1, length(f - vec2(0.5, 0.82)))); // la cabeza
   shirt = mix(shirt, SR(vec3(0.85, 0.66, 0.52)) * (0.5 + 0.5 * h21(c + 4.4)), step(0.7, f.y));
   vec3 det = mix(col, shirt, body) * (0.55 + 0.45 * step(0.13, f.y));
-  col = mix(det, mix(col, SR(vec3(0.42, 0.38, 0.36)), 0.65) * 0.85, clamp(px * 1.4 - 0.4, 0.0, 1.0));
+  // de lejos no se distingue a nadie: un tono apagado, casi el de la ropa media
+  col = mix(det, mix(col, SR(vec3(0.36, 0.33, 0.31)), 0.82) * 0.85, clamp(px * 2.2 - 0.35, 0.0, 1.0));
   rough = 0.95;
 } else if (P < 2.5) {
   // cristal con montantes cada 1,6 m y forjados cada 3,4 m; de noche, luz dentro
@@ -1090,6 +1223,11 @@ if (P > 0.5 && P < 1.5) {
   col *= (0.9 + 0.1 * vn(uv * 1.7 + sd)) * (1.0 - 0.3 * step(fract(uv.x / 4.0), 0.015));
 } else if (P < 10.5) {
   col = vec3(1.0); glowC = vec3(1.0, 0.96, 0.88) * (0.6 + 6.0 * uFlood);
+} else if (P < 11.5) {
+  // bandera de aficionado: tres franjas de colores al azar
+  float band = floor(clamp(uv.x, 0.0, 0.999) * 3.0);
+  col = SR(hsv(h21(vec2(sd, band)), 0.75, 0.9)); if (h21(vec2(band, sd + 3.0)) > 0.7) col = SR(vec3(0.95));
+  rough = 0.9;
 }
 col *= 1.0 - 0.35 * texture2D(uCloud, vWXZ / (2.0 * uTexR) + 0.5).g;
 vec4 diffuseColor = vec4(col, opacity);
@@ -1097,7 +1235,7 @@ vec4 diffuseColor = vec4(col, opacity);
 function propMat() {
   const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, metalness: 0, flatShading: true, side: THREE.DoubleSide });
   m.onBeforeCompile = (sh) => {
-    Object.assign(sh.uniforms, { uW: U.uW, uS: U.uS, uFlood: U.uFlood, uCloud: U.uCloud, uTexR: U.uTexR, uSigns: { value: signTex } });
+    Object.assign(sh.uniforms, { uW: U.uW, uS: U.uS, uTime: U.uTime, uFlood: U.uFlood, uCloud: U.uCloud, uTexR: U.uTexR, uSigns: { value: signTex } });
     sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\n" + PROP_VH).replace("#include <begin_vertex>", PROP_VB);
     sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\n" + PROP_FH)
       .replace("vec4 diffuseColor = vec4( diffuse, opacity );", PROP_FB)
@@ -1112,7 +1250,7 @@ function propMat() {
 // la sombra tiene que salir de la forma ya ensanchada
 const PROP_DEPTH = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
 PROP_DEPTH.onBeforeCompile = (sh) => {
-  Object.assign(sh.uniforms, { uW: U.uW, uS: U.uS });
+  Object.assign(sh.uniforms, { uW: U.uW, uS: U.uS, uTime: U.uTime });
   sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\n" + PROP_VH).replace("#include <begin_vertex>", PROP_VB);
 };
 PROP_DEPTH.customProgramCacheKey = () => "decorado-sombra";
@@ -1185,7 +1323,7 @@ function propBuilder() {
   return B;
 }
 /** Distancia (en planta) al eje de la pista, con una rejilla para no recorrer toda la vuelta. */
-let tGrid = null;
+let tGrid = null, tdNear = 0;
 function trackDist(x, z) {
   const CS = 60;
   if (!tGrid || tGrid.T !== T) {
@@ -1199,7 +1337,7 @@ function trackDist(x, z) {
     for (let a = -r; a <= r; a++) for (let b = -r; b <= r; b++) {
       if (Math.max(Math.abs(a), Math.abs(b)) !== r) continue;
       const l = tGrid.m.get(gx + a + "," + (gz + b));
-      if (l) for (const i of l) { const d = (T.X[i] - x) ** 2 + (T.Z[i] - z) ** 2; if (d < best) best = d; }
+      if (l) for (const i of l) { const d = (T.X[i] - x) ** 2 + (T.Z[i] - z) ** 2; if (d < best) { best = d; tdNear = i; } }
     }
     if (best < (r * CS) ** 2) break;
   }
@@ -1228,7 +1366,7 @@ function cityMat(style) {
   return m;
 }
 
-let world = null, gaV = new Map();
+let world = null, gaV = new Map(), gSlot = 20, startL = null, lightT0 = -1, lightsBusy = false;
 const srgb = (t) => { t.colorSpace = THREE.SRGBColorSpace; return t; };
 function buildWorld() {
   if (world) for (const o of world.all) { scene.remove(o); o.geometry && o.geometry.dispose(); }
@@ -1317,10 +1455,19 @@ function buildWorld() {
       wsum += w; hsum += w * sh[k];
     }
     const d = Math.sqrt(dmin), near = hsum / wsum;
-    const far = T.hmean * 0.6 + (vnoise(x / (E * 0.22), z / (E * 0.22)) - 0.35) * E * 0.06;
-    const b = sstep(E * 0.06, E * 0.55, d);
-    return { h: Math.min(near + (far - near) * b - 1, cap - 1.5), d };
+    let far = T.hmean * 0.6 + (vnoise(x / (E * 0.22), z / (E * 0.22)) - 0.35) * E * 0.06;
+    let b = sstep(E * 0.06, E * 0.55, d), wet = false;
+    if (T.env) {
+      // el terreno de verdad: el mar (y el puerto) por debajo del agua, la ladera de Mónaco; Singapur es llano
+      // (su modelo de superficie trae los edificios, que se ponen aparte)
+      wet = T.env.wet(x, z);
+      far = wet ? T.env.sea - 6 : track.id === "singapur" ? Math.max(T.env.sea + 1.5, Math.min(T.env.at(x, z), T.hmean + 2)) : T.env.at(x, z);
+      b = sstep(T.SH * T.Wov * 1.6, T.SH * T.Wov * 1.6 + 110, d);
+    }
+    return { h: Math.min(near + (far - near) * b - 1, cap - 1.5), d, wet };
   };
+  const park = (x, z) => sstep(0.24, 0.16, vnoise(x / 240 + 5, z / 240 + 9)); // zonas verdes de las ciudades
+  const cPark = new THREE.Color(0x4d7a3e), cRock = new THREE.Color(0x6f7a5a);
   const G = 128, R = E * 3.2, PW = 1.5, TR = U.uTexR.value = E * 1.5;
   const tp = new Float32Array((G + 1) * (G + 1) * 3), tc = new Float32Array((G + 1) * (G + 1) * 3), tuv = new Float32Array((G + 1) * (G + 1) * 2);
   const warp = (u) => Math.sign(u) * Math.pow(Math.abs(u), PW) * R;
@@ -1332,6 +1479,12 @@ function buildWorld() {
     tp[v * 3] = x; tp[v * 3 + 1] = t.h; tp[v * 3 + 2] = z;
     tuv[v * 2] = x / (2 * TR) + 0.5; tuv[v * 2 + 1] = z / (2 * TR) + 0.5;
     cc.copy(cA).lerp(cB, vnoise(x / (E * 0.09) + 7, z / (E * 0.09) + 3)).lerp(cC, Math.max(0, 1 - t.d / (T.Wov * 5)) * 0.6);
+    if (street) {
+      // parques (donde no hay manzanas) y, en Mónaco, el monte de detrás: verde y roca
+      const far2 = sstep(T.SH * T.Wov + 30, T.SH * T.Wov + 70, t.d);
+      cc.lerp(cPark, park(x, z) * far2 * 0.85);
+      if (T.env) cc.lerp(cRock, sstep(70, 200, t.h - T.env.sea) * 0.8);
+    }
     tc[v * 3] = cc.r; tc[v * 3 + 1] = cc.g; tc[v * 3 + 2] = cc.b;
   }
   const ti = [];
@@ -1361,14 +1514,59 @@ function buildWorld() {
   const terrain = add(new THREE.Mesh(tg, terrMat));
   terrain.frustumCulled = false; terrain.receiveShadow = true;
 
+  // ---- mar y puertos (Mónaco, Singapur): una lámina de agua que solo se ve donde el terreno real está a nivel del mar
+  if (T.env) {
+    const en = T.env.en, NE = en.n, md = new Uint8Array(NE * NE * 4);
+    for (let k = 0; k < NE * NE; k++) { md[k * 4] = clamp((1.6 - en.h[k]) / 2, 0, 1) * 255; md[k * 4 + 3] = 255; }
+    const mt = new THREE.DataTexture(md, NE, NE, THREE.RGBAFormat); mt.magFilter = mt.minFilter = THREE.LinearFilter; mt.needsUpdate = true;
+    const wm = new THREE.MeshStandardMaterial({ color: 0x0b2b36, roughness: 0.07, metalness: 0 });
+    const span = en.paso * (NE - 1);
+    wm.onBeforeCompile = (sh) => {
+      Object.assign(sh.uniforms, { uMask: { value: mt }, uTime: U.uTime, uFlood: U.uFlood, uG: { value: new THREE.Vector4(T.cx - en.x0, T.cy - en.y0, span, 0) } });
+      sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nvarying vec2 vWXZ;").replace("#include <begin_vertex>", "#include <begin_vertex>\nvWXZ = position.xz;");
+      sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nvarying vec2 vWXZ; uniform sampler2D uMask; uniform float uTime, uFlood; uniform vec4 uG;" + GLSL_NOISE)
+        .replace("vec4 diffuseColor = vec4( diffuse, opacity );", `vec2 mu = vec2(vWXZ.x + uG.x, -vWXZ.y + uG.y) / uG.z;
+          if (texture2D(uMask, mu).r < 0.5) discard;
+          // olas: dos trenes de ruido que se cruzan
+          vec2 dn = (vec2(vn(vWXZ * 0.11 + uTime * 0.35), vn(vWXZ * 0.11 + 9.0 - uTime * 0.3)) - 0.5) * 0.5
+                  + (vec2(vn(vWXZ * 0.53 - uTime * 0.9), vn(vWXZ * 0.47 + 3.0 + uTime * 0.8)) - 0.5) * 0.22;
+          vec4 diffuseColor = vec4(diffuse * (0.85 + 0.3 * vn(vWXZ * 0.02)), opacity);`)
+        .replace("#include <normal_fragment_maps>", "normal = normalize(normal + mat3(viewMatrix) * vec3(dn.x, 0.0, dn.y));")
+        .replace("vec3 totalEmissiveRadiance = emissive;", "vec3 totalEmissiveRadiance = emissive + diffuseColor.rgb * uFlood * 0.1;");
+    };
+    wm.customProgramCacheKey = () => "agua";
+    const water = add(new THREE.Mesh(new THREE.PlaneGeometry(E * 7, E * 7).rotateX(-Math.PI / 2).translate(0, T.env.sea + 0.2, 0), wm));
+    water.frustumCulled = false; water.receiveShadow = true; water.renderOrder = 0;
+    // barcos amarrados cerca de la orilla
+    const boats = [], rB = (() => { let q = 999 + n; return () => ((q = (q * 1664525 + 1013904223) >>> 0) / 4294967296); })();
+    const shore = (i, j) => { for (let a = -3; a <= 3; a++) for (let b2 = -3; b2 <= 3; b2++) { const ii = i + a, jj = j + b2; if (ii >= 0 && jj >= 0 && ii < NE && jj < NE && en.h[jj * NE + ii] > 1) return true; } return false; };
+    for (let j = 0; j < NE; j++) for (let i = 0; i < NE; i++) {
+      if (en.h[j * NE + i] > 0 || !shore(i, j)) continue;
+      for (let k = 0; k < 2; k++) {
+        if (rB() < 0.55) continue;
+        const gx = en.x0 + (i + rB() - 0.5) * en.paso, gy = en.y0 + (j + rB() - 0.5) * en.paso, x = gx - T.cx, z = -(gy - T.cy);
+        const dd = trackDist(x, z);
+        if (dd < T.SH * T.Wov + 25 || dd > 420 || !T.env.wet(x, z)) continue;
+        boats.push([x, z, 12 + rB() * rB() * 45, rB() * Math.PI * 2, rB()]);
+      }
+    }
+    if (boats.length) {
+      const bm = add(new THREE.InstancedMesh(BOAT_GEO, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.35 }), boats.length));
+      const qq = new THREE.Quaternion(), vv = new THREE.Vector3(), sc3 = new THREE.Vector3(), yAx = new THREE.Vector3(0, 1, 0);
+      const mb = new THREE.Matrix4();
+      boats.forEach(([x, z, L, a], k) => { bm.setMatrixAt(k, mb.compose(vv.set(x, T.env.sea + 0.1, z), qq.setFromAxisAngle(yAx, a), sc3.set(L, L, L))); });
+      bm.castShadow = true; bm.frustumCulled = false;
+    }
+  }
+
   // ---- arbolado
   const trees = [], rnd = (() => { let s = 12345 + T.n; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296); })();
-  const maxT = street ? 70 : 800;
+  const maxT = street ? 450 : 800;
   for (let tries = 0; tries < 12000 && trees.length < maxT; tries++) {
     const x = (rnd() * 2 - 1) * E * 1.15, z = (rnd() * 2 - 1) * E * 1.15;
-    if (vnoise(x / (E * 0.12) + 31, z / (E * 0.12) + 17) < (street ? 0.66 : 0.52)) continue;
+    if (street ? park(x, z) < 0.6 : vnoise(x / (E * 0.12) + 31, z / (E * 0.12) + 17) < 0.52) continue;
     const t = terr(x, z, 0);
-    if (t.d < T.Wov * 3.4 + 45) continue;
+    if (t.wet || t.d < (street ? T.SH * T.Wov + 40 : T.Wov * 3.4 + 45)) continue;
     trees.push([x, t.h - 1.5, z, 0.75 + rnd() * 0.7, rnd()]);
   }
   const tgc = collect();
@@ -1398,14 +1596,14 @@ function buildWorld() {
   treeMesh.frustumCulled = false; treeMesh.castShadow = true; treeMesh.receiveShadow = true;
 
   // ---- focos (solo de noche)
-  const nP = Math.floor(T.L / 130);
+  const nP = Math.floor(T.L / 130), lampPos = [];
   const lamps = add(new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial({ color: new THREE.Color(0xfff1c9).multiplyScalar(6), fog: false }), nP));
   const poles = add(new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), new THREE.MeshStandardMaterial({ color: 0x30353c, roughness: 0.6, metalness: 0.5 }), nP));
   for (let k = 0; k < nP; k++) {
     const s = k * 130, i = Math.floor(s / T.ds);
     sample(s, tmp);
     const lat = -T.PS * (SH * W_REAL + T.rO[i] + 5), x = tmp.x + tmp.rx * lat, z = tmp.z + tmp.rz * lat;
-    m4.makeScale(1.6, 0.6, 1.6).setPosition(x, tmp.y + 16, z); lamps.setMatrixAt(k, m4);
+    m4.makeScale(1.6, 0.6, 1.6).setPosition(x, tmp.y + 16, z); lamps.setMatrixAt(k, m4); lampPos.push({ x, y: tmp.y + 16, z });
     m4.makeScale(0.35, 16, 0.35).setPosition(x, tmp.y, z); poles.setMatrixAt(k, m4);
   }
   lamps.frustumCulled = poles.frustumCulled = false;
@@ -1441,10 +1639,6 @@ function buildWorld() {
     brakes.forEach((bi, k) => { const s = bi * T.ds - d - 35, i2 = Math.floor(mod(s, T.L) / T.ds); bm.setMatrixAt(k, place(s, sideAt(i2) + T.PS * 1.6, 1.0, 1, 1.0, 1.45)); });
     bm.frustumCulled = false;
   });
-  const nM = Math.floor(T.L / 380);
-  const marsh = add(new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), new THREE.MeshStandardMaterial({ color: 0xe8791f, roughness: 0.7 }), nM));
-  for (let k = 0; k < nM; k++) { const s = 190 + k * 380, i2 = Math.floor(s / T.ds) % n; marsh.setMatrixAt(k, place(s, sideAt(i2) - T.PS * 1.4, 0, 2.6, 2.3, 2.0)); }
-  marsh.frustumCulled = false; marsh.castShadow = true;
   // pórtico de salida con el semáforo
   { const gg = collect(), half = SH * W_REAL + 1.2;
     for (const z of [half, -half]) gg.add(new THREE.BoxGeometry(0.3, 6.8, 0.3).translate(0, 3.4, z), [0.2, 0.22, 0.25]);
@@ -1452,7 +1646,11 @@ function buildWorld() {
     for (let k = -2; k <= 2; k++) gg.add(new THREE.BoxGeometry(0.25, 1.0, 0.5).translate(-0.3, 5.9, k * 0.8), [0.05, 0.05, 0.06]);
     const gm = add(new THREE.Mesh(gg.done(), new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5, metalness: 0.4 })));
     sample(6, tmp); gm.matrixAutoUpdate = false;
-    gm.matrix.set(tmp.tx, 0, tmp.rx, tmp.x, 0, 1, 0, tmp.y, tmp.tz, 0, tmp.rz, tmp.z, 0, 0, 0, 1); gm.castShadow = true; gm.frustumCulled = false; }
+    gm.matrix.set(tmp.tx, 0, tmp.rx, tmp.x, 0, 1, 0, tmp.y, tmp.tz, 0, tmp.rz, tmp.z, 0, 0, 0, 1); gm.castShadow = true; gm.frustumCulled = false;
+    // las cinco luces (dos por caja), mirando a la parrilla
+    startL = add(new THREE.InstancedMesh(new THREE.SphereGeometry(0.16, 12, 8).scale(0.4, 1, 1), new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false }), 10));
+    for (let k = 0; k < 10; k++) { const b = Math.floor(k / 2) - 2; startL.setMatrixAt(k, m4.makeTranslation(-0.44, k % 2 ? 5.68 : 6.12, b * 0.8).premultiply(gm.matrix)); startL.setColorAt(k, col.setRGB(0.04, 0.01, 0.01)); }
+    startL.frustumCulled = false; }
   // ---- decorado: edificio de boxes con sus garajes, gradas, torres de televisión, puentes de publicidad y, en
   // los circuitos urbanos, calles con edificios. Todo se comprueba contra la pista (a cualquier escala) antes de quedarse.
   const B = propBuilder(), PS = T.PS, laneLen = T.L - track.pit.entry + track.pit.exit;
@@ -1464,7 +1662,7 @@ function buildWorld() {
   let rs = 4321 + n; const rnd2 = () => ((rs = (rs * 1664525 + 1013904223) >>> 0) / 4294967296);
   // garajes: uno por equipo, en la parte recta de la calle de boxes (donde para el coche: gaV)
   const gM = Math.min(100, laneLen * 0.25), sA = track.pit.entry + gM, sB = track.pit.entry + laneLen - gM, slot = (sB - sA) / TEAMS.length;
-  gaV = new Map(TEAMS.map((tm, k) => [tm.id, (gM + (k + 0.5) * slot) / laneLen]));
+  gaV = new Map(TEAMS.map((tm, k) => [tm.id, (gM + (k + 0.5) * slot) / laneLen])); gSlot = slot; DBG.gaV = gaV;
   busy[0].push([track.pit.entry - 40, track.pit.entry + laneLen + 40]);
   const wallLw = 1.0 + (PIT_OFF - 0.55 - 1.0) * 0.5;
   { const b0 = sA - 24, nSeg = Math.max(1, Math.round((sB - sA + 48) / 6)), segL = (sB - sA + 48) / nSeg;
@@ -1476,7 +1674,15 @@ function buildWorld() {
       for (const D of [18, 10, 5]) if (tryAdd(() => {
         B.at(sc, PS);
         // planta baja: la puerta del garaje (o muro), con un pilar en cada junta
-        B.box(x0, x1, -3, 5.2, 0, D, lw, 0, open ? tm.color : 0xd9dde2, { front: open ? [3, 0] : [9, 0], back: [9, 0], top: [8, 0] }, uo);
+        if (open) {
+          // garaje abierto: suelo claro, fondo con los paneles del equipo, techo con luces (los coches de libres se ven dentro)
+          const Dg = Math.min(D, 14), Q = (x, y, z, u, v) => [x, y, z, lw, 0, u, v];
+          B.quad(Q(x0, 0.03, 0, 0, 0), Q(x1, 0.03, 0, 0, 0), Q(x1, 0.03, Dg, 0, 0), Q(x0, 0.03, Dg, 0, 0), 0x9aa0a8, 9, 0);
+          B.box(x0, x1, -3, 5.2, Dg, D, lw, 0, tm.color, { front: [3, 0], back: [9, 0], top: [8, 0] }, uo);
+          B.quad(Q(x0, 5.2, 0, 0, 0), Q(x1, 5.2, 0, 0, 0), Q(x1, 5.2, Dg, 0, 0), Q(x0, 5.2, Dg, 0, 0), 0x2a2d31, 0, 0);
+          for (const zz of [Dg * 0.3, Dg * 0.7]) B.box(x0 + 0.6, x1 - 0.6, 5.0, 5.12, zz - 0.15, zz + 0.15, lw, 0, 0xffffff, { front: [10, 0], top: [10, 0] });
+          B.box(x0, x1, -3, 0, 0, Dg, lw, 0, 0x9aa0a8, { front: [9, 0] }, uo);
+        } else B.box(x0, x1, -3, 5.2, 0, D, lw, 0, 0xd9dde2, { front: [9, 0], back: [9, 0], top: [8, 0] }, uo);
         B.box(x0 - 0.15, x0 + 0.3, -3, 5.2, -0.35, 0.05, lw, 0, 0xc9ced4, { front: [9, 0] }, uo);
         // cartel sobre la puerta: el equipo o una marca
         B.box(x0, x1, 5.2, 6.7, -0.5, 1.2, lw, 0, 0xd0d4d9, { front: [9, 0], top: [9, 0] }, uo);
@@ -1538,6 +1744,12 @@ function buildWorld() {
         B.quad(Q(-L2, rb[1] - 0.35, rb[0], 0, 0), Q(L2, rb[1] - 0.35, rb[0], 0, 0), Q(L2, ra[1] - 0.35, ra[0], 0, 0), Q(-L2, ra[1] - 0.35, ra[0], 0, 0), 0x5a6068, 0, 0);
         B.box(-L2, L2, rb[1] - 0.35, rb[1], rb[0] - 0.05, rb[0] + 0.05, lw, lm, 0x5a6068);
         if (k % 2 === 0) B.box(-0.25, 0.25, H + 1.2, ra[1] - 0.2, D + 0.05, D + 0.45, lw, lm, 0x7a8088, { front: [9, 0] });
+        // banderas de los aficionados, que ondean
+        for (let fq = 0; fq < 2; fq++) if (rnd2() < 0.55) {
+          const fx0 = (rnd2() * 2 - 1) * (L2 - 1.5), ff = 0.15 + rnd2() * 0.75, fz = 0.5 + ff * (D - 0.5), fy = 2.4 + ff * (H - 2.4), seed = Math.floor(rnd2() * 40);
+          B.box(fx0 - 0.03, fx0 + 0.03, fy, fy + 2.3, fz - 0.03, fz + 0.03, lw, lm, 0x333333);
+          B.quad(Q(fx0, fy + 1.5, fz, 0, 0), Q(fx0 + 1.3, fy + 1.5, fz, 1, 0), Q(fx0 + 1.3, fy + 2.3, fz, 1, 1), Q(fx0, fy + 2.3, fz, 0, 1), 0xffffff, 11, seed);
+        }
         for (const [kk, x] of [[0, -L2], [nS - 1, L2]]) if (k === kk) B.quad(Q(x, -2.5, 0.5, 0, 0), Q(x, 2.4, 0.5, 0, 0), Q(x, H + 1.2, D, 0, 0), Q(x, -2.5, D, 0, 0), 0xc4c9cf, 9, 0);
       })) ok++;
     }
@@ -1551,12 +1763,13 @@ function buildWorld() {
     for (let k = 0; k < nCam; k++) {
       const cs = k * sp, sg = -PS;
       if (isBusy(sg, cs - 8, cs + 8)) continue;
-      tryAdd(() => {
-        B.at(cs, sg); const lm = run(sg, iOf(cs)) + 0.9, lw = 1.7;
-        B.box(-1.2, 1.2, -2, h, -1.2, 1.2, lw, lm, 0xffffff, { front: [7, 0], side: [7, 0], top: [9, 0] });
-        B.box(-1.6, 1.6, h, h + 0.25, -1.6, 1.6, lw, lm, 0x5b6169, { front: [9, 0], top: [9, 0] });
+      const st = street, lm = st ? run(sg, iOf(cs)) + 2.3 : run(sg, iOf(cs)) + 0.9, lw = st ? T.SH - 0.08 : 1.7, a = st ? 0.6 : 1.2;
+      if (tryAdd(() => {
+        B.at(cs, sg);
+        B.box(-a, a, -2, h, -a, a, lw, lm, 0xffffff, { front: [7, 0], side: [7, 0], top: [9, 0] });
+        B.box(-a - 0.4, a + 0.4, h, h + 0.25, -a - 0.4, a + 0.4, lw, lm, 0x5b6169, { front: [9, 0], top: [9, 0] });
         B.box(-0.3, 0.5, h + 0.25, h + 0.9, -0.3, 0.3, lw, lm, 0x1a1c20);
-      }, 0.5);
+      }, st ? -1 : 0.5) && st) busy[1].push([cs - 6, cs + 6]); // en la calle, las casas dejan sitio a la torre
     } }
   // puentes de publicidad sobre las rectas
   { const bridges = [], stp = Math.max(1, Math.round(20 / T.ds));
@@ -1591,7 +1804,9 @@ function buildWorld() {
         if (!isBusy(sg, s, s + len) && !(sg === PS && ramp(sc) > 0.02)) {
           const h = tower ? 14 + rnd2() * 26 : 10 + rnd2() * 15, D = 12 + rnd2() * 10, c = PAL[Math.floor(rnd2() * PAL.length)], seed = Math.floor(rnd2() * 50), roof = !tower && rnd2() < 0.5;
           const lm = run(sg, iOf(sc)) + 3, lw = T.SH - 0.08;
-          for (const dd of [D, D * 0.5]) if (tryAdd(() => {
+          // en la orilla no hay edificio: se ve el agua
+          const pc = sample(sc, mkS()), lat = sg * (lw * W_REAL + lm + D / 2), wet = T.env && T.env.wet(pc.x + pc.rx * lat, pc.z + pc.rz * lat);
+          if (!wet) for (const dd of [D, D * 0.5]) if (tryAdd(() => {
             B.at(sc, sg);
             B.box(-len / 2, len / 2, -4, h, 0, dd, lw, lm, c, { front: [tower ? 6 : 5, seed], top: [8, 0] });
             if (roof) B.box(-len / 2 - 0.3, len / 2 + 0.3, h, h + 0.7, -0.4, dd + 0.4, lw, lm, 0xa65a3a, { front: [9, 0], top: [8, 0] });
@@ -1601,17 +1816,24 @@ function buildWorld() {
         s += len;
       }
     }
-    // manzanas lejos de la pista (no se ensanchan): bloques de pisos en Mónaco, rascacielos de cristal en Singapur
-    const list = [], ext = E * 0.72 + 260, stepB = 32, ang = T.axis;
-    const ca = Math.cos(ang), sa = Math.sin(ang);
-    for (let gx = -ext; gx < ext; gx += stepB) for (let gz = -ext; gz < ext; gz += stepB) {
-      const x = gx * ca - gz * sa + (rnd2() - 0.5) * 14, z = gx * sa + gz * ca + (rnd2() - 0.5) * 14, w = 12 + rnd2() * 22, d = 12 + rnd2() * 22;
-      const dist = trackDist(x, z), need = Math.max(T.SH * T.Wov + 8, T.SH * W_REAL + 32) + Math.hypot(w, d) / 2;
-      if (dist < need || vnoise(x / 240 + 5, z / 240 + 9) < 0.22) continue;
-      let h = tower ? 18 + rnd2() * 30 + Math.pow(vnoise(x / 520 + 2, z / 520 + 7), 3) * 240 : 10 + rnd2() * 16 + vnoise(x / 200, z / 200) * 14;
+    // manzanas lejos de la pista (no se ensanchan). Las calles siguen la pista (cada bloque se orienta como el tramo
+    // más cercano); Mónaco crece en altura ladera arriba y Singapur toma la altura de sus torres del modelo de superficie.
+    const list = [], ext = E * 0.72 + 260, used = new Set(), CS = 12;
+    const free = (x, z, r) => { for (let a = Math.floor((x - r) / CS); a <= Math.floor((x + r) / CS); a++) for (let b2 = Math.floor((z - r) / CS); b2 <= Math.floor((z + r) / CS); b2++) if (used.has(a + "," + b2)) return false; return true; };
+    const take = (x, z, r) => { for (let a = Math.floor((x - r) / CS); a <= Math.floor((x + r) / CS); a++) for (let b2 = Math.floor((z - r) / CS); b2 <= Math.floor((z + r) / CS); b2++) used.add(a + "," + b2); };
+    for (let t = 0; t < 14000 && list.length < 2600; t++) {
+      const x = (rnd2() * 2 - 1) * ext, z = (rnd2() * 2 - 1) * ext, w = 12 + rnd2() * 20, d = 12 + rnd2() * 18;
+      const dist = trackDist(x, z), near = tdNear, need = Math.max(T.SH * T.Wov + 8, T.SH * W_REAL + 32) + Math.hypot(w, d) / 2;
+      if (dist < need || park(x, z) > 0.3 || (T.env && T.env.wet(x, z)) || !free(x, z, Math.min(w, d) * 0.45)) continue;
+      const nx = (near + 2) % n, ang = Math.atan2(-(T.Z[nx] - T.Z[near]), T.X[nx] - T.X[near]) + (rnd2() - 0.5) * 0.15;
+      let h;
+      if (tower) {
+        const above = T.env ? T.env.abs(x, z) - (-T.env.sea + 2) : 0;
+        h = above > 20 ? above * (0.9 + rnd2() * 0.2) : 14 + rnd2() * 22;
+      } else h = 9 + rnd2() * 12 + (T.env ? 26 * sstep(15, 110, T.env.abs(x, z)) : 0);
       h = Math.min(h, 14 + (dist - need) * (tower ? 1.3 : 0.6));
-      list.push([x, terr(x, z, 0).h, z, w, h, d, ang + (rnd2() - 0.5) * 0.12, PAL[Math.floor(rnd2() * PAL.length)]]);
-      if (list.length >= 2600) break;
+      take(x, z, Math.min(w, d) * 0.45);
+      list.push([x, terr(x, z, 0).h, z, w, h, d, ang, PAL[Math.floor(rnd2() * PAL.length)]]);
     }
     if (list.length) {
       const city = add(new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0), cityMat(tower ? 6 : 5), list.length));
@@ -1620,7 +1842,34 @@ function buildWorld() {
       city.castShadow = city.receiveShadow = true; city.frustumCulled = false;
     }
   }
+  // torres de focos de las carreras de noche: un poste junto a la valla cada 85 m, alternando lados, con la batería de
+  // focos en un brazo sobre la pista
+  const towers = [], night = track.id === "singapur" || track.id === "bahrein";
+  if (night) for (let k = 0; k < Math.floor(T.L / 85); k++) {
+    const s = 40 + k * 85, sg = k % 2 ? PS : -PS;
+    if (sg === PS && ramp(s) > 0.02) continue;
+    const lw = T.SH - 0.08, lm = run(sg, iOf(s)) + 2.2;
+    if (tryAdd(() => {
+      B.at(s, sg);
+      B.box(-0.22, 0.22, -1, 13, -0.22, 0.22, lw, lm, 0x4a4f57, { front: [9, 0], top: [9, 0] });
+      B.box(-0.12, 0.12, 12.6, 12.85, -3.4, 0.1, lw, lm, 0x4a4f57, { front: [9, 0] });
+      B.box(-1.1, 1.1, 12.1, 12.55, -3.6, -2.4, lw, lm, 0x2a2d31, { front: [9, 0], top: [9, 0] });
+      B.box(-1.0, 1.0, 12.05, 12.1, -3.5, -2.5, lw, lm, 0xffffff, { front: [10, 0], top: [10, 0] });
+    }, -4.5, true)) towers.push({ s, sg, lw: lw * arrAt(T.wr, s), lm, z: -3.0, y: 12.0 });
+  }
+  // puestos de comisarios, cada 380 m por fuera de la valla (con su bandera, que sale cuando hace falta)
+  const posts = [];
+  for (let k = 0; k < Math.floor(T.L / 380); k++) {
+    const s = 190 + k * 380, sg = -PS, lw = T.SH, lm = run(sg, iOf(s)) + 4.0;
+    if (tryAdd(() => { B.at(s, sg); B.box(-1.3, 1.3, -1, 2.3, -1, 1, lw, lm, 0xe8791f, { front: [9, 0], top: [9, 0] }); }, 0.5)) posts.push({ s, sg, lw: lw * arrAt(T.wr, s), lm });
+  }
   add(B.mesh());
+  const flags = add(new THREE.InstancedMesh(FLAG_GEO, FLAG_MAT, Math.max(1, posts.length)));
+  flags.frustumCulled = false; flags.castShadow = true; flags.count = 0;
+  for (let k = 0; k < posts.length; k++) flags.setColorAt(k, col.set(0xffd200));
+  const scCar = add(new THREE.Mesh(SC_GEO, new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.35, metalness: 0.5, clearcoat: 1, clearcoatRoughness: 0.06 })));
+  const scBar = add(new THREE.Mesh(SC_BAR, new THREE.MeshBasicMaterial({ color: 0xffa000 })));
+  scCar.matrixAutoUpdate = scBar.matrixAutoUpdate = false; scCar.visible = scBar.visible = false; scCar.castShadow = true; scCar.frustumCulled = scBar.frustumCulled = false;
 
   // ---- coches, ruedas, spray, sombras de reserva, fichas y aros
   const NC = sess.cars.length;
@@ -1642,6 +1891,18 @@ function buildWorld() {
   const steer = inst(STEER_GEO, STEER_MAT, NC, 10);
   const crewS = inst(CREW_STAND, CREW_MAT, NC * 10, 10), crewC = inst(CREW_CROUCH, CREW_MAT, NC * 4, 10), jacks = inst(JACK_GEO, JACK_MAT, NC * 2, 10);
   const loose = inst(WHEEL_GEO, WHEEL_MAT, NC * 8, 10);
+  // tras un accidente: restos, comisarios y la grúa
+  const debris = inst(new THREE.BoxGeometry(0.5, 0.08, 0.3), new THREE.MeshStandardMaterial({ roughness: 0.6 }), NC * 7, 9);
+  const marsh = inst(CREW_STAND, CREW_MAT, NC * 3, 10), crane = inst(CRANE_GEO, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, metalness: 0.2 }), NC, 10);
+  for (let i = 0; i < NC * 7; i++) debris.setColorAt(i, col.set(0x222222));
+  for (let i = 0; i < NC * 3; i++) marsh.setColorAt(i, col.set(0xff6a00));
+  debris.count = marsh.count = crane.count = 0; marsh.castShadow = crane.castShadow = true;
+  const blank = inst(BLANKET_GEO, CREW_MAT, NC * 4, 10);
+  for (let i = 0; i < NC * 4; i++) blank.setColorAt(i, col.set(0xffffff));
+  blank.count = 0; blank.castShadow = true;
+  const gant = inst(GANTRY_GEO, JACK_MAT, NC, 10), glit = inst(new THREE.BoxGeometry(0.3, 0.3, 0.5), new THREE.MeshBasicMaterial({ color: 0xffffff }), NC, 10);
+  for (let i = 0; i < NC; i++) glit.setColorAt(i, col.set(0xff0000));
+  gant.count = glit.count = 0; gant.castShadow = true;
   crewS.castShadow = crewC.castShadow = jacks.castShadow = loose.castShadow = true;
   for (let i = 0; i < NC * 10; i++) crewS.setColorAt(i, col.set(0xffffff));
   for (let i = 0; i < NC * 4; i++) crewC.setColorAt(i, col);
@@ -1653,6 +1914,12 @@ function buildWorld() {
   pg.setAttribute("aC", new THREE.InstancedBufferAttribute(new Float32Array(PN * 4), 4).setUsage(THREE.DynamicDrawUsage));
   pg.instanceCount = 0;
   const puffs = add(new THREE.Mesh(pg, PUFF_MAT)); puffs.frustumCulled = false; puffs.renderOrder = 13;
+  const mg = new THREE.InstancedBufferGeometry();
+  mg.setAttribute("position", new THREE.Float32BufferAttribute([-0.5, -0.5, 0, 0.5, -0.5, 0, 0.5, 0.5, 0, -0.5, 0.5, 0], 3)); mg.setIndex([0, 1, 2, 0, 2, 3]);
+  for (const a of ["aA", "aB", "aC"]) mg.setAttribute(a, new THREE.InstancedBufferAttribute(new Float32Array(MK * 4), 4).setUsage(THREE.DynamicDrawUsage));
+  mg.instanceCount = 0;
+  const markMesh = add(new THREE.Mesh(mg, MARK_MAT)); markMesh.frustumCulled = false; markMesh.renderOrder = 5;
+  marks.dirty = true;
   // lámina de dorsales
   const nc = document.createElement("canvas"); nc.width = NUM_COLS * 64; nc.height = NUM_ROWS * 64;
   { const g = nc.getContext("2d"); g.textAlign = "center"; g.textBaseline = "middle"; g.font = "900 46px 'Titillium Web', sans-serif"; g.lineJoin = "round";
@@ -1674,7 +1941,8 @@ function buildWorld() {
   });
   // el dorsal y el segundo color son de cada coche, pero los coches se dibujan por orden en pista: se copian a su hueco en cada fotograma
   const carIdx = new Map(sess.cars.map((c, i) => [c.id, i]));
-  world = { all, road, cars, wheels, crewS, crewC, jacks, loose, puffs, blobs, spray, discs, rings, lamps, poles, halos, decals, steer, carIdx, c2src: c2a.slice(), col2: CAR_GEO.attributes.aCol2, livSrc, liv: CAR_GEO.attributes.aLiv, cell: dg.attributes.aCell };
+  DBG.towers = towers;
+  world = { all, towers, night, lampPos, debris, marsh, crane, blank, gant, glit, markMesh, posts, flags, scCar, scBar, road, cars, wheels, crewS, crewC, jacks, loose, puffs, blobs, spray, discs, rings, lamps, poles, halos, decals, steer, carIdx, c2src: c2a.slice(), col2: CAR_GEO.attributes.aCol2, livSrc, liv: CAR_GEO.attributes.aLiv, cell: dg.attributes.aCell };
   U.uL.value = T.L;
   wetT = cloudT = lightT = -1e9;
   applyQuality();
@@ -1794,7 +2062,7 @@ function updateLight(now) {
   scene.environmentIntensity = 1 + 0.6 * (1 - day) + 0.6 * warm;
   updateEnv(now, [sunDir.x, sunDir.y, sunDir.z, zen.r, zen.g, zen.b, hor.r, hor.g, hor.b, cloud, wxMean, Math.min(rainHere, 3) / 2].map((v) => v.toFixed(2)).join());
   U.uFlood.value = (1 - day) * 0.8;
-  world.lamps.visible = world.poles.visible = world.halos.visible = day < 0.5;
+  world.lamps.visible = world.poles.visible = world.halos.visible = day < 0.5 && !world.night;
 }
 
 // ------------------------------------------------------------------ postproceso
@@ -1956,10 +2224,10 @@ function fxGround(p, W, l0) {
   return a > 1.28 && r > 3 ? 1 : 0.5;
 }
 // posición dibujada de cada coche: interpolada entre los dos últimos pasos de la simulación y llevada a la trazada
-const pose = new Map(), _a = mkS(), _b = mkS();
+const pose = new Map(), _a = mkS(), _b = mkS(); DBG.pose = pose;
 function latAt(p, s, W, far) {
   const line = arrAt(T.line, s) * (1 - 0.45 * far) * (1 - Math.min(1, Math.abs(p.lat) / 0.3) * 0.65);
-  if (p.c.loc === "pit") { const r = pitRamp(s); return line * (1 - r) + T.PS * (r * PIT_OFF + p.box * 0.95); }
+  if (p.c.loc === "pit" || p.c.loc === "lane_out" || p.c.loc === "lane_in" || p.gar) { const r = pitRamp(s); return line * (1 - r) + T.PS * (r * PIT_OFF + p.box * 0.95); }
   return clamp(line + p.lat, -0.82, 0.82);
 }
 function updatePoses(dtReal) {
@@ -1968,7 +2236,10 @@ function updatePoses(dtReal) {
   for (const c of sess.cars) {
     // un coche que se ha estrellado se queda un rato donde acabó
     const wreck = c.loc === "out" && c.fx?.k === "crash" && tNow - c.fx.t < WRECK_T;
-    if (!visible(c) && !wreck) { pose.delete(c.id); continue; }
+    // en el garaje: los de libres y clasificación que no están en pista y los que han abandonado por avería
+    const inGarage = c.loc === "garage" || (c.loc === "out" && !wreck && c.fx?.k !== "crash");
+    const lane = c.loc === "lane_out" || c.loc === "lane_in";
+    if (!visible(c) && !wreck && !inGarage && !lane) { pose.delete(c.id); continue; }
     let p = pose.get(c.id);
     if (!p) { p = mkS(); p.c = c; p.lat = 0; p.want = 0; p.box = 0; p.acc = 0; p.roll = 0; pose.set(c.id, p); }
     const p0 = prevS.get(c.id), jump = p0 === undefined || Math.abs(c.s - p0) > 40;
@@ -1986,6 +2257,17 @@ function updatePoses(dtReal) {
       if (f < 0.49 && c.tyres) p.oldC = c.tyres.c;
       p.newC = c.e.sets.find((x) => x.id === c.pit.setId)?.c ?? c.tyres?.c;
     } else if (c.tyres) p.oldC = c.tyres.c;
+    // garaje y calle de boxes de libres/clasificación: sale de su garaje marcha atrás… de frente, y vuelve a él
+    p.gar = 0;
+    const laneLen = T.L - track.pit.entry + track.pit.exit, gaC = gaV.get(c.team.id) ?? 0.5;
+    if (inGarage) {
+      const mates = sess.cars.filter((o) => o.team === c.team), side = mates.indexOf(c) === 0 ? -1 : 1;
+      p.s = track.pit.entry + laneLen * gaC + side * Math.min(4.2, gSlot * 0.22); p.gar = 1;
+    } else if (lane && c.lane) {
+      const f = clamp((c.lane.t - (1 - alpha) * sess.dt) / c.lane.total, 0, 1);
+      if (c.loc === "lane_out") { p.s = track.pit.entry + laneLen * (gaC + (1 - gaC) * f); boxT = 1 - sstep(0.04, 0.16, f); p.gar = 1 - sstep(0, 0.05, f); }
+      else { p.s = track.pit.entry + laneLen * gaC * f; boxT = sstep(0.84, 0.95, f); p.gar = sstep(0.95, 1, f); }
+    }
     // percances (trompo, salida, bloqueo, accidente): solo dibujo, con el reloj de la sesión
     const fx = c.fx, tau = fx ? tNow - fx.t : -1;
     p.fxK = null;
@@ -1999,7 +2281,7 @@ function updatePoses(dtReal) {
       p.fxK = fx.k; p.fxTau = tau; p.fxDur = fxDur(fx);
       if (fx.k === "crash") p.s = c.s + 24 * (1 - Math.exp(-tau / 0.45));
     }
-    p.boxT = boxT; p.want = 0;
+    p.boxT = boxT; p.want = 0; p.tn = tNow;
     list.push(p);
   }
   const L = T.L, W = curW, carLen = 5.6 * carK(W);
@@ -2037,7 +2319,19 @@ function placeCars(list, W) {
     sample(p.s, p);
     let l0 = latAt(p, p.s, W, far) * W * arrAt(T.wr, p.s);
     p.yaw = 0; p.gnd = 0;
+    p.yUp = 0;
     if (p.fxK) { const [o, yw] = fxShape(p); l0 += (fxLat(p, W) - l0) * o; p.yaw = yw; p.gnd = fxGround(p, W, l0); }
+    if (p.fxK === "crash") {
+      // la grúa lo levanta, lo pasa por encima de la barrera y lo deja detrás
+      const t = p.fxTau, us = Math.max(1, W / W_REAL);
+      p.yUp = (sstep(60, 72, t) - sstep(95, 105, t) * 0.85) * 3.6 * us;
+      l0 += p.fxSide * sstep(74, 94, t) * 7 * us;
+    }
+    if (p.gar > 0) {
+      // dentro del garaje, con el morro hacia el pit-lane
+      const kk = carK(W), lg = T.PS * ((pitRamp(p.s) * PIT_OFF + 1.35) * W * arrAt(T.wr, p.s) + 1.0 * Math.max(1, W / W_REAL) + 2.9 * kk);
+      l0 += (lg - l0) * p.gar; p.yaw = -T.PS * Math.PI / 2 * p.gar;
+    }
     p.l0 = l0;
     p.px = p.x + p.rx * l0; p.py = p.y; p.pz = p.z + p.rz * l0;
     sample(p.s + 2.5, _a); sample(p.s - 2.5, _b);
@@ -2094,8 +2388,19 @@ function setCam(m) {
 }
 const _tp = mkS(), _tq = mkS();
 const _up = new THREE.Vector3(0, 1, 0), _sr = new THREE.Vector3(), _su = new THREE.Vector3(), _sc = new THREE.Vector3();
+/** Distancia (m, de cerca) del eje a la torre de la cámara de tele: en los urbanos, en la acera entre la valla y las casas. */
+const tvLat = (i) => (T.street ? (T.SH - 0.08) * W_REAL + T.rO[i] + 2.3 : 1.7 * W_REAL + T.rO[i] + 0.9);
+/** En la cámara de tele, como en la realización: si alguien acaba de trompear, salirse o estrellarse, se corta a él. */
+function camTarget() {
+  if (camMode === "tele") {
+    let best = null, bt = 1e9;
+    for (const p of pose.values()) if (p.fxK && p.fxK !== "lock" && p.fxTau < (p.fxK === "crash" ? 7 : 4.5) && p.fxTau < bt) { best = p.c; bt = p.fxTau; }
+    if (best) return best;
+  }
+  return followCar();
+}
 function updateCamera(dt, now) {
-  const tgt = followCar(), p = tgt && pose.get(tgt.id);
+  const tgt = camTarget(), p = tgt && pose.get(tgt.id);
   let mode = camMode;
   if (!p && mode !== "circuito") mode = "circuito";
   let cut = false, onboard = false;
@@ -2133,14 +2438,15 @@ function updateCamera(dt, now) {
     const cs = idx * sp, ci = Math.min(T.n - 1, Math.floor(cs / T.ds));
     sample(cs, _tq);
     // siempre en el lado contrario a los boxes
-    const out = -T.PS * (1.7 * W_REAL + T.rO[ci] + 0.9);
+    const out = -T.PS * tvLat(ci);
     want.pos.set(_tq.x + _tq.rx * out, _tq.y + 9 + sp * 0.012, _tq.z + _tq.rz * out);
     want.look.set(p.px, p.py + 1, p.pz);
     const dist = want.pos.distanceTo(want.look);
     want.fov = clamp(2 * Math.atan(15 * fast / dist) * 180 / Math.PI, 4, 46);
   }
   if (opt.debug?.view) { // solo para pruebas: cámara puesta a mano, relativa al coche seguido
-    const v = opt.debug.view, b = p || { px: 0, py: 0, pz: 0, fx: 1, fz: 0, sx: 0, sz: 1 };
+    const v = opt.debug.view, b = v.s === undefined ? p || { px: 0, py: 0, pz: 0, fx: 1, fz: 0, sx: 0, sz: 1 }
+      : (() => { const q = sample(v.s, mkS()); return { px: q.x, py: q.y, pz: q.z, fx: q.tx, fz: q.tz, sx: q.rx, sz: q.rz }; })();
     const W2 = (a) => [b.px + b.fx * a[0] + b.sx * a[2], b.py + a[1], b.pz + b.fz * a[0] + b.sz * a[2]];
     want.pos.set(...W2(v.pos)); want.look.set(...W2(v.look)); want.fov = v.fov || 30; camSnap = true;
   }
@@ -2201,6 +2507,159 @@ function emitFx(p, c, m, k, fx, fz) {
     else if (t < 30) burst(3, () => { const q = at(-1.6, 0.6, 0); emit(q.x, q.y, q.z, R() - 0.5, 0.6, R() - 0.5, 0.8 * k, 5 * k, 4, 0.38, 0.38, 0.4, 0.35, 0.7); });
   }
 }
+/** Después de un accidente: trozos de coche en la pista, comisarios que llegan andando y la grúa que se lo lleva. */
+const cs = { d: 0, m: 0, c: 0 }, _cq = mkS();
+function crashScene(p, c, k, W) {
+  const t = p.fxTau, us = Math.max(1, W / W_REAL), sg = p.fxSide, s0 = c.s, wr = arrAt(T.wr, s0);
+  const { debris, marsh, crane } = world;
+  // restos: siete trozos donde golpeó, repartidos por la pista
+  if (t > 0.3) for (let j = 0; j < 7; j++) {
+    const h1 = hash2(c.id * 7.1 + j, j * 3.3), h2 = hash2(j * 1.7, c.id + 0.5), ss = s0 + 2 + h1 * 30, la = (sg * 0.3 + (h2 - 0.5) * 1.1) * W * arrAt(T.wr, ss);
+    sample(ss, _cq);
+    const a = h1 * 6.28, ca = Math.cos(a) * k, sa = Math.sin(a) * k, sc = 0.6 + h2;
+    m4.set(ca * sc, 0, -sa * sc, _cq.x + _cq.rx * la, 0, k, 0, _cq.y + 0.05, sa * sc, 0, ca * sc, _cq.z + _cq.rz * la, 0, 0, 0, 1);
+    debris.setMatrixAt(cs.d, m4); debris.setColorAt(cs.d++, _c3.set(j % 3 ? 0x1b1c20 : c.team.color));
+  }
+  sample(p.s, _cq);
+  const h = Math.hypot(_cq.tx, _cq.tz) || 1, tx = _cq.tx / h, tz = _cq.tz / h, rx = _cq.rx * sg, rz = _cq.rz * sg;
+  const barrier = (T.SH - 0.08) * W * wr + (sg === T.PS ? T.rP : T.rO)[Math.min(T.n - 1, Math.floor(mod(p.s, T.L) / T.ds))];
+  const at = (lat, along, y, yaw, mesh, idx, scl) => {
+    const L = sg * lat, cy = Math.cos(yaw), sy = Math.sin(yaw);
+    // ejes: x a lo largo de la pista, z hacia fuera (lado del accidente)
+    const ax = tx * cy - rx * sy, az = tz * cy - rz * sy, bx = rx * cy + tx * sy, bz = rz * cy + tz * sy;
+    m4.set(ax * scl, 0, bx * scl, _cq.x + _cq.rx * L + tx * along, 0, scl, 0, _cq.y + y, az * scl, 0, bz * scl, _cq.z + _cq.rz * L + tz * along, 0, 0, 0, 1);
+    mesh.setMatrixAt(idx, m4);
+  };
+  // comisarios: saltan la barrera a los 6 s y se quedan junto al coche
+  if (t > 6) for (let j = 0; j < 3; j++) {
+    const e = sstep(6, 13, t), lat = barrier + 2 * us - e * (2 * us + 2.2 * k) + (j - 1) * 0.3 * k;
+    at(lat, (j - 1) * 2.4 * k, 0, e < 1 ? Math.PI / 2 : Math.PI / 2 + (j - 1) * 0.6, marsh, cs.m, k);
+    marsh.setColorAt(cs.m++, _c3.set(0xff6a00));
+  }
+  // grúa detrás de la barrera, con la pluma hacia el coche
+  if (t > 25) at(barrier + 4.5 * us, 0, 0, 0, crane, cs.c++, us);
+}
+/** Semáforo de salida: en la parrilla se encienden de una en una; al darse la salida se apagan. Rojas con bandera roja. */
+function updateStartLights(now) {
+  if (!startL) return;
+  const race = sess.kind === "RACE" || sess.kind === "SPRINT", onGrid = race && sess.t === 0;
+  if (onGrid && lightT0 < 0) lightT0 = now;
+  const lit = sess.flag === "red" ? 5 : onGrid ? Math.min(5, Math.floor((now - lightT0) / 900) + 1) : 0;
+  lightsBusy = onGrid && lit < 5;
+  for (let j = 0; j < 10; j++) startL.setColorAt(j, _c3.setRGB(...(Math.floor(j / 2) < lit ? [1.8, 0, 0] : [0.03, 0.01, 0.01])));
+  startL.instanceColor.needsUpdate = true;
+}
+/** Huellas que deja cada rueda: goma al bloquear o trompear, tierra en la hierba y grava al volver al asfalto. */
+const _mw = new THREE.Vector3();
+function trackMarks(p, c, m, k) {
+  const W = curW, wr = arrAt(T.wr, p.s), t = p.tn;
+  if (p.gnd >= 1) p.gravT = t;
+  const kinds = [-1, -1, -1, -1];
+  if (p.fxK === "lock" && p.fxTau < 0.7) kinds[p.fxW] = 0;
+  if (p.fxK === "spin" && p.fxTau < 2.0) kinds[2] = kinds[3] = 0;
+  if (p.gnd > 0 && p.gnd < 1) kinds[2] = kinds[3] = 2;
+  if (p.gnd === 0 && p.gravT !== undefined && t - p.gravT < 2.5 && t >= p.gravT) kinds[0] = kinds[1] = kinds[2] = kinds[3] = 1;
+  p.mk = p.mk || [null, null, null, null];
+  for (let w = 0; w < 4; w++) {
+    if (kinds[w] < 0 || c.v < 2) { p.mk[w] = null; continue; }
+    const wd = WHEELS[w];
+    _mw.set(wd[0], 0, wd[1]).applyMatrix4(m);
+    const dx = _mw.x - p.px, dz = _mw.z - p.pz, h = Math.hypot(p.tx, p.tz) || 1;
+    const sN = p.s + (dx * p.tx + dz * p.tz) / h, lN = (p.l0 + dx * p.rx + dz * p.rz) / (W * wr);
+    const q = p.mk[w];
+    if (q && q.kind === kinds[w]) {
+      const ds = Math.abs(sN - q.s);
+      if (ds < 0.5 * k) continue;
+      if (ds < 30 * k) addMark(q.s, q.l, sN, lN + (kinds[w] === 1 ? (Math.random() - 0.5) * 0.04 : 0), kinds[w] === 1 ? 0.55 : 0.3, t, kinds[w]);
+    }
+    p.mk[w] = { s: sN, l: lN, kind: kinds[w] };
+  }
+}
+let mkW = 0, mkT = -1e9;
+function updateMarks(now, W, k) {
+  const M = marks;
+  if (!M.n || (!M.dirty && Math.abs(W - mkW) < W * 0.02 && now - mkT < 600)) return;
+  M.dirty = false; mkW = W; mkT = now;
+  const g = world.markMesh.geometry, A = g.attributes.aA.array, Bb = g.attributes.aB.array, C = g.attributes.aC.array, tn = sess.t;
+  let j = 0;
+  for (let i = 0; i < M.n; i++) {
+    const life = MK_LIFE[M.k[i]], f = (tn - M.t[i]) / life;
+    if (f >= 1 || f < -0.01) continue;
+    sample(M.s0[i], _sa); const la = M.l0[i] * W * arrAt(T.wr, M.s0[i]);
+    sample(M.s1[i], _sb); const lb = M.l1[i] * W * arrAt(T.wr, M.s1[i]);
+    const cl = MK_COL[M.k[i]];
+    A.set([_sa.x + _sa.rx * la, _sa.y, _sa.z + _sa.rz * la, M.w[i] * k], j * 4);
+    Bb.set([_sb.x + _sb.rx * lb, _sb.y, _sb.z + _sb.rz * lb, 0], j * 4);
+    C.set([cl[0], cl[1], cl[2], cl[3] * (1 - f) * (1 - f)], j * 4);
+    j++;
+  }
+  g.instanceCount = j; DBG.marks = j;
+  g.attributes.aA.needsUpdate = g.attributes.aB.needsUpdate = g.attributes.aC.needsUpdate = true;
+}
+/** Los 16 focos más cerca de lo que se mira, para sus reflejos en el asfalto mojado (solo de noche y con agua). */
+const _lp = mkS(), _lv = new THREE.Vector3();
+function updateLampRefl(W) {
+  const u = U.uLamps.value;
+  let wetMax = 0; for (let j = 0; j < sess.water.length; j += 3) wetMax = Math.max(wetMax, sess.water[j], sess.waterOff[j]);
+  if (U.uFlood.value < 0.05 || wetMax < 0.03) { U.uNL.value = 0; return; }
+  const us = Math.max(1, W / W_REAL), list = [];
+  if (world.night) for (const t of world.towers) {
+    sample(t.s, _lp);
+    const L = t.sg * (t.lw * W + t.lm) + t.sg * t.z * us;
+    list.push([_lp.x + _lp.rx * L, _lp.y + t.y * us, _lp.z + _lp.rz * L]);
+  } else for (const q of world.lampPos) list.push([q.x, q.y, q.z]);
+  const c = cur.look;
+  list.sort((a, b) => (a[0] - c.x) ** 2 + (a[2] - c.z) ** 2 - ((b[0] - c.x) ** 2 + (b[2] - c.z) ** 2));
+  const nL = Math.min(16, list.length);
+  for (let j = 0; j < nL; j++) u[j].set(list[j][0], list[j][1], list[j][2], 1);
+  U.uNL.value = nL;
+}
+/** Coche de seguridad, banderas de los comisarios y la zona en amarillo sobre la pista. */
+const _sa = mkS(), _sb = mkS();
+function drawFlags(now, W, k) {
+  const fl = sess.flag, L = T.L, us = Math.max(1, W / W_REAL);
+  // tramo con bandera amarilla: con coche de seguridad o VSC, toda la pista; si no, antes del último percance
+  let zc = 0, zh = 0, zon = 0, red = fl === "red";
+  if (fl === "sc" || fl === "sc_in" || fl === "vsc") { zh = L; zon = 1; }
+  else if (!red) {
+    let best = null;
+    for (const p of pose.values()) if ((p.fxK === "crash" || ((p.fxK === "off" || p.fxK === "spin") && p.fxTau < 9)) && (!best || p.fxTau < best.fxTau)) best = p;
+    if (best) { zc = best.s - 110; zh = 170; zon = 1; }
+  }
+  U.uYel.value.set(mod(zc, L), zh, zon);
+  // banderas: amarillas en el tramo, rojas con bandera roja; si no hay nada, guardadas
+  const { flags, posts } = world;
+  let nf = 0;
+  for (const po of posts) {
+    const inZone = zon && Math.abs(mod(po.s - zc + L / 2, L) - L / 2) < zh + 60;
+    if (!red && !inZone) continue;
+    sample(po.s, _sa);
+    const h = Math.hypot(_sa.tx, _sa.tz) || 1, tx = _sa.tx / h, tz = _sa.tz / h, lat = po.sg * (po.lw * W + po.lm), rx = _sa.rx * po.sg, rz = _sa.rz * po.sg;
+    m4.set(tx * us, 0, rx * us, _sa.x + _sa.rx * lat + rx * 0.4 * us, 0, us, 0, _sa.y + 2.3 * us, tz * us, 0, rz * us, _sa.z + _sa.rz * lat + rz * 0.4 * us, 0, 0, 0, 1);
+    flags.setMatrixAt(nf, m4); flags.setColorAt(nf++, _col.set(red ? 0xe0201a : 0xffd200));
+  }
+  flags.count = nf; flags.instanceMatrix.needsUpdate = true; if (flags.instanceColor) flags.instanceColor.needsUpdate = true;
+  // coche de seguridad, delante del líder; con «entra en esta vuelta» se mete por el pit-lane
+  const { scCar, scBar } = world;
+  let show = false;
+  const lp = (fl === "sc" || fl === "sc_in") && pose.get(sess.leaderId);
+  if (lp && lp.c.loc === "track") {
+    const ss = lp.s + 40 + 7 * k, pm = mod(ss, L), inLane = fl === "sc_in" && pm >= track.pit.entry, r = inLane ? pitRamp(ss) : 0;
+    show = !(inLane && r > 0.97);
+    if (show) {
+      const latOf = (s2) => (arrAt(T.line, s2) * 0.5 * (1 - r) + T.PS * r * PIT_OFF) * W * arrAt(T.wr, s2);
+      sample(ss, _sa); sample(ss + 3, _sb);
+      const la = latOf(ss), lb = latOf(ss + 3);
+      const x0 = _sa.x + _sa.rx * la, z0 = _sa.z + _sa.rz * la, x1 = _sb.x + _sb.rx * lb, z1 = _sb.z + _sb.rz * lb;
+      let fx = x1 - x0, fy = _sb.y - _sa.y, fz = z1 - z0; const fl2 = Math.hypot(fx, fy, fz) || 1; fx /= fl2; fy /= fl2; fz /= fl2;
+      const hl = Math.hypot(fx, fz) || 1, rx = -fz / hl, rz = fx / hl;
+      scCar.matrix.set(fx * k, 0, rx * k, x0, fy * k, k, 0, _sa.y + 0.03 * k, fz * k, 0, rz * k, z0, 0, 0, 0, 1);
+      scBar.matrix.copy(scCar.matrix);
+      scBar.material.color.setRGB(...(Math.floor(now / 250) % 2 ? [8, 3.5, 0] : [0.3, 0.12, 0]));
+    }
+  }
+  scCar.visible = scBar.visible = show;
+}
 let screenPts = [], rainClock = 0;
 function draw3d(dt, now) {
   const list = updatePoses(dt);
@@ -2218,8 +2677,9 @@ function draw3d(dt, now) {
   const fine = q >= 2 && far < 0.5;
   cars.geometry = fine ? CAR_GEO : CAR_LO; wheels.geometry = fine ? WHEEL_GEO : WHEEL_LO;
   const dr = W * 0.6 * far;
-  let i = 0, ns = 0, nS = 0, nC = 0, nJ = 0, nL = 0;
-  const { crewS, crewC, jacks, loose } = world;
+  let i = 0, ns = 0, nS = 0, nC = 0, nJ = 0, nL = 0, nG = 0, nB = 0;
+  cs.d = cs.m = cs.c = 0;
+  const { crewS, crewC, jacks, loose, gant, glit, blank } = world;
   for (const p of list) {
     const c = p.c;
     // base del coche: delante, lado y arriba, con cabeceo al frenar o acelerar y balanceo en curva
@@ -2230,14 +2690,14 @@ function draw3d(dt, now) {
     }
     // parada: u va de 0 (se para) a 1 (sale); el coche sube en los gatos mientras cambian las ruedas
     const u = p.pf >= 0 ? (p.pf - PIT_A) / (PIT_B - PIT_A) : -9, stop = u > -0.3 && u < 1.15;
-    const lift = stop ? sstep(0, 0.1, u) * (1 - sstep(0.86, 0.95, u)) : 0, off = stop && u >= 0.12 && u <= 0.62;
+    const lift = stop ? sstep(0, 0.1, u) * (1 - sstep(0.86, 0.95, u)) : 0, off = stop && u >= 0.12 && u <= 0.62, crewOn = u > -0.45 && u < 1.35;
     let ux = -rz * fy, uy = rz * fx - rx * fz, uz = rx * fy;
     const th = clamp(p.acc / 55, -1, 0.4) * 0.05, ph = p.roll * 0.04;
     const f2x = fx + ux * th, f2y = fy + uy * th, f2z = fz + uz * th;
     const u2x = ux - fx * th + rx * ph, u2y = uy - fy * th + ry * ph, u2z = uz - fz * th + rz * ph;
     rx -= ux * ph; ry -= uy * ph; rz -= uz * ph;
     m4.set(f2x * k, u2x * k, rx * k, p.px,
-      f2y * k, u2y * k, ry * k, p.py + (0.03 + 0.09 * lift) * k,
+      f2y * k, u2y * k, ry * k, p.py + (0.03 + 0.09 * lift + (p.gar >= 0.999 ? 0.08 : 0)) * k + (p.yUp || 0),
       f2z * k, u2z * k, rz * k, p.pz,
       0, 0, 0, 1);
     cars.setMatrixAt(i, m4); cars.setColorAt(i, _col.set(c.team.color));
@@ -2248,25 +2708,39 @@ function draw3d(dt, now) {
       mL.makeRotationY(wd[2] ? steer : 0).multiply(mS.makeRotationZ(-p.spin)).scale(_ws.set(1, 1, wd[3])).setPosition(wd[0], 0.36, wd[1]);
       if (off) mW.makeScale(0, 0, 0); else mW.multiplyMatrices(m4, mL);
       wheels.setMatrixAt(i * 4 + w, mW); wheels.setColorAt(i * 4 + w, _col);
+      if (p.gar >= 0.999) { blank.setMatrixAt(nB, mW); blank.setColorAt(nB++, _c3.set(c.team.color)); } // en el garaje, con las mantas puestas
     }
-    if (stop) {
-      // mecánicos: gato delantero y trasero, una pistola y dos que llevan ruedas en cada esquina
+    if (crewOn) {
+      // mecánicos: salen corriendo del garaje antes de que llegue el coche, esperan en su sitio (las pistolas,
+      // agachados) y vuelven corriendo cuando se va. Encima del morro, el semáforo de salida.
       mG.set(fx * k, 0, rx * k, p.px, 0, k, 0, p.py, fz * k, 0, rz * k, p.pz, 0, 0, 0, 1);
-      const tc = _col.set(c.team.color);
-      const put = (mesh, idx, lx, lz, yw) => { mL.makeRotationY(yw).setPosition(lx, 0, lz); mW.multiplyMatrices(mG, mL); mesh.setMatrixAt(idx, mW); if (mesh.instanceColor) mesh.setColorAt(idx, tc); };
+      const tc = _col.set(c.team.color), gs = T.PS, gz = gs * (0.42 * W * arrAt(T.wr, p.s) + 4) / k;
+      const e = u < 0.5 ? sstep(-0.45, -0.1, u) : 1 - sstep(1.02, 1.35, u), moving = e > 0.001 && e < 0.999, ph = u * 40;
+      const put = (mesh, idx, lx, lz, yw, colr = tc) => {
+        // de su sitio (lx, lz) al garaje: mismo x, z del garaje; corriendo mira hacia donde va
+        const x = lx, z = gz + (lz - gz) * e, bob = moving ? Math.abs(Math.sin(ph + lx * 3)) * 0.1 : 0;
+        const ry = moving ? Math.atan2(-(u < 0.5 ? lz - gz : gz - lz), 0) : yw;
+        mL.makeRotationY(ry).setPosition(x, bob, z); mW.multiplyMatrices(mG, mL); mesh.setMatrixAt(idx, mW); if (mesh.instanceColor) mesh.setColorAt(idx, colr);
+      };
       put(crewS, nS++, 4.25, 0, Math.PI); put(crewS, nS++, -3.9, 0, 0);
-      put(jacks, nJ++, 3.0, 0, 0); put(jacks, nJ++, -2.7, 0, Math.PI);
+      if (stop) { put(jacks, nJ++, 3.0, 0, 0); put(jacks, nJ++, -2.7, 0, Math.PI); }
       for (const wd of WHEELS) {
         const sg = wd[1] > 0 ? 1 : -1, yw = sg * Math.PI / 2;
-        put(crewC, nC++, wd[0], wd[1] + sg * 0.62, yw);
+        if (moving) put(crewS, nS++, wd[0], wd[1] + sg * 0.62, yw); else put(crewC, nC++, wd[0], wd[1] + sg * 0.62, yw);
         put(crewS, nS++, wd[0] - 0.85, wd[1] + sg * 1.4, yw); put(crewS, nS++, wd[0] + 0.85, wd[1] + sg * 1.4, yw);
         // la rueda vieja sale y se la llevan hacia atrás; la nueva llega desde delante
         const wheel = (lx, lz, cmp) => { mL.makeScale(1, 1, wd[3]).setPosition(lx, 0.36, lz); mW.multiplyMatrices(mG, mL); loose.setMatrixAt(nL, mW); loose.setColorAt(nL++, _c3.set(COMPOUND[cmp] || "#888888")); };
         if (u >= 0.12 && u < 0.47) { const a = sstep(0.12, 0.28, u), b = sstep(0.28, 0.45, u); wheel(wd[0] - 0.85 * b, wd[1] + sg * (0.7 * a + 0.45 * b), p.oldC); }
-        if (u >= 0.45 && u <= 0.62) { const e = sstep(0.45, 0.62, u); wheel(wd[0] + 0.85 * (1 - e), wd[1] + sg * 1.15 * (1 - e), p.newC); }
+        if (u >= 0.45 && u <= 0.62) { const e2 = sstep(0.45, 0.62, u); wheel(wd[0] + 0.85 * (1 - e2), wd[1] + sg * 1.15 * (1 - e2), p.newC); }
       }
+      // semáforo de salida: rojo mientras trabajan, verde para soltarlo
+      mL.makeScale(1, 1, gs).setPosition(2.7, 0, 0); mW.multiplyMatrices(mG, mL); gant.setMatrixAt(nG, mW);
+      mL.makeTranslation(2.7, 3.05, 0); mW.multiplyMatrices(mG, mL); glit.setMatrixAt(nG, mW);
+      glit.setColorAt(nG++, _c3.setRGB(...(u > 0.92 && u < 1.3 ? [0, 3, 0.2] : [3, 0, 0])));
     }
     if (p.fxK && p.simDt > 0) emitFx(p, c, m4, k, fx, fz);
+    trackMarks(p, c, m4, k);
+    if (p.fxK === "crash") crashScene(p, c, k, W);
     if (q === 0) { mL.copy(m4); mL.elements[13] = p.py + 0.1; blobs.setMatrixAt(i, mL); } // sin sombras del sol, una mancha bajo el coche
     world.decals.setMatrixAt(i, m4);
     const ci = world.carIdx.get(c.id);
@@ -2288,8 +2762,8 @@ function draw3d(dt, now) {
     i++;
   }
   cars.count = blobs.count = discs.count = world.decals.count = world.steer.count = i; wheels.count = i * 4; spray.geometry.instanceCount = ns;
-  crewS.count = nS; crewC.count = nC; jacks.count = nJ; loose.count = nL;
-  for (const m of [crewS, crewC, jacks, loose]) { m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true; }
+  crewS.count = nS; crewC.count = nC; jacks.count = nJ; loose.count = nL; gant.count = glit.count = nG; blank.count = nB; world.debris.count = cs.d; world.marsh.count = cs.m; world.crane.count = cs.c;
+  for (const m of [crewS, crewC, jacks, loose, gant, glit, blank, world.debris, world.marsh, world.crane]) { m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true; }
   // humo y polvo: avanzan con el reloj de la sesión (en pausa se quedan quietos)
   stepParts(dt * (opt.paused() ? 0 : Math.min(8, opt.speed())));
   { const pa = world.puffs.geometry.attributes.aP, pc = world.puffs.geometry.attributes.aC, P = parts;
@@ -2311,6 +2785,8 @@ function draw3d(dt, now) {
     r.visible = !!p && far > 0.25;
     if (p) { r.position.set(p.px, p.py + 0.4, p.pz); r.scale.setScalar(k * 3.9); }
   });
+  drawFlags(now, W, k); updateStartLights(now); updateLampRefl(W);
+  updateMarks(now, W, k);
   // lluvia: cae alrededor de lo que se mira, solo donde la textura dice que llueve
   rain.visible = q > 0 && rainHere > 0.15 && !reduced;
   if (rain.visible) {
@@ -2395,7 +2871,7 @@ return {
   /** Tras una pausa larga del dibujo (pestaña oculta, mapa tapado): que no cuente como fotogramas lentos. */
   idle() { fN = 0; fT = performance.now(); lowSecs = 0; },
   /** La cámara está cambiando de sitio: hay que seguir dibujando aunque la sesión esté en pausa. */
-  moving: () => camFrom !== null || camSnap || performance.now() < busyUntil,
+  moving: () => camFrom !== null || camSnap || lightsBusy || performance.now() < busyUntil,
   resize() { resize(); busyUntil = performance.now() + 400; },
   cycleCam() { busyUntil = performance.now() + 1300; setCam(CAMS[(CAMS.indexOf(camMode) + 1) % CAMS.length]); return CAM_NAME[camMode]; },
   cam: () => camMode,
