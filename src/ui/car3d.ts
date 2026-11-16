@@ -412,11 +412,31 @@ vec3 liveryAt(vec3 p, vec3 n, float cell){
 // color de cada coche (o de cada rueda: el compuesto); las mallas que aún no lo tienen (la fina con calidad baja, las
 // ruedas sueltas antes de la primera parada) se compilan sin él: así no falla el sombreador
 const INST_COL_DEF = "\n#ifdef USE_INSTANCING_COLOR\n#define INST_COL instanceColor.rgb\n#else\n#define INST_COL vec3(1.0)\n#endif\n";
+// Gotas de lluvia sobre la carrocería: una rejilla de casillas de 5 cm en el plano al que más mira cada punto, con
+// una gota redonda en algunas (más cuanto más moja, uDrops). Devuelve (cuánto es gota, brillo de su reflejo). Solo de
+// cerca: de lejos no se distinguen y se apagan.
+const DROPS_GLSL = `
+float dH(vec2 p){ p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+vec2 dropsAt(vec3 p, vec3 n){
+  vec3 a = abs(n); vec2 uv = a.y > max(a.x, a.z) ? p.xz : (a.z > a.x ? p.xy : p.zy);
+  uv /= 0.05;
+  float px = length(fwidth(uv));
+  if (px > 0.8) return vec2(0.0);
+  vec2 c = floor(uv), f = fract(uv) - 0.5;
+  float h = dH(c), on = step(h, 0.25 + 0.45 * uDrops);
+  vec2 o = vec2(dH(c + 3.1), dH(c + 7.7)) - 0.5;
+  float r = 0.12 + 0.2 * dH(c + 1.3), d = length(f - o * (0.9 - 2.0 * r));
+  float drop = on * smoothstep(r, r * 0.7, d);
+  // el reflejo: un punto claro arriba de cada gota
+  float hl = on * smoothstep(r * 0.4, r * 0.15, length(f - o * (0.9 - 2.0 * r) - vec2(-0.3, 0.35) * r));
+  // el reflejo, solo si la gota ocupa varios píxeles (si no, parece ruido); la gota, un poco más lejos
+  return vec2(drop * (1.0 - smoothstep(0.35, 0.8, px)), hl * (1.0 - smoothstep(0.08, 0.18, px)));
+}`;
 export function makeCarMaterial(livTex, U) {
 const uLiv = { value: livTex };
 const CAR_MAT = new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.45, metalness: 0.15, clearcoat: 1, clearcoatRoughness: 0.05, side: THREE.DoubleSide });
 CAR_MAT.onBeforeCompile = (sh) => {
-  Object.assign(sh.uniforms, { uFlood: U.uFlood, uLight: U.uLight, uLiv });
+  Object.assign(sh.uniforms, { uFlood: U.uFlood, uLight: U.uLight, uLiv, uDrops: U.uDrops || { value: 0 } });
   sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\n" + INST_COL_DEF + "uniform float uLight; attribute vec3 aCol2; attribute float aLiv, aPart, aDmg; varying float vPaint, vGlow, vShade, vLiv; varying vec3 vLP, vLN;")
     .replace("#include <begin_vertex>", `#include <begin_vertex>
       // alerón delantero: con daño, el lado derecho se descuelga hasta casi rozar el suelo; sin él (cambio de morro), no se dibuja
@@ -429,12 +449,13 @@ CAR_MAT.onBeforeCompile = (sh) => {
     .replace("#include <color_vertex>", `float kr = pow(color.r, 2.2), kb = pow(color.b, 2.2), red = step(color.g, -0.5);
       vColor = vec4(INST_COL * kr + aCol2 * kb + vec3(pow(max(color.g, 0.0), 2.2)) + vec3(0.25, 0.0, 0.0) * red, 1.0);
       vPaint = step(0.25, color.r + color.b); vGlow = red * uLight; vShade = max(kr, kb); vLiv = aLiv; vLP = position; vLN = normal;`);
-  sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nuniform float uFlood; varying float vPaint, vGlow, vShade, vLiv; varying vec3 vLP, vLN;" + LIV_GLSL)
-    .replace("#include <color_fragment>", "#include <color_fragment>\nif (vPaint > 0.5) diffuseColor.rgb = liveryAt(vLP, normalize(vLN), floor(vLiv + 0.5)) * vShade;")
-    .replace("#include <roughnessmap_fragment>", "float roughnessFactor = mix(0.62, roughness, vPaint);")
+  sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nuniform float uFlood, uDrops; varying float vPaint, vGlow, vShade, vLiv; varying vec3 vLP, vLN;" + LIV_GLSL + DROPS_GLSL)
+    .replace("#include <color_fragment>", "#include <color_fragment>\nif (vPaint > 0.5) diffuseColor.rgb = liveryAt(vLP, normalize(vLN), floor(vLiv + 0.5)) * vShade;\ndrop = uDrops > 0.01 ? dropsAt(vLP, normalize(vLN)) * uDrops : vec2(0.0); diffuseColor.rgb *= 1.0 - 0.3 * drop.x;")
+    .replace("#include <roughnessmap_fragment>", "float roughnessFactor = mix(mix(0.62, roughness, vPaint), 0.04, drop.x);")
     .replace("#include <metalnessmap_fragment>", "float metalnessFactor = metalness * vPaint;")
     .replace("#include <lights_physical_fragment>", "#include <lights_physical_fragment>\nmaterial.clearcoat *= vPaint;")
-    .replace("vec3 totalEmissiveRadiance = emissive;", "vec3 totalEmissiveRadiance = emissive + vColor.rgb * uFlood * 0.6 + vec3(7.0, 0.25, 0.1) * vGlow;");
+    .replace("vec3 totalEmissiveRadiance = emissive;", "vec2 drop = vec2(0.0);\nvec3 totalEmissiveRadiance = emissive + vColor.rgb * uFlood * 0.6 + vec3(7.0, 0.25, 0.1) * vGlow;")
+    .replace("#include <emissivemap_fragment>", "#include <emissivemap_fragment>\ntotalEmissiveRadiance += vec3(0.9, 0.95, 1.0) * drop.y * (0.15 + 0.6 * uFlood);");
 };
 CAR_MAT.userData.uLiv = uLiv; // para cambiar la librea sin rehacer el material
 return CAR_MAT;

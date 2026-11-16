@@ -90,17 +90,41 @@ vec3 SR(vec3 c){ return pow(c, vec3(2.2)); }
 // El mismo material pinta el entorno que reflejan los coches y el asfalto mojado (uEnv = 1: sin disco, con suelo).
 const skyU = { uZen: { value: new THREE.Color() }, uHor: { value: new THREE.Color() }, uSun: { value: new THREE.Vector3(0, 1, 0) }, uSunCol: { value: new THREE.Color() },
   uCloudCol: { value: new THREE.Color() }, uGround: { value: new THREE.Color() }, uNight: { value: 0 }, uCity: { value: 0 }, uFlash: { value: 0 },
-  uWx: { value: null }, uWxR: { value: 40000 }, uCam: { value: new THREE.Vector2() }, uWind: { value: new THREE.Vector2() } };
+  uWx: { value: null }, uWxR: { value: 40000 }, uCam: { value: new THREE.Vector2() }, uWind: { value: new THREE.Vector2() },
+  uVol: { value: 0 } }; // uVol: nubes con volumen (calidad 2 y 3)
 const skyMat = (env) => new THREE.ShaderMaterial({
   uniforms: { ...skyU, uEnv: { value: env } }, side: THREE.BackSide, fog: false, depthWrite: false,
   vertexShader: `varying vec3 vDir; void main(){ vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-  fragmentShader: `uniform vec3 uZen, uHor, uSun, uSunCol, uCloudCol, uGround; uniform float uEnv, uNight, uWxR, uCity, uFlash; uniform vec2 uCam, uWind; uniform sampler2D uWx; varying vec3 vDir;` + GLSL_NOISE + `
+  fragmentShader: `uniform vec3 uZen, uHor, uSun, uSunCol, uCloudCol, uGround; uniform float uEnv, uNight, uWxR, uCity, uFlash, uVol; uniform vec2 uCam, uWind; uniform sampler2D uWx; varying vec3 vDir;` + GLSL_NOISE + `
     // ruido de gradiente con transición suave (no deja ver la rejilla) y octavas giradas
     vec2 g2(vec2 p){ float a = h21(p) * 6.2831853; return vec2(cos(a), sin(a)); }
     float gn(vec2 p){ vec2 i = floor(p), f = fract(p), u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
       return mix(mix(dot(g2(i), f), dot(g2(i + vec2(1.0, 0.0)), f - vec2(1.0, 0.0)), u.x),
                  mix(dot(g2(i + vec2(0.0, 1.0)), f - vec2(0.0, 1.0)), dot(g2(i + vec2(1.0, 1.0)), f - vec2(1.0, 1.0)), u.x), u.y); }
     float cloudDen(vec2 q){ float s = 0.0, a = 0.5; for (int i = 0; i < 5; i++) { s += a * gn(q); q = mat2(1.6, 1.2, -1.2, 1.6) * q + 3.7; a *= 0.5; } return 0.5 + 0.9 * s; }
+    // lo mismo con tres octavas (las otras dos apenas mueven la forma grande): para recorrer el volumen
+    float cloudDen3(vec2 q){ float s = 0.0, a = 0.5; for (int i = 0; i < 3; i++) { s += a * gn(q); q = mat2(1.6, 1.2, -1.2, 1.6) * q + 3.7; a *= 0.5; } return 0.5 + 0.9 * s; }
+    // Nubes con volumen (calidad 2 y 3): la capa plana da la base; por encima, cada nube sube hasta una altura que
+    // depende de lo densa que es (cúmulos de cima redonda). Entre los huecos de las bases se ven, sobre todo hacia el
+    // horizonte, los costados de las que hay detrás: cuatro pasos de 1,6 a 3,0 km. Devuelve (cuánto tapan los
+    // costados, a qué altura de la nube se ven de media, cuánta nube tienen delante hacia el sol).
+    vec3 cloudSides(vec3 d){
+      float Tr = 1.0, hs = 0.0, sh = 0.0;
+      vec2 toSun = uSun.xz / max(uSun.y, 0.2);
+      for (int i = 1; i <= 4; i++) {
+        float hf = float(i) / 4.0, h = 1600.0 + 1400.0 * hf;
+        vec2 q = uCam + d.xz * (h / (d.y + 0.06));
+        vec4 w = texture2D(uWx, q / (2.0 * uWxR) + 0.5);
+        float lo = mix(0.66, 0.2, w.g) + 0.02 + hf * 0.3;
+        float a = smoothstep(lo, lo + 0.1, cloudDen3(q / 2600.0 + uWind));
+        if (a < 0.01) continue;
+        // ¿hay nube 400 m más arriba hacia el sol? Entonces este costado está en sombra
+        float ls = smoothstep(lo + 0.05, lo + 0.15, cloudDen3((q + toSun * 400.0) / 2600.0 + uWind));
+        hs += Tr * a * hf; sh += Tr * a * ls; Tr *= 1.0 - a;
+      }
+      float cv = 1.0 - Tr;
+      return vec3(cv, hs / max(cv, 0.001), sh / max(cv, 0.001));
+    }
     void main(){
       vec3 d = normalize(vDir);
       float up = max(d.y, 0.0);
@@ -131,6 +155,15 @@ const skyMat = (env) => new THREE.ShaderMaterial({
         float th = clamp((n - lo) / 0.4, 0.0, 1.0) * (0.45 + 0.55 * cover);
         vec3 cc = uCloudCol * mix(1.18, 0.44, th) * mix(1.0, 0.5, rainK);
         cc += uSunCol * pow(s, 8.0) * 0.35 * (1.0 - th);
+        if (uVol > 0.5 && uEnv < 0.5 && c < 0.99) {
+          vec3 v = cloudSides(d);
+          // el costado que mira a la cámara está al sol si el sol queda detrás de ella; arriba, más claro
+          float face = clamp(dot(-normalize(d.xz + 1e-4), normalize(uSun.xz + 1e-4)) * 0.6 + 0.4, 0.0, 1.0) * step(0.0, uSun.y);
+          float L = (0.55 + 0.45 * v.y) * mix(1.0, 0.45, v.z) * (0.6 + 0.6 * face);
+          vec3 side = uCloudCol * mix(0.5, 1.3, L) * mix(1.0, 0.55, rainK) + uSunCol * pow(s, 6.0) * 0.4 * (1.0 - v.z);
+          float cs = v.x * smoothstep(0.0, 0.05, d.y) * (1.0 - c);
+          cc = mix(cc, side, cs / max(c + cs, 0.001)); c += cs;
+        }
         cc = mix(cc, uHor, smoothstep(0.14, 0.0, d.y) * 0.55); // se pierden en la calima del horizonte
         col = mix(col, cc, c * 0.97);
         // cortinas de lluvia bajo los chubascos lejanos: franjas verticales que se mueven con el viento
@@ -209,6 +242,7 @@ const DET = { asfalto: detailTex("asfalto"), hierba: detailTex("hierba"), grava:
 const U = {
   uW: { value: 20 }, uDetail: { value: 0 }, uL: { value: 5000 }, uFlood: { value: 0 }, uLight: { value: 0.2 },
   uCloud: { value: null }, uTexR: { value: 3000 }, uTime: { value: 0 },
+  uDrops: { value: -1 }, // gotas en los coches: 0 secos … 1 empapados (−1: aún sin calcular)
   uYel: { value: new THREE.Vector3(0, 0, 0) }, // zona en amarillo: centro (s), media longitud y cuánto se ve
   uLamps: { value: Array.from({ length: 16 }, () => new THREE.Vector4()) }, uNL: { value: 0 }, // focos que se reflejan en el agua
 };
@@ -449,19 +483,21 @@ const SPRAY_P = 20;
 const SPRAY_MAT = new THREE.ShaderMaterial({
   uniforms: { uTime: U.uTime, uCol: { value: new THREE.Color(0.7, 0.75, 0.8) } },
   transparent: true, depthWrite: false,
-  vertexShader: `attribute vec3 aCar, aDir; attribute vec4 aPar; uniform float uTime; varying vec2 vQ; varying float vA, vSeed;
+  vertexShader: `attribute vec3 aCar, aDir; attribute vec4 aPar; attribute float aSpl; uniform float uTime; varying vec2 vQ; varying float vA, vSeed;
     void main(){
       float seed = aPar.z, k = aPar.y, L = aPar.w;
       float ph = fract(seed * 7.31 + uTime * (0.6 + 0.5 * fract(seed * 3.7)));   // vida del jirón: 0 recién levantado, 1 deshecho
       vec3 side = normalize(cross(vec3(0.0, 1.0, 0.0), aDir));
       float lat = (fract(seed * 13.7) - 0.5) * 2.0;
-      vec3 c = aCar - aDir * (1.7 * k + ph * L) + side * lat * k * (0.7 + ph * 1.7)
-        + vec3(0.0, k * (0.3 + ph * (1.0 + 1.6 * fract(seed * 5.3))), 0.0);
-      float size = k * (1.3 + ph * 4.8) * (0.75 + 0.5 * fract(seed * 9.1));
+      // en un charco (aSpl) el agua sale disparada más alta y más abierta, y cae antes
+      float up = (1.0 + 1.6 * fract(seed * 5.3)) * (1.0 + 1.4 * aSpl) * (1.0 - 0.4 * aSpl * ph * ph);
+      vec3 c = aCar - aDir * (1.7 * k + ph * L * (1.0 - 0.3 * aSpl)) + side * lat * k * (0.7 + ph * 1.7 * (1.0 + 0.6 * aSpl))
+        + vec3(0.0, k * (0.3 + ph * up), 0.0);
+      float size = k * (1.3 + ph * 4.8) * (0.75 + 0.5 * fract(seed * 9.1)) * (1.0 + 0.25 * aSpl);
       vec4 mv = viewMatrix * vec4(c, 1.0); mv.xy += position.xy * size;
       gl_Position = projectionMatrix * mv;
       vQ = position.xy * 2.0; vSeed = seed;
-      vA = aPar.x * smoothstep(0.0, 0.07, ph) * pow(1.0 - ph, 1.3);
+      vA = min(1.0, aPar.x * (1.0 + 0.4 * aSpl)) * smoothstep(0.0, 0.07, ph) * pow(1.0 - ph, 1.3);
     }`,
   fragmentShader: `uniform vec3 uCol; varying vec2 vQ; varying float vA, vSeed;` + GLSL_NOISE + `
     void main(){
@@ -1618,7 +1654,7 @@ function buildWorld() {
   const blobs = inst(BLOB_GEO, BLOB_MAT, NC, 6);
   const sg = new THREE.InstancedBufferGeometry();
   sg.setAttribute("position", new THREE.Float32BufferAttribute([-0.5, -0.5, 0, 0.5, -0.5, 0, 0.5, 0.5, 0, -0.5, 0.5, 0], 3)); sg.setIndex([0, 1, 2, 0, 2, 3]);
-  for (const [name, size] of [["aCar", 3], ["aDir", 3], ["aPar", 4]]) sg.setAttribute(name, new THREE.InstancedBufferAttribute(new Float32Array(NC * SPRAY_P * size), size).setUsage(THREE.DynamicDrawUsage));
+  for (const [name, size] of [["aCar", 3], ["aDir", 3], ["aPar", 4], ["aSpl", 1]]) sg.setAttribute(name, new THREE.InstancedBufferAttribute(new Float32Array(NC * SPRAY_P * size), size).setUsage(THREE.DynamicDrawUsage));
   sg.instanceCount = 0;
   const spray = add(new THREE.Mesh(sg, SPRAY_MAT)); spray.frustumCulled = false; spray.renderOrder = 12;
   // segundo color por coche
@@ -1973,6 +2009,7 @@ function applyQuality() {
     } catch (e) { console.warn("mapa 3D: sin postproceso", e); post = null; q = 1; applyQuality(); return; }
   }
   sun.castShadow = q > 0;
+  skyU.uVol.value = q >= 2 ? 1 : 0;
   const ms = Q_SHADOW[q];
   if (sun.shadow.mapSize.x !== ms) { sun.shadow.mapSize.set(ms, ms); if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; } }
   if (world) {
@@ -2764,6 +2801,10 @@ function draw3d(dt, now) {
   U.uDetail.value = clamp((T.Wov * 0.8 - W) / Math.max(1, T.Wov * 0.8 - W_REAL), 0, 1);
   updateWet(now); updateCloud(now); updateLight(now);
   if (!isPaused()) U.uTime.value = (U.uTime.value + dt * (replay ? REPLAY_SPEED : 1)) % 1000;
+  // gotas en la carrocería: aparecen enseguida con la lluvia y tardan en irse cuando para (al ritmo de la sesión)
+  { const tgt = clamp(rainHere / 1.5, 0, 1), d = U.uDrops;
+    if (d.value < 0) d.value = tgt;
+    else d.value += (tgt - d.value) * (1 - Math.exp(-dt * (isPaused() ? 0 : Math.min(8, curSpeed())) / (tgt > d.value ? 8 : 120))); }
   U.uLight.value = rainHere > 0.3 ? (Math.floor(now / 160) % 2 ? 1 : 0.1) : 0.25;
   const { cars, wheels, blobs, spray, discs } = world;
   // malla fina solo de cerca y con calidad alta; de muy lejos (vista general), la mínima con las ruedas dentro
@@ -2873,13 +2914,19 @@ function draw3d(dt, now) {
     // spray: estela de agua detrás de cada coche sobre asfalto mojado
     const mi = track.msOfPoint[Math.min(T.n - 1, Math.floor(mod(p.s, T.L) / T.ds))], offLine = Math.min(1, Math.abs(p.lat) / 0.3);
     const wet = c.loc === "track" ? sess.water[mi] + (sess.waterOff[mi] - sess.water[mi]) * offLine : 0;
+    // ¿pisa un charco? Con mucha agua se forman en los badenes (donde el coche toca abajo) y a trozos sueltos de
+    // 10 a 20 m a lo largo de la pista: al cruzarlos, la estela salta más alta y más abierta
+    const i3 = Math.min(T.n - 1, Math.floor(mod(p.s, T.L) / T.ds));
+    const pud = wet > 0.04 ? sstep(0.45, 0.85, wetVis(wet)) * Math.max(sstep(0.64, 0.8, vnoise(mod(p.s, T.L) / 22, 3.7)), sstep(0.002, 0.006, T.dip[i3])) : 0;
+    const pudV = DBG.splash ?? pud; // (en las pruebas se puede forzar)
+    p.spl = p.spl === undefined ? pudV : p.spl + (pudV - p.spl) * (1 - Math.exp(-p.simDt / (pudV > p.spl ? 0.08 : 0.35)));
     if (wet > 0.04 && c.v > 18 && q > 0) {
       // cuanta más agua y más velocidad, más densa y más larga
       const str = Math.min(1, wet * 2.2) * clamp((c.v - 18) / 35, 0, 1), L = (6 + c.v * 0.4) * k * (0.6 + 0.4 * Math.min(1, wet * 1.6));
-      const sa = spray.geometry.attributes, ci = world.carIdx.get(c.id);
+      const sa = spray.geometry.attributes, ci = world.carIdx.get(c.id), spl = p.spl * clamp((c.v - 18) / 30, 0, 1);
       for (let j = 0; j < SPRAY_P; j++, ns++) {
         sa.aCar.array.set([p.px, p.py, p.pz], ns * 3); sa.aDir.array.set([fx, fy, fz], ns * 3);
-        sa.aPar.array.set([str, k, ci * 0.173 + (j + 0.5) / SPRAY_P, L], ns * 4);
+        sa.aPar.array.set([str, k, ci * 0.173 + (j + 0.5) / SPRAY_P, L], ns * 4); sa.aSpl.array[ns] = spl;
       }
     }
     i++;
