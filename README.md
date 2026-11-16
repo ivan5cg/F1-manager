@@ -188,8 +188,11 @@ Cada circuito tiene su balance. En Monza ir a rebufo compensa; en Silverstone o 
 
 En la sesión, el botón **3D** del mapa cambia el mapa de siempre por una vista en 3D que ocupa el
 mismo recuadro (se descarga la primera vez que se pulsa y se recuerda para la siguiente sesión).
-El botón de la cámara pasa por *Circuito*, *Seguir* y *Tele*, y el de la esquina amplía el mapa
-sobre la clasificación.
+El botón de la cámara pasa por *Circuito*, *Seguir*, *Tele* y *A bordo*, y el de la esquina amplía el mapa
+sobre la clasificación. Manteniendo pulsado el de la cámara (o con clic derecho) salen todas, con cuatro más:
+*Helicóptero* (alto, detrás y a un lado del coche seguido, con zoom suave y deriva lenta), *Pit-lane* (fija en el
+muro frente a su garaje mientras está en boxes; si no, le sigue de cerca), *Alerón trasero* (a bordo mirando hacia
+atrás) y *Grúa de meta* (de lado y en alto sobre la recta de meta, barriendo al pasar el coche).
 
 La luz es física (three.js, materiales PBR): el sol da la luz directa y las sombras, y el propio
 cielo de cada momento (hora, nubes) se fotografía en un cubo y da la luz ambiente y los reflejos

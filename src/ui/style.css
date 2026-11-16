@@ -909,3 +909,5 @@ html[data-tema] .dcard .cl i { color: #aab0ba; }
 /* avisos discretos (copia de seguridad) */
 .notice { display: flex; align-items: center; gap: 6px; margin: 8px 10px; padding: 8px 10px; background: rgba(242, 194, 48, .1); border: 1px solid rgba(242, 194, 48, .35); border-radius: 4px; }
 .notice button { min-height: 30px; padding: 0 10px; }
+.camgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin: 4px 0 8px; }
+.camgrid button { min-height: 38px; }

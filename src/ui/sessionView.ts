@@ -83,7 +83,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     <div class="main"><div class="bigban" id="bigban" aria-live="polite"></div>
       <div class="leftcol"><div class="tower" id="tower"></div><div class="toast" id="toast" title="Dirección de carrera y meteo"></div></div>
       <div class="side${race ? "" : " timed"}">
-        <div class="mapbox"><canvas id="map" title="Toca un coche para seguirlo. Línea discontinua: zona de modo adelantamiento · naranja: frenada donde se adelanta${race ? " · círculo discontinuo: dónde estaría tu piloto si parase ahora" : ""}"></canvas><canvas id="map3d" hidden aria-label="Mapa 3D"></canvas><div class="lbl3d" id="lbl3d" hidden></div><button class="perf3" id="perf3" hidden title="Rendimiento del mapa 3D. Toca para cambiar la calidad (automática, 0, 1, 2, 3)"></button><div class="flyov" id="flyov"></div><div class="selchip" id="selchip"></div><button class="camb" id="camb" title="Cámara: sigue de cerca a tu piloto (o al coche que sigues)" aria-label="Cámara que sigue"><svg viewBox="0 0 20 16" width="20" height="16" aria-hidden="true"><rect x="1" y="3" width="13" height="10" rx="2" fill="currentColor"/><path d="M14.5 7 19 4.5v7L14.5 9z" fill="currentColor"/></svg><span id="camn"></span></button><button class="repb" id="repb" hidden title="Volver a ver el último percance a cámara lenta" aria-label="Repetición del último percance">↺</button><button class="m3b" id="m3b" title="Cambia entre el mapa 2D y el 3D" aria-label="Mapa en 3D" aria-pressed="false">3D</button><button class="bigb" id="bigb" title="Amplía el mapa sobre la clasificación" aria-label="Ampliar el mapa" aria-pressed="false"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" fill="none" stroke="currentColor" stroke-width="2"/></svg></button></div>
+        <div class="mapbox"><canvas id="map" title="Toca un coche para seguirlo. Línea discontinua: zona de modo adelantamiento · naranja: frenada donde se adelanta${race ? " · círculo discontinuo: dónde estaría tu piloto si parase ahora" : ""}"></canvas><canvas id="map3d" hidden aria-label="Mapa 3D"></canvas><div class="lbl3d" id="lbl3d" hidden></div><button class="perf3" id="perf3" hidden title="Rendimiento del mapa 3D. Toca para cambiar la calidad (automática, 0, 1, 2, 3)"></button><div class="flyov" id="flyov"></div><div class="selchip" id="selchip"></div><button class="camb" id="camb" title="Cámara: sigue de cerca a tu piloto (o al coche que sigues). En 3D, mantenlo pulsado para ver todas las cámaras" aria-label="Cámara que sigue"><svg viewBox="0 0 20 16" width="20" height="16" aria-hidden="true"><rect x="1" y="3" width="13" height="10" rx="2" fill="currentColor"/><path d="M14.5 7 19 4.5v7L14.5 9z" fill="currentColor"/></svg><span id="camn"></span></button><button class="repb" id="repb" hidden title="Volver a ver el último percance a cámara lenta" aria-label="Repetición del último percance">↺</button><button class="m3b" id="m3b" title="Cambia entre el mapa 2D y el 3D" aria-label="Mapa en 3D" aria-pressed="false">3D</button><button class="bigb" id="bigb" title="Amplía el mapa sobre la clasificación" aria-label="Ampliar el mapa" aria-pressed="false"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" fill="none" stroke="currentColor" stroke-width="2"/></svg></button></div>
         ${race ? `<canvas id="gapstrip" class="gapstrip" title="Toda la parrilla en una vuelta: el líder a la izquierda. El círculo discontinuo es dónde saldría tu piloto si parase ahora."></canvas>` : ""}
         <div class="wxbox" id="wx"></div>
         <div id="lapban"></div>
@@ -666,8 +666,26 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     mapOx = cv.width / 2 - camX * mapScale;
     mapOy = cv.height / 2 + camY * mapScale;
   }
+  // en 3D, mantener pulsado el botón de cámara (o clic derecho) abre todas las cámaras, con las de «Más cámaras»
+  let camHold = 0, camHeld = false;
+  const camSheet = () => {
+    if (!view3d || !m3) return;
+    const list = m3.camList() as { id: string; name: string; more: boolean }[], cur = m3.cam();
+    const row = (c: { id: string; name: string }) => `<button data-cam="${c.id}" class="${c.id === cur ? "on" : ""}">${esc(c.name)}</button>`;
+    open(`<div class="row"><span class="tab">Cámaras</span><span class="grow"></span><button data-close>Cerrar</button></div>
+      <div class="camgrid">${list.filter((c) => !c.more).map(row).join("")}</div>
+      <h2>Más cámaras</h2>
+      <div class="camgrid">${list.filter((c) => c.more).map(row).join("")}</div>
+      <div class="small dim">El botón va pasando por las cuatro de arriba; mantenlo pulsado para volver aquí. Pit-lane: frente a su garaje cuando el coche está en boxes (si no, le sigue de cerca).</div>`, (el, close) => {
+      el.querySelectorAll<HTMLButtonElement>("[data-cam]").forEach((b) => (b.onclick = () => { cam3d(m3!.setCamera(b.dataset.cam!)); close(); }));
+    });
+  };
+  $("#camb").addEventListener("pointerdown", () => { camHeld = false; clearTimeout(camHold); camHold = window.setTimeout(() => { camHeld = true; camSheet(); }, 550); });
+  for (const ev of ["pointerup", "pointerleave", "pointercancel"]) $("#camb").addEventListener(ev, () => clearTimeout(camHold));
+  $("#camb").addEventListener("contextmenu", (e) => { e.preventDefault(); clearTimeout(camHold); if (!camHeld) camSheet(); camHeld = true; });
   $("#camb").onclick = (e) => {
     e.stopPropagation();
+    if (camHeld) { camHeld = false; return; } // ya se abrió la hoja al mantener pulsado
     if (view3d && m3) { cam3d(m3.cycleCam()); return; }
     camOn = !camOn;
     $("#camb").classList.toggle("on", camOn);

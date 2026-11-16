@@ -23,8 +23,10 @@ import { toCreasedNormals } from "three/addons/utils/BufferGeometryUtils.js";
 import { rainAt } from "../sim/weather";
 import { BRANDS, FONT, SECOND, collect, skin, carGeometry, wheelGeometry, liveryTexture, makeCarMaterial, makeWheelMaterial } from "./car3d";
 
+// las cuatro del botón (se van rotando) y las de «Más cámaras» (manteniendo pulsado el botón)
 const CAMS = ["circuito", "seguir", "tele", "abordo"];
-const CAM_NAME = { circuito: "Circuito", seguir: "Seguir", tele: "Tele", abordo: "A bordo" };
+const MORE_CAMS = ["heli", "boxes", "trasera", "grua"];
+const CAM_NAME = { circuito: "Circuito", seguir: "Seguir", tele: "Tele", abordo: "A bordo", heli: "Helicóptero", boxes: "Pit-lane", trasera: "Alerón trasero", grua: "Grúa de meta" };
 const COMPOUND = { S: "#e8452c", M: "#f2d23c", H: "#f2f2f2", I: "#3cc35a", W: "#3a7be8" };
 const PIT_OFF = 2.15;
 const mod = (a, n) => ((a % n) + n) % n;
@@ -2240,7 +2242,8 @@ function setCam(m) {
   camMode = m; teleIdx = -1;
   camFrom = { pos: cur.pos.clone(), look: cur.look.clone(), fov: cur.fov }; camT = 0;
 }
-const _tp = mkS(), _tq = mkS();
+const _tp = mkS(), _tq = mkS(), _hv = new THREE.Vector3(), heliPos = new THREE.Vector3();
+let heliOn = false;
 const _up = new THREE.Vector3(0, 1, 0), _sr = new THREE.Vector3(), _su = new THREE.Vector3(), _sc = new THREE.Vector3();
 /** Distancia (m, de cerca) del eje a la torre de la cámara de tele: en los urbanos, en la acera entre la valla y las casas. */
 const tvLat = (i) => (T.street ? (T.SH - 0.08) * W_REAL + T.rO[i] + 2.3 : 1.7 * W_REAL + T.rO[i] + 0.9);
@@ -2257,6 +2260,10 @@ function updateCamera(dt, now) {
   const tgt = camTarget(), p = tgt && pose.get(tgt.id);
   let mode = camMode;
   if (!p && mode !== "circuito") mode = "circuito";
+  // pit-lane: solo con el coche en boxes (entrando, parado o saliendo, o en su garaje); si no, se le sigue de cerca
+  const inPits = p && (p.pf >= 0 || p.gar > 0 || p.lane2 || p.c.loc === "lane_out" || p.c.loc === "lane_in");
+  if (mode === "boxes" && !inPits) mode = "seguir";
+  if (mode !== "heli") heliOn = false;
   let cut = false, onboard = false;
   const fast = Math.sqrt(Math.max(1, opt.speed() / 4));
   if (mode === "circuito") {
@@ -2284,6 +2291,40 @@ function updateCamera(dt, now) {
     want.look.set(_tp.x + _tp.rx * la, _tp.y + 0.6, _tp.z + _tp.rz * la);
     want.fov = 62;
     onboard = true;
+  } else if (mode === "heli") {
+    // helicóptero: alto, detrás y a un lado, que deriva despacio alrededor del coche y se acerca con suavidad
+    const drift = reduced ? 0.6 : 0.6 + 0.35 * Math.sin(now / 9000);
+    const hl = Math.hypot(p.fx, p.fz) || 1, ax = p.fx / hl, az = p.fz / hl, H = 120 + 50 * (0.5 + 0.5 * Math.sin(now / 13000));
+    const back = 110 * Math.cos(drift), side = 110 * Math.sin(drift);
+    _hv.set(p.px - ax * back - az * side, p.py + H, p.pz - az * back + ax * side);
+    if (!heliOn) { heliPos.copy(_hv); heliOn = true; } else heliPos.lerp(_hv, 1 - Math.exp(-dt / 1.6));
+    want.pos.copy(heliPos); want.look.set(p.px + ax * 6, p.py, p.pz + az * 6);
+    want.fov = clamp(2 * Math.atan(22 * fast / want.pos.distanceTo(want.look)) * 180 / Math.PI, 6, 30);
+  } else if (mode === "boxes") {
+    // pit-lane: fija en el muro, frente al garaje de su equipo, mirando al coche
+    const laneLen = T.L - track.pit.entry + track.pit.exit, gs = track.pit.entry + laneLen * (gaV.get(p.c.team.id) ?? 0.5);
+    sample(gs - 14, _tq);
+    const wl = (1.0 + (PIT_OFF - 0.55 - 1.0) * 0.5) * curW * arrAt(T.wr, gs) * T.PS;
+    want.pos.set(_tq.x + _tq.rx * wl, _tq.y + 2.6, _tq.z + _tq.rz * wl);
+    want.look.set(p.px, p.py + 0.7, p.pz);
+    want.fov = clamp(2 * Math.atan(5 / want.pos.distanceTo(want.look)) * 180 / Math.PI, 18, 55);
+  } else if (mode === "trasera") {
+    // alerón trasero: en la deriva, mirando hacia atrás (se ve al que viene detrás)
+    const k = carK(curW);
+    const ux = -p.sz * p.fy, uy = p.sz * p.fx - p.sx * p.fz, uz = p.sx * p.fy;
+    want.pos.set(p.px - p.fx * 1.7 * k + ux * 1.4 * k, p.py + uy * 1.4 * k, p.pz - p.fz * 1.7 * k + uz * 1.4 * k);
+    sample(p.s - 40, _tp);
+    want.look.set(_tp.x + _tp.rx * p.l0, _tp.y + 1.6 * k, _tp.z + _tp.rz * p.l0);
+    want.fov = 58;
+    onboard = true;
+  } else if (mode === "grua") {
+    // grúa de meta: de lado y en alto sobre la recta de meta, al otro lado de los boxes; barre siguiendo al coche
+    const ds = mod(p.s + T.L / 2, T.L) - T.L / 2; // dónde está el coche respecto a la línea (m)
+    sample(clamp(ds, -90, 90) * 0.45, _tq);
+    const out = -T.PS * ((T.SH + 1.4) * curW + 8);
+    want.pos.set(_tq.x + _tq.rx * out, _tq.y + 13, _tq.z + _tq.rz * out);
+    want.look.set(p.px, p.py + 0.8, p.pz);
+    want.fov = clamp(2 * Math.atan(12 * fast / want.pos.distanceTo(want.look)) * 180 / Math.PI, 3, 50);
   } else {
     // cámaras fijas en torres junto a la pista, como la realización de la tele: giran, hacen zoom y se corta de una a otra
     const spacing = 360 * Math.max(1, opt.speed() / 2), nCam = Math.max(3, Math.round(T.L / spacing)), sp = T.L / nCam;
@@ -2326,7 +2367,7 @@ function updateCamera(dt, now) {
     const e = camT * camT * (3 - 2 * camT);
     cur.pos.lerpVectors(camFrom.pos, want.pos, e); cur.look.lerpVectors(camFrom.look, want.look, e); cur.fov = camFrom.fov + (want.fov - camFrom.fov) * e;
     if (camT >= 1) camFrom = null;
-  } else if (mode === "tele" && !cut && !camSnap) {
+  } else if ((mode === "tele" || mode === "grua" || mode === "boxes") && !cut && !camSnap) {
     cur.pos.copy(want.pos); cur.look.lerp(want.look, 1 - Math.exp(-dt / 0.08)); cur.fov += (want.fov - cur.fov) * (1 - Math.exp(-dt / 0.3));
   } else { cur.pos.copy(want.pos); cur.look.copy(want.look); cur.fov = want.fov; }
   camera.position.copy(cur.pos); camera.fov = cur.fov;
@@ -2746,7 +2787,7 @@ function draw3d(dt, now) {
     const el = labels.get(p.c.id);
     if (!el) continue;
     const near = close && fp && Math.min(mod(p.s - fp.s, T.L), mod(fp.s - p.s, T.L)) < 22 * k;
-    if (ok && (p.c.player || p.c.id === opt.selId() || near) && !(camMode === "abordo" && p === fp)) {
+    if (ok && (p.c.player || p.c.id === opt.selId() || near) && !((camMode === "abordo" || camMode === "trasera") && p === fp)) {
       el.hidden = false;
       let ly = y - 19;
       while (placed.some((o) => Math.abs(o.x - x) < 30 && Math.abs(o.y - ly) < 13)) ly -= 14;
@@ -2872,6 +2913,9 @@ return {
   photos: () => photos.slice(),
   resize() { resize(); busyUntil = performance.now() + 400; },
   cycleCam() { busyUntil = performance.now() + 1300; setCam(CAMS[(CAMS.indexOf(camMode) + 1) % CAMS.length]); return CAM_NAME[camMode]; },
+  /** Todas las cámaras ({ id, name, more }: las de «Más cámaras» con more) y poner una concreta (devuelve su nombre). */
+  camList: () => [...CAMS, ...MORE_CAMS].map((id) => ({ id, name: CAM_NAME[id], more: MORE_CAMS.includes(id) })),
+  setCamera(m) { if (CAM_NAME[m]) { busyUntil = performance.now() + 1300; setCam(m); } return CAM_NAME[camMode]; },
   cam: () => camMode,
   /** Coche más cercano al punto tocado (px del recuadro), o null. */
   pick(x, y) {
