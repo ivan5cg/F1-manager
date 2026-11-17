@@ -27,7 +27,8 @@ Tamaño: **P** pequeño (un PR corto), **M** medio, **G** grande (varios PR).
 **Lo que queda, en este orden:** 3.1 (en tandas) → 3.4 (y con ella, el resto de 3.5).
 
 Además, fuera de los bloques 1 a 5, está hecho el **Bloque 6 · Competición** (adelantamientos, salida e IA de carrera y
-clasificación): ver al final.
+clasificación) y pendiente el **Bloque 7 · Motor de simulación** (banco de realismo, neutralizaciones, sanciones,
+daños…): ver al final.
 
 ## Reglas para quien lo haga
 
@@ -366,7 +367,80 @@ de los equipos»).
 8. **Paradas con más juego:** tiempo de reacción del equipo (pedir la parada tarde y no llegar), salida insegura,
    y elegir entre parada rápida con riesgo o segura.
 
+Esta lista está reordenada, con medidas y con lo que falla, en el **Bloque 7**.
+
+## Bloque 7 · Motor de simulación · ⏳ Pendiente (cambia resultados a propósito)
+
+Análisis de noviembre de 2026, leyendo `session.ts`, `strategy.ts` y `tyres.ts` y corriendo 16 carreras en seco:
+`npx tsx scripts/carrera.ts <circuito> 4 1 --detalle` en Mónaco, Monza, Silverstone y Suzuka.
+
+### Lo que se ha medido
+
+| Circuito | Adelantamientos (real) | Pasa en una vuelta con 1–1,5 s de ventaja | Atascado 3+ vueltas tras el mismo | Paradas 1 / 2 / 3 |
+|---|---|---|---|---|
+| Mónaco | 24,5 (8,8) | 3 % | 63 por carrera | 42 / 37 / 5 |
+| Monza | 133 (47) | 40 % | 59 | 77 / 6 |
+| Silverstone | 53,5 (34,5) | 23 % | 49 | 63 / 19 |
+| Suzuka | 92,5 (40,5) | 34 % | 37 | 47 / 38 |
+
+- Que haya más adelantamientos que en la realidad es a propósito (`calibra.ts` apunta a 2,4 veces la media real).
+- **Pocas neutralizaciones:** en 16 carreras, 5 coches de seguridad, 4 virtuales y ninguna bandera roja (en la
+  realidad, coche de seguridad más o menos en una de cada dos). Es lo que más decisiones da al muro.
+- **Mucha dispersión:** en Suzuka una carrera tuvo 164 adelantamientos y otra 62. En la de 164 se pasan de 3 a 9
+  coches por vuelta toda la carrera, sin incidentes, por mezclar estrategias de una y dos paradas.
+- **Trenes:** de 37 a 63 veces por carrera un coche pasa 3 vueltas o más detrás del mismo, y el jugador no tiene
+  nada para hacer frente a eso.
+- Abandonos: unos 1,1 por carrera (18 en 16).
+
+### Lo que falla o está a medias
+
+- **El daño en el fondo no existe:** `c.floor` se lee en `msTime` (agarre) y en `onLeaderLap` (averías), pero nunca
+  se le da valor; siempre es 0.
+- **Los toques no tienen culpable:** en `contact()` el alerón dañado es siempre el del que ataca, y no hay sanciones.
+- **En carrera no hay límites de pista:** solo se anulan vueltas en libres y clasificación (`onMsEnter`).
+- **Banderas azules:** solo cuestan al doblado (de 0,2 a 0,6 s en `overtakeCheck`); el que dobla no pierde nada.
+- **Coche de seguridad:** dura de 3 a 5 vueltas al azar (`deploy`), sea cual sea el accidente o dónde quede el
+  coche. Los doblados no se desdoblan y la relanzada es solo una bandera verde.
+
+### Tareas, por orden
+
+**7.0 Banco de realismo (P) · primero.** Casi todo lo que sigue cambia resultados y `carrera.ts` solo mide
+adelantamientos. Ampliarlo (o un `scripts/realismo.ts`) para que saque por circuito, con márgenes de referencia:
+coches de seguridad, virtuales y banderas rojas por carrera, abandonos, reparto de paradas, cuántas gana el de la pole,
+diferencia del 1.º al 10.º y dispersión de los adelantamientos. Cada PR del bloque enseña el antes y el después.
+
+**7.1 Neutralizaciones creíbles (M).** Junta los puntos 2 y 3 de la lista del Bloque 6 y la calibración:
+- más incidentes, hasta acercarse a un coche de seguridad cada dos carreras;
+- duración según lo grave que sea y dónde quede el coche (escapatoria o en la trazada);
+- doble amarilla en carrera y banderas amarillas por sector en clasificación (vuelta estropeada al que pasa por ahí);
+- doblados que se desdoblan y relanzada que marca el líder.
+
+**7.2 Sanciones con culpable (M), con 7.1 en el mismo PR o justo después** (punto 1 del Bloque 6). En `contact()`
+se decide quién tiene la culpa según quién ataca y lo agresivo que es cada uno. Sanciones de 5 o 10 s por causar un
+toque, por límites de pista en carrera (con bandera blanca y negra antes) y por salir de boxes de forma insegura. Se
+cumplen en la parada o se suman al final: decisión nueva para el muro (cumplirla ahora o aguantar).
+
+**7.3 Daños que se quedan (P/M).** Dar valor a `floor` con bordillos, toques y salidas de pista: el coche pierde
+X s/vuelta y avería más. El ingeniero lo dice por radio y el jugador decide si para (hoy el morro se cambia solo,
+cuando `wing > 0.012`, en `enterPit`).
+
+**7.4 «Defender» y «no pelear» por piloto (P)** (punto 5 del Bloque 6). `passOutlook` ya da la ventaja y la
+probabilidad de pasar: sale barato y responde a los trenes medidos arriba.
+
+**7.5 Averías con aviso (M)** (punto 7). `puHazard` ya existe: faltan síntomas antes de la avería (temperaturas,
+presión) y poder llegar a meta bajando el motor.
+
+**7.6 Paradas con más juego (P/M)** (punto 8): pedir la parada tarde y no llegar, paradas que salen mal al parar los
+dos coches seguidos, y la salida insegura enlazada con 7.2.
+
+**7.7 Pilotos con carácter y vuelta de formación (M)** (puntos 6 y 4). Se notan menos.
+
+Para cada tarea: azar solo con `this.rng`/`fork()`, volver a calibrar si cambian los adelantamientos (`calibra.ts`)
+y decir en el PR que cambia resultados.
+
 ## Orden recomendado (lo que queda)
 
-3.1 (en tandas, cuando haya tiempo: es sobre todo trabajo de datos) → 3.4 (toca casi todo:
+Simulación: 7.0 → 7.1 y 7.2 → 7.3 → 7.4 → el resto del Bloque 7.
+
+Gestión: 3.1 (en tandas, cuando haya tiempo: es sobre todo trabajo de datos) → 3.4 (toca casi todo:
 temporada, mercado, guardado) y, con ella, el resto de 3.5.
