@@ -2,11 +2,8 @@
 // importa para calibrar los adelantamientos: cuántos hay, cuánto tiempo se pasa en tren y, sobre todo, la
 // probabilidad de pasar en una vuelta según la ventaja de ritmo en aire limpio del que persigue.
 //   npx tsx scripts/carrera.ts silverstone [carreras=6] [semilla=1] [--detalle]
-import { readFileSync } from "fs";
-import { buildTrack } from "../src/sim/track";
-import { Weekend, newWeekend } from "../src/sim/weekend";
-import { TeamDef, ResultRow, setPassT, setPassW } from "../src/sim/session";
-import { Rng } from "../src/sim/rng";
+import { setPassT, setPassW } from "../src/sim/session";
+import { benchRace, circuit } from "./banco";
 
 const id = process.argv[2] ?? "silverstone";
 const nRaces = Number(process.argv[3] ?? 6);
@@ -17,9 +14,7 @@ const um = process.argv.find((a) => a.startsWith("--umbral="));
 if (um) setPassT(Number(um.split("=")[1]));
 const pw = process.argv.find((a) => a.startsWith("--w="));
 if (pw) setPassW(Number(pw.split("=")[1]));
-const def = JSON.parse(readFileSync(`data/circuitos/${id}.json`, "utf8"));
-const teams = JSON.parse(readFileSync("data/equipos-2026.json", "utf8")).equipos as TeamDef[];
-const track = buildTrack(def);
+const { def, track } = circuit(id);
 
 const EDGES = [-9, 0, 0.3, 0.6, 1.0, 1.5, 2.2, 99];
 const bucket = (d: number) => { let b = 0; while (b < EDGES.length - 2 && d >= EDGES[b + 1]) b++; return b; };
@@ -30,22 +25,7 @@ const t0 = Date.now();
 
 for (let r = 0; r < nRaces; r++) {
   const seed = seed0 + r;
-  const st = newWeekend(def.ronda, def, teams, seed);
-  for (const d of st.days) d.scenario = "seco";
-  // lo que habrían aprendido en los libres
-  const kr = new Rng(seed * 77 + 5);
-  for (const k of Object.values(st.knowledge)) {
-    for (const c of ["S", "M", "H"] as const) { k.noise[c] = Math.max(0.03, k.noise[c] * 0.45); k.hidden.wearMult[c] = st.hidden.wearMult[c] * kr.logn(k.noise[c]); }
-    k.hidden.thermalOffset = st.hidden.thermalOffset + kr.gauss(0, 1.5);
-  }
-  st.rubber = 0.6;
-  const wk = new Weekend(st, track, teams, "-");
-  // parrilla: por ritmo con algo de azar, como una clasificación
-  const ents = wk.entrants();
-  const q = ents.map((e) => ({ id: e.id, k: -(e.d.ritmo - 85) * 0.0007 - e.team.agarre / 180 - e.team.potencia * 0.0012 + kr.gauss(0, 0.0022) })).sort((a, b) => a.k - b.k);
-  st.results.Q = q.map((x, i) => ({ id: x.id, pos: i + 1, best: 90, time: 0, laps: 0, status: "ok", stops: 0 }) as ResultRow);
-  st.next = wk.sessions().indexOf("RACE");
-  const s = wk.build("RACE");
+  const s = benchRace(id, seed);
   const lapsSeen = new Map<number, number>();
   const watch = new Map<number, { a: number; stopsC: number; stopsA: number; lap: number }>();
   const streak = new Map<number, { a: number; n: number }>();

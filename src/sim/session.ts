@@ -342,6 +342,8 @@ export class Session {
   autoPlayers = false; // carrera simulada hasta el final: la IA decide también por el jugador
   passCount = 0; // adelantamientos completados en pista (sin contar doblados ni los de boxes)
   passLap1 = 0; // de ellos, los de la primera vuelta
+  /** Recuento de lo que ha pasado (solo para medir: scripts/realismo.ts). No cambia nada de la sesión. */
+  stats = { sc: 0, vsc: 0, red: 0, contacts: 0, offs: 0, retire: 0, pens: 0 };
   /** Ventaja (s/vuelta) con la que se adelanta una de cada dos veces en la mejor frenada del circuito. */
   get passT(): number { return passTOverride ?? this.track.def.adelantamientos?.umbral ?? PASS_T0; }
   /** Lo difícil que es adelantar aquí: la ventaja (s/vuelta) que hace falta en la mejor frenada que tenga el circuito. */
@@ -792,6 +794,7 @@ export class Session {
     if (this.chequered || this.flag === "sc" || this.flag === "red") return;
     if (kind === "vsc" && this.flag === "vsc") { this.flagTimer += 40; return; }
     this.flag = kind;
+    this.stats[kind]++;
     if (kind === "vsc") {
       this.flagTimer = this.rng.range(90, 200);
       this.log({ kind: "control", text: `🟡 COCHE DE SEGURIDAD VIRTUAL — ${why}`, pause: true, important: true });
@@ -806,6 +809,7 @@ export class Session {
     if (this.flag === "red" || this.chequered) return;
     if (!isRaceKind(this.kind) && this.remaining() <= 0) return;
     this.flag = "red";
+    this.stats.red++;
     this.redReason = rain ? "rain" : "crash";
     this.redWall = this.wall;
     this.redLap = this.leaderLap + 1;
@@ -927,6 +931,7 @@ export class Session {
 
   private retire(c: Car, reason: string, severity: number) {
     c.loc = "out";
+    this.stats.retire++;
     c.retireReason = reason;
     c.v = 0;
     c.run = undefined;
@@ -1616,6 +1621,7 @@ export class Session {
       if (this.rng.chance(0.15)) { c.wing += this.rng.range(0.008, 0.03); dmg = " y daña el alerón"; }
       // los que más tiempo pierden son los que han trompeado (solo cambia el texto y el dibujo)
       const spin = loss > 3.6;
+      this.stats.offs++;
       c.fx = { k: spin ? "spin" : "off", t: this.t, loss };
       this.log({ kind: "incident", text: spin ? `🌀 ${c.d.abrev} hace un trompo en el sector ${m.sector + 1}${dmg} (−${loss.toFixed(1)} s)` : `↩️ ${c.d.abrev} se sale de pista en el sector ${m.sector + 1}${dmg} (−${loss.toFixed(1)} s)`, carId: c.id, important: c.player });
     } else if (r < crashP + 0.35) {
@@ -1742,6 +1748,7 @@ export class Session {
   }
 
   private contact(c: Car, a: Car) {
+    this.stats.contacts++;
     const r = this.rng.next();
     if (r < 0.4) {
       c.wing += this.rng.range(0.01, 0.035);

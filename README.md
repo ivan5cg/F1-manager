@@ -337,8 +337,16 @@ volumen general, de motores, de ambiente y de radio, y las voces de la radio y d
 npx tsx scripts/finde.ts silverstone 42 --resumen   # fin de semana completo
 npx tsx scripts/carrera.ts silverstone 6             # varias carreras en seco: adelantamientos, trenes y curva de ventaja
 npx tsx scripts/calibra.ts monza --escribe           # calibra el umbral de adelantamiento de un circuito
+npx tsx scripts/realismo.ts --carreras=8             # banco de realismo: coches de seguridad, abandonos, quién gana, sanciones…
 npx tsx scripts/pista.ts spa                         # análisis del circuito
 ```
+
+`realismo.ts` corre clasificación y carrera en todos los circuitos (o los que se le digan) y compara cada cifra con un
+margen de referencia (aproximado, de las temporadas 2022–2025): carreras con coche de seguridad, virtual o bandera roja,
+abandonos, toques, sanciones, cuántas gana el de la pole, margen del ganador, diferencia del 1.º al 10.º, paradas y
+adelantamientos frente al objetivo de cada circuito. Con `--json=a.json` guarda las cifras y con `--antes=a.json` las
+enseña al lado de las nuevas; `--clima` corre con el tiempo de cada semilla en vez de en seco, y `--rapido` se salta la
+clasificación.
 
 ## Fuentes
 
