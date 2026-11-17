@@ -2,14 +2,14 @@
 // Cada equipo tiene un conocimiento IMPERFECTO del desgaste real; lo mejora rodando tandas largas
 // en libres. Con lo que sabe simula stints con el mismo modelo de neumáticos que la carrera y
 // busca la mejor combinación de paradas con los juegos que le quedan.
-import { Rng } from "./rng";
-import { Compound, COMPOUNDS, DRY, HiddenTyre, TyreSet, newSet, updateSet, setGrip, setWear, WET, driverRough } from "./tyres";
+import { Rng, clamp } from "./rng";
+import { Compound, COMPOUNDS, DRY, HiddenTyre, TyreSet, newSet, updateSet, setGrip, setWear, WET, driverRough, steadyGrip } from "./tyres";
 import { msTimeAtGrip } from "./track";
 import { forecast, Forecast } from "./weather";
 import type { Session, Car, TeamDef, Run } from "./session";
 
 export interface Stint { c: Compound; endLap: number; setId?: string }
-export interface Plan { stints: Stint[]; total?: number }
+export interface Plan { stints: Stint[]; total?: number; /** vueltas que se ha retrasado ya la parada por tráfico */ hold?: number }
 
 export interface TeamKnowledge {
   hidden: HiddenTyre; // su estimación de lo oculto
@@ -26,6 +26,8 @@ export interface TeamKnowledge {
 }
 
 const MAX_AGE = 70;
+/** Calentar el juego nuevo en la vuelta de salida (s): los duros tardan más. */
+const WARM_UP: Record<Compound, number> = { S: 0.6, M: 0.9, H: 1.3, I: 0.5, W: 0.4 };
 
 export function buildKnowledge(truth: HiddenTyre, team: TeamDef, rng: Rng): TeamKnowledge {
   const n0 = 0.06 + ((100 - team.estrategia) / 100) * 0.3;
@@ -144,11 +146,11 @@ export function availableSets(car: Car): Record<Compound, TyreSet[]> {
  * Mejor estrategia en seco desde fromLap con el neumático actual (curC, edad curAge).
  * Si curC es null también elige el de salida. Solo usa los juegos que quedan.
  */
-export function planStrategy(sess: Session, car: Car, k: TeamKnowledge, fromLap = 0, curC: Compound | null = null, curAge = 0, rng: Rng | null = null): Plan {
+export function planStrategy(sess: Session, car: Car, k: TeamKnowledge, fromLap = 0, curC: Compound | null = null, curAge = 0, rng: Rng | null = null, keepUsed = false): Plan {
   const n = (k.noise.M + k.noise.S) / 2;
   const temp = 1 + n * 15;
   // solo hacen falta las opciones cercanas a la mejor (con rng se elige entre ellas)
-  const options = enumeratePlans(sess, car, k, fromLap, curC, curAge, rng ? temp * 3 : 0);
+  const options = enumeratePlans(sess, car, k, fromLap, curC, curAge, rng ? temp * 3 : 0, keepUsed);
   const total = sess.laps;
   if (!options.length) return { stints: [{ c: curC ?? "M", endLap: total }] };
   if (rng) {
@@ -162,16 +164,17 @@ export function planStrategy(sess: Session, car: Car, k: TeamKnowledge, fromLap 
 }
 
 /** Todas las estrategias posibles en seco (0, 1 o 2 paradas) con los juegos que quedan, de mejor a peor. */
-function enumeratePlans(sess: Session, car: Car, k: TeamKnowledge, fromLap = 0, curC: Compound | null = null, curAge = 0, margin = Infinity): Plan[] {
+function enumeratePlans(sess: Session, car: Car, k: TeamKnowledge, fromLap = 0, curC: Compound | null = null, curAge = 0, margin = Infinity, keepUsed = false): Plan[] {
   const total = sess.laps;
   // se descartan sobre la marcha las que ya están peor que la mejor + margen (sin crear objetos)
   let bestT = Infinity;
   const keep = (t: number) => { if (t < bestT) bestT = t; return t <= bestT + margin; };
   const remain = total - fromLap;
   // pérdida en boxes + lo que cuesta perder posición en pista (tráfico al volver)
-  const loss = pitLoss(sess) + car.team.boxes + 1.0 + 4;
+  const loss = pitLoss(sess) + car.team.boxes + 1.0 + sess.trafficCost;
   const avail = availableSets(car);
-  const used = curC ? new Set(car.usedCompounds) : new Set<Compound>();
+  // keepUsed: se para ahora, en plena carrera; los compuestos ya usados siguen contando para la regla
+  const used = curC || keepUsed ? new Set(car.usedCompounds) : new Set<Compound>();
   const isRace = sess.kind === "RACE";
   const ruleOk = (cs: Compound[]) => {
     if (!isRace) return true;
@@ -276,7 +279,7 @@ export function planOptions(sess: Session, car: Car, k: TeamKnowledge, n = 3): P
     let t = 0, from = 0;
     plan.stints.forEach((st, i) => {
       t += stintCost(sess, car, kk, st.c, ageFor(kk, st.c, st.setId), st.endLap - from);
-      if (i > 0) t += pitLoss(sess) + car.team.boxes + 1.0 + 4;
+      if (i > 0) t += pitLoss(sess) + car.team.boxes + 1.0 + sess.trafficCost;
       from = st.endLap;
     });
     return t;
@@ -308,31 +311,86 @@ export function pickSet(car: Car, c: Compound, preferNew: boolean): TyreSet | un
   return sets[0];
 }
 
-/** Compuesto que toca según el agua y la previsión. null = el actual vale. */
+/**
+ * Compuesto que toca según el agua y la previsión. null = el actual vale.
+ * El muro hace la cuenta: proyecta el agua de los próximos minutos (la de ahora, la lluvia prevista, lo que drena y lo
+ * que secan los coches) y compara, con cada tipo de neumático, lo que se perdería por vuelta, lo que cuesta la parada
+ * (y la de volver, si la pista va a cambiar otra vez) y el riesgo de ir con el neumático equivocado. Cada equipo lee
+ * el agua con su error, se fía de su meteorólogo y tiene su carácter (unos se adelantan y otros apuran).
+ */
 function weatherCall(sess: Session, car: Car): Compound | null {
   const k = car.e.knowledge;
-  const water = sess.avgWater() * sess.rng.logn(0.15);
   const cur = car.tyres!.c;
-  const rainNow = sess.rainOnTrack();
   const isDry = DRY.includes(cur);
+  const now = sess.avgWater() * sess.rng.logn(0.15);
   const fc = teamForecast(sess, car);
-  const soonDry = fc.prob[2] < 0.3 && fc.prob[3] < 0.25;
-  const soonWet = fc.prob[1] > 0.6 && fc.p50[1] > 2;
-  const left = sess.laps - sess.lapsDone(car);
-  if (isDry) {
-    if (water > k.wetIn && water < WET.si * 2.5 && soonDry && left > 5 && sess.rng.chance(0.6)) return null;
-    if (water > k.wetIn || (soonWet && water > k.wetIn * 0.5)) return water > WET.iw * 1.05 ? "W" : "I";
-    return null;
-  }
-  // intermedio ↔ lluvia alrededor del cruce, con margen para no cambiar por una vuelta
-  if (cur === "I" && water > WET.iw * 1.1) return "W";
-  if (cur === "W" && water < WET.iw * 0.8 && rainNow < 4) return "I";
-  if (cur === "I" && water < k.wetOut && rainNow < 0.4 && fc.prob[2] < 0.5) {
-    const avail = availableSets(car);
-    const pref: Compound[] = left < 18 ? ["S", "M", "H"] : left < 32 ? ["M", "S", "H"] : ["H", "M", "S"];
-    return pref.find((c) => avail[c].length) ?? "M";
-  }
-  return null;
+  const rainNow = sess.rainOnTrack();
+  // en seco y sin nada a la vista no hay nada que pensar
+  if (isDry && now < 0.02 && rainNow < 0.2 && Math.max(fc.prob[1], fc.prob[2]) < 0.35) return null;
+  const done = sess.lapsDone(car) + 1;
+  const left = sess.laps - done;
+  if (left < 1) return null;
+  const lapMin = sess.lapRefRace / 60;
+  const H = Math.round(clamp(left * lapMin * 1.15, 3, 24)); // minutos que se miran
+  // la previsión da el máximo sobre el circuito; se ajusta con lo que cae ahora de media
+  const scale = fc.p50[0] > 0.3 ? clamp(rainNow / fc.p50[0], 0.3, 1) : 0.6;
+  const rainAtMin = (m: number) => {
+    const hz = fc.horizons;
+    let i = 0;
+    while (i < hz.length - 2 && m > hz[i + 1]) i++;
+    const f = clamp((m - hz[i]) / (hz[i + 1] - hz[i]), 0, 1);
+    return (fc.p50[i] + (fc.p50[i + 1] - fc.p50[i]) * f) * scale;
+  };
+  const water = sess.projectWater(now, rainAtMin, H);
+  // carácter del equipo: los que tardan en poner intermedios ven «menos agua»; los que tardan en quitarlos, más
+  const bias = isDry ? Math.pow(WET.si / k.wetIn, 0.5) : Math.pow((WET.si * 0.75) / k.wetOut, 0.5);
+  const tT = sess.weather.trackT;
+  const gRef = steadyGrip("M", 0, tT);
+  const kinds: Compound[] = ["M", "I", "W"];
+  const lapLoss = (c: Compound, w: number) => {
+    const g = steadyGrip(c, w, tT), best = Math.max(...kinds.map((x) => steadyGrip(x, w, tT)));
+    // tiempo que se pierde frente a la pista seca, más el riesgo de irse fuera si el neumático no es el de esa agua
+    return Math.min(45, (1 - g / gRef) * 100 * sess.secPerGrip) + Math.max(0, 0.92 - g / best) * 45;
+  };
+  const kindOf = (c: Compound): Compound => (DRY.includes(c) ? "M" : c);
+  const bestAt = (w: number) => kinds.reduce((b, x) => (steadyGrip(x, w, tT) > steadyGrip(b, w, tT) ? x : b));
+  const stop = (pitLoss(sess) + car.team.boxes + 1) * (sess.flag === "sc" || sess.flag === "sc_in" ? 0.45 : sess.flag === "vsc" ? 0.6 : 1);
+  const beyond = left * lapMin > H + 2; // queda carrera después de lo que se mira
+  const endBest = bestAt(water[water.length - 1] * bias);
+  const total = (c: Compound) => {
+    let t = c === kindOf(cur) ? 0 : stop;
+    for (const w of water) t += lapLoss(c, w * bias) / lapMin;
+    // si al final del tramo ese neumático ya no es el bueno, habrá que parar otra vez
+    if (beyond && endBest !== c && lapLoss(c, water[water.length - 1] * bias) - lapLoss(endBest, water[water.length - 1] * bias) > 1.5) t += pitLoss(sess) + car.team.boxes + 1;
+    return t;
+  };
+  const stay = total(kindOf(cur));
+  let best: Compound = kindOf(cur), bestT = stay;
+  for (const c of kinds) { const t = total(c); if (t < bestT - 1e-6) { bestT = t; best = c; } }
+  if (best === kindOf(cur)) return null;
+  // margen para no cambiar por nada (más si acaba de parar) y algo de duda según el muro
+  const margin = (car.lastPitLap >= done - 3 ? 8 : 3) + Math.abs(sess.rng.gauss(0, (100 - k.strategy) / 12));
+  if (stay - bestT < margin) return null;
+  // parar ahora solo si el otro neumático ya va a ser más rápido en las dos primeras vueltas con él; si la lluvia
+  // (o la pista seca) aún está lejos, se espera: se decide otra vez la vuelta que viene
+  const soon = Math.min(water.length, Math.max(2, Math.ceil(lapMin * 2.2)));
+  let dSoon = 0;
+  for (let m = 1; m < soon; m++) dSoon += lapLoss(kindOf(cur), water[m] * bias) - lapLoss(best, water[m] * bias);
+  if (dSoon <= 0) return null;
+  if (best !== "M") return best;
+  const avail = availableSets(car);
+  const pref: Compound[] = left < 18 ? ["S", "M", "H"] : left < 32 ? ["M", "S", "H"] : ["H", "M", "S"];
+  return pref.find((c) => avail[c].length) ?? "M";
+}
+
+/** Edad equivalente (vueltas) del juego montado según el perfil que cree el equipo. */
+function tyreAge(sess: Session, car: Car, k: TeamKnowledge): number {
+  if (!car.tyres) return 0;
+  const p = stintProfile(sess, car, k, car.tyres.c);
+  const w = setWear(car.tyres);
+  let a = 0;
+  while (a < MAX_AGE - 1 && p.wear[a] < w) a++;
+  return a;
 }
 
 export function ruleSatisfied(car: Car): boolean {
@@ -347,7 +405,6 @@ export function aiDecide(sess: Session, car: Car, adviceOnly = false): string | 
   const done = sess.lapsDone(car) + 1;
   const total = sess.laps;
   const left = total - done;
-  if (!adviceOnly) aiModes(sess, car, left);
   if (left < 1 || car.pitRequest) return null;
   const decideC = (c: Compound) => {
     const set = sess.bestSetFor(car, c) ?? sess.bestSetFor(car, c === "I" ? "W" : c === "W" ? "I" : "M");
@@ -356,7 +413,9 @@ export function aiDecide(sess: Session, car: Car, adviceOnly = false): string | 
     return set.id;
   };
   const wc = weatherCall(sess, car);
+  if (adviceOnly) car.adviceWhy = undefined;
   if (wc && wc !== car.tyres.c) {
+    if (adviceOnly) car.adviceWhy = DRY.includes(wc) ? "la pista ya está para slicks" : wc === "W" ? "hay demasiada agua para lo que llevamos" : "viene agua y los slicks no van a aguantar";
     if (!adviceOnly && DRY.includes(wc)) car.plan = { stints: [...car.plan.stints.slice(0, car.stops + 1), { c: wc, endLap: total }] };
     return decideC(wc);
   }
@@ -391,22 +450,112 @@ export function aiDecide(sess: Session, car: Car, adviceOnly = false): string | 
   const plannedEnd = stint?.endLap ?? total;
   const anyDry = DRY.some((c) => availableSets(car)[c].length > 0);
 
+  // lo listo que es el muro: los buenos ven la jugada casi siempre; los flojos, a veces una vuelta tarde
+  const sharp = clamp(0.5 + (k.strategy - 60) / 70, 0.3, 0.95);
+  const lossGreen = pitLoss(sess) + car.team.boxes + 1.0;
+  const sp = COMPOUNDS[cur];
+  const age = tyreAge(sess, car, k);
+  const prof = stintProfile(sess, car, k, cur);
+  const next = car.plan.stints[car.stops + 1];
+  // lo que se gana por vuelta con el juego nuevo frente al que lleva (ya descontado calentarlo)
+  const freshGain = () => {
+    if (!next) return 0;
+    const pn = stintProfile(sess, car, k, next.c);
+    return prof.dt[Math.min(MAX_AGE - 1, age + 1)] - pn.dt[1] - WARM_UP[next.c];
+  };
+  // ¿aguanta el siguiente juego si se monta ya? (parar antes alarga lo que queda)
+  const nextLasts = () => {
+    if (!next) return false;
+    const pn = stintProfile(sess, car, k, next.c);
+    const n2 = (next.endLap ?? total) - done;
+    return n2 < MAX_AGE && pn.wear[Math.max(0, n2 - 1)] < COMPOUNDS[next.c].cliff + 0.03;
+  };
+  const ord = sess.order();
+  const me = ord.indexOf(car);
+  const rival = (o: Car) => o !== car && o.loc === "track" && sess.lapsDone(o) === sess.lapsDone(car);
+  // tráfico al volver: coches que ahora van por detrás y que quedarían justo delante al salir de boxes
+  const traffic = (loss: number) => {
+    let cost = 0;
+    for (let j = me + 1; j < ord.length; j++) {
+      const o = ord[j];
+      if (o.loc !== "track") continue;
+      const g = sess.gapBetween(car, o);
+      if (g > loss + 0.5) break;
+      // los que aún tienen que parar y van con gomas viejas se quitan solos o se les pasa pronto
+      if (g > loss - 3 && g > 0) cost += 0.6 * sess.passHard * (o.tyres && o.tyres.laps > 12 && o.stops <= car.stops ? 0.5 : 1);
+    }
+    return cost;
+  };
+  const mate = sess.cars.find((o) => o !== car && o.team === car.team && o.loc === "track");
+  // doble parada: si el compañero va justo delante y también entra, hay que esperar a que le acaben
+  const stack = mate && mate.pitRequest && mate.s > car.s ? Math.max(0, car.team.boxes + 2.5 - sess.gapBetween(mate, car)) : 0;
+
   let box = false;
   let why = "";
-  if (wear > 0.9 && left > 2) { box = true; why = "desgaste"; }
-  if (stopsLeft > 0 && done >= plannedEnd) { box = true; why = "plan"; }
-  if ((sess.flag === "sc" || sess.flag === "vsc") && left > 5 && !fresh && anyDry) {
-    if (stopsLeft > 0 && plannedEnd - done <= 14) { box = true; why = "SC"; }
-    else if (needRule) { box = true; why = "SC regla"; }
-    else if (car.tyres.laps > 14 && left > 12 && sess.rng.chance(0.5)) { box = true; why = "SC gratis"; }
+  let say = ""; // la razón, dicha para el jugador
+  if (wear > 0.9 && left > 2) { box = true; why = "desgaste"; say = "los neumáticos no dan más"; }
+  if (stopsLeft > 0 && done >= plannedEnd) {
+    box = true; why = "plan"; say = "es la vuelta prevista";
+    // la ventana está abierta, pero saldría en mitad de un grupo o tendría que esperar al compañero: si las gomas
+    // aguantan, una vuelta más (los muros buenos lo ven; no se alarga más de tres vueltas)
+    const hold = car.plan.hold ?? 0;
+    const tr = traffic(lossGreen);
+    if (!adviceOnly && hold < 3 && wear < sp.cliff - 0.04 && (tr > 2 || stack > 1.5) && sess.flag === "green" && left > 6 && sess.rng.chance(sharp)) {
+      box = false; why = "";
+      car.plan.hold = hold + 1;
+    }
   }
-  const ord = sess.order();
-  const i = ord.indexOf(car);
-  const behind = ord[i + 1];
-  if (behind && behind.lastPitLap === done - 1 && sess.gapBetween(car, behind) < 3 && stopsLeft > 0 && plannedEnd - done <= 6) { box = true; why = "cubrir undercut"; }
-  if (car.followGap < 0.9 && stopsLeft > 0 && plannedEnd - done <= 3 && plannedEnd - done >= 1 && sess.rng.chance(0.3)) { box = true; why = "undercut"; }
-  if (needRule && left <= 6 && !fresh) { box = true; why = "regla"; }
+  // gomas hundidas con carrera por delante: se hace la cuenta de parar ya frente a seguir
+  if (!box && sess.flag === "green" && wear > sp.cliff + 0.02 && left > 4 && !fresh && anyDry) {
+    const stay = enumeratePlans(sess, car, k, done, cur, age, 0)[0];
+    const pit = enumeratePlans(sess, car, k, done, null, 0, 0, true)[0];
+    if (stay && pit && stay.total! - (pit.total! + lossGreen + sess.trafficCost) > 2) { box = true; why = "gomas acabadas"; say = "con estas gomas perdemos más que parando"; }
+  }
+  // neutralización: la parada cuesta la mitad. Se compara parar ahora con seguir con el plan (con lo que cree
+  // saber el equipo de sus neumáticos), contando los puestos que se pierden en pista y la cola en el box
+  if ((sess.flag === "sc" || sess.flag === "vsc") && left > 3 && !fresh && anyDry && !box) {
+    const lossNow = lossGreen * (sess.flag === "sc" ? 0.45 : 0.6) + stack;
+    const stay = enumeratePlans(sess, car, k, done, cur, age, 0)[0];
+    const pit = enumeratePlans(sess, car, k, done, null, 0, 0, true)[0];
+    if (stay && pit) {
+      let behind = 0;
+      for (let j = me + 1; j < ord.length; j++) { const o = ord[j]; if (o.loc === "track" && sess.gapBetween(car, o) < lossNow) behind++; }
+      // más o menos la mitad de los de detrás se quedará fuera; recuperar cada puesto cuesta según el circuito
+      const posCost = 0.5 * behind * 0.7 * sess.passHard;
+      const gain = stay.total! - (pit.total! + lossNow + posCost) + sess.rng.gauss(0, (1 - sharp) * 5);
+      if (gain > 1.5 && sess.rng.chance(0.55 + 0.45 * sharp)) { box = true; why = `${sess.flag === "sc" ? "SC" : "VSC"} (+${gain.toFixed(0)} s)`; say = `con el coche de seguridad${sess.flag === "vsc" ? " virtual" : ""} la parada sale barata`; }
+    }
+    if (!box && needRule && left < 25) { box = true; why = "SC regla"; say = "falta el segundo compuesto y ahora la parada sale barata"; }
+  }
+  if (sess.flag === "green" && stopsLeft > 0 && !box && !fresh) {
+    const early = plannedEnd - done;
+    // defensa: uno que venía pegado ha parado la vuelta pasada. Si aún se le puede salir por delante, se cubre;
+    // si ya ha ganado la posición, mejor alargar y buscarle luego con gomas más nuevas
+    if (early <= 7) {
+      for (const o of sess.cars) {
+        if (!rival(o) || o.stops !== car.stops + 1 || o.lastPitLap < done - 2 || o.s > car.s) continue;
+        const eff = sess.gapBetween(car, o) - lossGreen; // lo que le quedaría de ventaja si para ahora
+        if (eff < -1.5 || eff > 3.5) continue;
+        if (!sess.rng.chance(sharp)) break;
+        if (eff > 0.4 + freshGain()) { box = true; why = "cubrir undercut"; say = `${o.d.abrev} acaba de parar y nos puede pasar en boxes: hay que cubrirle`; }
+        else if (!adviceOnly && wear < sp.cliff - 0.08 && plannedEnd - done < 4 && plannedEnd + 3 < total - 4) {
+          // ya está perdida: tres o cuatro vueltas más para tener gomas mejores que él al final
+          car.plan.stints[car.stops] = { ...car.plan.stints[car.stops], endLap: done + 4 };
+        }
+        break;
+      }
+    }
+    // ataque: atascado detrás de uno al que no se pasa en pista y con la parada cerca: se adelanta en boxes
+    if (!box && early >= 1 && early <= 5 && car.aheadId >= 0 && nextLasts()) {
+      const a = sess.carById(car.aheadId);
+      const g = sess.gapBetween(a, car);
+      const fg = freshGain();
+      if (rival(a) && a.stops === car.stops && !a.pitRequest && g < 1.6 && (car.stuck?.n ?? 0) >= 1 && fg > 0.5 && g < fg * 2.2 + 0.3 && traffic(lossGreen) < 1.6 && stack < 0.5 && sess.rng.chance(0.25 + 0.6 * sharp)) { box = true; why = "undercut"; say = `no pasamos a ${a.d.abrev} en pista: podemos ganarle el puesto en boxes`; }
+    }
+  }
+  if (needRule && left <= 6 && !fresh) { box = true; why = "regla"; say = "falta el segundo compuesto"; }
   if (!box || !anyDry) return null;
+  if (adviceOnly) car.adviceWhy = say;
 
   const fc = teamForecast(sess, car);
   if (Math.max(fc.prob[1], fc.prob[2], fc.prob[3]) > 0.55) {
@@ -423,12 +572,13 @@ export function aiDecide(sess: Session, car: Car, adviceOnly = false): string | 
         car.plan.stints[car.stops] = { ...car.plan.stints[car.stops], endLap: done };
         car.plan.stints[car.stops + 1] = { ...nextPlanned, setId: set.id };
         car.pitRequest = set.id;
+        car.plan.hold = 0;
         car.pitWhy = `${why} v${done} ${cur}${car.tyres.laps}→${car.plan.stints.slice(car.stops + 1).map((x) => x.c + x.endLap).join(" ")}`;
       }
       return set.id;
     }
   }
-  const plan = planStrategy(sess, car, k, done, null, 0, null);
+  const plan = planStrategy(sess, car, k, done, null, 0, null, true);
   let nextC = plan.stints[0].c;
   if (needRule && nextC === cur && plan.stints.length === 1) nextC = DRY.find((c) => c !== cur && availableSets(car)[c].length) ?? nextC;
   const id = plan.stints[0].setId && plan.stints[0].c === nextC ? plan.stints[0].setId : sess.bestSetFor(car, nextC)?.id;
@@ -442,24 +592,79 @@ export function aiDecide(sess: Session, car: Car, adviceOnly = false): string | 
   return id;
 }
 
-/** Modos de ritmo y motor de la IA. */
+/** Desgaste relativo de cada modo de ritmo (el mismo reparto que usa la sesión). */
+const PUSH_WEAR = [0.74, 0.87, 1, 1.12, 1.25];
+
+/**
+ * Modos de ritmo y motor de la IA, una vez por vuelta. Decide como un piloto con su ingeniero:
+ * cuánto puede gastar (para que las gomas lleguen a la parada prevista y el combustible a la meta) y cuánto
+ * le interesa gastar (atacar, defenderse, la vuelta de entrada y las de después de parar, el final de carrera);
+ * y si lleva vueltas pegado a uno al que no pasa, se descuelga un par de vueltas para enfriar las gomas.
+ */
 export function aiModes(sess: Session, car: Car, left: number) {
   if (!car.tyres) return;
   const fuelLaps = car.fuel / sess.fuelLap(car);
   const sp = COMPOUNDS[car.tyres.c];
   const wear = setWear(car.tyres);
   const stint = car.plan.stints[car.stops];
-  const toEnd = (stint?.endLap ?? sess.laps) - sess.lapsDone(car);
-  let push = 2;
-  if (fuelLaps < left + 0.3) push = 1;
-  if (fuelLaps < left - 0.5) push = 0;
-  if (wear > sp.cliff - 0.15 && toEnd > 6 && push > 1) push = 1;
-  if (left <= 4 && wear < sp.cliff - 0.1 && fuelLaps > left + 0.5) push = 3;
+  const done = sess.lapsDone(car) + 1;
+  const toEnd = car.pitRequest ? 0 : Math.max(0, (stint?.endLap ?? sess.laps) - done);
+  const sameLap = (o: Car) => o.loc === "track" && Math.abs(o.s - car.s) < sess.L * 0.5;
+  const ahead = car.aheadId >= 0 ? sess.carById(car.aheadId) : null;
+  const gapA = ahead && sameLap(ahead) ? car.followGap : 99;
+  const gapB = car.chased ?? 99;
+
+  // --- lo que le interesa
+  let want = 2;
+  const cooling = car.coolUntil !== undefined && done <= car.coolUntil;
+  if (gapA < 1.3 && !cooling) want = 3;
+  if (gapB < 1.0) want = Math.max(want, 3);
+  // pelea de boxes: alguien de su zona ha parado hace nada (o acaba de parar él): esas vueltas valen puestos
+  if (car.lastPitLap >= done - 3 && car.stops > 0) want = Math.max(want, 3);
+  else if (sess.flag === "green") {
+    for (const o of sess.cars) {
+      if (o === car || o.loc !== "track" || o.stops !== car.stops + 1 || o.lastPitLap < done - 3) continue;
+      const eff = sess.gapBetween(car, o) - (pitLoss(sess) + car.team.boxes + 1);
+      if (eff > -4 && eff < 5) { want = Math.max(want, 3); break; }
+    }
+  }
+  if (left <= 4) want = Math.max(want, 3);
+  if (car.pitRequest || left <= 1) want = 4; // estas gomas ya no hacen falta
+  // lleva vueltas detrás del mismo sin pasarle y aún queda tanda: a enfriar dos vueltas y volver a por él
+  if (!cooling && (car.stuck?.n ?? 0) >= 4 && toEnd > 6 && gapB > 1.5 && sess.rng.chance(0.5)) { car.coolUntil = done + 2; car.stuck = undefined; want = 1; }
+  if (cooling && gapB > 1.2) want = 1;
+
+  // --- lo que se puede permitir: el ritmo más alto con el que las gomas llegan al final de la tanda
+  let cap = 4;
+  const n = car.tyres.laps - car.stintL0;
+  if (toEnd > 0 && DRY.includes(car.tyres.c)) {
+    const rate = n >= 3 ? ((wear - car.stintW0) / n) / PUSH_WEAR[car.push] : COMPOUNDS[car.tyres.c].wear * 0.9;
+    const limit = sp.cliff - (toEnd > 8 ? 0.03 : 0);
+    while (cap > 0 && wear + rate * PUSH_WEAR[cap] * toEnd > limit) cap--;
+    // a un par de vueltas de parar, lo que quede se puede gastar
+    if (toEnd <= 2 && wear < sp.cliff) cap = Math.max(cap, 3);
+  }
   // la telemetría ve la banda pasada de temperatura o el piloto ya nota ampollas: a cuidar, que son para siempre
   const feel = car.tyreFeel;
-  if (feel && feel.set === car.tyres.id && toEnd > 2 && (feel.risk.some(Boolean) || feel.blister.some((b) => b > 0)) && push > 1) push = 1;
-  if (!car.player || car.autoPush) car.push = push;
-  if (!car.player) car.engine = fuelLaps < left - 0.3 ? 0 : 1;
+  if (feel && feel.set === car.tyres.id && toEnd > 2 && (feel.risk.some(Boolean) || feel.blister.some((b) => b > 0))) cap = Math.min(cap, 1);
+  let push = Math.min(want, cap);
+  // con las gomas justas y nadie cerca no se regala nada; pero defendiendo posición se aguanta el ritmo normal
+  if (cap < 2 && (gapB < 0.8 || gapA < 0.8) && toEnd <= 10) push = Math.max(push, Math.min(2, cap + 1));
+  if (fuelLaps < left + 0.3) push = Math.min(push, 1);
+  if (fuelLaps < left - 0.5) push = 0;
+  if (!car.player || car.autoPush || sess.autoPlayers) car.push = push;
+  if (!car.player || sess.autoPlayers) {
+    // motor: a tope solo en plena pelea y con combustible de sobra (castiga la fiabilidad)
+    const fight = (gapA < 0.7 && !cooling) || gapB < 0.7;
+    car.engine = fuelLaps < left - 0.3 ? 0 : fight && fuelLaps > left + 0.8 && sess.flag === "green" ? 2 : 1;
+  }
+  // órdenes de equipo: si el compañero viene pegado y es claramente más rápido (otra estrategia, gomas mucho más
+  // nuevas), el equipo le abre paso en vez de dejar que se estorben. En tu equipo lo decides tú.
+  if (!car.player && car.stuck && car.stuck.n >= 2 && ahead && ahead.team === car.team && ahead.letPass !== car.id && sess.flag === "green") {
+    const faster = sess.estLap(ahead) - sess.estLap(car);
+    const fresher = (ahead.tyres?.laps ?? 0) - car.tyres.laps;
+    if ((faster > 0.45 || (fresher >= 8 && faster > 0.15)) && sess.rng.chance(0.4 + car.team.estrategia / 250)) ahead.letPass = car.id;
+  }
 }
 
 /** Batería: se decide en cada minisector. */
@@ -468,15 +673,17 @@ export function aiErs(sess: Session, car: Car) {
   const ph = car.run?.phase;
   if (ph === "out" || ph === "cool" || ph === "in") { car.ers = 0; return; }
   if (ph === "push") { car.ers = car.soc > 0.8 ? 2 : 1; return; }
-  const attacking = car.followGap < 0.9 && car.aheadId >= 0;
+  const attacking = car.followGap < 0.9 && car.aheadId >= 0 && !(car.coolUntil !== undefined && sess.lapsDone(car) < car.coolUntil);
+  const defending = (car.chased ?? 99) < 0.8;
   // la batería sube y baja dentro de la vuelta: el modo se decide con la media reciente
   const soc = car.socAvg ?? car.soc;
   if (soc < 0.6) car.ers = 0;
   else if (attacking && soc > 1.2) car.ers = car.followGap < 0.5 ? 3 : 2;
+  // defenderse también gasta: sin batería en la recta, el modo adelantamiento del otro no tiene respuesta
+  else if (defending && soc > 1.0) car.ers = soc > 2 ? 2 : 1;
   else if (soc < 2.2) car.ers = 0;
   else if (soc > 3.6) car.ers = 2;
   else car.ers = 1;
-  void sess;
 }
 
 // ------------------------------------------------------------------ libres
@@ -598,7 +805,9 @@ export function qualiTick(sess: Session, car: Car) {
     const r = sess.rng;
     const deps: number[] = [];
     const lastDep = outLap + lap + r.range(15, 55);
-    if (part.minutes * 60 - lastDep > outLap + lap * 2 + 120) deps.push(part.minutes * 60 - r.range(50, 200));
+    // con la pista mojada o lluvia encima se sale cuanto antes: puede ir a peor y hay que tener un tiempo
+    const hurry = aw > WET.si * 0.6 || sess.rainOnTrack() > 1;
+    if (part.minutes * 60 - lastDep > outLap + lap * 2 + 120) deps.push(part.minutes * 60 - (hurry ? r.range(5, 45) : r.range(50, 200)));
     deps.push(lastDep);
     car.qPlan = { part: sess.part, deps };
   }
@@ -612,22 +821,65 @@ export function qualiTick(sess: Session, car: Car) {
   if (!urgent && R > plan.deps[0]) return;
   if (urgent) plan.deps = [];
   else plan.deps.shift();
-  // en Q1/Q2, si va sobrado, se ahorra la última salida
   const ord = sess.timingOrder().filter((c) => !c.eliminated);
   const pos = ord.indexOf(car);
-  const safe = part.advance !== null && isFinite(car.bestByPart[sess.part] ?? Infinity) && pos < part.advance - 5 && plan.deps.length === 0 && car.pace > 1.006;
+  const water = sess.avgWater();
+  const k = car.e.knowledge;
+  const raining = sess.rainOnTrack();
+  const wetTrack = water > WET.si * 0.6 || raining > 1;
+  const myBest = car.bestByPart[sess.part] ?? Infinity;
+  const lastRun = plan.deps.length === 0;
+  // en Q1/Q2, si va sobrado, se ahorra la última salida (y un juego). Se mide en tiempo, no en puestos: los de atrás
+  // mejorarán con la pista más rápida y el segundo juego, así que hace falta margen sobre el primero que cae.
+  // Con la pista cambiando (mojada o secándose) nadie está a salvo.
+  let margin = Infinity; // lo que le saca al primer eliminado (s); negativo: está fuera
+  if (part.advance !== null && isFinite(myBest)) {
+    const cutT = ord[part.advance]?.bestByPart[sess.part] ?? Infinity;
+    margin = isFinite(cutT) ? cutT - myBest : pos < part.advance ? Infinity : -1;
+  }
+  const need = lap * (0.0055 + 0.004 * (1 - k.strategy / 100));
+  const timed = ord.filter((c) => isFinite(c.bestByPart[sess.part] ?? Infinity)).length;
+  const safe = part.advance !== null && lastRun && !wetTrack && isFinite(myBest) && pos < part.advance - 2 && timed > part.advance + 2 && margin > need;
   if (safe) return;
   if (R < outLap + lap * 0.95) return;
-  const water = sess.avgWater();
-  let c: Compound = water > WET.iw * 1.05 ? "W" : water > WET.si ? "I" : (part.compound ?? "S");
-  let set = pickSet(car, c, true);
-  if (!set && c === "W") { c = "I"; set = pickSet(car, c, true); }
+  // pista secándose: cada equipo se atreve con los slicks a partir de su propio umbral; si aún llueve, nadie
+  const drying = raining < 0.3 && Math.max(fc.prob[1], fc.prob[2]) < 0.4;
+  const slickAt = drying ? clamp(k.wetOut * 1.35, WET.si * 0.8, WET.si * 1.2) : WET.si;
+  let c: Compound = water > WET.iw * 1.05 ? "W" : water > slickAt ? "I" : (part.compound ?? "S");
+  let set = qualiSet(sess, car, c, lastRun, margin < need || !isFinite(myBest));
+  if (!set && c === "W") { c = "I"; set = qualiSet(sess, car, c, lastRun, true); }
   if (!set) return;
   const freshLeft = car.e.sets.filter((s) => s.c === c && s.laps === 0 && !s.returned).length;
   // si no habrá otra salida, dos vueltas lanzadas para tener un margen ante un error o una vuelta anulada
-  const lastChance = plan.deps.length === 0 && R < outLap + lap * 3.2 + 60;
-  const pushLaps = water > WET.si ? 3 : (freshLeft <= 1 && part.advance === null) || lastChance ? 2 : 1;
+  const lastChance = lastRun && R < outLap + lap * 3.2 + 60;
+  // en mojado se rueda seguido: la pista cambia cada vuelta y los neumáticos de agua no piden vuelta de enfriamiento;
+  // si se está secando, hasta la bandera (la última vuelta es la buena)
+  const fit = Math.floor((R - outLap) / lap);
+  const pushLaps = !DRY.includes(c) ? clamp(lastRun || drying ? fit : 4, 2, 7) : water > WET.si * 0.5 ? clamp(fit, 2, 5) : (freshLeft <= 1 && part.advance === null) || lastChance ? 2 : 1;
   sess.startRun(car, { kind: "quali", setId: set.id, pushLaps, fuel: QUALI_FUEL + pushLaps * 2 * sess.fuelPerLap });
+}
+
+/**
+ * Juego para una salida de clasificación. Los nuevos son contados: se guarda uno por cada parte que queda (dos para
+ * la última) y, mientras no haga falta, la primera salida de una parte se hace con un juego usado que aún sirva;
+ * el nuevo se deja para el final, con la pista en su mejor momento. Si el coche está en peligro, el mejor que haya.
+ */
+function qualiSet(sess: Session, car: Car, c: Compound, lastRun: boolean, atRisk: boolean): TyreSet | undefined {
+  const sets = car.e.sets.filter((s) => s.c === c && !s.returned && !s.punctured && s !== car.tyres).sort((a, b) => setWear(a) - setWear(b));
+  if (!sets.length) return undefined;
+  if (!DRY.includes(c)) return sets[0];
+  const fresh = sets.filter((s) => s.laps === 0);
+  const used = sets.filter((s) => s.laps > 0 && setWear(s) < 0.22);
+  if (!fresh.length) return sets[0];
+  const final = sess.parts[sess.part].advance === null;
+  // partes que quedan con este compuesto (en la sprint cada parte obliga a uno)
+  const later = sess.parts.slice(sess.part + 1).filter((p) => !p.compound || p.compound === c);
+  const reserve = later.length + (later.some((p) => p.advance === null) ? 1 : 0);
+  if (final) return lastRun || fresh.length >= 2 || !used.length ? fresh[0] : used[0];
+  if (lastRun) return atRisk || fresh.length > Math.min(reserve, later.length) || !used.length ? fresh[0] : used[0];
+  // primera salida: nuevo si sobran; si no, usado (salvo que el coche no dé para pasar con uno usado)
+  if (fresh.length - 1 >= reserve || !used.length) return fresh[0];
+  return car.pace > 1.004 && !atRisk ? used[0] : fresh[0];
 }
 
 /** Neumáticos de la IA durante una bandera roja en carrera (cambio gratis). */

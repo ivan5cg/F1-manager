@@ -29,7 +29,7 @@
  },
  "adelantamientos": {
   "objetivo": 46.0,
-  "factor": 0.078,
+  "umbral": 2.69,
   "fuente": "media de adelantamientos por carrera desde 2014 (formula1.com)"
  },
  "clima": {
