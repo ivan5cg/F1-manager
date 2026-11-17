@@ -17,7 +17,8 @@ export function pitLoss(sess: Session, c: Car): number {
   let loss = def.boxes.perdida - 1.0 + (c.team.boxes - 2.4) + (c.wing > 0.012 ? 7.5 : 0);
   if (sess.flag === "sc" || sess.flag === "sc_in") loss *= 0.45;
   else if (sess.flag === "vsc") loss *= 0.6;
-  return loss;
+  // la sanción pendiente se cumple parado (si no, se suma al final)
+  return loss + (c.penS ?? 0);
 }
 
 /** Ritmo reciente: mediana de las últimas vueltas limpias (sin la de boxes ni las lentas). */

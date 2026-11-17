@@ -88,6 +88,18 @@ export function createLobato(sess: Session, gp: string) {
           ? pick([`¡¡${nm(w).toUpperCase()} GANA!! ¡¡GANA EN ${gp.replace(/^Gran Premio de /i, "").toUpperCase()}!! ¡No me lo puedo creer, señores!`, `¡Victoria de ${nm(w)}! ¡Qué carrera! ¡Esto es historia!`])
           : pick([`¡Bandera a cuadros! ¡${sur(w)} gana el ${gp}!`, `¡${sur(w)} cruza la meta y se lleva la victoria! Qué carrera nos ha dado ${gp.replace(/^Gran Premio de /i, "")}.`, `Victoria para ${sur(w)} con el ${w.team.nombre}. Impecable.`]), true);
       }
+      if ((m = t.match(/(\d+) s de sanción para (\w+): (.*)/))) {
+        const c = byAbrev(m[2]);
+        if (c) return say(/toque/.test(m[3])
+          ? pick([`¡Sanción para ${sur(c)}! ${m[1]} segundos por el toque. Los comisarios no perdonan.`, `${m[1]} segundos a ${sur(c)}. Lo han visto culpable, y con razón.`])
+          : /límites/.test(m[3]) ? pick([`¡${m[1]} segundos a ${sur(c)} por los límites de pista! Ya se lo habían avisado con la blanca y negra.`, `Sanción para ${sur(c)}: los límites de pista. Se veía venir.`])
+          : `Sanción para ${sur(c)}: ${m[1]} segundos. Eso le cuesta caro.`, true);
+      }
+      if (/sin sanción, incidente de carrera/.test(t)) return say(pick(["Incidente de carrera, dicen los comisarios. Para mí también, sinceramente.", "Sin sanción. Son cosas de las carreras."]));
+      if ((m = t.match(/Bandera blanca y negra para (\w+)/))) { const c = byAbrev(m[1]); if (c) return say(`Bandera blanca y negra para ${sur(c)}. Una más y le cae sanción.`); }
+      if (/Los doblados pueden desdoblarse/.test(t)) return say("Los doblados pueden desdoblarse. Eso quiere decir que el coche de seguridad está a punto de irse.");
+      if (/El líder acelera: relanzada/.test(t)) return say(pick(["¡Acelera el líder! ¡Relanzada! ¡Agárrense!", "¡Y ahí va! ¡Ha elegido el momento! ¡Relanzada!"]), true);
+      if (/salida parada/.test(t)) return say("Se reanuda con salida parada desde la parrilla. ¡Otra salida! Esto es como empezar de cero.", true);
       if (/Bandera amarilla/.test(t)) return say(pick(["Bandera amarilla. Algo ha pasado ahí, cuidado.", "Amarilla en ese sector. A levantar, que no se juegan la sanción."]));
       if ((m = t.match(/(\w+) descalificado/))) { const c = byAbrev(m[1]); return say(`¡Descalificado ${c ? sur(c) : m[1]}! Error de libro: no ha usado los dos compuestos.`, true); }
       if (/Vuelta anulada/.test(t) && (m = t.match(/a (\w+):/))) { const c = byAbrev(m[1]); if (c) return say(pick([`Le borran la vuelta a ${sur(c)}. Los límites de pista, ¡siempre los límites de pista!`, `¡Ay! Vuelta anulada a ${sur(c)}. Se ha pasado de la línea blanca.`])); }

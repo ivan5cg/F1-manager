@@ -172,6 +172,13 @@ vuelta el líder agrupa a todos y acelera donde quiere antes de la meta; los dem
 otro. Tras una bandera roja por accidente se reanuda con **salida parada**, en el orden de carrera y con semáforos, y
 la vuelta de formación cuenta como vuelta de carrera. Con lluvia se sigue reanudando detrás del coche de seguridad.
 
+**Sanciones.** Los comisarios investigan cada toque y deciden en un par de vueltas: en la salida casi siempre es un
+incidente de carrera; si no, la culpa suele ser del que ataca (más si es agresivo y el otro no), y son 5 s, o 10 s si
+acabó en pinchazo o accidente. Los **límites de pista** también cuentan en carrera: a la tercera, bandera blanca y
+negra; a la cuarta, 5 s, y otros 5 cada tres más. Pasarse de velocidad en el pit-lane, 5 s. La sanción se cumple
+parado en la próxima parada (el Muro ya la cuenta en «Si para ahora») o, si no se para más, se suma al tiempo final.
+En la torre sale en rojo (+5s) hasta que se cumple. Con las banderas azules, el que dobla también pierde algo al pasar.
+
 **Salida.** Cada piloto reacciona y tracciona distinto (su nota de salida, con azar), el blando arranca mejor que el medio y el duro, y de vez en cuando alguien se queda clavado. Hasta la primera frenada hay sitio a los lados: los puestos se ganan o se pierden por pura arrancada. En la primera vuelta se pasa en casi cualquier curva, pero la diferencia de agarre cuenta la mitad (van en grupo).
 
 **Adelantamientos.** En cada frenada se compara la **ventaja del que ataca, en segundos por vuelta**, con un umbral:

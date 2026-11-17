@@ -67,6 +67,8 @@ const ENGINE_FAIL = [0.6, 1, 2.2];
 const FAIL_LAPS = 1700;
 /** De los errores en curva, cuántos acaban contra las barreras (en seco). */
 const CRASH_P = 0.08;
+/** Probabilidad de pisar fuera de los límites en cada curva rápida de carrera (al ritmo normal). */
+const TL_P = 0.0011;
 type IncidentKind = "crash" | "failure" | "debris";
 const ERS_POWER = [-3.5, 0, 2.0, 4.5];
 const ERS_NET = [1.1, 0, -0.9, -2.4];
@@ -252,6 +254,12 @@ export interface Car {
   unlap?: boolean;
   /** Relanzada: cuándo (s de sesión) puede acelerar, al ver acelerar a los de delante. */
   scGoT?: number;
+  /** Sanción de tiempo pendiente (s): se cumple parado en la próxima parada o se suma al tiempo final. */
+  penS?: number;
+  /** Segundos de sanción sumados al tiempo final. */
+  penAdded?: number;
+  /** Veces que se ha salido de los límites de pista en carrera. */
+  tlStrikes?: number;
 }
 
 export type FlagState = "green" | "vsc" | "sc" | "sc_in" | "red";
@@ -298,6 +306,7 @@ export interface ResultRow {
   stops: number;
   part?: string; // clasificación: en qué parte quedó
   grid?: number; // carreras: posición de salida
+  pen?: number; // carreras: segundos de sanción sumados al tiempo final
 }
 
 export class Session {
@@ -321,6 +330,8 @@ export class Session {
   unlapWait = 0;
   /** Relanzada: a cuántos metros de la meta acelera el líder y cuándo lo ha hecho (s de sesión). */
   scGo: { at: number; t: number | null } | null = null;
+  /** Toques que investigan los comisarios: cuándo deciden, quién atacaba, a quién, lo grave que fue y si era la salida. */
+  probes: { at: number; c: number; a: number; sev: number; lap1: boolean }[] = [];
   /** Banderas amarillas por zona: minisector, hasta cuándo (s de sesión) y si es doble. */
   yellows: { ms: number; until: number; double: boolean }[] = [];
   /** Salida parada tras una bandera roja: la parrilla espera los semáforos, y cuándo se apagaron (s de sesión). */
@@ -842,6 +853,53 @@ export class Session {
     }
   }
 
+  /** Sanción de tiempo: se cumple en la próxima parada o se suma al final. */
+  penalize(c: Car, secs: number, why: string) {
+    if (c.loc === "out" || c.loc === "fin") return;
+    c.penS = (c.penS ?? 0) + secs;
+    this.stats.pens++;
+    this.log({ kind: "control", carId: c.id, text: `⚖️ ${secs} s de sanción para ${c.d.abrev}: ${why}`, important: c.player, pause: c.player });
+  }
+
+  /** Llega a meta: lo que no ha cumplido en una parada se suma al tiempo. */
+  private finishCar(c: Car, t: number) {
+    c.loc = "fin";
+    c.finishT = t;
+    if (c.penS) {
+      c.finishT += c.penS;
+      c.penAdded = c.penS;
+      this.log({ kind: "control", carId: c.id, text: `⚖️ A ${c.d.abrev} se le suman ${c.penS} s de sanción al tiempo final`, important: c.player });
+      c.penS = 0;
+    }
+  }
+
+  /** Límites de pista: a la tercera, bandera blanca y negra; a la cuarta, 5 s; y otros 5 cada tres más. */
+  private trackLimits(c: Car, m: Minisector) {
+    const n = (c.tlStrikes = (c.tlStrikes ?? 0) + 1);
+    if (n === 3) this.log({ kind: "control", carId: c.id, text: `🏁 Bandera blanca y negra para ${c.d.abrev}: límites de pista`, important: c.player });
+    else if (n >= 4 && (n - 4) % 3 === 0) this.penalize(c, 5, `límites de pista (${n} veces)`);
+    else if (c.player && n < 3) this.log({ kind: "radio", carId: c.id, text: `📻 Ingeniero: ${c.d.abrev}, se ha pasado de los límites de pista en el sector ${m.sector + 1} (${n} de 3 antes de la bandera).` });
+  }
+
+  /**
+   * Los comisarios deciden sobre los toques: la culpa suele ser del que ataca, más si es agresivo y el otro no; en la
+   * salida, con todos en grupo, casi siempre es un incidente de carrera. 5 s, o 10 s si acabó en pinchazo o accidente.
+   */
+  private stewards() {
+    for (const p of this.probes.filter((x) => x.at <= this.t)) {
+      const c = this.carById(p.c), a = this.carById(p.a);
+      if (this.rng.chance(p.lap1 ? 0.6 : 0.35)) {
+        this.log({ kind: "control", carId: c.id, text: `⚖️ Toque entre ${c.d.abrev} y ${a.d.abrev}: sin sanción, incidente de carrera`, important: c.player || a.player });
+        continue;
+      }
+      const blameC = clamp(0.62 + (c.d.agresividad - a.d.agresividad) / 120, 0.3, 0.9);
+      const who = this.rng.chance(blameC) ? c : a, other = who === c ? a : c;
+      if (who.loc === "out" || who.loc === "fin") continue;
+      this.penalize(who, p.sev >= 0.6 ? 10 : 5, `provocar un toque con ${other.d.abrev}`);
+    }
+    this.probes = this.probes.filter((x) => x.at > this.t);
+  }
+
   /** Doblados por el líder que siguen en pista (no en boxes). */
   lappedCars(): Car[] {
     const lead = this.leaderId >= 0 ? this.carById(this.leaderId) : null;
@@ -1305,7 +1363,10 @@ export class Session {
       }
     }
     if (pushing) this.errorCheck(c, m);
-    if (isRaceKind(this.kind)) this.overtakeCheck(c, m);
+    if (isRaceKind(this.kind)) {
+      this.overtakeCheck(c, m);
+      if (c.loc === "track" && m.cornerSens > 0.5 && this.rng.chance(TL_P * PUSH_ERR[c.push] * (1 + (85 - c.d.regularidad) / 40))) this.trackLimits(c, m);
+    }
     // límites de pista en vuelta lanzada
     if (c.run?.phase === "push" && c.lapValid && m.cornerSens > 0.5 && this.rng.chance(0.001 * PUSH_ERR[c.push])) {
       c.lapValid = false;
@@ -1337,8 +1398,7 @@ export class Session {
       this.onLeaderLap(lap);
     }
     if (this.chequered && lap >= 1) {
-      c.loc = "fin";
-      c.finishT = c.cross[k];
+      this.finishCar(c, c.cross[k]);
       if (c.player) this.log({ kind: "info", text: `🏁 ${c.d.abrev} termina P${this.order().indexOf(c) + 1}`, carId: c.id, important: true });
       return;
     }
@@ -1347,6 +1407,7 @@ export class Session {
 
   private onLeaderLap(lap: number) {
     if (this.flag === "green") this.greenLeaderLaps++;
+    if (this.probes.length) this.stewards();
     this.lapOrder[lap] = this.order().filter((c) => c.loc !== "out").map((c) => c.id);
     // reglamento: 2 h de carrera (sin contar las suspensiones) y 3 h en total; al cumplirse, bandera
     // a cuadros al final de la vuelta en la que se agota el tiempo
@@ -1808,7 +1869,8 @@ export class Session {
     const lapped = this.lapsDone(c) > this.lapsDone(a) || c.s - a.s > this.L * 0.5;
     if (a.s - c.s > this.L * 0.5) return;
     if (lapped) {
-      if (this.rng.chance(0.55)) this.grantPass(c, a, this.rng.range(0.2, 0.6));
+      // banderas azules: el doblado se aparta (y pierde tiempo) y el que dobla también levanta algo al pasarle
+      if (this.rng.chance(0.55)) { this.grantPass(c, a, this.rng.range(0.2, 0.6)); c.delay += this.rng.range(0.05, 0.25); }
       return;
     }
     if (a.team === c.team && a.letPass === c.id) {
@@ -1912,6 +1974,9 @@ export class Session {
   private contact(c: Car, a: Car) {
     this.stats.contacts++;
     const r = this.rng.next();
+    // los comisarios lo miran y deciden en un par de vueltas (lo grave que fue: alerón, pinchazo, se van largos, accidente)
+    this.probes.push({ at: this.t + this.rng.range(60, 200), c: c.id, a: a.id, sev: r < 0.4 ? 0.3 : r < 0.62 ? 0.6 : r < 0.93 ? 0.3 : 0.9, lap1: this.lapsDone(c) === 0 });
+    this.log({ kind: "control", carId: c.id, text: `🔍 Los comisarios investigan el toque entre ${c.d.abrev} y ${a.d.abrev}`, important: c.player || a.player });
     if (r < 0.4) {
       c.wing += this.rng.range(0.01, 0.035);
       c.delay += this.rng.range(0.5, 2);
@@ -2023,12 +2088,20 @@ export class Session {
     if (this.rng.chance(0.05)) stationary += this.rng.range(1.5, 7);
     const noseChange = c.wing > 0.012;
     if (noseChange) stationary += 7.5;
+    // la sanción de tiempo se cumple parado, antes de que toquen el coche
+    const pen = c.penS ?? 0;
+    if (pen > 0) {
+      stationary += pen;
+      c.penS = 0;
+      this.log({ kind: "pit", carId: c.id, text: `⚖️ ${c.d.abrev} cumple ${pen} s de sanción en la parada`, important: c.player });
+    }
     const mate = this.cars.find((o) => o !== c && o.team === c.team && o.loc === "pit");
     const setId = c.pitRequest!;
     c.pit = { noseChange, t: 0, total: tr.pit.laneLength / tr.pit.limit + stationary, entryS: entryAbs, dist: exitAbs - entryAbs, stationary, setId, changed: false };
     if (mate && mate.pit) c.pit.total += Math.max(0, mate.pit.total - mate.pit.t - tr.pit.laneLength / tr.pit.limit / 2) + 0.5;
     c.loc = "pit";
     c.s = entryAbs;
+    if (this.rng.chance(0.004)) this.penalize(c, 5, "exceso de velocidad en el pit-lane");
     const set = c.e.sets.find((s) => s.id === setId)!;
     if (typeof process !== "undefined" && process.env?.DEPURAR) console.log("   PIT", c.d.abrev, c.pitWhy ?? "?");
     c.pitWhy = undefined;
@@ -2074,7 +2147,7 @@ export class Session {
         c.lapStart = c.cross[k];
         const lap = k / this.N;
         if (lap > this.leaderLap) { this.leaderLap = lap; this.onLeaderLap(lap); }
-        if (this.chequered) { c.loc = "fin"; c.finishT = this.t; return; }
+        if (this.chequered) { this.finishCar(c, this.t); return; }
       }
     }
     c.msK = Math.max(c.msK, newK);
@@ -2163,6 +2236,7 @@ export class Session {
       stops: c.stops,
       part: this.parts.length ? this.parts[c.eliminated ? c.elimPart! : this.part]?.name : undefined,
       grid: isRaceKind(this.kind) && this.lapOrder[0]?.includes(c.id) ? this.lapOrder[0].indexOf(c.id) + 1 : undefined,
+      pen: c.penAdded || undefined,
     }));
   }
 }

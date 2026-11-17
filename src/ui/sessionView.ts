@@ -1102,6 +1102,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       for (let j = 0; j < 3; j++) if (!isNaN(c.secCur[j])) k = tcls(c.secCur[j], c.secBest[j], sess.secBest[j]);
       return `<span class="flag vl ${c.lapValid ? k : "bad"}" title="En vuelta lanzada: tócalo para ver su vuelta en el mapa">▶</span>`;
     }
+    if (race && c.penS) return `<span class="flag pen" title="Sanción pendiente: se cumple en la próxima parada o se suma al final">+${c.penS}s</span>`;
     if (c.drs) return `<span class="flag mo">MO</span>`;
     return "";
   }
@@ -1613,7 +1614,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       const cell = (k: string, v: string, wide = false) => `<div class="${wide ? "w2" : ""}"><i>${k}</i><b class="mono">${v}</b></div>`;
       const sp = t ? COMPOUNDS[t.c] : null;
       return `<div class="pcard">
-        <div class="pc-h"><span class="teamdot" style="background:${c.team.color}"></span><b class="nm">${esc(shortName(c.d.nombre))}</b>${t ? `${tyreHtml(t.c)}<span class="dim">${t.laps} v · ${sp!.opt - sp!.window}–${sp!.opt + sp!.window}°</span>` : `<span class="dim">en el garaje</span>`}${c.wing > 0 ? `<span class="yellow">alerón</span>` : ""}${race ? `<button data-let="${idx}" title="Dejar pasar al compañero">Dejar pasar</button>` : ""}</div>
+        <div class="pc-h"><span class="teamdot" style="background:${c.team.color}"></span><b class="nm">${esc(shortName(c.d.nombre))}</b>${t ? `${tyreHtml(t.c)}<span class="dim">${t.laps} v · ${sp!.opt - sp!.window}–${sp!.opt + sp!.window}°</span>` : `<span class="dim">en el garaje</span>`}${c.wing > 0 ? `<span class="yellow">alerón</span>` : ""}${race && c.penS ? `<span class="redt" title="Se cumple en la próxima parada o se suma al final">+${c.penS} s</span>` : ""}${race && (c.tlStrikes ?? 0) >= 3 ? `<span class="dim" title="Bandera blanca y negra: límites de pista">🏁 ${c.tlStrikes}</span>` : ""}${race ? `<button data-let="${idx}" title="Dejar pasar al compañero">Dejar pasar</button>` : ""}</div>
         ${t ? `<div class="pc-t">${axle("Del.", t.F, 0)}${axle("Tras.", t.R, 1)}</div>` : ""}
         <div class="pc-s">${cell("Última", fmtLap(c.lapTimes[c.lapTimes.length - 1]))}${cell("Mejor", fmtLap(c.best))}${t ? cell("Posible", fmtLap(sess.estLap(c))) : ""}${cell("Combust.", `${c.fuel.toFixed(1)} kg${race ? ` <small>${fuelDelta >= 0 ? "+" : ""}${fuelDelta.toFixed(1)} v</small>` : ""}`)}${cell("Batería", `${Math.round((c.soc / SOC_MAX) * 100)} %`)}${c.e.pu ? cell("Motor", `${Math.round(puLife(c.e.pu.km0 + c.puKm) * 100)} % vida`) : ""}${race ? cell("Plan", plan || "—", !c.e.pu) : ""}</div>
         ${race ? `<div class="pc-c">${seg("push", "Ritmo", PUSH_NAMES, c.push)}${seg("engine", "Motor", ENGINE_NAMES, c.engine)}${seg("ers", "Batería", ERS_SHORT, c.ers, c.autoErs)}</div>` : ""}
