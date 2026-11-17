@@ -707,7 +707,7 @@ export function resultsTable(kind: SessionKind, rows: ResultRow[], playerTeam: s
     ${rows.map((r, i) => {
       const d = DRIVERS[r.id];
       const t = race
-        ? r.status === "out" || r.status === "dns" || r.status === "dsq" ? `<span class="redt">${esc(r.reason ?? "abandono")}</span>` : i === 0 ? fmtRace(r.time) : r.laps < lead.laps ? `+${lead.laps - r.laps} v` : `+${(r.time - lead.time).toFixed(3)}`
+        ? r.status === "out" || r.status === "dns" || r.status === "dsq" ? `<span class="redt">${esc(r.reason ?? "abandono")}</span>` : (i === 0 ? fmtRace(r.time) : r.laps < lead.laps ? `+${lead.laps - r.laps} v` : `+${(r.time - lead.time).toFixed(3)}`) + (r.pen ? ` <span class="redt small" title="Sanción sumada al tiempo">(+${r.pen} s)</span>` : "")
         : `${fmtLap(r.best)} <span class="dim small">${r.part ?? ""}</span>`;
       const p = race && r.status === "fin" ? pts[i] ?? "" : "";
       return `<tr class="${d.team.id === playerTeam ? "me" : ""}"><td><span class="pos">${i + 1}</span></td><td class="nm"><span class="teamdot" style="background:${d.team.color}"></span>${esc(d.d.nombre)}${r.best === bestLap && isFinite(bestLap) && race ? ' <span class="purple">⏱</span>' : ""}</td><td class="mono">${t}</td>${race ? `${hasGrid ? `<td class="mono small">${gainHtml(r, i + 1)}</td>` : ""}<td class="mono">${r.stops}</td><td class="mono"><b>${p}</b></td>` : `<td class="mono">${r.laps}</td>`}</tr>`;
