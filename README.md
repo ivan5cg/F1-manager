@@ -157,6 +157,21 @@ Apartar agua frena también en recta: con pista empapada se pierde velocidad pun
 
 **Carrera** (`src/sim/session.ts`). Modo adelantamiento, tapones, banderas azules, toques, errores, pinchazos, averías, coche de seguridad y VSC.
 
+**Neutralizaciones.** Dirección de carrera mira qué ha pasado y dónde:
+- un **accidente** deja restos y barreras dañadas: coche de seguridad casi siempre, y si es fuerte puede haber bandera roja;
+- una **avería** a veces deja llegar al garaje (sin neutralizar); si el coche se queda en la pista, lo normal es un virtual;
+- los **restos** de un alerón tras un toque, a veces un virtual;
+- en un **urbano** (Mónaco, Singapur) no hay escapatorias: cualquier coche parado trae coche de seguridad más a menudo.
+
+Lo que no merece neutralizar se queda en **bandera amarilla** (doble si hay un coche parado) en esa zona: se levanta al
+pasar y no se adelanta. En libres y clasificación, quien pasa por una amarilla en vuelta lanzada pierde unas décimas
+(doble: la vuelta estropeada), y un trompo o una salida de pista dejan su amarilla un rato. El coche de seguridad dura
+según lo que haya que limpiar (de 2 a 6 vueltas; el virtual, de 1 a 4 minutos). Antes de retirarse, los doblados
+pueden desdoblarse: adelantan al grupo, dan la vuelta y se ponen a la cola, y se les espera una vuelta. En la última
+vuelta el líder agrupa a todos y acelera donde quiere antes de la meta; los demás arrancan al verle, uno detrás de
+otro. Tras una bandera roja por accidente se reanuda con **salida parada**, en el orden de carrera y con semáforos, y
+la vuelta de formación cuenta como vuelta de carrera. Con lluvia se sigue reanudando detrás del coche de seguridad.
+
 **Salida.** Cada piloto reacciona y tracciona distinto (su nota de salida, con azar), el blando arranca mejor que el medio y el duro, y de vez en cuando alguien se queda clavado. Hasta la primera frenada hay sitio a los lados: los puestos se ganan o se pierden por pura arrancada. En la primera vuelta se pasa en casi cualquier curva, pero la diferencia de agarre cuenta la mitad (van en grupo).
 
 **Adelantamientos.** En cada frenada se compara la **ventaja del que ataca, en segundos por vuelta**, con un umbral:

@@ -63,6 +63,11 @@ const SPRINT_HALF = [4, 3.5, 3, 2.5, 2, 1.5, 1, 0.5];
 /** Fracción del agua de la trazada que aparta cada coche al pasar (a ritmo de carrera). */
 const CAR_DRY = 0.0035;
 const ENGINE_FAIL = [0.6, 1, 2.2];
+/** Vueltas de coche entre averías (equipo con fiabilidad 1, motor normal). */
+const FAIL_LAPS = 1700;
+/** De los errores en curva, cuántos acaban contra las barreras (en seco). */
+const CRASH_P = 0.08;
+type IncidentKind = "crash" | "failure" | "debris";
 const ERS_POWER = [-3.5, 0, 2.0, 4.5];
 const ERS_NET = [1.1, 0, -0.9, -2.4];
 export const SOC_MAX = 4;
@@ -243,6 +248,10 @@ export interface Car {
   pitOutT?: number;
   /** La IA se ha descolgado a propósito para enfriar neumáticos: hasta qué vuelta. */
   coolUntil?: number;
+  /** Coche de seguridad: doblado que tiene permiso para desdoblarse (adelanta al grupo y da la vuelta hasta la cola). */
+  unlap?: boolean;
+  /** Relanzada: cuándo (s de sesión) puede acelerar, al ver acelerar a los de delante. */
+  scGoT?: number;
 }
 
 export type FlagState = "green" | "vsc" | "sc" | "sc_in" | "red";
@@ -307,6 +316,16 @@ export class Session {
   flagTimer = 0;
   scLapsLeft = 0;
   scWet = false; // coche de seguridad por agua: no se retira hasta que se pueda correr
+  /** Ya se ha dado la orden de desdoblarse en este coche de seguridad (y cuántas vueltas de más se les ha esperado). */
+  unlapCalled = false;
+  unlapWait = 0;
+  /** Relanzada: a cuántos metros de la meta acelera el líder y cuándo lo ha hecho (s de sesión). */
+  scGo: { at: number; t: number | null } | null = null;
+  /** Banderas amarillas por zona: minisector, hasta cuándo (s de sesión) y si es doble. */
+  yellows: { ms: number; until: number; double: boolean }[] = [];
+  /** Salida parada tras una bandera roja: la parrilla espera los semáforos, y cuándo se apagaron (s de sesión). */
+  restartHold = false;
+  launchT = 0;
   drsEnabledFromLap = 3;
   events: RaceEvent[] = [];
   hidden: HiddenTyre;
@@ -318,7 +337,7 @@ export class Session {
   startHoldMax() { return 5.4 + ((this.laps * 37 + this.N * 11) % 23) / 10; }
   /** Semáforos encendidos ahora mismo (0 a 5): se encienden en la parrilla y se apagan todos a la vez en la salida. */
   startLights() {
-    if (!isRaceKind(this.kind) || this.t > 0 || this.flag !== "green" || this.startHold >= this.startHoldMax()) return 0;
+    if (!isRaceKind(this.kind) || (this.t > 0 && !this.restartHold) || this.flag !== "green" || this.startHold >= this.startHoldMax()) return 0;
     return Math.min(5, Math.floor(this.startHold + 1e-6));
   }
   leaderLap = 0;
@@ -516,11 +535,7 @@ export class Session {
       c.s = c.gridS;
       c.fuel = this.fuelLap(c) * this.laps * this.rng.range(0.985, 1.01) + 0.8;
       if (c.player) c.fuel = this.fuelLap(c) * this.laps + 0.5;
-      // la salida de cada uno: reacción y tracción según su habilidad, con azar; de vez en cuando, una mala de verdad
-      const sk = c.d.salida ?? 85;
-      const lr = this.rng.fork();
-      const bad = lr.chance(0.03 * (1.9 - sk / 100));
-      c.launch = { react: clamp(0.21 + Math.abs(lr.gauss(0, 0.03)) + (90 - sk) * 0.0015, 0.15, 0.45) + (bad ? lr.range(0.1, 0.3) : 0), k: clamp(lr.gauss(1 + (sk - 85) * 0.0025, 0.02), 0.93, 1.06) * (bad ? 0.98 : 1) };
+      this.rollLaunch(c);
     });
     for (const c of this.cars) {
       if (!grid.includes(c.id)) { c.loc = "out"; c.retireReason = "no sale"; continue; }
@@ -532,6 +547,20 @@ export class Session {
       const set = pickSet(c, start, true) ?? pickSet(c, start, false) ?? c.e.sets.find((s) => !s.returned && DRY.includes(s.c))!;
       this.mount(c, set);
     }
+  }
+
+  /** La salida de cada uno: reacción y tracción según su habilidad, con azar; de vez en cuando, una mala de verdad. */
+  private rollLaunch(c: Car) {
+    const sk = c.d.salida ?? 85;
+    const lr = this.rng.fork();
+    const bad = lr.chance(0.03 * (1.9 - sk / 100));
+    c.launch = { react: clamp(0.21 + Math.abs(lr.gauss(0, 0.03)) + (90 - sk) * 0.0015, 0.15, 0.45) + (bad ? lr.range(0.1, 0.3) : 0), k: clamp(lr.gauss(1 + (sk - 85) * 0.0025, 0.02), 0.93, 1.06) * (bad ? 0.98 : 1) };
+  }
+
+  /** ¿Está arrancando desde la parrilla (salida o salida parada tras bandera roja)? */
+  private launching(c: Car, d = 400): boolean {
+    if (this.lapsDone(c) === 0 && c.s < d) return true;
+    return this.launchT > 0 && c.gridS > 0 && c.s - c.gridS < d;
   }
 
   /** Tracción en la salida según el compuesto (el blando arranca mejor) y el agua. */
@@ -664,9 +693,15 @@ export class Session {
     const dt = this.dt;
     // salida parada: los cinco semáforos se encienden de uno en uno (1 s cada uno) y se apagan tras una espera.
     // Mientras tanto no corre nada (ni el reloj, ni el tiempo, ni los coches): los resultados no cambian.
-    if (isRaceKind(this.kind) && this.t === 0 && this.flag === "green" && (this.startHold ?? 0) < this.startHoldMax()) {
+    if (isRaceKind(this.kind) && (this.t === 0 || this.restartHold) && this.flag === "green" && (this.startHold ?? 0) < this.startHoldMax()) {
       this.startHold = (this.startHold ?? 0) + dt;
-      if (this.startHold >= this.startHoldMax()) this.log({ kind: "control", text: "🟢 ¡Se apagan los semáforos! Arranca la carrera." });
+      if (this.startHold >= this.startHoldMax()) {
+        if (this.restartHold) {
+          this.restartHold = false;
+          this.launchT = this.t;
+          this.log({ kind: "control", text: "🟢 ¡Se apagan los semáforos! Se reanuda la carrera.", important: true });
+        } else this.log({ kind: "control", text: "🟢 ¡Se apagan los semáforos! Arranca la carrera." });
+      }
       return;
     }
     this.wall += dt;
@@ -790,18 +825,80 @@ export class Session {
     }
   }
 
-  private deploy(kind: "vsc" | "sc", why: string) {
+  /** Neutraliza la carrera. `sev` (0 a 1): lo que tardan en limpiar (grúa, barreras, restos). */
+  private deploy(kind: "vsc" | "sc", why: string, sev = 0.5) {
     if (this.chequered || this.flag === "sc" || this.flag === "red") return;
     if (kind === "vsc" && this.flag === "vsc") { this.flagTimer += 40; return; }
+    // un coche de seguridad sobre un virtual: el virtual se acaba
+    if (kind === "sc" && this.flag === "sc_in") return;
     this.flag = kind;
     this.stats[kind]++;
     if (kind === "vsc") {
-      this.flagTimer = this.rng.range(90, 200);
+      this.flagTimer = this.rng.range(60, 110) + 120 * sev;
       this.log({ kind: "control", text: `🟡 COCHE DE SEGURIDAD VIRTUAL — ${why}`, pause: true, important: true });
     } else {
-      this.scLapsLeft = this.rng.int(3, 5);
+      this.scLapsLeft = clamp(2 + Math.round(sev * 2.5) + this.rng.int(0, 1), 2, 6);
       this.log({ kind: "control", text: `🟨 COCHE DE SEGURIDAD — ${why}`, pause: true, important: true });
     }
+  }
+
+  /** Doblados por el líder que siguen en pista (no en boxes). */
+  lappedCars(): Car[] {
+    const lead = this.leaderId >= 0 ? this.carById(this.leaderId) : null;
+    if (!lead) return [];
+    return this.cars.filter((c) => c.loc === "track" && lead.s - c.s > this.L);
+  }
+
+  /** El líder acelera: cada uno arranca al ver acelerar al de delante (un acordeón de unas décimas por coche). */
+  private restartGo() {
+    if (!this.scGo) return;
+    this.scGo.t = this.t;
+    this.order().filter((c) => c.loc === "track").forEach((c, i) => { c.scGoT = this.t + (i === 0 ? 0 : 0.2 + 0.12 * i + this.rng.range(0, 0.15) + (90 - c.d.salida) * 0.004); });
+    this.log({ kind: "control", text: "🟢 El líder acelera: relanzada", important: false });
+  }
+
+  /** Amarilla activa en ese minisector (o en el de antes: se avisa antes de llegar). */
+  yellowAt(ms: number) {
+    this.yellows = this.yellows.filter((y) => y.until > this.t);
+    return this.yellows.find((y) => y.ms === ms || (y.ms + 1) % this.N === ms || (y.ms - 1 + this.N) % this.N === ms);
+  }
+
+  private yellow(ms: number, double: boolean, secs: number, why: string) {
+    this.yellows.push({ ms, until: this.t + secs, double });
+    this.log({ kind: "control", text: `⚠️ Bandera amarilla${double ? " doble" : ""} en el sector ${this.track.ms[ms].sector + 1}: ${why}` });
+  }
+
+  /**
+   * Salida parada tras una bandera roja: todos a la parrilla en el orden de carrera (los doblados, desdoblados), con
+   * semáforos. Lo que falta de la vuelta se hace por el pit-lane y la vuelta de formación cuenta como vuelta de carrera.
+   */
+  private standingRestart() {
+    const ord = this.order().filter((c) => c.loc === "track");
+    if (!ord.length) return;
+    const line = (Math.floor((ord[0].s + 30) / this.L) + 1) * this.L;
+    ord.forEach((c, i) => this.jumpTo(c, line - 12 - i * 8));
+    const lap = Math.round(line / this.L);
+    if (this.laps - lap > 3) this.laps--;
+    this.drsEnabledFromLap = lap + 3;
+    this.restartHold = true;
+    this.startHold = 0;
+    for (const c of ord) { c.gridS = c.s; c.v = 0; c.delay = 0; this.rollLaunch(c); }
+    this.log({ kind: "control", text: `🚦 La carrera se reanuda con salida parada, en el orden de carrera. Quedan ${this.laps - lap} vueltas.`, important: true, pause: true });
+  }
+
+  /** Lleva un coche hacia delante sin recorrer la pista (pit-lane y vuelta de formación tras una bandera roja). */
+  private jumpTo(c: Car, sNew: number) {
+    if (sNew > c.s) {
+      const newK = Math.floor(sNew / this.L) * this.N + this.msIndexAt(sNew);
+      for (let k = c.msK + 1; k <= newK; k++) {
+        c.cross[k] = this.t;
+        // vuelta por el pit-lane: no cuenta para la mejor vuelta ni para el ritmo
+        if (k > 0 && k % this.N === 0) { c.lapTimes.push(this.lapRefRace * 1.6); c.lapStart = this.t; }
+      }
+      c.msK = Math.max(c.msK, newK);
+      c.fuel = Math.max(0.5, c.fuel - (this.fuelLap(c) * 0.4 * (sNew - c.s)) / this.L);
+    }
+    c.s = sNew;
   }
 
   /** Bandera roja. En libres/clasificación todos al garaje; en carrera, se para con cambio libre de neumáticos. */
@@ -895,9 +992,11 @@ export class Session {
       this.log({ kind: "control", text: "🟢 Se reanuda la sesión. Pit-lane abierto.", important: true, pause: true });
       return;
     }
+    // con lluvia se reanuda detrás del coche de seguridad; si no, salida parada desde la parrilla
+    if (!rain) return this.standingRestart();
     this.flag = "sc";
-    this.scLapsLeft = rain ? 2 : 1;
-    this.scWet = rain;
+    this.scLapsLeft = 2;
+    this.scWet = true;
     this.drsEnabledFromLap = this.leaderLap + 4;
     this.log({ kind: "control", text: "🟨 Se reanuda la carrera detrás del coche de seguridad", important: true, pause: true });
   }
@@ -915,21 +1014,39 @@ export class Session {
     }
   }
 
-  private incident(c: Car, why: string, severity: number) {
+  /**
+   * Lo que hace dirección de carrera con un coche parado o con restos en pista. Cuenta lo grave que es, de qué tipo es
+   * (un accidente deja restos y barreras dañadas; una avería, un coche parado; los restos, poca cosa) y dónde: en un
+   * urbano no hay escapatorias y cualquier coche parado es un peligro.
+   */
+  private incident(c: Car, why: string, severity: number, kind: IncidentKind = "crash") {
+    const ms = this.msIndexAt(c.s);
     if (!isRaceKind(this.kind)) {
-      if (this.rng.chance(0.3 + 0.6 * severity)) this.redFlag(why);
-      else this.log({ kind: "control", text: `⚠️ Bandera amarilla: ${why}` });
+      if (kind === "crash" && this.rng.chance(0.3 + 0.6 * severity)) this.redFlag(why);
+      else this.yellow(ms, true, this.rng.range(40, 90), why);
       return;
     }
+    const urban = !!this.track.def.entorno;
     // un accidente fuerte (barreras dañadas) puede parar la carrera
-    if (severity >= 0.7 && this.rng.chance(0.12 * severity)) { this.redFlag(`accidente de ${c.d.abrev}, reparación de barreras`); return; }
+    if (kind === "crash" && severity >= 0.7 && this.rng.chance((urban ? 0.32 : 0.2) * severity)) { this.redFlag(`accidente de ${c.d.abrev}, reparación de barreras`); return; }
+    let pSC: number, pVSC: number;
+    if (kind === "crash") { pSC = urban ? 0.75 : 0.35 + 0.4 * severity; pVSC = urban ? 0.2 : 0.42; }
+    else if (kind === "failure") { pSC = urban ? 0.45 : 0.12 + 0.3 * severity; pVSC = urban ? 0.4 : 0.55; }
+    else { pSC = urban ? 0.25 : 0.08; pVSC = urban ? 0.45 : 0.35; }
     const r = this.rng.next();
-    if (r < 0.25 + 0.4 * severity) this.deploy("sc", why);
-    else if (r < 0.55 + 0.35 * severity) this.deploy("vsc", why);
-    else this.log({ kind: "control", text: `⚠️ Bandera amarilla: ${why}` });
+    if (r < pSC) this.deploy("sc", why, severity + (urban ? 0.2 : 0));
+    else if (r < pSC + pVSC) this.deploy("vsc", why, severity);
+    else this.yellow(ms, kind !== "debris", this.rng.range(50, 140), why);
   }
 
-  private retire(c: Car, reason: string, severity: number) {
+  /** Avería en carrera: muchas dejan llegar al garaje (sin neutralizar); si no, el coche se queda en la pista. */
+  private failure(c: Car, what: string) {
+    const sev = this.rng.range(0, 0.6);
+    if (sev < 0.3 && this.rng.chance(0.5)) this.retire(c, `avería (${what}), se retira en boxes`, 0, "garage");
+    else this.retire(c, `avería (${what})`, sev, "failure");
+  }
+
+  private retire(c: Car, reason: string, severity: number, kind: IncidentKind | "garage" = "crash") {
     c.loc = "out";
     this.stats.retire++;
     c.retireReason = reason;
@@ -937,7 +1054,7 @@ export class Session {
     c.run = undefined;
     c.queue = [];
     this.log({ kind: "incident", text: `❌ ${c.d.abrev} ${isRaceKind(this.kind) ? "abandona" : "se queda fuera"}: ${reason}`, carId: c.id, important: true, pause: c.player });
-    this.incident(c, `${c.d.abrev} (${reason})`, severity);
+    if (kind !== "garage") this.incident(c, `${c.d.abrev} (${reason})`, severity, kind);
   }
 
   /** Tiempo objetivo del coche en un minisector, con su estado actual. */
@@ -1023,17 +1140,31 @@ export class Session {
       }
     }
 
-    if (isRaceKind(this.kind) && this.lapsDone(c) === 0 && c.s < 400) {
+    if (isRaceKind(this.kind) && this.launching(c)) {
       // salida parada: cada uno reacciona y tracciona distinto (piloto, compuesto y agua)
       const la = c.launch ?? { react: 0, k: 1 };
-      if (this.flag === "green" && this.t < la.react) v = 0;
+      if (this.flag === "green" && this.t - this.launchT < la.react) v = 0;
       else v = Math.min(v, Math.sqrt(2 * 11 * la.k * this.launchGrip(c) * Math.max(0.3, c.s - c.gridS + 0.3)));
     }
     if (this.flag === "vsc") v = Math.min(v, this.track.vref[pi] * 0.6);
     if (this.flag === "sc" || this.flag === "sc_in") {
-      const cap = this.track.vref[pi] * (c.followGap > 1.0 || c.aheadId < 0 ? 0.62 : 0.5);
-      v = Math.min(v, Math.min(cap, 62));
-      if (c.id === this.leaderId) v = Math.min(v, this.track.vref[pi] * 0.5, 50);
+      if (c.unlap) v = Math.min(v, this.track.vref[pi] * 0.8); // desdoblándose: a buen ritmo hasta la cola del grupo
+      else if (this.scGo?.t != null && this.t >= (c.scGoT ?? Infinity)) { /* relanzada: ya acelera */ }
+      else {
+        const cap = this.track.vref[pi] * (c.followGap > 1.0 || c.aheadId < 0 ? 0.62 : 0.5);
+        v = Math.min(v, Math.min(cap, 62));
+        if (c.id === this.leaderId) {
+          v = Math.min(v, this.track.vref[pi] * 0.5, 50);
+          // última vuelta del coche de seguridad: el líder agrupa a todos y acelera donde quiere antes de la meta
+          if (this.flag === "sc_in" && this.scGo && this.scGo.t === null) {
+            if (pos >= this.L - this.scGo.at) { this.restartGo(); v = this.track.vref[pi] * (this.tRef[m.i] / t) * ph.speed; }
+            else if (pos >= this.L - this.scGo.at - 500) v = Math.min(v, this.track.vref[pi] * 0.42, 40);
+          }
+        }
+      }
+    } else if (this.flag === "green" && this.yellows.length && this.yellowAt(m.i)) {
+      // amarilla: se levanta al pasar por la zona (doble: preparados para pararse)
+      v = Math.min(v, this.track.vref[pi] * (this.yellowAt(m.i)!.double ? 0.82 : 0.93));
     }
     if (c.slowPuncture || c.tyres!.punctured) v = Math.min(v, 28);
     let move = v * dt;
@@ -1075,7 +1206,7 @@ export class Session {
     } else c.soc = clamp(c.soc + (1.5 / this.lapRefRace) * dt, 0, SOC_MAX);
     // media de la última vuelta más o menos: es la que mira la IA para elegir modo, no el pico del momento
     c.socAvg = (c.socAvg ?? c.soc) + ((c.soc - (c.socAvg ?? c.soc)) * dt) / (this.lapRefRace * 0.6);
-    if (c.fuel <= 0) { c.fuel = 0; this.retire(c, "sin combustible", 0.2); return; }
+    if (c.fuel <= 0) { c.fuel = 0; this.retire(c, "sin combustible", 0.2, "failure"); return; }
 
     const wmax = setWear(c.tyres!);
     if (!c.tyres!.punctured && wmax > 0.96 && this.rng.chance(dt * 0.02 * (wmax - 0.95) * 20)) {
@@ -1164,6 +1295,15 @@ export class Session {
     aiErs(this, c);
     if (this.flag !== "green") return;
     const pushing = !c.run || c.run.phase === "push" || c.run.phase === "long";
+    // libres y clasificación: quien pasa en vuelta lanzada por una amarilla levanta y la vuelta se estropea
+    if (!isRaceKind(this.kind) && c.run?.phase === "push" && this.yellows.length) {
+      const y = this.yellowAt(ms);
+      if (y && c.lastImpede !== -2 - ms) {
+        c.lastImpede = -2 - ms;
+        c.delay += y.double ? this.rng.range(0.8, 2) : this.rng.range(0.15, 0.4);
+        if (c.player) this.log({ kind: "radio", carId: c.id, text: `📻 ${c.d.abrev}: "Amarilla${y.double ? " doble" : ""} en el sector ${m.sector + 1}, he tenido que levantar."`, important: y.double });
+      }
+    }
     if (pushing) this.errorCheck(c, m);
     if (isRaceKind(this.kind)) this.overtakeCheck(c, m);
     // límites de pista en vuelta lanzada
@@ -1225,31 +1365,49 @@ export class Session {
     } else if (this.flag === "sc") {
       this.scLapsLeft--;
       if (this.scLapsLeft <= 0) {
-        this.flag = "sc_in";
-        this.log({ kind: "control", text: "🟨 El coche de seguridad entra al final de esta vuelta", important: true });
+        // antes de retirarse, los doblados pueden desdoblarse: una vuelta más (dos si tardan en llegar a la cola)
+        const lapped = this.lappedCars();
+        if (!this.unlapCalled && lapped.length && this.laps - lap > 3) {
+          this.unlapCalled = true;
+          for (const c of lapped) c.unlap = true;
+          this.scLapsLeft = 1;
+          this.log({ kind: "control", text: `🟨 Los doblados pueden desdoblarse (${lapped.map((c) => c.d.abrev).join(", ")})`, important: lapped.some((c) => c.player) });
+        } else if (this.cars.some((c) => c.unlap) && this.unlapWait < 1) {
+          this.unlapWait++;
+          this.scLapsLeft = 1;
+        } else {
+          for (const c of this.cars) c.unlap = undefined;
+          this.flag = "sc_in";
+          // el líder elige dónde acelerar: en el último tramo, unos antes y otros apurando hasta cerca de la meta
+          this.scGo = { at: this.rng.range(140, Math.max(260, Math.min(this.L * 0.2, 900))), t: null };
+          this.log({ kind: "control", text: "🟨 El coche de seguridad entra al final de esta vuelta", important: true });
+        }
       }
     } else if (this.flag === "sc_in") {
       this.flag = "green";
       this.scWet = false;
+      this.scGo = null;
+      this.unlapCalled = false;
+      this.unlapWait = 0;
+      for (const c of this.cars) { c.scGoT = undefined; c.unlap = undefined; }
       this.drsEnabledFromLap = lap + 3;
       this.log({ kind: "control", text: "🟢 ¡Relanzada! Bandera verde.", important: true, pause: true });
     }
     // mucha agua pero sin llegar a bandera roja: coche de seguridad
-    if (this.avgWater() > 1.8 && this.flag === "green") { this.deploy("sc", "demasiada agua en pista"); this.scWet = true; }
+    if (this.avgWater() > 1.8 && this.flag === "green") { this.deploy("sc", "demasiada agua en pista", 0.4); this.scWet = true; }
     for (const c of this.cars) {
       if (c.loc !== "track") continue;
-      const hz = (1 / 2600) * c.team.fiabilidad * ENGINE_FAIL[c.engine] * (1 + c.floor * 5);
+      const hz = (1 / FAIL_LAPS) * c.team.fiabilidad * ENGINE_FAIL[c.engine] * (1 + c.floor * 5);
       if (c.e.pu) {
         // con unidades de potencia: la mitad de las averías son del motor y crecen con su desgaste
         if (this.rng.chance(hz * 0.5 * puHazard(puLife(c.e.pu.km0 + c.puKm)))) {
           c.puBroken = true;
-          this.retire(c, `avería (${this.rng.pick(["motor", "unidad de potencia", "MGU-K", "batería"])})`, this.rng.range(0, 0.6));
+          this.failure(c, this.rng.pick(["motor", "unidad de potencia", "MGU-K", "batería"]));
         } else if (this.rng.chance(hz * 0.5)) {
-          this.retire(c, `avería (${this.rng.pick(["caja de cambios", "hidráulica", "fallo eléctrico", "frenos"])})`, this.rng.range(0, 0.6));
+          this.failure(c, this.rng.pick(["caja de cambios", "hidráulica", "fallo eléctrico", "frenos"]));
         }
       } else if (this.rng.chance(hz)) {
-        const what = this.rng.pick(["motor", "caja de cambios", "hidráulica", "fallo eléctrico", "frenos", "batería"]);
-        this.retire(c, `avería (${what})`, this.rng.range(0, 0.6));
+        this.failure(c, this.rng.pick(["motor", "caja de cambios", "hidráulica", "fallo eléctrico", "frenos", "batería"]));
       }
     }
   }
@@ -1609,7 +1767,7 @@ export class Session {
     }
     if (!this.rng.chance(p * m.cornerSens * 2)) return;
     const r = this.rng.next();
-    const crashP = 0.05 + 0.06 * Math.min(1, water);
+    const crashP = CRASH_P + 0.06 * Math.min(1, water);
     if (r < crashP) {
       c.fx = { k: "crash", t: this.t };
       this.retire(c, "accidente", 0.7);
@@ -1623,6 +1781,9 @@ export class Session {
       const spin = loss > 3.6;
       this.stats.offs++;
       c.fx = { k: spin ? "spin" : "off", t: this.t, loss };
+      // el trompo deja amarilla doble un rato (en clasificación, vuelta estropeada al que pase); la salida, simple
+      this.yellows.push({ ms: m.i, until: this.t + this.rng.range(15, 35), double: spin });
+      if (!isRaceKind(this.kind)) this.log({ kind: "control", text: `⚠️ Bandera amarilla${spin ? " doble" : ""} en el sector ${m.sector + 1}: ${spin ? "trompo" : "salida de pista"} de ${c.d.abrev}` });
       this.log({ kind: "incident", text: spin ? `🌀 ${c.d.abrev} hace un trompo en el sector ${m.sector + 1}${dmg} (−${loss.toFixed(1)} s)` : `↩️ ${c.d.abrev} se sale de pista en el sector ${m.sector + 1}${dmg} (−${loss.toFixed(1)} s)`, carId: c.id, important: c.player });
     } else if (r < crashP + 0.35) {
       c.fx = { k: "lock", t: this.t };
@@ -1640,6 +1801,7 @@ export class Session {
 
   private overtakeCheck(c: Car, m: Minisector) {
     if (c.aheadId < 0 || c.followGap > PASS_REACH) return;
+    if (this.yellows.length && this.yellowAt(m.i)) return;
     const a = this.carById(c.aheadId);
     if (a === c || a.loc !== "track") return;
     if (c.grant === a.id && this.t < c.grantUntil) return;
@@ -1754,6 +1916,7 @@ export class Session {
       c.wing += this.rng.range(0.01, 0.035);
       c.delay += this.rng.range(0.5, 2);
       this.log({ kind: "incident", text: `💢 Toque entre ${c.d.abrev} y ${a.d.abrev}: ${c.d.abrev} daña el alerón delantero`, carId: c.id, important: c.player || a.player, pause: c.player || a.player });
+      if (this.rng.chance(0.3)) this.incident(c, `restos del alerón de ${c.d.abrev} en la pista`, 0.2, "debris");
     } else if (r < 0.62) {
       const victim = this.rng.chance(0.5) ? a : c;
       victim.slowPuncture = true;
@@ -1792,6 +1955,13 @@ export class Session {
       // salida: la parrilla va en dos filas y hay sitio a los lados; hasta la primera frenada cada uno avanza con su
       // arrancada y los puestos se ganan o se pierden por pura tracción (sin empujar hacia atrás al que se queda)
       if (race && this.flag === "green" && this.t < 14 && this.lapsDone(b) === 0 && b.s < 330 && a.s < 420) continue;
+      if (race && this.flag === "green" && this.launchT > 0 && this.t - this.launchT < 14 && b.gridS > 0 && b.s - b.gridS < 330) continue;
+      // coche de seguridad: el doblado que se desdobla pasa a todos hasta llegar a la vuelta del líder
+      if (b.unlap && race && (this.flag === "sc" || this.flag === "sc_in")) {
+        const lead = this.carById(this.leaderId);
+        if (lead.s - b.s >= this.L - 60) { this.grantPass(b, a, 0); continue; }
+        if (b.followGap < 1.2 && !a.unlap) b.unlap = undefined;
+      }
       // libres/clasificación: el que no va lanzado se aparta del que sí
       if (!race && b.followGap < 1.2 && this.isFlying(b) && !this.isFlying(a)) {
         if (b.lastImpede !== a.id) {
