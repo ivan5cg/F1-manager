@@ -26,6 +26,9 @@ Tamaño: **P** pequeño (un PR corto), **M** medio, **G** grande (varios PR).
 
 **Lo que queda, en este orden:** 3.1 (en tandas) → 3.4 (y con ella, el resto de 3.5).
 
+Además, fuera de los bloques 1 a 5, está hecho el **Bloque 6 · Competición** (adelantamientos, salida e IA de carrera y
+clasificación): ver al final.
+
 ## Reglas para quien lo haga
 
 - Todo en español: textos, comentarios y mensajes de commit, con el estilo de los que ya hay (frases, sin jerga).
@@ -325,6 +328,43 @@ Referencia medida (página de prueba, Singapur de noche, vista «horizonte», 80
   `debug.propFar`) y deja en `debug.props` cuántos vértices del decorado se dibujan y el estado de cada tramo
   (0 fuera, 1 lejos, 2 cerca). **No editar el código mientras se mide:** Vite recarga la página a mitad y salen
   capturas raras (edificios claros, sin ventanas) que no son un fallo.
+
+## Bloque 6 · Competición (clasificación y carrera) · ✅ Hecho (cambia resultados a propósito)
+
+Todo en `src/sim/session.ts` y `src/sim/strategy.ts`; el detalle, en el README («Salida», «Adelantamientos» y «La IA
+de los equipos»).
+
+- **Adelantamientos:** ventaja en s/vuelta (agarre en aire limpio + recta anterior + ataque/defensa) contra el umbral
+  del circuito (`adelantamientos.umbral`, antes `factor`). Constantes `PASS_*` arriba de `session.ts`.
+- **Salida** con la nota `salida` de cada piloto (antes no se usaba), intentos fallidos, errores bajo presión.
+- **IA de carrera:** undercut, cubrirlo o alargar, tráfico al volver, doble parada, cuenta de parar con coche de
+  seguridad, gomas hundidas, modos de ritmo/motor/batería con presupuesto de gomas, órdenes de equipo y la decisión de
+  neumáticos con lluvia hecha con cuentas (`weatherCall`).
+- **IA de clasificación:** margen en tiempo, reserva de juegos nuevos (`qualiSet`), mojado, repetir tras un error.
+- **Para medir:** `npx tsx scripts/carrera.ts <circuito> [carreras] [semilla] [--detalle] [--umbral=x] [--w=x]` y
+  `npx tsx scripts/calibra.ts [circuitos] [--escribe]`. **Si se toca algo que cambie el ritmo o los adelantamientos,
+  volver a calibrar** (tarda ~5 min por circuito) y mirar la curva: coches iguales ~5 % por vuelta, 1–1,5 s ~35 %,
+  más de 2 s casi siempre.
+- Referencia nueva para comprobar que una tarea NO cambia resultados: la salida de `finde.ts` de ahora.
+
+### Lo que mejoraría después (por orden de lo que más se notaría)
+
+1. **Sanciones de carrera:** 5 y 10 s por causar un toque, por límites de pista repetidos o por pasarse en el
+   pit-lane; se cumplen en la parada o se suman al final. Ahora un toque no tiene culpable.
+2. **Relanzadas:** el líder marca el ritmo y elige cuándo acelerar; coches doblados que se desdoblan; salida parada
+   tras bandera roja. Ahora la relanzada es un semáforo verde sin más.
+3. **Banderas amarillas por sector** en clasificación (vuelta arruinada para quien pasa por ahí) y doble amarilla en
+   carrera en vez de solo VSC/SC.
+4. **Vuelta de formación y calentamiento:** gomas y frenos fríos en la salida según el compuesto y el asfalto; hoy
+   las mantas lo igualan casi todo.
+5. **Defensa activa del jugador:** una orden «defender» / «no pelear» por piloto (cuesta gomas y tiempo, sube el
+   umbral del que ataca) y que el muro vea la ventaja del perseguidor y la probabilidad de que le pase.
+6. **Pilotos con carácter en carrera:** rachas de confianza, quien se viene abajo tras un error, novatos que fallan
+   más en mojado, y rivalidades que suben la agresividad.
+7. **Fiabilidad con aviso:** averías que se anuncian (temperaturas, presión) y que se pueden llevar hasta la meta
+   bajando el motor, en vez de solo el abandono repentino.
+8. **Paradas con más juego:** tiempo de reacción del equipo (pedir la parada tarde y no llegar), salida insegura,
+   y elegir entre parada rápida con riesgo o segura.
 
 ## Orden recomendado (lo que queda)
 

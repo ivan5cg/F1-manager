@@ -6,10 +6,10 @@
 import { Rng, clamp } from "./rng";
 import { Track, Minisector, msTimeAtGrip, MIN_MASS, REF_CAR } from "./track";
 import { type Setup, type SessionSetup, WET_SHIFT, SETUP_Q, SETUP_GRIP } from "./setup";
-import { Compound, COMPOUNDS, DRY, HiddenTyre, TyreSet, setGrip, updateSet, axleGrip, warmBlankets, setWear, bestWaterGrip, WET, treadT, blisterT, grainT, driverRough } from "./tyres";
+import { Compound, COMPOUNDS, DRY, HiddenTyre, TyreSet, setGrip, waterGrip, updateSet, axleGrip, warmBlankets, setWear, bestWaterGrip, WET, treadT, blisterT, grainT, driverRough } from "./tyres";
 import { WeatherState, stepWeather, rainAt, evaporation, waterStep, windNow } from "./weather";
 import { PU_WEAR, puLife, puPowerLoss, puHazard } from "./powerunit";
-import { Plan, planStrategy, aiDecide, aiErs, TeamKnowledge, practiceProgram, qualiTick, pickSet, learnFromRun, aiRedFlagTyres, practiceWeather, wrongTyresForWater, teamForecast, ruleSatisfied } from "./strategy";
+import { Plan, planStrategy, aiDecide, aiModes, aiErs, TeamKnowledge, practiceProgram, qualiTick, pickSet, learnFromRun, aiRedFlagTyres, practiceWeather, wrongTyresForWater, teamForecast, ruleSatisfied } from "./strategy";
 
 export const PUSH_NAMES = ["Conservar", "Gestionar", "Normal", "Atacar", "Al límite"];
 export const ENGINE_NAMES = ["Ahorro", "Normal", "Potencia"];
@@ -29,9 +29,28 @@ const DIRTY_AIR = 0.12;
 const dirtyAir = (gap: number) => (gap < 1.6 ? Math.pow(1 - gap / 1.6, 1.5) : 0);
 /** Rebufo: % de resistencia que se ahorra detrás de otro coche en recta; dura más que el aire sucio. */
 const TOW = 16;
-/** Escala de la probabilidad de adelantar en una zona de frenada (calibrada para ~1-2 adelantamientos por vuelta). */
-let PASS_K = 0.7;
-export function setPassK(k: number) { PASS_K = k; }
+/**
+ * Adelantar. En cada frenada se compara la ventaja del que ataca (en segundos por vuelta) con un umbral:
+ *  - agarre en aire limpio (neumáticos, coche, piloto, ritmo, daños), que es lo que da tracción y frenada;
+ *  - lo que gana en la recta anterior (rebufo, modo adelantamiento, batería, motor), pasado a s/vuelta con PASS_KS;
+ *  - ataque del uno contra defensa del otro.
+ * Con la ventaja igual al umbral pasa una de cada dos veces; PASS_W dice lo deprisa que sube o baja a partir de ahí.
+ * El umbral es el del circuito (`adelantamientos.umbral`, calibrado con su media real de adelantamientos) en su mejor
+ * frenada, más PASS_ZONE por lo que le falte a la zona, y PASS_ANY fuera de las zonas (solo se pasa en cualquier curva
+ * a un coche mucho más lento). Antes la dificultad del circuito recortaba la probabilidad por arriba y con dos
+ * segundos de ventaja se seguía sin pasar: de ahí los trenes.
+ */
+const PASS_T0 = 1.6;
+let PASS_W = 0.3;
+export function setPassW(w: number) { PASS_W = w; }
+const PASS_KS = 12;
+const PASS_ZONE = 1.2;
+const PASS_ANY = 2.6;
+/** Hueco máximo (s) al llegar a la frenada para poder intentarlo. */
+const PASS_REACH = 0.55;
+let passTOverride: number | null = null;
+/** Para los scripts de calibración: fuerza el umbral de adelantamiento (null: el del circuito). */
+export function setPassT(t: number | null) { passTOverride = t; }
 const tow = (gap: number) => (gap < 3 ? TOW * Math.exp(-gap * 1.6) : 0);
 /** Reglamento: 2 h de carrera, 3 h en total contando las suspensiones. */
 const RACE_MAX = 2 * 3600;
@@ -210,6 +229,20 @@ export interface Car {
   puKm: number; // km de desgaste que suma a su unidad de potencia en esta sesión (ponderados por el modo de motor)
   puBroken?: boolean; // la unidad de potencia se ha roto
   setup?: Setup; // reglaje (carga y altura, -2 … 2); sin él, el coche de referencia de siempre
+  /** Salida: tiempo de reacción (s) y aceleración frente a la normal (1). */
+  launch?: { react: number; k: number };
+  /** Hueco (s) con el que le sigue el de detrás ahora mismo (99: nadie): presión. */
+  chased?: number;
+  /** Vueltas seguidas cruzando la meta a menos de 1 s del mismo coche sin poder pasarle. */
+  stuck?: { id: number; n: number };
+  /** Carrera: cuándo falló su último intento de adelantar (para no repetir el aviso ni el castigo en cada curva). */
+  lastTry?: number;
+  /** Por qué recomienda parar el estratega (solo para el mensaje al jugador). */
+  adviceWhy?: string;
+  /** Cuándo salió de boxes por última vez (s de sesión). */
+  pitOutT?: number;
+  /** La IA se ha descolgado a propósito para enfriar neumáticos: hasta qué vuelta. */
+  coolUntil?: number;
 }
 
 export type FlagState = "green" | "vsc" | "sc" | "sc_in" | "red";
@@ -308,7 +341,17 @@ export class Session {
   longRuns: LongRun[] = []; // tandas largas de los libres
   autoPlayers = false; // carrera simulada hasta el final: la IA decide también por el jugador
   passCount = 0; // adelantamientos completados en pista (sin contar doblados ni los de boxes)
-  get passFactor(): number { return this.track.def.adelantamientos?.factor ?? 1; }
+  passLap1 = 0; // de ellos, los de la primera vuelta
+  /** Ventaja (s/vuelta) con la que se adelanta una de cada dos veces en la mejor frenada del circuito. */
+  get passT(): number { return passTOverride ?? this.track.def.adelantamientos?.umbral ?? PASS_T0; }
+  /** Lo difícil que es adelantar aquí: la ventaja (s/vuelta) que hace falta en la mejor frenada que tenga el circuito. */
+  get passHard(): number {
+    let z = 0;
+    for (const m of this.track.ms) z = Math.max(z, m.overtake);
+    return this.passT + (z > 0 ? (1 - z) * PASS_ZONE : PASS_ANY);
+  }
+  /** Lo que cuesta, en segundos, volver de una parada entre coches más lentos: más donde no se puede pasar. */
+  get trafficCost(): number { return 1 + 1.7 * this.passHard; }
   lapOrder: number[][] = []; // carrera: orden (ids) al cerrar cada vuelta el líder; [0] = parrilla
   /** Hueco que se busca en la vuelta de salida (s): rebufo en circuitos de rectas, aire limpio en el resto. */
   outLapGap = 2.5;
@@ -471,6 +514,11 @@ export class Session {
       c.s = c.gridS;
       c.fuel = this.fuelLap(c) * this.laps * this.rng.range(0.985, 1.01) + 0.8;
       if (c.player) c.fuel = this.fuelLap(c) * this.laps + 0.5;
+      // la salida de cada uno: reacción y tracción según su habilidad, con azar; de vez en cuando, una mala de verdad
+      const sk = c.d.salida ?? 85;
+      const lr = this.rng.fork();
+      const bad = lr.chance(0.03 * (1.9 - sk / 100));
+      c.launch = { react: clamp(0.21 + Math.abs(lr.gauss(0, 0.03)) + (90 - sk) * 0.0015, 0.15, 0.45) + (bad ? lr.range(0.1, 0.3) : 0), k: clamp(lr.gauss(1 + (sk - 85) * 0.0025, 0.02), 0.93, 1.06) * (bad ? 0.98 : 1) };
     });
     for (const c of this.cars) {
       if (!grid.includes(c.id)) { c.loc = "out"; c.retireReason = "no sale"; continue; }
@@ -482,6 +530,15 @@ export class Session {
       const set = pickSet(c, start, true) ?? pickSet(c, start, false) ?? c.e.sets.find((s) => !s.returned && DRY.includes(s.c))!;
       this.mount(c, set);
     }
+  }
+
+  /** Tracción en la salida según el compuesto (el blando arranca mejor) y el agua. */
+  private launchGrip(c: Car): number {
+    const t = c.tyres;
+    if (!t) return 1;
+    const w = this.water[0] ?? 0;
+    if (w > 0.05) return clamp(0.9 * waterGrip(t.c, w) / bestWaterGrip(w), 0.55, 0.92);
+    return 1 + (COMPOUNDS[t.c].base - 0.973) * 1.2;
   }
 
   mount(c: Car, set: TyreSet) {
@@ -510,6 +567,18 @@ export class Session {
     const evap = evaporation(this.weather);
     for (let i = 0; i < 6; i++) w = waterStep(w * (1 - CAR_DRY * 0.19 * 60), rainSoon, 60, evap);
     return 0.5 * now + 0.5 * w;
+  }
+
+  /** Agua media prevista minuto a minuto con esa lluvia (mm/h): drenaje, evaporación y lo que secan los coches. */
+  projectWater(w0: number, rain: (min: number) => number, minutes: number): number[] {
+    const evap = evaporation(this.weather);
+    const out: number[] = [];
+    let w = w0;
+    for (let m = 0; m < minutes; m++) {
+      w = waterStep(w * (1 - CAR_DRY * 0.19 * 60), rain(m + 0.5), 60, evap);
+      out.push(w);
+    }
+    return out;
   }
 
   /** Cambia el neumático de salida (antes de la salida). */
@@ -873,7 +942,8 @@ export class Session {
     let grip = setGrip(tyres, water) * c.pace * wetSkill * PUSH_GRIP[c.push] * (1 + 0.018 * this.rubber) * (1 - c.wing - c.floor);
     const su = this.setupAt(c, m, water);
     if (su) grip *= 1 + SETUP_GRIP.a * su.ea * m.aero - SETUP_GRIP.r * su.er * (m.aero - this.setupK!.aeroMean);
-    if (c.aheadId >= 0) grip *= 1 - DIRTY_AIR * m.aero * m.cornerSens * dirtyAir(c.followGap) * (su ? 1 + 0.06 * su.ea : 1);
+    // en paralelo (adelantando) ya no va en la estela
+    if (c.aheadId >= 0 && c.grant !== c.aheadId) grip *= 1 - DIRTY_AIR * m.aero * m.cornerSens * dirtyAir(c.followGap) * (su ? 1 + 0.06 * su.ea : 1);
     // viento: de cara frena en recta pero da carga en curva; de cola, al revés
     const air = this.windAir[m.i];
     grip *= 1 + 0.5 * m.aero * m.cornerSens * air;
@@ -948,7 +1018,12 @@ export class Session {
       }
     }
 
-    if (isRaceKind(this.kind) && this.lapsDone(c) === 0 && c.s < 400) v = Math.min(v, Math.sqrt(2 * 11 * Math.max(0.3, c.s - c.gridS + 0.3)));
+    if (isRaceKind(this.kind) && this.lapsDone(c) === 0 && c.s < 400) {
+      // salida parada: cada uno reacciona y tracciona distinto (piloto, compuesto y agua)
+      const la = c.launch ?? { react: 0, k: 1 };
+      if (this.flag === "green" && this.t < la.react) v = 0;
+      else v = Math.min(v, Math.sqrt(2 * 11 * la.k * this.launchGrip(c) * Math.max(0.3, c.s - c.gridS + 0.3)));
+    }
     if (this.flag === "vsc") v = Math.min(v, this.track.vref[pi] * 0.6);
     if (this.flag === "sc" || this.flag === "sc_in") {
       const cap = this.track.vref[pi] * (c.followGap > 1.0 || c.aheadId < 0 ? 0.62 : 0.5);
@@ -1078,7 +1153,7 @@ export class Session {
 
     if (isRaceKind(this.kind)) {
       // al simular hasta el final, el equipo también lleva a tus pilotos (con la estrategia elegida)
-      if (ms === this.N - 3 && (!c.player || this.autoPlayers)) aiDecide(this, c);
+      if (ms === this.N - 3 && (!c.player || this.autoPlayers)) { aiDecide(this, c); aiModes(this, c, this.laps - this.lapsDone(c) - 1); }
       if (ms === this.N - 3 && c.player && !this.autoPlayers) this.playerAdvice(c);
     }
     aiErs(this, c);
@@ -1107,6 +1182,10 @@ export class Session {
       // en carrera la pista también se engoma (si llovió por la mañana, sale verde y mejora vuelta a vuelta)
       this.rubber = Math.min(1, this.rubber + 0.0009);
       this.tyreLap(c);
+      // ¿sigue detrás del mismo coche sin poder pasarle?
+      const ah = c.aheadId >= 0 && c.followGap < 1.0 && this.flag === "green" ? this.carById(c.aheadId) : null;
+      if (ah && ah.loc === "track" && Math.abs(ah.s - c.s) < 200) c.stuck = { id: ah.id, n: c.stuck?.id === ah.id ? c.stuck.n + 1 : 1 };
+      else c.stuck = undefined;
     }
     if (lap > this.leaderLap) {
       this.leaderLap = lap;
@@ -1260,7 +1339,7 @@ export class Session {
     if (sugg) {
       c.advice = { lap, setId: sugg };
       const set = c.e.sets.find((s) => s.id === sugg)!;
-      this.log({ kind: "radio", carId: c.id, text: `🧠 Estratega: ${c.d.abrev}, recomendaría parar ESTA vuelta y montar ${COMPOUNDS[set.c].name.toLowerCase()} (${set.laps ? `usado, ${set.laps} v` : "nuevo"}).`, pause: true, important: true });
+      this.log({ kind: "radio", carId: c.id, text: `🧠 Estratega: ${c.d.abrev}, recomendaría parar ESTA vuelta y montar ${COMPOUNDS[set.c].name.toLowerCase()} (${set.laps ? `usado, ${set.laps} v` : "nuevo"})${c.adviceWhy ? `: ${c.adviceWhy}` : ""}.`, pause: true, important: true });
     }
   }
   private carSetCompound(c: Car, id: string) { return c.e.sets.find((s) => s.id === id)?.c; }
@@ -1279,6 +1358,8 @@ export class Session {
     this.tyreLap(c);
     this.rubber = Math.min(1, this.rubber + 0.0009);
     const wasPush = run.phase === "push" || run.phase === "long";
+    // vuelta estropeada (anulada, o con una salida de pista o un bloqueo): si da tiempo, la IA lo vuelve a intentar
+    const ruined = run.phase === "push" && c.lapStart > 0 && (!c.lapValid || (!!c.fx && c.fx.t > c.lapStart));
     if (wasPush && c.lapStart > 0) {
       const lt = c.cross[k] - c.lapStart;
       c.lapTimes.push(lt);
@@ -1300,8 +1381,12 @@ export class Session {
     // fase siguiente
     if (run.phase === "out") run.phase = run.kind === "long" ? "long" : run.kind === "inst" ? "in" : "push";
     else if (run.phase === "push") {
+      const lapT = c.lapTimes[c.lapTimes.length - 1] ?? this.track.refLap;
+      // sin un tiempo que valga y con reloj para una de enfriamiento y otra lanzada: se queda fuera
+      if (ruined && run.kind === "quali" && c.auto && run.done >= run.pushLaps && run.pushLaps < 4 && this.remaining() > lapT * 2.3 && !c.tyres!.punctured && this.retryWorthIt(c)) run.pushLaps++;
       if (run.done >= run.pushLaps || this.remaining() <= 0) run.phase = "in";
-      else run.phase = run.kind === "quali" && run.pushLaps > 1 && this.rng.chance(0.5) ? "push" : "cool";
+      // en mojado se encadenan las vueltas; en seco, a veces dos seguidas
+      else run.phase = run.kind === "quali" && run.pushLaps > 1 && (this.avgWater() > WET.si * 0.5 || this.rng.chance(0.5)) ? "push" : "cool";
     } else if (run.phase === "cool") run.phase = this.remaining() > 0 ? "push" : "in";
     else if (run.phase === "long" && (run.done >= run.pushLaps || this.remaining() <= 0)) run.phase = "in";
     // con slicks y pista mojada (o con neumáticos de lluvia en seco) no tiene sentido seguir
@@ -1320,6 +1405,17 @@ export class Session {
     if ((run.phase === "push" || run.phase === "long") && this.remaining() <= 0) run.phase = "in";
     if (run.phase === "push") c.push = 4;
     else if (run.phase === "long") c.push = 2;
+  }
+
+  /** Clasificación: ¿merece la pena otra vuelta con este juego tras estropear la anterior? */
+  private retryWorthIt(c: Car): boolean {
+    const part = this.parts[this.part];
+    if (!part) return false;
+    const best = c.bestByPart[this.part] ?? Infinity;
+    if (!isFinite(best)) return true;
+    if (part.advance === null) return true;
+    const pos = this.timingOrder().filter((x) => !x.eliminated).indexOf(c);
+    return pos >= part.advance - 3;
   }
 
   private lapRadio(c: Car, lt: number) {
@@ -1499,7 +1595,13 @@ export class Session {
     p *= 1 + 5 * Math.min(1.2, water) * (1.3 - c.d.lluvia / 100);
     const wind = windNow(this.weather).speed;
     if (wind > 25) p *= 1 + ((wind - 25) / 25) * m.aero;
-    if (isRaceKind(this.kind) && this.lapsDone(c) === 0) p *= 2;
+    if (isRaceKind(this.kind)) {
+      if (this.lapsDone(c) === 0) p *= 2;
+      // con uno pegado detrás se cometen más errores (los regulares, casi ninguno más); pegado al de delante, también
+      const pr = clamp((0.9 - (c.chased ?? 99)) / 0.7, 0, 1);
+      p *= 1 + pr * 3.2 * (1.25 - c.d.regularidad / 100);
+      if (c.aheadId >= 0 && c.followGap < 0.6) p *= 1.25;
+    }
     if (!this.rng.chance(p * m.cornerSens * 2)) return;
     const r = this.rng.next();
     const crashP = 0.05 + 0.06 * Math.min(1, water);
@@ -1531,7 +1633,7 @@ export class Session {
   }
 
   private overtakeCheck(c: Car, m: Minisector) {
-    if (c.aheadId < 0 || c.followGap > 0.45) return;
+    if (c.aheadId < 0 || c.followGap > PASS_REACH) return;
     const a = this.carById(c.aheadId);
     if (a === c || a.loc !== "track") return;
     if (c.grant === a.id && this.t < c.grantUntil) return;
@@ -1549,30 +1651,84 @@ export class Session {
     }
     const lap1 = this.lapsDone(c) === 0;
     // recién adelantado: sale de la frenada fuera de la trazada y sin tracción, no puede devolverla enseguida
-    if (c.passedBy && c.passedBy.id === a.id && this.t - c.passedBy.t < 12) return;
-    const zone = m.overtake > 0 ? m.overtake : lap1 ? 0.12 : 0.006;
+    if (c.passedBy && c.passedBy.id === a.id && this.t - c.passedBy.t < 7) return;
+    // dónde: una zona de frenada; en la primera vuelta, cualquier curva (van en grupo y con los neumáticos fríos);
+    // fuera de las zonas solo en curvas y con una ventaja enorme (un coche con los neumáticos muertos no aguanta)
+    let zone = m.overtake, extra = 0;
+    if (lap1 && m.cornerSens > 0.3 && c.s < this.L * 0.4) zone = Math.max(zone, 0.2);
+    if (zone <= 0) { if (lap1 || m.cornerSens < 0.45) return; extra = PASS_ANY; } else extra += (1 - zone) * PASS_ZONE;
     const water = this.water[m.i];
     // el que ataca sale de la trazada: si se ha abierto línea seca, pisa más agua
     const wAtt = water + 0.6 * Math.max(0, this.waterOff[m.i] - water);
-    const tc = this.msTime(c, m, wAtt).t, ta = this.msTime(a, m, water).t;
+    // agarre de cada uno en aire limpio (el aire sucio ya ha hecho su trabajo: no dejarle acercarse)
+    const clean = (x: Car, w: number) => { const fg = x.followGap; x.followGap = 99; const g = this.msTime(x, m, w).grip; x.followGap = fg; return g; };
+    // (en la primera vuelta van en grupo y con las gomas a medio calentar: la diferencia de agarre cuenta la mitad)
+    const grip = clamp((clean(c, wAtt) / clean(a, water) - 1) * 100 * this.secPerGrip, -3, 5) * (lap1 ? 0.5 : 1);
+    // la recta anterior, cada uno con lo que llevaba: rebufo, modo adelantamiento (también el de delante si va en tren),
+    // batería, motor, resistencia y peso
     const prev = this.track.ms[(m.i - 1 + this.N) % this.N];
-    const tcp = this.msTime(c, prev, this.water[prev.i]).t;
-    const saved = { fg: a.followGap, drs: a.drs };
-    a.followGap = 99; a.drs = false;
-    const tap = this.msTime(a, prev, this.water[prev.i]).t;
-    a.followGap = saved.fg; a.drs = saved.drs;
-    const delta = ta - tc + (tap - tcp);
+    const onStraight = (x: Car) => { const d = x.drs; x.drs = x.drsEligible && prev.drs; const t = this.msTime(x, prev, this.water[prev.i]).t; x.drs = d; return t; };
+    const straight = onStraight(a) - onStraight(c);
     const skill = (c.d.ataque - a.d.defensa) / 100;
-    const ersEdge = (ERS_POWER[c.ers] - ERS_POWER[a.ers]) * 0.02;
-    const x = delta * 9 + skill * 1.5 + ersEdge - 1.85 + zone * 2.2 - (1 - zone) * 0.4;
-    const p = zone * (1 / (1 + Math.exp(-x)));
-    // cada circuito, calibrado con su media real de adelantamientos por carrera
-    if (!this.rng.chance(Math.min(0.85, p * PASS_K * this.passFactor))) return;
-    const contactP = 0.01 * (0.5 + c.d.agresividad / 100) * (0.5 + a.d.agresividad / 120) * (lap1 ? 2.5 : 1) * (1 + Math.min(1, wAtt) * 1.5);
-    if (this.rng.chance(contactP)) return this.contact(c, a);
-    this.grantPass(c, a, this.rng.range(0.1, 0.35));
+    const adv = grip + PASS_KS * straight + skill;
+    const near = clamp((PASS_REACH - c.followGap) / (PASS_REACH - 0.2), 0.25, 1);
+    const will = 1 / (1 + Math.exp(-(adv - this.passT - extra) / PASS_W));
+    const real = will > 0.1 && this.t - (c.lastTry ?? -99) > 6;
+    // se tocan sobre todo cuando el intento es de verdad y los dos son de no levantar
+    if (real || will > 0.5) {
+      const contactP = 0.004 * (0.5 + c.d.agresividad / 100) * (0.5 + a.d.agresividad / 120) * (lap1 ? 2.2 : 1) * (1 + Math.min(1, wAtt) * 1.5) * (1.4 - will);
+      if (this.rng.chance(contactP)) { c.lastTry = this.t; return this.contact(c, a); }
+    }
+    if (!this.rng.chance(Math.min(0.92, near * will))) {
+      // intento fallido: el de delante tapa el hueco y los dos pierden algo; a veces el que ataca se pasa de frenada
+      if (real && this.rng.chance(0.6)) {
+        c.lastTry = this.t;
+        a.delay += this.rng.range(0.03, 0.18);
+        c.delay += this.rng.range(0.05, 0.25);
+        if (this.rng.chance(0.05 * (0.5 + c.d.agresividad / 100) * PUSH_ERR[c.push] / 1.7)) {
+          c.fx = { k: "lock", t: this.t };
+          c.delay += this.rng.range(0.4, 1.1);
+          c.tyres!.flatSpot = Math.min(1, c.tyres!.flatSpot + this.rng.range(0.2, 0.6));
+          c.tyres!.F.tSurf += this.rng.range(20, 50);
+          if (c.player || a.player) this.log({ kind: "incident", carId: c.id, text: `💨 ${c.d.abrev} se pasa de frenada intentando adelantar a ${a.d.abrev}` });
+        }
+      }
+      return;
+    }
+    // pasa: el de delante pierde lo justo para que el otro salga por delante de la frenada
+    this.grantPass(c, a, Math.max(this.rng.range(0.1, 0.3), c.followGap + this.rng.range(0.04, 0.14)));
     c.passLog = { a: a.id, until: this.t + 10 };
     a.passedBy = { id: c.id, t: this.t };
+    c.stuck = undefined;
+  }
+
+  /**
+   * Para el muro: ventaja (s/vuelta) de c sobre a en la mejor frenada del circuito si llega pegado (con rebufo y, si
+   * está activo, modo adelantamiento), la que hace falta ahí y la probabilidad de pasar en ese intento. No usa azar.
+   */
+  passOutlook(c: Car, a: Car): { adv: number; need: number; p: number } | null {
+    if (!c.tyres || !a.tyres || c.loc !== "track" || a.loc !== "track") return null;
+    let m = this.track.ms[0], extra = PASS_ANY;
+    for (const x of this.track.ms) if (x.overtake > m.overtake) m = x;
+    if (m.overtake > 0) extra = (1 - m.overtake) * PASS_ZONE;
+    else for (const x of this.track.ms) if (x.cornerSens > m.cornerSens) m = x;
+    const prev = this.track.ms[(m.i - 1 + this.N) % this.N];
+    const keep = (x: Car) => ({ fg: x.followGap, ah: x.aheadId, drs: x.drs, n: x.noise });
+    const put = (x: Car, k: { fg: number; ah: number; drs: boolean; n: number }) => { x.followGap = k.fg; x.aheadId = k.ah; x.drs = k.drs; x.noise = k.n; };
+    const kc = keep(c), ka = keep(a);
+    const moOn = this.flag === "green" && this.leaderLap + 1 >= this.drsEnabledFromLap && this.avgWater() < 0.35;
+    c.noise = 0; a.noise = 0;
+    c.followGap = 99; a.followGap = 99;
+    const water = this.water[m.i];
+    const grip = clamp((this.msTime(c, m, water + 0.6 * Math.max(0, this.waterOff[m.i] - water)).grip / this.msTime(a, m, water).grip - 1) * 100 * this.secPerGrip, -3, 5);
+    // la recta: él pegado al otro; el de delante, como vaya ahora (si va en tren también lleva el modo adelantamiento)
+    c.followGap = 0.3; c.aheadId = a.id; c.drs = moOn && prev.drs;
+    a.followGap = ka.fg; a.drs = a.drsEligible && prev.drs;
+    const straight = this.msTime(a, prev, this.water[prev.i]).t - this.msTime(c, prev, this.water[prev.i]).t;
+    put(c, kc); put(a, ka);
+    const adv = grip + PASS_KS * straight + (c.d.ataque - a.d.defensa) / 100;
+    const need = this.passT + extra;
+    return { adv, need, p: 1 / (1 + Math.exp(-(adv - need) / PASS_W)) };
   }
 
   /** Permiso para pasar: el de delante cede (pierde algo de tiempo) y el otro pasa por velocidad. */
@@ -1580,7 +1736,9 @@ export class Session {
     if (c.grant === a.id && this.t < c.grantUntil) return;
     c.grant = a.id;
     c.grantUntil = this.t + 8;
-    a.delay += lossA;
+    // si ya venía perdiendo tiempo (le acaban de pasar otros), no se le suma más: si no, al que pasa un grupo
+    // entero se le iba medio circuito
+    a.delay = Math.max(a.delay, lossA);
   }
 
   private contact(c: Car, a: Car) {
@@ -1614,6 +1772,7 @@ export class Session {
     on.sort((a, b) => posOf(b) - posOf(a));
     const n = on.length;
     const race = isRaceKind(this.kind);
+    for (const c of on) c.chased = 99;
     for (let i = 0; i < n; i++) {
       const b = on[i];
       const a = n > 1 ? on[(i - 1 + n) % n] : null;
@@ -1622,6 +1781,10 @@ export class Session {
       if (gapM < 0) gapM += L;
       b.followGap = gapM / Math.max(20, b.v);
       b.aheadId = a.id;
+      a.chased = b.followGap;
+      // salida: la parrilla va en dos filas y hay sitio a los lados; hasta la primera frenada cada uno avanza con su
+      // arrancada y los puestos se ganan o se pierden por pura tracción (sin empujar hacia atrás al que se queda)
+      if (race && this.flag === "green" && this.t < 14 && this.lapsDone(b) === 0 && b.s < 330 && a.s < 420) continue;
       // libres/clasificación: el que no va lanzado se aparta del que sí
       if (!race && b.followGap < 1.2 && this.isFlying(b) && !this.isFlying(a)) {
         if (b.lastImpede !== a.id) {
@@ -1639,7 +1802,9 @@ export class Session {
       const rel = (c: Car) => c.v / Math.max(15, this.track.vref[Math.min(this.track.vref.length - 1, Math.floor(posOf(c) / this.track.ds))]);
       const slowAhead = race && this.flag === "green" && (a.delay > 0.8 || a.slowPuncture || !!a.tyres?.punctured || (this.lapsDone(b) > 0 && rel(a) < rel(b) * 0.8));
       if (gapM < minGap + 25 && slowAhead) {
-        if (!(b.grant === a.id && this.t < b.grantUntil) && this.lapsDone(b) === this.lapsDone(a)) b.passLog = { a: a.id, until: this.t + 10 };
+        // pasar a uno que sale de boxes o que vuelve con un pinchazo no es un adelantamiento
+        const limping = a.slowPuncture || !!a.tyres?.punctured || this.t - (a.pitOutT ?? -99) < 8;
+        if (!limping && !(b.grant === a.id && this.t < b.grantUntil) && this.lapsDone(b) === this.lapsDone(a)) b.passLog = { a: a.id, until: this.t + 10 };
         this.grantPass(b, a, 0);
         continue;
       }
@@ -1661,6 +1826,7 @@ export class Session {
       if (ahead < 0) ahead += L;
       if (a.loc === "track" && ahead > 0 && ahead < 150) {
         this.passCount++;
+        if (this.leaderLap < 1) this.passLap1++;
         const pos = this.order().indexOf(c) + 1;
         if (c.player || a.player || pos <= 3) this.log({ kind: "info", text: `⚔️ ${c.d.abrev} adelanta a ${a.d.abrev} por la P${pos}`, carId: c.id });
         c.passLog = undefined;
@@ -1738,6 +1904,7 @@ export class Session {
     if (frac >= 1) {
       c.loc = "track";
       c.pit = undefined;
+      c.pitOutT = this.t;
       if (c.player) this.log({ kind: "pit", carId: c.id, text: `↪️ ${c.d.abrev} sale de boxes P${this.order().indexOf(c) + 1}`, important: true });
     }
   }

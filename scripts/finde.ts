@@ -34,7 +34,7 @@ for (let k = wk.nextKind(); k; k = wk.nextKind()) {
   if (k === "RACE" || k === "SPRINT") {
     const stops: Record<number, number> = {};
     for (const r of res) if (r.status === "fin") stops[r.stops] = (stops[r.stops] ?? 0) + 1;
-    console.log("paradas:", JSON.stringify(stops), "adelantamientos:", s.events.filter((e) => e.text.includes("adelanta")).length);
+    console.log("paradas:", JSON.stringify(stops), "adelantamientos:", s.passCount);
   }
   wk.finish(s);
 }

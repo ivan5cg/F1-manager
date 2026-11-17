@@ -1768,12 +1768,30 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
         if (k === "defend") return `<div class="mw-uc"><span class="tab">Defensa</span> Si <b>${r}</b> (a ${Math.max(0, u.gapNow).toFixed(1)} s, para a ${tyreHtml(u.rivalTyre)}) para ya y tú en la siguiente: ${u.after > 0 ? `<span class="green">sigues delante por ${u.after.toFixed(1)} s</span>` : `<span class="redt">te pasa por ${(-u.after).toFixed(1)} s</span>`}.</div>`;
         return `<div class="mw-uc"><span class="tab">Ataque</span> Si paras ya con ${tyreHtml(u.myTyre)} y <b>${r}</b> (a ${Math.max(0, u.gapNow).toFixed(1)} s) en la siguiente: ${u.after < 0 ? `<span class="green">le pasas por ${(-u.after).toFixed(1)} s</span>` : `<span class="redt">sigue delante por ${u.after.toFixed(1)} s</span>`}.</div>`;
       };
+      // duelo en pista: la ventaja sobre el de delante (y la del de detrás sobre ti) frente a la que pide el circuito
+      const duel = (k: "attack" | "defend") => {
+        const ordNow = sess.order();
+        const i = ordNow.indexOf(c);
+        const o = k === "attack" ? ordNow[i - 1] : ordNow[i + 1];
+        if (!o || o.loc !== "track" || sess.lapsDone(o) !== sess.lapsDone(c)) return "";
+        const gap = k === "attack" ? sess.gapBetween(o, c) : sess.gapBetween(c, o);
+        if (!(gap > 0) || gap > 4) return "";
+        const out = k === "attack" ? sess.passOutlook(c, o) : sess.passOutlook(o, c);
+        if (!out) return "";
+        const word = out.p < 0.08 ? "muy difícil" : out.p < 0.3 ? "difícil" : out.p < 0.6 ? "posible" : "probable";
+        const good = k === "attack" ? out.p >= 0.3 : out.p < 0.3;
+        const adv = `${out.adv >= 0 ? "+" : "−"}${Math.abs(out.adv).toFixed(1)} s/v`;
+        return k === "attack"
+          ? `<div class="mw-uc"><span class="tab">En pista</span> Pasar a <b>${o.d.abrev}</b> (a ${gap.toFixed(1)} s): ventaja <b>${adv}</b> llegando pegado; aquí hacen falta ~${out.need.toFixed(1)} · <span class="${good ? "green" : "redt"}">${word}</span></div>`
+          : `<div class="mw-uc"><span class="tab">En pista</span> <b>${o.d.abrev}</b> (a ${gap.toFixed(1)} s detrás) tiene <b>${adv}</b> sobre ti; hacen falta ~${out.need.toFixed(1)} · <span class="${good ? "green" : "redt"}">${out.p < 0.08 ? "aguantas sin problema" : out.p < 0.3 ? "puedes aguantarle" : out.p < 0.6 ? "te puede pasar" : "te va a pasar"}</span></div>`;
+      };
       const req = c.pitRequest ? c.e.sets.find((x) => x.id === c.pitRequest) : null;
       return `<div class="panel" style="margin:6px 0"><div class="hd"><span class="t"><span class="teamdot" style="background:${c.team.color}"></span>${esc(c.d.nombre)} · P${sess.order().indexOf(c) + 1}</span>${c.tyres ? `${tyreHtml(c.tyres.c)}<span class="small dim">${c.tyres.laps} v</span>` : ""}</div><div class="bd">
         <h2>Si para ahora <span class="dim small" style="text-transform:none">· pierde ${pitLoss(sess, c).toFixed(1)} s en boxes${sess.flag === "sc" || sess.flag === "sc_in" ? " (coche de seguridad)" : sess.flag === "vsc" ? " (VSC)" : ""}</span></h2>
         ${req ? `<div class="small yellow">Parada pedida: ${COMPOUNDS[req.c].name.toLowerCase()} ${req.laps ? "usado" : "nuevo"}. <button data-cancel="${idx}" style="padding:2px 8px">Anular</button></div>` : ""}
         ${opts[0] ? exitLine(opts[0]) : ""}
         <div data-car="${idx}">${opts.filter((o) => fitsWater(o.c)).map(optionLine).join("") || `<div class="dim small">Sin juegos para cambiar.</div>`}</div>
+        ${duel("attack")}${duel("defend")}
         ${ucLine("defend")}${ucLine("attack")}
         ${gapHistory(sess, c, [], 15).length >= 2 ? `<h2>Huecos en meta <span class="dim small" style="text-transform:none">· últimas 15 vueltas, ${esc(c.d.abrev)} en el 0</span></h2>
         <div class="mw-leg" id="leg${idx}"></div>

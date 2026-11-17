@@ -96,6 +96,7 @@ En la realidad, en 2026 el GP de Baréin no se corrió en Sakhir: se trasladó a
   - momentos clave: coches de seguridad, banderas, abandonos, tus paradas y la vuelta rápida.
 - **Muro de boxes** (botón «Muro» en carrera), con estimaciones del equipo: su modelo de neumáticos con su error, el ritmo reciente de cada coche y la pérdida en boxes del circuito (menor con coche de seguridad o VSC). No sabe qué harán los rivales.
   - **Si para ahora:** en qué posición sale, detrás de quién y a cuánto, y quién queda detrás. Con cada juego disponible, cuánto ritmo gana frente a seguir y si alcanza al de delante. Se puede parar desde ahí.
+  - **En pista:** la ventaja de tu piloto sobre el de delante si llega pegado (agarre, recta y manos, en s/vuelta), la que pide la mejor frenada del circuito y si pasarle es muy difícil, difícil, posible o probable. Y lo mismo del de detrás contigo. Sirve para decidir si pelear en pista o buscarle en boxes.
   - **Undercut:** si el de detrás para ya y tú respondes en la vuelta siguiente, ¿te pasa? Y al revés con el de delante.
   - **Huecos en meta** de las últimas 15 vueltas con el de delante, el de detrás y tu compañero. Tocando la gráfica se ven los de cada vuelta.
 - ⏸ ×1 ×2 ×4 ×8 ×16 ×64 (teclas 1-6) y ⏭ (simular hasta el final). La sesión se pausa sola en los momentos clave.
@@ -148,13 +149,32 @@ Todo es determinista a partir de la semilla de la temporada.
 - un intermedio en pista seca pierde ~6 % y se destroza;
 - con mucha agua el intermedio va un ~20 % más lento que en seco (en Interlagos 2024, la pole en mojado fue de 1:23.405 frente a 1:08.899 en seco el mismo fin de semana), y a partir de ~0,85 mm compensa el de lluvia.
 
-Apartar agua frena también en recta: con pista empapada se pierde velocidad punta. La IA cambia de neumático alrededor de esos puntos de cruce, cada equipo con su criterio.
+Apartar agua frena también en recta: con pista empapada se pierde velocidad punta. La IA decide el cambio haciendo cuentas con el agua prevista (ver «La IA de los equipos»), cada equipo con su error y su carácter.
 
 **Lo que nadie sabe.** Cada fin de semana esconde cuánto desgasta de verdad cada compuesto (±12-13 %), si los neumáticos trabajan más calientes o fríos de lo previsto y la tendencia al graining. Los equipos lo estiman con más o menos error, lo afinan en libres y lo corrigen en carrera comparando el desgaste real del stint con el previsto.
 
 **Tiempo** (`src/sim/weather.ts`). Siempre dinámico y localizado. Hay células de lluvia grandes (frentes) y pequeñas (chubascos de 0,3-1,2 km) que mojan solo una parte del circuito. Nacen, crecen, se mueven con el viento y mueren. El clima de cada circuito corresponde a su lugar y fecha: temperaturas medias, días de lluvia y tormentas de tarde en Interlagos y Spa. El viento sopla con rachas y afecta al coche según la orientación de cada tramo: de cara frena en recta pero da carga en curva, y de cola al revés; con 25 km/h la vuelta cambia unas décimas según la dirección, y las rachas fuertes provocan más errores en las curvas rápidas. Hay ciclo diario de temperatura y sol, y cada día es continuo: la clasificación hereda el agua y las nubes de la mañana. El agua se calcula por tramo de pista: la lluvia la sube enseguida (con 4 mm/h, en un par de minutos ya hacen falta intermedios), el drenaje la baja deprisa cuando hay agua estancada y despacio cuando la pista solo está húmeda, y la evaporación remata. Cada coche que pasa aparta algo de agua de la trazada: en carrera se abre una línea seca y la pista se seca en ~15 minutos, más rápido que en unos libres con pocos coches. Fuera de la trazada sigue mojado, y quien sale de ella para adelantar lo nota. El radar ve el campo real; la previsión de tu meteorólogo extrapola lo que ve, con su error.
 
-**Carrera** (`src/sim/session.ts`). Modo adelantamiento, tapones, adelantamientos en las zonas de frenada según diferencia de ritmo y habilidad (quien acaba de perder la posición no puede devolverla en la frenada siguiente), banderas azules, toques, errores, pinchazos, averías, coche de seguridad y VSC.
+**Carrera** (`src/sim/session.ts`). Modo adelantamiento, tapones, banderas azules, toques, errores, pinchazos, averías, coche de seguridad y VSC.
+
+**Salida.** Cada piloto reacciona y tracciona distinto (su nota de salida, con azar), el blando arranca mejor que el medio y el duro, y de vez en cuando alguien se queda clavado. Hasta la primera frenada hay sitio a los lados: los puestos se ganan o se pierden por pura arrancada. En la primera vuelta se pasa en casi cualquier curva, pero la diferencia de agarre cuenta la mitad (van en grupo).
+
+**Adelantamientos.** En cada frenada se compara la **ventaja del que ataca, en segundos por vuelta**, con un umbral:
+- **agarre en aire limpio** (neumáticos y su estado, coche, piloto, modo de ritmo, daños): es lo que da tracción y frenada;
+- **lo que gana en la recta anterior**: rebufo, modo adelantamiento (que el de delante también lleva si va en tren), batería, motor, resistencia y peso;
+- **ataque** de uno contra **defensa** del otro.
+
+Con la ventaja igual al umbral se pasa una de cada dos veces, y sube o baja deprisa a partir de ahí: con coches iguales casi no se pasa (un 5 % por vuelta), con 1 s por vuelta de ventaja cuesta dos o tres vueltas, con 1,5 s se pasa casi a la primera y un coche con las gomas muertas pierde el puesto en cualquier curva. El umbral es el de la mejor frenada del circuito (`adelantamientos.umbral`); las zonas peores piden más. Hay que llegar pegado (menos de 0,55 s). Un intento fallido hace perder tiempo a los dos, y a veces el que ataca se pasa de frenada y se hace un plano; quien acaba de perder el puesto tarda unos segundos en poder devolverlo. Con un coche pegado detrás se cometen más errores (los pilotos regulares, casi ninguno más).
+
+Antes la dificultad del circuito recortaba la probabilidad por arriba: con dos segundos de ventaja se seguía sin pasar, se formaban trenes y lo que funcionaba siempre era alargar la tanda. Ahora unas gomas mucho más nuevas valen puestos en pista, y el undercut y el overcut dependen del circuito y del tráfico. `npx tsx scripts/carrera.ts <circuito> [carreras]` mide la curva (probabilidad de pasar según la ventaja), los trenes y el total; `npx tsx scripts/calibra.ts` ajusta el umbral de cada circuito al doble de su media real de adelantamientos, que es de coches anteriores a 2026 (con el modo adelantamiento y la batería de ahora se pasa bastante más).
+
+**La IA de los equipos** (`src/sim/strategy.ts`).
+- **Paradas.** Sigue su plan, pero mira la carrera: no para si va a salir en mitad de un grupo o detrás de su compañero y las gomas aguantan; si lleva vueltas atascado y la parada está cerca, intenta el **undercut**; si se lo hacen a él, lo **cubre** mientras aún pueda salir por delante y, si ya es tarde, **alarga** para tener gomas mejores al final; con las gomas hundidas hace la cuenta de parar ya. Con **coche de seguridad** compara de verdad parar ahora (la parada cuesta la mitad) con seguir, contando los puestos que perdería y la cola en su box.
+- **Lluvia.** Proyecta el agua de los próximos minutos (la que hay, la prevista, el drenaje y lo que secan los coches) y compara cada tipo de neumático: lo que se pierde por vuelta, la parada (y la de vuelta) y el riesgo de ir con el equivocado. Aguanta un chaparrón flojo con slicks y no pone intermedios hasta que van a ser más rápidos en un par de vueltas.
+- **Ritmo, motor y batería.** Gasta lo que las gomas y el combustible permiten para llegar a la parada prevista, y aprieta cuando vale puestos: atacando, defendiéndose, en la vuelta de entrada y las de después de parar y al final. Si lleva varias vueltas pegado a uno al que no pasa, se descuelga un par de vueltas para enfriar las gomas. El motor a tope, solo en plena pelea; la batería también se usa para defenderse.
+- **Órdenes de equipo.** Si el compañero viene pegado y es claramente más rápido, le abren paso (en tu equipo lo decides tú).
+- **Clasificación.** Se ahorra la última salida solo con margen de tiempo sobre el primer eliminado; guarda un juego nuevo por cada parte que queda (dos para la última) y hace la primera salida con uno usado si le basta; en mojado sale enseguida y encadena vueltas, y con la pista secándose rueda hasta la bandera; si estropea la vuelta y hay reloj, se queda fuera y lo intenta otra vez.
+- **Y se equivoca.** Cada muro lee el agua y el desgaste con su error y los flojos ven las jugadas una vuelta tarde; los pilotos fallan más bajo presión, atacando al límite y en la primera vuelta.
 
 **Aire sucio y rebufo.**
 - **Aire sucio:** detrás de otro coche se pierde carga aerodinámica. Pesa en las curvas rápidas, donde el agarre depende de ella, y apenas en una chicane lenta. Se diluye deprisa: a 1 s ya es poco y a 1,6 s nada.
@@ -176,7 +196,7 @@ Cada circuito tiene su balance. En Monza ir a rebufo compensa; en Silverstone o 
 
 **Salida en mojado:** con mucha agua la carrera empieza detrás del coche de seguridad, que no se retira hasta que se puede correr. Cada equipo elige el neumático de salida mirando también el radar y su previsión, no solo el agua de ese momento. En clasificación hay tráfico (coches en vuelta de salida que estorban) y vueltas anuladas por límites de pista.
 
-**Estrategia** (`src/sim/strategy.ts`). La IA simula stints con el mismo modelo de neumáticos (con su error) y busca la mejor combinación de 0, 1 o 2 paradas **con los juegos que le quedan**, valorando la posición en pista. En carrera reacciona a coches de seguridad, undercuts y lluvia.
+**Estrategia** (`src/sim/strategy.ts`). La IA simula stints con el mismo modelo de neumáticos (con su error) y busca la mejor combinación de 0, 1 o 2 paradas **con los juegos que le quedan**, valorando la posición en pista. Cada parada cuenta además lo que cuesta volver entre coches más lentos, que es más donde no se puede adelantar (en Mónaco una parada de más sale cara). En carrera reacciona a coches de seguridad, undercuts y lluvia (ver «La IA de los equipos»). El estratega te dice por qué recomienda parar.
 
 ## Parrilla 2026
 
@@ -315,6 +335,8 @@ volumen general, de motores, de ambiente y de radio, y las voces de la radio y d
 
 ```bash
 npx tsx scripts/finde.ts silverstone 42 --resumen   # fin de semana completo
+npx tsx scripts/carrera.ts silverstone 6             # varias carreras en seco: adelantamientos, trenes y curva de ventaja
+npx tsx scripts/calibra.ts monza --escribe           # calibra el umbral de adelantamiento de un circuito
 npx tsx scripts/pista.ts spa                         # análisis del circuito
 ```
 
