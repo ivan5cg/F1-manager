@@ -13,7 +13,7 @@ const ATTRS = ["ritmo", "regularidad", "neumaticos", "lluvia", "ataque", "defens
 type Attr = (typeof ATTRS)[number];
 
 export interface MarketDriver extends Partial<Record<Attr, number>> {
-  abrev: string; nombre?: string; numero?: number;
+  abrev: string; nombre?: string; numero?: number; nacimiento?: number; debut?: number;
   equipo: string | null; rol: Role; salario: number; inc: number; nota?: string;
 }
 export interface MarketBoss { nombre: string; equipo: string | null; estrategia: number; meteo: number; boxes: number; salario: number; inc: number; nota?: string }
@@ -77,6 +77,8 @@ export function publicDriver(m: Market, base: TeamDef[], abrev: string): DriverD
   const x = m.pilotos.find((p) => p.abrev === abrev)!;
   const d: Record<string, unknown> = { nombre: x.nombre, abrev: x.abrev, numero: x.numero };
   for (const a of ATTRS) d[a] = x[a] ?? 75;
+  if (x.nacimiento) d.nacimiento = x.nacimiento;
+  if (x.debut) d.debut = x.debut;
   return d as unknown as DriverDef;
 }
 

@@ -30,6 +30,7 @@ export interface WeekendState {
   summaries?: Partial<Record<SessionKind, RaceSummary>>; // resumen de las carreras ya corridas (para volver a verlas)
   pu?: Record<number, PuState>; // modo «crear equipo»: unidades de potencia de cada piloto
   setup?: SetupState; // reglajes (carga y altura): óptimo oculto, lo que sabe cada equipo y lo que elige el jugador
+  year?: number; // temporada (sin ella, 2026)
 }
 
 /**
@@ -174,6 +175,7 @@ export class Weekend {
       laps: kind === "SPRINT" ? this.def.vueltasSprint : this.def.vueltas,
       sprintWeekend: this.st.sprint,
       setup: this.sessionSetup(kind),
+      year: this.st.year,
     });
     if (kind === "RACE") {
       for (const [id, n] of Object.entries(this.penalties())) {
@@ -203,6 +205,7 @@ export class Weekend {
       sprintWeekend: this.st.sprint,
       restore: true,
       setup: this.sessionSetup(kind),
+      year: this.st.year,
     });
     applySnapshot(sess, snap);
     return sess;

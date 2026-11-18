@@ -1,5 +1,5 @@
 {
- "_nota": "Mercado del modo «crear equipo». salario y precio en millones por temporada; inc = incertidumbre (1 conocido, 3 casi desconocido): el valor real de cada temporada se aparta del publicado. Los valores publicados de los titulares son los de equipos-2026.json. Cargos y reservas según la prensa de principios de 2026; los marcados con nota no están confirmados. Las valoraciones son estimaciones del juego.",
+ "_nota": "Mercado del modo «crear equipo». salario y precio en millones por temporada; inc = incertidumbre (1 conocido, 3 casi desconocido): el valor real de cada temporada se aparta del publicado. Los valores publicados de los titulares son los de equipos-2026.json. Cargos y reservas según la prensa de principios de 2026; los marcados con nota no están confirmados. Las valoraciones son estimaciones del juego. nacimiento y debut (año de su primera carrera de F1; sin él, nunca ha corrido un gran premio) como en equipos-2026.json.",
  "techo": 100,
  "pilotos": [
   {
@@ -171,7 +171,8 @@
    "ataque": 80,
    "defensa": 80,
    "agresividad": 64,
-   "salida": 80
+   "salida": 80,
+   "nacimiento": 2002
   },
   {
    "nombre": "Antonio Giovinazzi",
@@ -189,7 +190,9 @@
    "defensa": 80,
    "agresividad": 62,
    "salida": 80,
-   "nota": "reserva de Ferrari en años anteriores; sin confirmar para 2026"
+   "nota": "reserva de Ferrari en años anteriores; sin confirmar para 2026",
+   "nacimiento": 1993,
+   "debut": 2017
   },
   {
    "nombre": "Yuki Tsunoda",
@@ -206,7 +209,9 @@
    "ataque": 85,
    "defensa": 80,
    "agresividad": 74,
-   "salida": 82
+   "salida": 82,
+   "nacimiento": 2000,
+   "debut": 2021
   },
   {
    "nombre": "Pato O'Ward",
@@ -223,7 +228,8 @@
    "ataque": 84,
    "defensa": 80,
    "agresividad": 72,
-   "salida": 82
+   "salida": 82,
+   "nacimiento": 1999
   },
   {
    "nombre": "Leonardo Fornaroli",
@@ -240,7 +246,8 @@
    "ataque": 80,
    "defensa": 82,
    "agresividad": 62,
-   "salida": 80
+   "salida": 80,
+   "nacimiento": 2004
   },
   {
    "nombre": "Ayumu Iwasa",
@@ -257,7 +264,8 @@
    "ataque": 82,
    "defensa": 78,
    "agresividad": 68,
-   "salida": 80
+   "salida": 80,
+   "nacimiento": 2001
   },
   {
    "nombre": "Paul Aron",
@@ -274,7 +282,8 @@
    "ataque": 80,
    "defensa": 78,
    "agresividad": 70,
-   "salida": 78
+   "salida": 78,
+   "nacimiento": 2004
   },
   {
    "nombre": "Ryo Hirakawa",
@@ -291,7 +300,8 @@
    "ataque": 78,
    "defensa": 80,
    "agresividad": 60,
-   "salida": 80
+   "salida": 80,
+   "nacimiento": 1994
   },
   {
    "nombre": "Luke Browning",
@@ -309,7 +319,8 @@
    "defensa": 78,
    "agresividad": 66,
    "salida": 78,
-   "nota": "sin confirmar"
+   "nota": "sin confirmar",
+   "nacimiento": 2002
   },
   {
    "nombre": "Jak Crawford",
@@ -326,7 +337,8 @@
    "ataque": 82,
    "defensa": 78,
    "agresividad": 70,
-   "salida": 80
+   "salida": 80,
+   "nacimiento": 2005
   },
   {
    "nombre": "Zhou Guanyu",
@@ -343,7 +355,9 @@
    "ataque": 78,
    "defensa": 82,
    "agresividad": 58,
-   "salida": 80
+   "salida": 80,
+   "nacimiento": 1999,
+   "debut": 2022
   },
   {
    "nombre": "Mick Schumacher",
@@ -360,7 +374,9 @@
    "ataque": 80,
    "defensa": 80,
    "agresividad": 62,
-   "salida": 80
+   "salida": 80,
+   "nacimiento": 1999,
+   "debut": 2021
   },
   {
    "nombre": "Kevin Magnussen",
@@ -377,7 +393,9 @@
    "ataque": 84,
    "defensa": 88,
    "agresividad": 82,
-   "salida": 82
+   "salida": 82,
+   "nacimiento": 1992,
+   "debut": 2014
   },
   {
    "nombre": "Jack Doohan",
@@ -394,7 +412,9 @@
    "ataque": 80,
    "defensa": 76,
    "agresividad": 74,
-   "salida": 78
+   "salida": 78,
+   "nacimiento": 2003,
+   "debut": 2024
   },
   {
    "nombre": "Felipe Drugovich",
@@ -411,7 +431,8 @@
    "ataque": 80,
    "defensa": 80,
    "agresividad": 62,
-   "salida": 80
+   "salida": 80,
+   "nacimiento": 2000
   },
   {
    "nombre": "Théo Pourchaire",
@@ -428,7 +449,8 @@
    "ataque": 80,
    "defensa": 78,
    "agresividad": 64,
-   "salida": 80
+   "salida": 80,
+   "nacimiento": 2003
   },
   {
    "nombre": "Nyck de Vries",
@@ -445,7 +467,9 @@
    "ataque": 78,
    "defensa": 78,
    "agresividad": 60,
-   "salida": 80
+   "salida": 80,
+   "nacimiento": 1995,
+   "debut": 2022
   },
   {
    "nombre": "Logan Sargeant",
@@ -462,7 +486,9 @@
    "ataque": 76,
    "defensa": 74,
    "agresividad": 66,
-   "salida": 76
+   "salida": 76,
+   "nacimiento": 2000,
+   "debut": 2023
   },
   {
    "nombre": "Richard Verschoor",
@@ -479,7 +505,8 @@
    "ataque": 80,
    "defensa": 80,
    "agresividad": 62,
-   "salida": 80
+   "salida": 80,
+   "nacimiento": 2000
   },
   {
    "nombre": "Alex Dunne",
@@ -496,7 +523,8 @@
    "ataque": 84,
    "defensa": 78,
    "agresividad": 78,
-   "salida": 80
+   "salida": 80,
+   "nacimiento": 2005
   },
   {
    "nombre": "Gabriele Minì",
@@ -513,7 +541,8 @@
    "ataque": 80,
    "defensa": 78,
    "agresividad": 66,
-   "salida": 78
+   "salida": 78,
+   "nacimiento": 2005
   },
   {
    "nombre": "Dino Beganovic",
@@ -530,7 +559,8 @@
    "ataque": 80,
    "defensa": 78,
    "agresividad": 66,
-   "salida": 78
+   "salida": 78,
+   "nacimiento": 2004
   },
   {
    "nombre": "Victor Martins",
@@ -547,7 +577,8 @@
    "ataque": 80,
    "defensa": 78,
    "agresividad": 66,
-   "salida": 78
+   "salida": 78,
+   "nacimiento": 2001
   },
   {
    "nombre": "Sebastián Montoya",
@@ -564,7 +595,8 @@
    "ataque": 78,
    "defensa": 76,
    "agresividad": 64,
-   "salida": 78
+   "salida": 78,
+   "nacimiento": 2005
   },
   {
    "nombre": "Kush Maini",
@@ -581,7 +613,8 @@
    "ataque": 78,
    "defensa": 76,
    "agresividad": 66,
-   "salida": 78
+   "salida": 78,
+   "nacimiento": 2000
   }
  ],
  "jefes": [

@@ -90,6 +90,13 @@ const FAULT_SIGNS: Record<string, string> = {
 const FAULT_GROW = 0.07;
 const FAULT_ENGINE = [0.22, 1, 2];
 const FAULT_PUSH = [0.55, 0.75, 1, 1.2, 1.45];
+/** Ritmo de más (fracción de agarre) con la confianza a tope (y de menos por los suelos). */
+const CONF_PACE = 0.0015;
+/** Grados que gana cada compuesto en la vuelta de formación (con 25 °C de asfalto). */
+const FORMATION_GAIN: Partial<Record<Compound, number>> = { S: 17, M: 13, H: 9, I: 12, W: 10 };
+/** Rivalidades: cuando pelean entre ellos, ninguno levanta (más toques). */
+const RIVALS = [["VER", "NOR"], ["VER", "HAM"], ["VER", "RUS"], ["VER", "LEC"], ["NOR", "PIA"], ["ALO", "HAM"], ["LEC", "SAI"], ["GAS", "OCO"], ["STR", "ALO"]];
+const rivals = (a: Car, b: Car) => RIVALS.some(([x, y]) => (a.d.abrev === x && b.d.abrev === y) || (a.d.abrev === y && b.d.abrev === x));
 /** Ventaja de más (s/vuelta) que necesita el que ataca si el de delante cierra la puerta. */
 const DEFEND_T = 0.35;
 
@@ -140,6 +147,8 @@ export interface DriverDef {
   nombre: string; abrev: string; numero: number;
   ritmo: number; regularidad: number; neumaticos: number; lluvia: number;
   ataque: number; defensa: number; agresividad: number; salida: number;
+  /** Año de nacimiento y de su primera carrera de F1 (sin él, nunca ha corrido un gran premio: novato). */
+  nacimiento?: number; debut?: number;
 }
 
 /**
@@ -292,6 +301,8 @@ export interface Car {
   pitMode?: number;
   /** Cuándo se pidió la parada que tiene pendiente (s de sesión): el piloto necesita unos segundos para reaccionar. */
   pitCallT?: number;
+  /** Confianza del piloto en esta sesión (−1 a 1): sube con las vueltas limpias y los adelantamientos, cae tras un error. */
+  conf?: number;
   /** Avería que se está gestando: qué es, lo cerca que está de romperse (0 a 1) y si es de la unidad de potencia. */
   fault?: { what: string; lvl: number; pu: boolean; warned: number };
 }
@@ -324,6 +335,7 @@ export interface SessionOptions {
   sprintWeekend: boolean;
   restore?: boolean; // se va a volcar una instantánea encima: sin preparar parrilla ni programas
   setup?: SessionSetup; // reglajes (ver setup.ts); sin ellos, todos con el coche de referencia
+  year?: number; // temporada (para saber quién es novato); sin ella, 2026
 }
 
 /** Una tanda larga de libres, resumida: ritmo medio sin combustible y caída por vuelta. */
@@ -591,6 +603,7 @@ export class Session {
       if (wet > WET.iw * 1.05) start = "W"; else if (wet > WET.si && DRY.includes(start)) start = "I";
       const set = pickSet(c, start, true) ?? pickSet(c, start, false) ?? c.e.sets.find((s) => !s.returned && DRY.includes(s.c))!;
       this.mount(c, set);
+      if (this.flag === "green") this.formationLap(c);
     }
   }
 
@@ -887,6 +900,30 @@ export class Session {
     }
   }
 
+  /** Lo nuevo que es en la F1: 1 novato, 0,5 en su segundo año, 0 a partir del tercero. */
+  greenness(c: Car): number {
+    const y = this.opt.year ?? 2026;
+    const exp = c.d.debut === undefined ? 0 : y - c.d.debut;
+    return exp <= 0 ? 1 : exp === 1 ? 0.5 : 0;
+  }
+
+  /** Un error le hace perder confianza (y si ya iba mal, más). */
+  private shake(c: Car, x: number) {
+    c.conf = clamp((c.conf ?? 0) - x, -1, 1);
+    if (c.player && (c.conf ?? 0) < -0.45) this.log({ kind: "radio", carId: c.id, text: `📻 Ingeniero: ${c.d.abrev}, tranquilo, respira. Vamos vuelta a vuelta.` });
+  }
+
+  /**
+   * Vuelta de formación: los neumáticos salen de las mantas a 70 °C y en la vuelta cogen temperatura según el
+   * compuesto (el blando se calienta antes que el duro) y el asfalto; en la parrilla se vuelven a enfriar algo.
+   */
+  private formationLap(c: Car) {
+    const t = c.tyres;
+    if (!t) return;
+    const gain = (FORMATION_GAIN[t.c] ?? 10) + 0.3 * (this.weather.trackT - 25) - 6 * Math.min(1, this.avgWater());
+    for (const a of [t.F, t.R]) { a.tBulk = clamp(a.tBulk + gain, 50, 100); a.tSurf = a.tBulk + 3; }
+  }
+
   /**
    * Cómo se defiende c: lo que pida el jugador o, en automático, lo que haría el equipo: cerrar la puerta en las
    * últimas vueltas cuando hay puntos en juego, y si no, defenderse sin más (lo normal).
@@ -1007,7 +1044,7 @@ export class Session {
     this.drsEnabledFromLap = lap + 3;
     this.restartHold = true;
     this.startHold = 0;
-    for (const c of ord) { c.gridS = c.s; c.v = 0; c.delay = 0; this.rollLaunch(c); }
+    for (const c of ord) { c.gridS = c.s; c.v = 0; c.delay = 0; this.rollLaunch(c); this.formationLap(c); }
     this.log({ kind: "control", text: `🚦 La carrera se reanuda con salida parada, en el orden de carrera. Quedan ${this.laps - lap} vueltas.`, important: true, pause: true });
   }
 
@@ -1153,7 +1190,7 @@ export class Session {
     }
     const urban = !!this.track.def.entorno;
     // un accidente fuerte (barreras dañadas) puede parar la carrera
-    if (kind === "crash" && severity >= 0.7 && this.rng.chance((urban ? 0.32 : 0.2) * severity)) { this.redFlag(`accidente de ${c.d.abrev}, reparación de barreras`); return; }
+    if (kind === "crash" && severity >= 0.7 && this.rng.chance((urban ? 0.26 : 0.14) * severity)) { this.redFlag(`accidente de ${c.d.abrev}, reparación de barreras`); return; }
     let pSC: number, pVSC: number;
     if (kind === "crash") { pSC = urban ? 0.75 : 0.45 + 0.4 * severity; pVSC = urban ? 0.2 : 0.4; }
     else if (kind === "failure") { pSC = urban ? 0.45 : 0.18 + 0.3 * severity; pVSC = urban ? 0.4 : 0.55; }
@@ -1219,7 +1256,7 @@ export class Session {
   msTime(c: Car, m: Minisector, water: number): { t: number; grip: number } {
     const tyres = c.tyres!;
     const wetSkill = water > 0.05 ? 1 + (c.d.lluvia - 80) * 0.0012 * Math.min(1, water / 0.6) : 1;
-    let grip = setGrip(tyres, water) * c.pace * wetSkill * PUSH_GRIP[c.push] * (1 + 0.018 * this.rubber) * (1 - c.wing - c.floor);
+    let grip = setGrip(tyres, water) * c.pace * (1 + CONF_PACE * (c.conf ?? 0)) * wetSkill * PUSH_GRIP[c.push] * (1 + 0.018 * this.rubber) * (1 - c.wing - c.floor);
     const su = this.setupAt(c, m, water);
     if (su) grip *= 1 + SETUP_GRIP.a * su.ea * m.aero - SETUP_GRIP.r * su.er * (m.aero - this.setupK!.aeroMean);
     // en paralelo (adelantando) ya no va en la estela
@@ -1504,6 +1541,9 @@ export class Session {
       // en carrera la pista también se engoma (si llovió por la mañana, sale verde y mejora vuelta a vuelta)
       this.rubber = Math.min(1, this.rubber + 0.0009);
       this.tyreLap(c);
+      // una vuelta limpia: la confianza vuelve poco a poco (por encima de cero, también se va apagando)
+      const cf = c.conf ?? 0;
+      c.conf = cf < 0 ? Math.min(0, cf + 0.06) : cf * 0.95;
       // ¿sigue detrás del mismo coche sin poder pasarle?
       const ah = c.aheadId >= 0 && c.followGap < 1.0 && this.flag === "green" ? this.carById(c.aheadId) : null;
       if (ah && ah.loc === "track" && Math.abs(ah.s - c.s) < 200) c.stuck = { id: ah.id, n: c.stuck?.id === ah.id ? c.stuck.n + 1 : 1 };
@@ -1933,7 +1973,9 @@ export class Session {
     const deficit = Math.max(0, 0.9 - setGrip(tyres, water) / (sp.base * bestWaterGrip(water))) * 5;
     let p = 1.1e-4 * PUSH_ERR[c.push] * (1 + (85 - c.d.regularidad) / 25) * (1 + deficit + coldF);
     if (c.fault?.what === "frenos") p *= 1 + 2 * c.fault.lvl;
-    p *= 1 + 5 * Math.min(1.2, water) * (1.3 - c.d.lluvia / 100);
+    p *= 1 + 5 * Math.min(1.2, water) * (1.3 - c.d.lluvia / 100) * (1 + 0.5 * this.greenness(c));
+    // los novatos fallan algo más; con la confianza por los suelos, también
+    p *= (1 + 0.15 * this.greenness(c)) * (1 - 0.35 * (c.conf ?? 0));
     const wind = windNow(this.weather).speed;
     if (wind > 25) p *= 1 + ((wind - 25) / 25) * m.aero;
     if (isRaceKind(this.kind)) {
@@ -1959,6 +2001,8 @@ export class Session {
       // los que más tiempo pierden son los que han trompeado (solo cambia el texto y el dibujo)
       const spin = loss > 3.6;
       this.stats.offs++;
+      // tras un error, unos se vienen abajo más que otros
+      this.shake(c, 0.15 + (95 - c.d.regularidad) / 80 + (spin ? 0.1 : 0));
       c.fx = { k: spin ? "spin" : "off", t: this.t, loss };
       // el trompo deja amarilla doble un rato (en clasificación, vuelta estropeada al que pase); la salida, simple
       this.yellows.push({ ms: m.i, until: this.t + this.rng.range(15, 35), double: spin });
@@ -1967,6 +2011,7 @@ export class Session {
     } else if (r < crashP + 0.35) {
       c.fx = { k: "lock", t: this.t };
       c.delay += this.rng.range(0.3, 0.8);
+      this.shake(c, 0.08);
       tyres.flatSpot = Math.min(1, tyres.flatSpot + this.rng.range(0.3, 0.8));
       // la rueda bloqueada arrastra goma por el asfalto: pico de temperatura en la superficie (que con
       // la carcasa caliente puede iniciar ampollas) y banda que se va en ese punto
@@ -2039,7 +2084,7 @@ export class Session {
     const real = will > 0.1 && this.t - (c.lastTry ?? -99) > 6;
     // se tocan sobre todo cuando el intento es de verdad y los dos son de no levantar
     if (real || will > 0.5) {
-      const contactP = 0.004 * (0.5 + c.d.agresividad / 100) * (0.5 + a.d.agresividad / 120) * (lap1 ? 2.2 : 1) * (1 + Math.min(1, wAtt) * 1.5) * (1.4 - will) * (defend ? 1.4 : 1);
+      const contactP = 0.004 * (0.5 + c.d.agresividad / 100) * (0.5 + a.d.agresividad / 120) * (lap1 ? 2.2 : 1) * (1 + Math.min(1, wAtt) * 1.5) * (1.4 - will) * (defend ? 1.4 : 1) * (rivals(c, a) ? 1.7 : 1);
       if (this.rng.chance(contactP)) { c.lastTry = this.t; return this.contact(c, a); }
     }
     if (!this.rng.chance(Math.min(0.92, near * will))) {
@@ -2208,6 +2253,8 @@ export class Session {
         if (this.leaderLap < 1) this.passLap1++;
         const pos = this.order().indexOf(c) + 1;
         if (c.player || a.player || pos <= 3) this.log({ kind: "info", text: `⚔️ ${c.d.abrev} adelanta a ${a.d.abrev} por la P${pos}`, carId: c.id });
+        c.conf = clamp((c.conf ?? 0) + 0.12, -1, 1);
+        a.conf = clamp((a.conf ?? 0) - 0.05, -1, 1);
         c.passLog = undefined;
       } else if (this.t > c.passLog.until) c.passLog = undefined;
     }

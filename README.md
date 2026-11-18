@@ -204,6 +204,16 @@ puede meterse y para en la vuelta siguiente. En la hoja de la parada se elige c�
 mal), **normal** o **rápida** (−0,25 s, sale mal el doble de veces y es más fácil soltar el coche justo cuando llega
 otro: salida insegura, 5 s). Si el compañero acaba de parar, los mecánicos van con prisa y sale mal más a menudo.
 
+**Pilotos con carácter.** Cada piloto lleva su confianza durante la sesión: sube con las vueltas limpias y los
+adelantamientos y cae tras un error (más en los menos regulares), y con ella cambian un poco su ritmo y lo que se
+equivoca; tras un trompo, alguno se viene abajo unas vueltas. Los **novatos** (sin carreras de F1 antes de esta
+temporada: año de `debut` en los datos) fallan algo más, sobre todo en mojado, y los de segundo año, la mitad. Las
+**rivalidades** conocidas (Verstappen con Norris o Hamilton, los compañeros de McLaren…) hacen que, cuando pelean
+entre ellos, ninguno levante: más toques.
+
+**Vuelta de formación.** Los neumáticos salen de las mantas a 70 °C y en la vuelta de formación cogen temperatura
+según el compuesto y el asfalto: el blando sale casi en su ventana y el duro, lejos; con frío o con agua, menos.
+
 **Salida.** Cada piloto reacciona y tracciona distinto (su nota de salida, con azar), el blando arranca mejor que el medio y el duro, y de vez en cuando alguien se queda clavado. Hasta la primera frenada hay sitio a los lados: los puestos se ganan o se pierden por pura arrancada. En la primera vuelta se pasa en casi cualquier curva, pero la diferencia de agarre cuenta la mitad (van en grupo).
 
 **Adelantamientos.** En cada frenada se compara la **ventaja del que ataca, en segundos por vuelta**, con un umbral:
