@@ -245,6 +245,8 @@ export interface Prefs {
   sinRecordatorio?: boolean;
   /** Calendario de las temporadas nuevas: el corto (9 carreras, por defecto) o el completo de 2026. */
   calendario?: "corta" | "completa";
+  /** Modo escenario: las mejores estrellas (0 a 3) de cada escenario jugado. */
+  escenarios?: Record<string, number>;
 }
 /** Velocidades de la sesión (× tiempo real). */
 export const SPEEDS = [1, 2, 4, 8, 16, 64];
@@ -270,6 +272,7 @@ export function loadPrefs(): Prefs {
       if (o.sinAvisoSafari === true) p.sinAvisoSafari = true;
       if (o.sinRecordatorio === true) p.sinRecordatorio = true;
       if (o.calendario === "completa" || o.calendario === "corta") p.calendario = o.calendario;
+      if (o.escenarios && typeof o.escenarios === "object") p.escenarios = Object.fromEntries(Object.entries(o.escenarios).filter(([, v]) => typeof v === "number"));
       if (o.sonido && typeof o.sonido === "object") {
         const so = o.sonido as Partial<SoundPrefs>;
         if (typeof so.sonido === "boolean") p.sonido.sonido = so.sonido;

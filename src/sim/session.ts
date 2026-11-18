@@ -104,7 +104,25 @@ type IncidentKind = "crash" | "failure" | "debris";
 const ERS_POWER = [-3.5, 0, 2.0, 4.5];
 const ERS_NET = [1.1, 0, -0.9, -2.4];
 export const SOC_MAX = 4;
-const MO_POWER = 6; // % extra del modo adelantamiento (2026)
+const MO_POWER = 6; // % extra del modo adelantamiento (2026) o del DRS (2011-2025)
+
+/**
+ * Reglamento de la época (modo escenario: carreras reales de 2010 en adelante). Sin él, el de 2026.
+ *  - ayuda: cómo se adelanta en recta: modo adelantamiento (2026), DRS (2011-2025, el mismo segundo en el punto de
+ *    detección) o nada (2010);
+ *  - ers: lo que pesa la parte eléctrica en la potencia: 1 en 2026, ~0,45 con los híbridos de 2014-2025, ~0,12 con el
+ *    KERS de 2011-2013 y 0 sin batería (2010);
+ *  - vsc: hay coche de seguridad virtual (desde 2015).
+ */
+export interface Era { ayuda: "mo" | "drs" | "ninguna"; ers: number; vsc: boolean }
+export const ERA_2026: Era = { ayuda: "mo", ers: 1, vsc: true };
+/** Reglamento de una temporada (de 2010 en adelante). */
+export function eraOf(year: number): Era {
+  if (year >= 2026) return ERA_2026;
+  if (year >= 2014) return { ayuda: "drs", ers: 0.45, vsc: year >= 2015 };
+  if (year >= 2011) return { ayuda: "drs", ers: 0.12, vsc: false };
+  return { ayuda: "ninguna", ers: 0, vsc: false };
+}
 
 export type SessionKind = "FP1" | "FP2" | "FP3" | "SQ" | "Q" | "SPRINT" | "RACE";
 export const SESSION_NAMES: Record<SessionKind, string> = {
@@ -338,6 +356,7 @@ export interface SessionOptions {
   restore?: boolean; // se va a volcar una instantánea encima: sin preparar parrilla ni programas
   setup?: SessionSetup; // reglajes (ver setup.ts); sin ellos, todos con el coche de referencia
   year?: number; // temporada (para saber quién es novato); sin ella, 2026
+  era?: Era; // reglamento (modo escenario); sin él, el de 2026
 }
 
 /** Una tanda larga de libres, resumida: ritmo medio sin combustible y caída por vuelta. */
@@ -456,7 +475,19 @@ export class Session {
   /** Reglajes: lo que no cambia en la sesión (ver setup.ts y setupAt). */
   private setupK: { opt: Setup; dragPerA: number; aeroMean: number; lapRef: number; mean: { wk: number; v: number }[] } | null = null;
 
+  /** Reglamento de la época: DRS o modo adelantamiento, KERS o batería, coche de seguridad virtual. */
+  era: Era;
+  /** Modo escenario: lo que pasa cuando el líder cierra una vuelta (por ejemplo, un coche de seguridad de la carrera real). */
+  onLap: ((lap: number) => void)[] = [];
+  /** Modo escenario: lo que pasa a un tiempo dado de la sesión (s), a mitad de vuelta. */
+  timers: { t: number; fn: () => void }[] = [];
+  /** Nombre corto de la ayuda para adelantar («MO», «DRS») o null si no hay. */
+  get aidShort(): string | null { return this.era.ayuda === "mo" ? "MO" : this.era.ayuda === "drs" ? "DRS" : null; }
+  /** Nombre de la parte eléctrica («Batería», «KERS») o null si no hay (2010). */
+  get ersLabel(): string | null { return this.era.ers <= 0 ? null : this.era.ers < 0.3 ? "KERS" : "Batería"; }
+
   constructor(public opt: SessionOptions) {
+    this.era = opt.era ?? ERA_2026;
     this.kind = opt.kind;
     this.track = opt.track;
     this.N = this.track.ms.length;
@@ -610,7 +641,7 @@ export class Session {
   }
 
   /** La salida de cada uno: reacción y tracción según su habilidad, con azar; de vez en cuando, una mala de verdad. */
-  private rollLaunch(c: Car) {
+  rollLaunch(c: Car) {
     const sk = c.d.salida ?? 85;
     const lr = this.rng.fork();
     const bad = lr.chance(0.03 * (1.9 - sk / 100));
@@ -802,6 +833,11 @@ export class Session {
     }
     this.t += dt;
     if (!isRaceKind(this.kind)) this.partT += dt;
+    if (this.timers.length && this.timers.some((x) => x.t <= this.t)) {
+      const due = this.timers.filter((x) => x.t <= this.t);
+      this.timers = this.timers.filter((x) => x.t > this.t);
+      for (const x of due) x.fn();
+    }
     this.updateFlags(dt);
 
     let leader: Car | null = null;
@@ -886,7 +922,7 @@ export class Session {
   }
 
   /** Neutraliza la carrera. `sev` (0 a 1): lo que tardan en limpiar (grúa, barreras, restos). */
-  private deploy(kind: "vsc" | "sc", why: string, sev = 0.5) {
+  deploy(kind: "vsc" | "sc", why: string, sev = 0.5) {
     if (this.chequered || this.flag === "sc" || this.flag === "red") return;
     if (kind === "vsc" && this.flag === "vsc") { this.flagTimer += 40; return; }
     // un coche de seguridad sobre un virtual: el virtual se acaba
@@ -919,7 +955,7 @@ export class Session {
    * Vuelta de formación: los neumáticos salen de las mantas a 70 °C y en la vuelta cogen temperatura según el
    * compuesto (el blando se calienta antes que el duro) y el asfalto; en la parrilla se vuelven a enfriar algo.
    */
-  private formationLap(c: Car) {
+  formationLap(c: Car) {
     const t = c.tyres;
     if (!t) return;
     const gain = (FORMATION_GAIN[t.c] ?? 10) + 0.3 * (this.weather.trackT - 25) - 6 * Math.min(1, this.avgWater());
@@ -1197,6 +1233,8 @@ export class Session {
     if (kind === "crash") { pSC = urban ? 0.75 : 0.45 + 0.4 * severity; pVSC = urban ? 0.2 : 0.4; }
     else if (kind === "failure") { pSC = urban ? 0.45 : 0.18 + 0.3 * severity; pVSC = urban ? 0.4 : 0.42; }
     else { pSC = urban ? 0.25 : 0.08; pVSC = urban ? 0.4 : 0.28; }
+    // antes de 2015 no había virtual: algunas de esas veces salía el de verdad y el resto bastaba con amarillas
+    if (!this.era.vsc) { pSC += pVSC * 0.35; pVSC = 0; }
     const r = this.rng.next();
     if (r < pSC) this.deploy("sc", why, severity + (urban ? 0.2 : 0));
     else if (r < pSC + pVSC) this.deploy("vsc", why, severity);
@@ -1244,7 +1282,7 @@ export class Session {
     else this.retire(c, `avería (${what})`, sev, "failure");
   }
 
-  private retire(c: Car, reason: string, severity: number, kind: IncidentKind | "garage" = "crash") {
+  retire(c: Car, reason: string, severity: number, kind: IncidentKind | "garage" = "crash") {
     c.loc = "out";
     this.stats.retire++;
     c.retireReason = reason;
@@ -1269,7 +1307,7 @@ export class Session {
     grip *= 1 + 0.5 * m.aero * m.cornerSens * air;
     let t = msTimeAtGrip(m, grip);
     const scale = t / this.tRef[m.i];
-    let power = c.team.potencia * 0.6 + ENGINE_POWER[c.engine] + (c.soc > 0.05 || c.ers === 0 ? ERS_POWER[c.ers] : -3.5);
+    let power = c.team.potencia * 0.6 + ENGINE_POWER[c.engine] + this.era.ers * (c.soc > 0.05 || c.ers === 0 ? ERS_POWER[c.ers] : -3.5);
     if (c.e.pu) power -= puPowerLoss(puLife(c.e.pu.km0 + c.puKm));
     // un motor o una batería tocados no dan todo
     if (c.fault && (c.fault.what === "motor" || c.fault.what === "unidad de potencia" || c.fault.what === "MGU-K" || c.fault.what === "batería")) power -= 1.2 * c.fault.lvl;
@@ -1491,7 +1529,7 @@ export class Session {
       if (c.loc !== "track") return;
     }
     if (m.drsDetect) {
-      c.drsEligible = isRaceKind(this.kind) && this.flag === "green" && this.leaderLap + 1 >= this.drsEnabledFromLap && c.followGap < 1.0 && this.avgWater() < 0.35;
+      c.drsEligible = isRaceKind(this.kind) && this.era.ayuda !== "ninguna" && this.flag === "green" && this.leaderLap + 1 >= this.drsEnabledFromLap && c.followGap < 1.0 && this.avgWater() < 0.35;
     }
     if (m.drs) c.drs = c.drsEligible;
     else if (!m.drsDetect) c.drs = false;
@@ -1568,6 +1606,7 @@ export class Session {
     if (this.flag === "green") this.greenLeaderLaps++;
     if (this.probes.length) this.stewards();
     this.lapOrder[lap] = this.order().filter((c) => c.loc !== "out").map((c) => c.id);
+    for (const f of this.onLap) f(lap);
     // reglamento: 2 h de carrera (sin contar las suspensiones) y 3 h en total; al cumplirse, bandera
     // a cuadros al final de la vuelta en la que se agota el tiempo
     if (!this.chequered && lap < this.laps && (this.wall - this.suspended >= RACE_MAX || this.wall >= RACE_WINDOW)) {

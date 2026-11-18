@@ -156,6 +156,14 @@ const DRIVER_FLAG: Record<string, string> = {
   "Frederik Vesti": "🇩🇰", "Antonio Giovinazzi": "🇮🇹", "Yuki Tsunoda": "🇯🇵", "Pato O'Ward": "🇲🇽", "Leonardo Fornaroli": "🇮🇹", "Ayumu Iwasa": "🇯🇵",
   "Paul Aron": "🇪🇪", "Ryo Hirakawa": "🇯🇵", "Luke Browning": "🇬🇧", "Jak Crawford": "🇺🇸", "Zhou Guanyu": "🇨🇳", "Mick Schumacher": "🇩🇪",
   "Kevin Magnussen": "🇩🇰", "Jack Doohan": "🇦🇺", "Felipe Drugovich": "🇧🇷", "Théo Pourchaire": "🇫🇷", "Nyck de Vries": "🇳🇱", "Logan Sargeant": "🇺🇸",
+  // modo escenario (2010-2024)
+  "Sebastian Vettel": "🇩🇪", "Mark Webber": "🇦🇺", "Jenson Button": "🇬🇧", "Felipe Massa": "🇧🇷", "Michael Schumacher": "🇩🇪", "Nico Rosberg": "🇩🇪",
+  "Robert Kubica": "🇵🇱", "Vitaly Petrov": "🇷🇺", "Rubens Barrichello": "🇧🇷", "Adrian Sutil": "🇩🇪", "Vitantonio Liuzzi": "🇮🇹", "Kamui Kobayashi": "🇯🇵",
+  "Nick Heidfeld": "🇩🇪", "Pedro de la Rosa": "🇪🇸", "Sébastien Buemi": "🇨🇭", "Jaime Alguersuari": "🇪🇸", "Jarno Trulli": "🇮🇹", "Heikki Kovalainen": "🇫🇮",
+  "Timo Glock": "🇩🇪", "Lucas di Grassi": "🇧🇷", "Bruno Senna": "🇧🇷", "Christian Klien": "🇦🇹", "Paul di Resta": "🇬🇧", "Pastor Maldonado": "🇻🇪",
+  "Jérôme d'Ambrosio": "🇧🇪", "Narain Karthikeyan": "🇮🇳", "Kimi Räikkönen": "🇫🇮", "Romain Grosjean": "🇫🇷", "Daniel Ricciardo": "🇦🇺", "Jean-Éric Vergne": "🇫🇷",
+  "Charles Pic": "🇫🇷", "Daniil Kvyat": "🇷🇺", "Esteban Gutiérrez": "🇲🇽", "Jolyon Palmer": "🇬🇧", "Marcus Ericsson": "🇸🇪", "Felipe Nasr": "🇧🇷",
+  "Pascal Wehrlein": "🇩🇪", "Rio Haryanto": "🇮🇩", "Nicholas Latifi": "🇨🇦", "Nikita Mazepin": "🇷🇺",
   "Richard Verschoor": "🇳🇱", "Alex Dunne": "🇮🇪", "Gabriele Minì": "🇮🇹", "Dino Beganovic": "🇸🇪", "Victor Martins": "🇫🇷", "Sebastián Montoya": "🇨🇴", "Kush Maini": "🇮🇳",
 };
 /** Bandera del país del piloto (cadena vacía si no se conoce). */

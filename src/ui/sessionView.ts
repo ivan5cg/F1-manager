@@ -25,11 +25,17 @@ type TowerMode = "int" | "gap" | "last" | "tyre";
  * Pantalla de una sesión. `onFinish` se llama al terminar; `onExit`, si el jugador sale a medias
  * (la sesión queda guardada y se retoma después).
  */
-export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Session) => void, snap?: SessionSnapshot, onExit?: () => void) {
+/**
+ * Modo escenario: la sesión llega ya preparada (a mitad de carrera), no se guarda nunca encima de la partida activa
+ * y empieza con un aviso propio en vez de la previa de carrera.
+ */
+export interface SessionViewOpts { session: Session; intro: string; exitLabel: string; exitHint: string }
+
+export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Session) => void, snap?: SessionSnapshot, onExit?: () => void, scn?: SessionViewOpts) {
   const app = document.getElementById("app")!;
   const def = CIRCUITS[wk.st.circuitId];
   const track = wk.track;
-  const sess = snap ? wk.restore(snap) : wk.build(kind);
+  const sess = scn ? scn.session : snap ? wk.restore(snap) : wk.build(kind);
   const race = isRaceKind(kind);
   const quali = isQualiKind(kind);
   const prefs = loadPrefs();
@@ -51,13 +57,13 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   let toastTimer = 0;
   let lastSave = performance.now();
   let started = !!snap; // la carrera no cuenta hasta la salida
-  /** Guarda la sesión a medias para poder retomarla si se cierra la app. */
+  /** Guarda la sesión a medias para poder retomarla si se cierra la app (un escenario no se guarda). */
   const persist = () => {
-    if (ended || skipping || !started || sess.finished) return;
+    if (scn || ended || skipping || !started || sess.finished) return;
     lastSave = performance.now();
     saveSession(snapshotSession(sess, wk.st));
   };
-  setParked(false); // está dentro de la sesión: si se cierra la app, al volver se retoma sola
+  if (!scn) setParked(false); // está dentro de la sesión: si se cierra la app, al volver se retoma sola
   const onHide = () => { if (document.visibilityState === "hidden") { persist(); hush(); } };
   document.addEventListener("visibilitychange", onHide);
   window.addEventListener("pagehide", persist);
@@ -83,7 +89,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     <div class="main"><div class="bigban" id="bigban" aria-live="polite"></div>
       <div class="leftcol"><div class="tower" id="tower"></div><div class="toast" id="toast" title="Dirección de carrera y meteo"></div></div>
       <div class="side${race ? "" : " timed"}">
-        <div class="mapbox"><canvas id="map" title="Toca un coche para seguirlo. Línea discontinua: zona de modo adelantamiento · naranja: frenada donde se adelanta${race ? " · círculo discontinuo: dónde estaría tu piloto si parase ahora" : ""}"></canvas><canvas id="map3d" hidden aria-label="Mapa 3D"></canvas><div class="lbl3d" id="lbl3d" hidden></div><button class="perf3" id="perf3" hidden title="Rendimiento del mapa 3D. Toca para cambiar la calidad (automática, 0, 1, 2, 3)"></button><div class="flyov" id="flyov"></div><div class="tvg" id="tvg" hidden></div><div class="selchip" id="selchip"></div><button class="camb" id="camb" title="Cámara: sigue de cerca a tu piloto (o al coche que sigues). En 3D, mantenlo pulsado para ver todas las cámaras" aria-label="Cámara que sigue"><svg viewBox="0 0 20 16" width="20" height="16" aria-hidden="true"><rect x="1" y="3" width="13" height="10" rx="2" fill="currentColor"/><path d="M14.5 7 19 4.5v7L14.5 9z" fill="currentColor"/></svg><span id="camn"></span></button><button class="repb" id="repb" hidden title="Volver a ver el último percance a cámara lenta" aria-label="Repetición del último percance">↺</button><button class="m3b" id="m3b" title="Cambia entre el mapa 2D y el 3D" aria-label="Mapa en 3D" aria-pressed="false">3D</button><button class="bigb" id="bigb" title="Amplía el mapa sobre la clasificación" aria-label="Ampliar el mapa" aria-pressed="false"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" fill="none" stroke="currentColor" stroke-width="2"/></svg></button></div>
+        <div class="mapbox"><canvas id="map" title="Toca un coche para seguirlo.${sess.aidShort ? ` Línea discontinua: zona de ${sess.aidShort === "DRS" ? "DRS" : "modo adelantamiento"} ·` : ""} naranja: frenada donde se adelanta${race ? " · círculo discontinuo: dónde estaría tu piloto si parase ahora" : ""}"></canvas><canvas id="map3d" hidden aria-label="Mapa 3D"></canvas><div class="lbl3d" id="lbl3d" hidden></div><button class="perf3" id="perf3" hidden title="Rendimiento del mapa 3D. Toca para cambiar la calidad (automática, 0, 1, 2, 3)"></button><div class="flyov" id="flyov"></div><div class="tvg" id="tvg" hidden></div><div class="selchip" id="selchip"></div><button class="camb" id="camb" title="Cámara: sigue de cerca a tu piloto (o al coche que sigues). En 3D, mantenlo pulsado para ver todas las cámaras" aria-label="Cámara que sigue"><svg viewBox="0 0 20 16" width="20" height="16" aria-hidden="true"><rect x="1" y="3" width="13" height="10" rx="2" fill="currentColor"/><path d="M14.5 7 19 4.5v7L14.5 9z" fill="currentColor"/></svg><span id="camn"></span></button><button class="repb" id="repb" hidden title="Volver a ver el último percance a cámara lenta" aria-label="Repetición del último percance">↺</button><button class="m3b" id="m3b" title="Cambia entre el mapa 2D y el 3D" aria-label="Mapa en 3D" aria-pressed="false">3D</button><button class="bigb" id="bigb" title="Amplía el mapa sobre la clasificación" aria-label="Ampliar el mapa" aria-pressed="false"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" fill="none" stroke="currentColor" stroke-width="2"/></svg></button></div>
         ${race ? `<canvas id="gapstrip" class="gapstrip" title="Toda la parrilla en una vuelta: el líder a la izquierda. El círculo discontinuo es dónde saldría tu piloto si parase ahora."></canvas>` : ""}
         <div class="wxbox" id="wx"></div>
         <div id="lapban"></div>
@@ -856,7 +862,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     g.save();
     g.strokeStyle = "rgba(255,255,255,.75)"; g.lineWidth = 1.3 * dpr; g.setLineDash([3 * dpr, 3 * dpr]);
     for (const m of track.ms) {
-      if (!m.drs) continue;
+      if (!m.drs || !sess.aidShort) continue;
       const i0 = Math.floor(m.s0 / track.ds), i1 = Math.min(track.xs.length - 2, Math.floor(m.s1 / track.ds));
       g.beginPath();
       for (let i = i0; i <= i1; i++) {
@@ -1103,7 +1109,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       return `<span class="flag vl ${c.lapValid ? k : "bad"}" title="En vuelta lanzada: tócalo para ver su vuelta en el mapa">▶</span>`;
     }
     if (race && c.penS) return `<span class="flag pen" title="Sanción pendiente: se cumple en la próxima parada o se suma al final">+${c.penS}s</span>`;
-    if (c.drs) return `<span class="flag mo">MO</span>`;
+    if (c.drs) return `<span class="flag mo">${sess.aidShort ?? ""}</span>`;
     return "";
   }
   /** Color de un tiempo como en la tele: morado = mejor de la sesión, verde = mejor personal, amarillo = más lento. */
@@ -1392,7 +1398,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       return cell(`▲ ${ahead ? ahead.d.abrev : ""}`, f(ga), gapTrend(c.id * 2, ahead?.id, ga, -1)) + cell(`▼ ${behind ? behind.d.abrev : ""}`, f(gb), gapTrend(c.id * 2 + 1, behind?.id, gb, 1))
         + cell("Última", lap1(lt), ltCls)
         + cell("Ruedas", temps, "tc") + cell("Gasolina", `${d >= 0 ? "+" : ""}${d.toFixed(1)} v`, d < 0 ? "redt" : d < 0.4 ? "yellow" : "")
-        + cell(c.drs ? "Batería · MO" : "Batería", `${soc} %`, c.drs ? "green" : soc < 20 ? "yellow" : "");
+        + (sess.ersLabel ? cell(c.drs ? `${sess.ersLabel} · ${sess.aidShort}` : sess.ersLabel, `${soc} %`, c.drs ? "green" : soc < 20 ? "yellow" : "") : cell(c.drs ? sess.aidShort ?? "" : "Ayuda", c.drs ? "abierto" : "—", c.drs ? "green" : "dim"));
     }
     const best = quali ? c.bestByPart[c.eliminated ? c.elimPart! : sess.part] : c.best;
     const secs = [0, 1, 2].map((j) => { const cur = !isNaN(c.secCur[j]); const v = cur ? c.secCur[j] : c.secLast[j]; return `<span class="${tcls(v, c.secBest[j], sess.secBest[j])}" style="${cur ? "" : "opacity:.6"}">●</span>`; }).join("");
@@ -1618,8 +1624,8 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       return `<div class="pcard">
         <div class="pc-h"><span class="teamdot" style="background:${c.team.color}"></span><b class="nm">${esc(shortName(c.d.nombre))}</b>${t ? `${tyreHtml(t.c)}<span class="dim">${t.laps} v · ${sp!.opt - sp!.window}–${sp!.opt + sp!.window}°</span>` : `<span class="dim">en el garaje</span>`}${c.wing > 0 ? `<span class="yellow" title="Lo que cuesta por vuelta">alerón −${sess.wingLoss(c).toFixed(1)} s</span>` : ""}${race && c.fault ? `<span class="redt" title="Motor en Ahorro y ritmo bajo para que aguante">⚠️ ${esc(c.fault.what)} ${Math.round(c.fault.lvl * 100)} %</span>` : ""}${c.floor > 0 ? `<span class="redt" title="No se puede arreglar en boxes">fondo −${(c.floor * 100 * sess.secPerGrip).toFixed(1)} s</span>` : ""}${race && c.penS ? `<span class="redt" title="Se cumple en la próxima parada o se suma al final">+${c.penS} s</span>` : ""}${race && (c.tlStrikes ?? 0) >= 3 ? `<span class="dim" title="Bandera blanca y negra: límites de pista">🏁 ${c.tlStrikes}</span>` : ""}${race ? `<button data-let="${idx}" title="Dejar pasar al compañero">Dejar pasar</button>` : ""}</div>
         ${t ? `<div class="pc-t">${axle("Del.", t.F, 0)}${axle("Tras.", t.R, 1)}</div>` : ""}
-        <div class="pc-s">${cell("Última", fmtLap(c.lapTimes[c.lapTimes.length - 1]))}${cell("Mejor", fmtLap(c.best))}${t ? cell("Posible", fmtLap(sess.estLap(c))) : ""}${cell("Combust.", `${c.fuel.toFixed(1)} kg${race ? ` <small>${fuelDelta >= 0 ? "+" : ""}${fuelDelta.toFixed(1)} v</small>` : ""}`)}${cell("Batería", `${Math.round((c.soc / SOC_MAX) * 100)} %`)}${c.e.pu ? cell("Motor", `${Math.round(puLife(c.e.pu.km0 + c.puKm) * 100)} % vida`) : ""}${race ? cell("Plan", plan || "—", !c.e.pu) : ""}</div>
-        ${race ? `<div class="pc-c">${seg("push", "Ritmo", PUSH_NAMES, c.push)}${seg("engine", "Motor", ENGINE_NAMES, c.engine)}${seg("ers", "Batería", ERS_SHORT, c.ers, c.autoErs)}${seg("fight", "Pelea", ["Defender", "No pelear"], c.fight === "yield" ? 1 : 0, (c.fight ?? "auto") === "auto")}${c.wing > 0 ? seg("nose", "Morro", ["Cambiar", "Dejar"], c.nose === "no" ? 1 : 0, (c.nose ?? "auto") === "auto") : ""}</div>` : ""}
+        <div class="pc-s">${cell("Última", fmtLap(c.lapTimes[c.lapTimes.length - 1]))}${cell("Mejor", fmtLap(c.best))}${t ? cell("Posible", fmtLap(sess.estLap(c))) : ""}${cell("Combust.", `${c.fuel.toFixed(1)} kg${race ? ` <small>${fuelDelta >= 0 ? "+" : ""}${fuelDelta.toFixed(1)} v</small>` : ""}`)}${sess.ersLabel ? cell(sess.ersLabel, `${Math.round((c.soc / SOC_MAX) * 100)} %`) : ""}${c.e.pu ? cell("Motor", `${Math.round(puLife(c.e.pu.km0 + c.puKm) * 100)} % vida`) : ""}${race ? cell("Plan", plan || "—", !c.e.pu) : ""}</div>
+        ${race ? `<div class="pc-c">${seg("push", "Ritmo", PUSH_NAMES, c.push)}${seg("engine", "Motor", ENGINE_NAMES, c.engine)}${sess.ersLabel ? seg("ers", sess.ersLabel, ERS_SHORT, c.ers, c.autoErs) : ""}${seg("fight", "Pelea", ["Defender", "No pelear"], c.fight === "yield" ? 1 : 0, (c.fight ?? "auto") === "auto")}${c.wing > 0 ? seg("nose", "Morro", ["Cambiar", "Dejar"], c.nose === "no" ? 1 : 0, (c.nose ?? "auto") === "auto") : ""}</div>` : ""}
       </div>`;
     };
     const body = () => mine().map(card).join("");
@@ -2083,7 +2089,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
         <button data-m="data"><b>Datos del fin de semana</b><span>Lo que saben tus ingenieros, tandas largas y juegos de neumáticos</span></button>
         <button data-m="skip"><b>⏭ Simular hasta el final</b><span>El equipo lleva a tus pilotos y se calcula lo que queda</span></button>
         <button data-m="settings"><b>Ajustes</b><span>Qué momentos paran la sesión sola · atajos de teclado</span></button>
-        ${onExit ? `<button data-m="exit"><b>Salir al fin de semana</b><span>${started ? "La sesión se guarda tal cual y se retoma con «Reanudar»" : "Aún no ha empezado: al volver se empieza de cero"}</span></button>` : ""}
+        ${onExit ? `<button data-m="exit"><b>${scn ? esc(scn.exitLabel) : "Salir al fin de semana"}</b><span>${scn ? esc(scn.exitHint) : started ? "La sesión se guarda tal cual y se retoma con «Reanudar»" : "Aún no ha empezado: al volver se empieza de cero"}</span></button>` : ""}
       </div>`, (el, close) => {
       el.querySelectorAll<HTMLButtonElement>("[data-m]").forEach((b) => (b.onclick = () => {
         const m = b.dataset.m;
@@ -2250,7 +2256,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     if (ended || skipping || !onExit) return;
     paused = true;
     persist();
-    if (started) setParked(true);
+    if (started && !scn) setParked(true);
     cleanup();
     closeAllSheets();
     onExit();
@@ -2367,10 +2373,11 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       return;
     }
     // textos cortos: tienen que caber enteros en la caja de avisos de un móvil estrecho
-    if (race) showToast("Pulsa ▶ para dar la salida.", 0, "Muro", true, "left");
+    if (scn) showToast(scn.intro, 0, "Escenario", true, "left");
+    else if (race) showToast("Pulsa ▶ para dar la salida.", 0, "Muro", true, "left");
     else showToast(quali ? "Pulsa ▶ para empezar. «Salir» manda a tu piloto a pista; con «Auto» decide el equipo." : "Pulsa ▶ para empezar. «Tanda» programa una salida; con «Auto» decide el equipo.", 0, "Muro", true, "left");
     raf = requestAnimationFrame(loop);
   };
   // tras el semáforo la carrera arranca sola, a la velocidad de siempre
-  if (race && !snap) preRace(() => { begin(); setSpeed(speed); }); else begin();
+  if (race && !snap && !scn) preRace(() => { begin(); setSpeed(speed); }); else begin();
 }

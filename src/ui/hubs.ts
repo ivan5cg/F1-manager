@@ -35,6 +35,8 @@ export interface Nav {
   simulate(kind: SessionKind): void;
   /** Empieza la temporada siguiente en la misma partida. */
   nextSeason(next: SeasonState): void;
+  /** Modo escenario: momentos reales de 2010 en adelante (no toca las partidas). */
+  scenarios(): void;
 }
 
 const app = () => document.getElementById("app")!;
@@ -103,6 +105,9 @@ export function startScreen(nav: Nav, notice = "") {
         <button class="newcard" id="build"><b>Crea tu equipo</b><span>Ficha pilotos, jefe, técnico y motor con 100 M de techo de gasto, y gestiona las unidades de potencia.</span></button>
       </div>
     </div></div>
+    <div class="panel"><div class="hd"><span class="t">Modo escenario</span></div><div class="bd">
+      <button class="newcard wide" id="scen"><b>Escenarios</b><span>Diez carreras reales de 2010 a 2024, a mitad de carrera y con la parrilla de aquel año. Te toca decidir en el muro: Abu Dabi 2010, Canadá 2011, Mónaco 2016, Abu Dabi 2021...</span></button>
+    </div></div>
     <div style="padding:0 10px"><button id="import" style="width:100%">Importar partida desde un archivo</button><input type="file" id="importf" accept=".json,application/json" hidden></div>
   </div>`;
   $("#real").onclick = () => chooseSlot("Nueva temporada", (slot) => nav.pickTeam(slot));
@@ -113,6 +118,7 @@ export function startScreen(nav: Nav, notice = "") {
   const sx = document.getElementById("safarix");
   if (sx) sx.onclick = () => { const p = loadPrefs(); p.sinAvisoSafari = true; savePrefs(p); document.getElementById("safari")?.remove(); };
   $("#build").onclick = () => chooseSlot("Nueva temporada", (slot) => nav.build(slot));
+  $("#scen").onclick = () => nav.scenarios();
   document.querySelectorAll<HTMLElement>("[data-open]").forEach((b) => (b.onclick = () => nav.open(Number(b.dataset.open))));
   document.querySelectorAll<HTMLElement>("[data-more]").forEach((b) => (b.onclick = () => slotSheet(nav, Number(b.dataset.more))));
   const inp = $<HTMLInputElement>("#importf");
