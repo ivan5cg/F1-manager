@@ -86,6 +86,12 @@ En la realidad, en 2026 el GP de Baréin no se corrió en Sakhir: se trasladó a
     Dunne, Herta, Minì…; sus valoraciones son estimaciones del juego) y cada año llegan a la F2 unos cuantos jóvenes
     nuevos (inventados) que van madurando hasta que algún equipo los sube. Las noticias del mercado salen al empezar
     la temporada.
+  - **A mitad de temporada:** tras un accidente, un piloto puede lesionarse una a tres carreras (le sustituye el
+    reserva de su equipo o el mejor libre, y luego vuelve); pasado un tercio del año, un equipo de la IA puede destituir
+    al piloto que no rinde (muy por detrás de su compañero) y subir a uno mejor, a menudo de la F2. Tú puedes cambiar
+    a uno de tus pilotos entre carreras («Cambiar un piloto» en la pantalla de temporada): un libre, uno de la F2 o uno
+    de otro equipo, pagando las cláusulas del presupuesto de desarrollo. El mundial cuenta por piloto: el que sale
+    conserva sus puntos y el coche los sigue sumando para constructores.
   - **Salarios:** cada piloto cobra según lo bueno que es (de ~0,5 M un novato a ~55 M el mejor). En «crea tu
     equipo», desde la segunda temporada el techo de gasto lo ocupan los salarios de ese año (tus pilotos, jefe y
     técnico) y el motor, y lo que sobra va al desarrollo, como en la primera.

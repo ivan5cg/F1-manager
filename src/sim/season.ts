@@ -77,6 +77,23 @@ export interface SeasonState {
   devBonus?: number;
   /** Temporadas seguidas sin cumplir ningún objetivo (con dos, la directiva avisa de que el jefe peligra). */
   aviso?: number;
+  /** Cambios de piloto a mitad de temporada (lesiones, destituciones, tus fichajes), en orden. */
+  swaps?: SeatSwap[];
+}
+
+/** Un cambio de piloto a mitad de temporada: desde la ronda `round` (índice, 0 la primera), en el asiento `seat` (el id
+ *  del coche), corre `in` en lugar de `out`. */
+export interface SeatSwap { round: number; seat: number; in: DriverDef; out: DriverDef; why: string }
+
+/** Id de la persona que llevaba un asiento en una ronda: el del asiento si es quien lo lleva ahora; si no, 1000 + el
+ *  índice del cambio en el que salió (así el mundial cuenta por piloto aunque haya cambios). */
+export function personId(s: SeasonState, round: number, seat: number): number {
+  const sw = (s.swaps ?? []).filter((x) => x.seat === seat);
+  if (!sw.length) return seat;
+  let holder = sw[0].out;
+  for (const x of sw) if (x.round <= round) holder = x.in;
+  if (holder.abrev === sw[sw.length - 1].in.abrev) return seat;
+  return 1000 + (s.swaps ?? []).findIndex((x) => x.seat === seat && x.out.abrev === holder.abrev);
 }
 
 export function pointsFor(rows: ResultRow[] | undefined, table: number[]): Map<number, number> {
@@ -89,21 +106,33 @@ export function pointsFor(rows: ResultRow[] | undefined, table: number[]): Map<n
 export interface Standing { id: number; points: number; wins: number; best: number }
 
 export function driverStandings(s: SeasonState, nDrivers: number): Standing[] {
-  const out: Standing[] = Array.from({ length: nDrivers }, (_, id) => ({ id, points: 0, wins: 0, best: 99 }));
-  for (const r of s.rounds) {
-    for (const [id, p] of pointsFor(r.race, r.raceTable ?? RACE_POINTS)) out[id].points += p;
-    for (const [id, p] of pointsFor(r.sprint, r.sprintTable ?? SPRINT_POINTS)) out[id].points += p;
+  const by = new Map<number, Standing>();
+  for (let id = 0; id < nDrivers; id++) by.set(id, { id, points: 0, wins: 0, best: 99 });
+  const at = (round: number, seat: number) => { const k = personId(s, round, seat); let x = by.get(k); if (!x) by.set(k, (x = { id: k, points: 0, wins: 0, best: 99 })); return x; };
+  s.rounds.forEach((r, ri) => {
+    for (const [id, p] of pointsFor(r.race, r.raceTable ?? RACE_POINTS)) at(ri, id).points += p;
+    for (const [id, p] of pointsFor(r.sprint, r.sprintTable ?? SPRINT_POINTS)) at(ri, id).points += p;
     r.race?.forEach((row, i) => {
-      if (i === 0 && row.status === "fin") out[row.id].wins++;
-      if (row.status === "fin") out[row.id].best = Math.min(out[row.id].best, i + 1);
+      const x = at(ri, row.id);
+      if (i === 0 && row.status === "fin") x.wins++;
+      if (row.status === "fin") x.best = Math.min(x.best, i + 1);
     });
+  });
+  return [...by.values()].sort((a, b) => b.points - a.points || b.wins - a.wins || a.best - b.best);
+}
+
+/** Puntos de cada asiento (para constructores: el coche suma aunque cambie el piloto). */
+function seatPoints(s: SeasonState): Map<number, number> {
+  const m = new Map<number, number>();
+  for (const r of s.rounds) {
+    for (const [id, p] of pointsFor(r.race, r.raceTable ?? RACE_POINTS)) m.set(id, (m.get(id) ?? 0) + p);
+    for (const [id, p] of pointsFor(r.sprint, r.sprintTable ?? SPRINT_POINTS)) m.set(id, (m.get(id) ?? 0) + p);
   }
-  return out.sort((a, b) => b.points - a.points || b.wins - a.wins || a.best - b.best);
+  return m;
 }
 
 export function teamStandings(s: SeasonState, teams: TeamDef[]): { team: TeamDef; points: number }[] {
-  const ds = driverStandings(s, teams.reduce((a, t) => a + t.pilotos.length, 0));
-  const byId = new Map(ds.map((d) => [d.id, d.points]));
+  const byId = seatPoints(s);
   let id = 0;
   return teams.map((t) => {
     let p = 0;

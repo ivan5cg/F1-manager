@@ -2,7 +2,7 @@
 // (1080×1920, formato «story») con tu resultado para compartir.
 import type { ResultRow } from "../sim/session";
 import type { RaceSummary, Standing } from "../sim/season";
-import { DRIVERS, CIRCUITS } from "./data";
+import { DRIVERS, CIRCUITS, person } from "./data";
 import { esc, sheet } from "./common";
 import { helmetSvg, circuitPoints, reducedMotion, saveFile, shade } from "./visual";
 
@@ -32,9 +32,9 @@ export function podiumHtml(rows: ResultRow[], title: string, playerTeam: string)
 export function standingsHtml(gp: string, before: Standing[], after: Standing[], playerTeam: string, foot: string): string {
   const prevPos = new Map(before.map((x, i) => [x.id, i]));
   const prevPts = new Map(before.map((x) => [x.id, x.points]));
-  const shown = after.map((x, i) => ({ x, i })).filter(({ x, i }) => i < 5 || DRIVERS[x.id].team.id === playerTeam);
+  const shown = after.map((x, i) => ({ x, i })).filter(({ x, i }) => i < 5 || (x.id < 1000 && DRIVERS[x.id].team.id === playerTeam));
   return `<div class="panel"><div class="hd"><span class="t">Mundial tras ${esc(gp)}</span></div><div class="bd standings">${shown.map(({ x, i }, k) => {
-    const d = DRIVERS[x.id];
+    const d = person(x.id);
     const from = prevPts.get(x.id) ?? 0;
     const was = prevPos.get(x.id) ?? i;
     const mv = was - i;

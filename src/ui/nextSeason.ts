@@ -1,11 +1,12 @@
 // Fin de temporada y paso a la siguiente: lo que ha pasado, los objetivos, tus pilotos (renovar o cambiar) y el
 // mercado de los demás (career.ts).
-import { BASE_TEAMS, MARKET, DRIVERS, TEAMS, CALENDARS, calendarOf, gridOf } from "./data";
-import { $, esc, setBack } from "./common";
-import type { SeasonState } from "../sim/season";
-import { driverStandings, teamStandings } from "../sim/season";
+import { BASE_TEAMS, MARKET, DRIVERS, TEAMS, CALENDARS, calendarOf, gridOf, who } from "./data";
+import { $, esc, setBack, sheet } from "./common";
+import type { SeasonState, SeatSwap } from "../sim/season";
+import { driverStandings, teamStandings, pointsFor, RACE_POINTS, SPRINT_POINTS } from "../sim/season";
+import { devLeft } from "../sim/development";
 import { objectiveStatus } from "../sim/objectives";
-import { offSeason, initialContracts, rating, ageOf, FIRST_YEAR, objectivesBonus, SeasonRecord, CAR_CARRY, OBJ_BONUS, OBJ_MALUS, salaryFor, clauseFor } from "../sim/career";
+import { offSeason, initialContracts, rating, ageOf, FIRST_YEAR, objectivesBonus, SeasonRecord, CAR_CARRY, OBJ_BONUS, OBJ_MALUS, salaryFor, clauseFor, midSeason, SeatNow } from "../sim/career";
 import { publicDriver, trueTech, NEW_TEAM, PLAYER_TEAM_ID } from "../sim/market";
 import type { DriverDef, TeamDef } from "../sim/session";
 
@@ -22,7 +23,7 @@ function objectivesDone(s: SeasonState): { text: string; done: boolean }[] {
 /** Lo que se guarda de la temporada que acaba. */
 export function seasonRecord(s: SeasonState): SeasonRecord {
   const ds = driverStandings(s, DRIVERS.length), ts = teamStandings(s, TEAMS);
-  const ch = DRIVERS[ds[0].id];
+  const ch = who(s, ds[0].id);
   const tp = ts.findIndex((x) => x.team.id === s.playerTeam);
   return {
     year: yearOf(s),
@@ -30,7 +31,7 @@ export function seasonRecord(s: SeasonState): SeasonRecord {
     constructores: { equipo: ts[0].team.nombre, puntos: ts[0].points },
     mine: {
       equipo: ts[tp].team.nombre, pos: tp + 1, puntos: ts[tp].points,
-      pilotos: ds.map((x, i) => ({ x, i })).filter(({ x }) => DRIVERS[x.id].team.id === s.playerTeam).map(({ x, i }) => ({ nombre: DRIVERS[x.id].d.nombre, pos: i + 1, puntos: x.points })),
+      pilotos: ds.map((x, i) => ({ x, i })).filter(({ x }) => x.id < 1000 && DRIVERS[x.id].team.id === s.playerTeam).map(({ x, i }) => ({ nombre: DRIVERS[x.id].d.nombre, pos: i + 1, puntos: x.points })),
     },
     objetivos: objectivesDone(s),
     carreras: calendarOf(s).length,
@@ -40,7 +41,8 @@ export function seasonRecord(s: SeasonState): SeasonRecord {
 /** Cómo es ahora un piloto (por su abreviatura), esté donde esté. */
 function driverNow(s: SeasonState, abrev: string): DriverDef {
   for (const t of s.grid ?? []) { const d = t.pilotos.find((p) => p.abrev === abrev); if (d) return d; }
-  const m = s.misPilotos?.find((p) => p.abrev === abrev) ?? s.pool?.find((p) => p.abrev === abrev);
+  const m = s.misPilotos?.find((p) => p.abrev === abrev) ?? s.pool?.find((p) => p.abrev === abrev)
+    ?? s.swaps?.map((x) => (x.in.abrev === abrev ? x.in : x.out.abrev === abrev ? x.out : null)).find((d) => d);
   return m ?? publicDriver(MARKET, BASE_TEAMS, abrev);
 }
 
@@ -54,7 +56,7 @@ function rosters(s: SeasonState): { ai: TeamDef[]; mine: DriverDef[]; fin: TeamD
     const b = base.find((x) => x.id === t.id) ?? t;
     return { ...b, pilotos: t.pilotos.map((d) => driverNow(s, d.abrev)) };
   });
-  const mine = custom ? s.equipo!.pilotos.map((a) => driverNow(s, a)) : (base.find((t) => t.id === s.playerTeam)?.pilotos ?? []).map((d) => driverNow(s, d.abrev));
+  const mine = custom ? s.equipo!.pilotos.map((a) => driverNow(s, a)) : (fin.find((t) => t.id === s.playerTeam)?.pilotos ?? []).map((d) => driverNow(s, d.abrev));
   return { ai, mine, fin };
 }
 
@@ -91,8 +93,11 @@ export function buildNextSeason(s: SeasonState, choices: { keep: boolean; sign?:
   const contracts = s.contracts ?? initialContracts(allTeams, yearOf(s), s.seed);
   const salaries = salariesOf(s, allTeams.flatMap((t) => t.pilotos));
   const meanAgarre = BASE_TEAMS.reduce((a, t) => a + t.agarre, 0) / BASE_TEAMS.length;
+  const departed = (s.swaps ?? []).map((x) => x.out).filter((d, i, a) => !taken.has(d.abrev) && a.findIndex((z) => z.abrev === d.abrev) === i);
+  const basePool = poolOf(s, taken);
+  const pool0 = [...basePool, ...departed.filter((d) => !basePool.some((p) => p.abrev === d.abrev))];
   const out = offSeason({
-    year: y, seed: s.seed, final: fin, base: ai, meanAgarre, pool: poolOf(s, taken), contracts, salaries,
+    year: y, seed: s.seed, final: fin, base: ai, meanAgarre, pool: pool0, contracts, salaries,
     mine: mine.map((d, i) => ({ d, keep: choices[i]?.keep ?? true, sign: choices[i]?.sign })),
   });
   // tu coche: lo mismo que los demás, desde como acabó el tuyo
@@ -211,4 +216,128 @@ export function historyPanel(s: SeasonState): string {
 export function newsPanel(s: SeasonState): string {
   if (!s.news?.length || s.rounds.length) return "";
   return `<div class="panel"><div class="hd"><span class="t">Mercado de pilotos ${yearOf(s)}</span></div><div class="bd small">${s.news.map((n) => `<div>${esc(n)}</div>`).join("")}</div></div>`;
+}
+
+// --------------------------------------------------------------- a mitad de temporada
+/** Los asientos de la última carrera (o de la próxima), con quién los lleva. */
+function seatsAt(s: SeasonState, round: number): SeatNow[] {
+  const teams = gridOf(s, round).teams;
+  const out: SeatNow[] = [];
+  let id = 0;
+  for (const t of teams) {
+    const first = id;
+    t.pilotos.forEach((d, k) => out.push({ seat: id++, d, teamId: t.id, team: t.nombre, player: t.id === s.playerTeam, mate: first + (k === 0 ? 1 : 0) }));
+  }
+  return out;
+}
+
+/** Puntos de cada asiento esta temporada. */
+function seatPointsOf(s: SeasonState): Map<number, number> {
+  const m = new Map<number, number>();
+  for (const r of s.rounds) {
+    for (const [id, p] of pointsFor(r.race, r.raceTable ?? RACE_POINTS)) m.set(id, (m.get(id) ?? 0) + p);
+    for (const [id, p] of pointsFor(r.sprint, r.sprintTable ?? SPRINT_POINTS)) m.set(id, (m.get(id) ?? 0) + p);
+  }
+  return m;
+}
+
+/** Tras una carrera: lesiones y destituciones para la próxima (las guarda en la temporada). Devuelve las noticias. */
+export function applyMidSeason(s: SeasonState): string[] {
+  const last = s.rounds[s.rounds.length - 1];
+  if (!last?.race) return [];
+  const seats = seatsAt(s, s.round - 1);
+  const taken = new Set(seatsAt(s, s.round).map((x) => x.d.abrev));
+  for (const x of s.swaps ?? []) if (x.round >= s.round) taken.add(x.out.abrev);
+  const reserves: Record<string, string[]> = {};
+  for (const p of MARKET.pilotos) if (p.rol === "reserva" && p.equipo) (reserves[p.equipo] ??= []).push(p.abrev);
+  const out = midSeason({
+    next: s.round, rounds: calendarOf(s).length, year: yearOf(s), seed: s.seed, seats,
+    race: last.race.map((r) => ({ seat: r.id, status: r.status, reason: r.reason })), points: seatPointsOf(s),
+    pool: poolOf(s, taken), reserves, swaps: s.swaps ?? [],
+  });
+  if (out.swaps.length) {
+    s.swaps = [...(s.swaps ?? []), ...out.swaps];
+    s.pool = out.pool;
+    syncMine(s);
+  }
+  return out.news;
+}
+
+/** «Crear equipo»: tus pilotos de ahora en el equipo que fichaste (para la temporada siguiente). */
+function syncMine(s: SeasonState) {
+  if (!s.equipo) return;
+  const mine = seatsAt(s, s.round).filter((x) => x.player).map((x) => x.d);
+  s.equipo = { ...s.equipo, pilotos: mine.map((d) => d.abrev) };
+  if (s.misPilotos) s.misPilotos = mine.map((d) => s.misPilotos!.find((m) => m.abrev === d.abrev) ?? d);
+}
+
+/** Lo que cuesta cambiar a uno de tus pilotos a mitad de temporada (cláusulas, como entre temporadas). */
+function midSwapCost(s: SeasonState, out: DriverDef, inn: DriverDef, fromTeam: boolean): number {
+  const y = yearOf(s);
+  const contracts = s.contracts ?? {};
+  const sal = s.salaries ?? {};
+  const mk = (d: DriverDef) => MARKET.pilotos.find((p) => p.abrev === d.abrev)?.salario ?? salaryFor(d);
+  let c = clauseFor(sal[out.abrev] ?? mk(out), contracts[out.abrev] ?? y, y);
+  if (fromTeam) c += clauseFor(sal[inn.abrev] ?? mk(inn), contracts[inn.abrev] ?? y, y);
+  return Math.round(c * 10) / 10;
+}
+
+/** Hoja para cambiar a uno de tus pilotos entre carreras: un libre, uno de la F2 o uno de otro equipo (con cláusula). */
+export function swapSheet(s: SeasonState, onDone: (news: string) => void) {
+  const seats = seatsAt(s, s.round);
+  const mine = seats.filter((x) => x.player);
+  const taken = new Set(seats.map((x) => x.d.abrev));
+  const pool = poolOf(s, taken).sort((a, b) => rating(b) - rating(a)).slice(0, 20);
+  const others = seats.filter((x) => !x.player).sort((a, b) => rating(b.d) - rating(a.d));
+  const left = s.dev ? devLeft(s.dev) : 0;
+  let pick = 0, inAb = pool[0]?.abrev ?? "";
+  const options = () => [...pool.map((d) => ({ d, team: null as SeatNow | null })), ...others.map((x) => ({ d: x.d, team: x }))];
+  const body = () => {
+    const o = options().find((x) => x.d.abrev === inAb) ?? options()[0];
+    const cost = o ? midSwapCost(s, mine[pick].d, o.d, !!o.team) : 0;
+    return `<div class="row"><b class="up grow">Cambiar un piloto</b><span class="small dim">desde la próxima carrera</span></div>
+      <div class="seg">${mine.map((x, i) => `<button data-who="${i}" class="${i === pick ? "on" : ""}">${esc(x.d.nombre)}</button>`).join("")}</div>
+      <select id="swin" style="width:100%">${options().map((x) => `<option value="${x.d.abrev}" ${x.d.abrev === inAb ? "selected" : ""}>${esc(x.d.nombre)} · ${ageOf(x.d, yearOf(s))} años · ritmo ${x.d.ritmo} · ${x.team ? esc(x.team.team) : x.d.serie ? esc(x.d.serie) : "libre"}${x.d.debut === undefined ? " · sin experiencia en F1" : ""}</option>`).join("")}</select>
+      <div class="small" style="margin:6px 0">Cuesta <b>${cost} M</b> del presupuesto de desarrollo (quedan ${left} M): romper el contrato de ${esc(mine[pick].d.nombre)}${o?.team ? ` y la cláusula de ${esc(o.d.nombre)} con ${esc(o.team.team)}, que pondrá a otro` : ""}.</div>
+      <div class="btnrow" style="padding:0"><button data-close>Cancelar</button><button class="red" id="swok" ${o && cost <= left ? "" : "disabled"}>Cambiar</button></div>`;
+  };
+  const { el, close } = sheet(`<div id="swb">${body()}</div>`);
+  const wire = () => {
+    el.querySelectorAll<HTMLElement>("[data-close]").forEach((b) => (b.onclick = () => close()));
+    el.querySelectorAll<HTMLElement>("[data-who]").forEach((b) => (b.onclick = () => { pick = Number(b.dataset.who); redraw(); }));
+    el.querySelector<HTMLSelectElement>("#swin")!.onchange = (e) => { inAb = (e.target as HTMLSelectElement).value; redraw(); };
+    const ok = el.querySelector<HTMLButtonElement>("#swok");
+    if (ok) ok.onclick = () => {
+      const o = options().find((x) => x.d.abrev === inAb)!;
+      const out = mine[pick];
+      const cost = midSwapCost(s, out.d, o.d, !!o.team);
+      if (s.dev) s.dev.budget = Math.round((s.dev.budget - cost) * 10) / 10;
+      let rest = poolOf(s, taken).filter((d) => d.abrev !== o.d.abrev);
+      const swaps: SeatSwap[] = [{ round: s.round, seat: out.seat, in: o.d, out: out.d, why: "fichaje" }];
+      let txt = `✍️ Fichas a ${o.d.nombre}${o.team ? ` de ${o.team.team}` : ""} en lugar de ${out.d.nombre} (${cost} M).`;
+      if (o.team) {
+        // su equipo pone al mejor libre que quede
+        const sub = rest.sort((a, b) => rating(b) - rating(a))[0];
+        if (sub) { swaps.push({ round: s.round, seat: o.team.seat, in: sub, out: o.d, why: "sustituto" }); rest = rest.filter((d) => d !== sub); txt += ` ${o.team.team} sube a ${sub.nombre}.`; }
+      }
+      rest.push(out.d);
+      s.swaps = [...(s.swaps ?? []), ...swaps];
+      s.pool = rest;
+      if (s.contracts) s.contracts[o.d.abrev] = Math.max(s.contracts[o.d.abrev] ?? 0, yearOf(s));
+      if (s.salaries) s.salaries[o.d.abrev] = salaryFor(o.d);
+      syncMine(s);
+      close();
+      onDone(txt);
+    };
+  };
+  const redraw = () => { el.querySelector("#swb")!.innerHTML = body(); wire(); };
+  wire();
+}
+
+/** Los cambios de piloto de esta temporada, para la pantalla de temporada. */
+export function swapsPanel(s: SeasonState): string {
+  const sw = s.swaps ?? [];
+  if (!sw.length) return "";
+  const cal = calendarOf(s);
+  return `<div class="panel"><div class="hd"><span class="t">Cambios de pilotos</span></div><div class="bd small">${sw.map((x) => `<div>R${x.round + 1} · ${esc(x.in.nombre)} por ${esc(x.out.nombre)} <span class="dim">(${esc(x.why)}${x.round >= s.round && x.round < cal.length ? ", próxima" : ""})</span></div>`).join("")}</div></div>`;
 }

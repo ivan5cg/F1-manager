@@ -1,5 +1,5 @@
 import type { SessionSnapshot } from "../sim/snapshot";
-import { TEAMS, BASE_TEAMS, CIRCUITS, ROUNDS, DRIVERS, GRID_CHANGES, getTrack, calendarOf, devContext, gridOf, CALENDARS, circuitOf, devRounds } from "./data";
+import { TEAMS, BASE_TEAMS, CIRCUITS, ROUNDS, DRIVERS, GRID_CHANGES, getTrack, calendarOf, devContext, gridOf, CALENDARS, circuitOf, devRounds, person, whoAt, useSeason } from "./data";
 import { objectivesFor, objectiveStatus } from "../sim/objectives";
 import { DEV_AREAS, DEV_SIZES, DEV_RIVAL, MOTOR_CAP, DevArea, DevSize, devLeft, devExpect, orderPart, newDev, isWorks, devGains } from "../sim/development";
 import { myTeamPanel, puSummary, puPanel, wirePu, PLAYER_TEAM_ID } from "./teamBuilder";
@@ -7,7 +7,7 @@ import { $, esc, fmtLap, fmtRace, tyreHtml, fmtDate, sheet, setLabel, groupSets,
 import { SeasonState, RoundResult, RaceSummary, driverStandings, teamStandings, RACE_POINTS, SPRINT_POINTS } from "../sim/season";
 import { Weekend, WeekendState, newWeekend, preparePu, DAY_NAMES } from "../sim/weekend";
 import { puPenalty, quotaFor } from "../sim/powerunit";
-import { yearOf, offSeasonScreen, historyPanel, newsPanel } from "./nextSeason";
+import { yearOf, offSeasonScreen, historyPanel, newsPanel, swapsPanel, swapSheet } from "./nextSeason";
 import { startAttract } from "./attract";
 import { saveFile, helmetSvg, circuitSvg, skyGradient, lightAt, reducedMotion, forecastIcon } from "./visual";
 import { SESSION_NAMES, SessionKind, ResultRow, isRaceKind, isQualiKind, Car, Session, LongRun, TeamDef, DriverDef } from "../sim/session";
@@ -218,10 +218,10 @@ export function seasonScreen(nav: Nav, s: SeasonState) {
   const ts = teamStandings(s, TEAMS);
   const ROUNDS_S = calendarOf(s);
   const done = s.round >= ROUNDS_S.length;
-  const champ = done ? DRIVERS[ds[0].id] : null;
+  const champ = done ? person(ds[0].id) : null;
   const myTeam = TEAMS.find((t) => t.id === s.playerTeam)!;
   const myPos = ts.findIndex((x) => x.team.id === s.playerTeam) + 1;
-  const mine = ds.map((x, i) => ({ x, i })).filter(({ x }) => DRIVERS[x.id].team.id === s.playerTeam);
+  const mine = ds.map((x, i) => ({ x, i })).filter(({ x }) => x.id < 1000 && DRIVERS[x.id].team.id === s.playerTeam);
   // puesto de cada piloto antes de la última carrera (para las flechas)
   const prevPos = new Map(driverStandings({ ...s, rounds: s.rounds.slice(0, -1) }, DRIVERS.length).map((x, i) => [x.id, i]));
   app().innerHTML = `
@@ -234,6 +234,8 @@ export function seasonScreen(nav: Nav, s: SeasonState) {
     ${s.equipo && s.pu ? `<div class="panel"><div class="hd"><span class="t">Unidades de potencia</span></div><div class="bd">${puSummary(s.pu, DRIVERS.filter((d) => d.team.id === PLAYER_TEAM_ID).map((d) => d.id), DRIVERS.filter((d) => d.team.id === PLAYER_TEAM_ID).map((d) => d.d.abrev))}<div class="small dim" style="margin-top:4px">Porcentaje de vida gastada de cada unidad (en amarillo, la montada; tachadas, las rotas).</div></div></div>` : ""}
     ${exportDue(getActiveSlot(), s.rounds.length) ? `<div class="notice" id="expnote"><div class="grow small">Llevas ${s.rounds.length} carreras sin copia de seguridad. Como el juego no está instalado, el navegador podría borrar la partida: expórtala a un archivo.</div><button id="expnow">Exportar</button><button id="expx" title="No volver a recordarlo" aria-label="No volver a recordarlo">✕</button></div>` : ""}
     ${newsPanel(s)}
+    ${swapsPanel(s)}
+    ${!done && s.dev && !(s.weekend && s.weekend.next > 0) ? `<div style="padding:0 10px 8px"><button id="swapbtn" style="width:100%">Cambiar un piloto (libres, F2 u otro equipo)</button></div>` : ""}
     ${objectivesPanel(s, ROUNDS_S.length, done)}
     ${devPanel(s, myTeam, ROUNDS_S, done)}
     ${s.equipo && GRID_CHANGES.length ? `<div class="panel"><div class="hd"><span class="t">La parrilla tras tus fichajes</span></div><div class="bd small">${GRID_CHANGES.map((c) => `${esc(c.team)}: ${c.what === "piloto" ? `${esc(c.in)} por ${esc(c.out)}` : `interino por ${esc(c.out)}`}`).join("<br>")}</div></div>` : ""}
@@ -251,14 +253,14 @@ export function seasonScreen(nav: Nav, s: SeasonState) {
           <div class="cc-sil">${circuitSvg(c, 104, 60, r ? "#8a909a" : i === s.round ? "#ffffff" : "#c9ccd2", 2.2)}</div>
           <b class="cc-gp">${esc(c.gp.replace("Gran Premio de ", ""))}</b>
           <span class="cc-date">${fmtDate(c.fecha)}</span>
-          <div class="cc-res">${r ? `${win ? `🏁 ${esc(DRIVERS[win.id].d.abrev)}` : ""}${badge}` : i === s.round ? `<span class="cc-next">Siguiente</span>` : ""}</div>
+          <div class="cc-res">${r ? `${win ? `🏁 ${esc(whoAt(s, i, win.id).d.abrev)}` : ""}${badge}` : i === s.round ? `<span class="cc-next">Siguiente</span>` : ""}</div>
         </div>`;
       }).join("")}</div>
     </div></div>
     <div class="panel"><div class="hd"><span class="t">Mundial de pilotos</span></div><div class="bd" style="padding:0">
       ${s.rounds.length ? `<canvas class="champchart" id="champchart"></canvas><div class="small dim" style="padding:0 10px 6px">Puntos acumulados ronda a ronda: los cinco primeros y tus pilotos (línea gruesa).</div>` : ""}
       <table class="tv">${ds.map((x, i) => {
-        const d = DRIVERS[x.id];
+        const d = person(x.id);
         const was = prevPos.get(x.id);
         const mv = s.rounds.length > 1 && was !== undefined ? was - i : 0;
         return `<tr class="${d.team.id === s.playerTeam ? "me" : ""}"><td class="mono"><span class="pos">${i + 1}</span></td><td class="hcell">${helmetSvg(d.team.color, d.d.numero, d.d.abrev, 24)}${esc(d.d.nombre)}${mv ? ` <span class="${mv > 0 ? "green" : "redt"} small">${mv > 0 ? "▲" : "▼"}${Math.abs(mv)}</span>` : ""}</td><td class="dim small">${esc(d.team.nombre)}</td><td class="mono" style="text-align:right"><b>${x.points}</b></td></tr>`;
@@ -293,6 +295,8 @@ export function seasonScreen(nav: Nav, s: SeasonState) {
     $("#nextyear").onclick = () => offSeasonScreen(s, (next) => nav.nextSeason(next), () => nav.season());
   }
   wireDev(s, () => { const y = window.scrollY; seasonScreen(nav, s); window.scrollTo(0, y); });
+  const sb = document.getElementById("swapbtn");
+  if (sb) sb.onclick = () => swapSheet(s, () => { saveSeason(s); useSeason(s); seasonScreen(nav, s); });
   const en = document.getElementById("expnow");
   if (en) en.onclick = () => { exportToFile(getActiveSlot()); document.getElementById("expnote")?.remove(); };
   const ex = document.getElementById("expx");
@@ -363,7 +367,7 @@ function drawChampChart(cv: HTMLCanvasElement, s: SeasonState, cal: string[]) {
   const n = s.rounds.length;
   const per = Array.from({ length: n + 1 }, (_, r) => new Map(driverStandings({ ...s, rounds: s.rounds.slice(0, r) }, DRIVERS.length).map((x) => [x.id, x.points])));
   const final = driverStandings(s, DRIVERS.length);
-  const ids = [...new Set([...final.slice(0, 5).map((x) => x.id), ...final.filter((x) => DRIVERS[x.id].team.id === s.playerTeam).map((x) => x.id)])];
+  const ids = [...new Set([...final.slice(0, 5).map((x) => x.id), ...final.filter((x) => x.id < 1000 && DRIVERS[x.id].team.id === s.playerTeam).map((x) => x.id)])];
   const dpr = window.devicePixelRatio || 1;
   const W = cv.clientWidth || 360, H = 200;
   cv.width = W * dpr; cv.height = H * dpr; cv.style.height = H + "px";
@@ -376,7 +380,7 @@ function drawChampChart(cv: HTMLCanvasElement, s: SeasonState, cal: string[]) {
   const FONT = (w: number, px: number) => `${w} ${px}px "Titillium Web", sans-serif`;
   const seenTeam = new Set<string>();
   const series = ids.map((id) => {
-    const d = DRIVERS[id];
+    const d = person(id);
     const dash = seenTeam.has(d.team.id);
     seenTeam.add(d.team.id);
     return { id, d, mine: d.team.id === s.playerTeam, dash, pts: per.map((m) => m.get(id) ?? 0) };

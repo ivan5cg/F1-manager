@@ -2,7 +2,7 @@
 // pilotos (edad, retiradas, fichajes, novatos), los coches y el presupuesto.
 //   npx tsx scripts/temporadas.ts [temporadas=5] [semilla=1] [equipo=williams|propio] [--completo]
 import { gridOf, useSeason, DRIVERS, TEAMS, CALENDARS, MARKET } from "../src/ui/data";
-import { buildNextSeason, yearOf } from "../src/ui/nextSeason";
+import { buildNextSeason, yearOf, applyMidSeason } from "../src/ui/nextSeason";
 import type { SeasonState } from "../src/sim/season";
 import { driverStandings } from "../src/sim/season";
 import { objectivesFor } from "../src/sim/objectives";
@@ -33,8 +33,12 @@ for (let k = 0; k < n; k++) {
     let id = 0;
     const rows = teams.flatMap((t) => t.pilotos.map((d) => ({ id: id++, k: t.agarre / 180 + t.potencia * 0.0012 + (d.ritmo - 85) * 0.0007 + rng.gauss(0, 0.004) })));
     rows.sort((a, b) => b.k - a.k);
-    const race = rows.map((x, i) => ({ id: x.id, pos: i + 1, best: 90, time: 5400 + i, laps: 50, status: "fin", stops: 1 }) as ResultRow);
+    // unos 3 abandonos por carrera, la mitad por accidente
+    const race = rows.map((x, i) => (rng.chance(0.14) ? { id: x.id, pos: i + 1, best: 90, time: 0, laps: 20, status: "out", reason: rng.chance(0.5) ? "accidente" : "avería (motor)", stops: 1 } : { id: x.id, pos: i + 1, best: 90, time: 5400 + i, laps: 50, status: "fin", stops: 1 }) as ResultRow)
+      .sort((a, b) => (a.status === b.status ? a.pos - b.pos : a.status === "fin" ? -1 : 1));
     s.rounds.push({ round: r + 1, circuitId: s.calendar![r], race });
+    s.round = r + 1;
+    for (const t of applyMidSeason(s)) console.log(`   R${r + 1}: ${t}`);
   }
   s.round = s.calendar!.length;
   useSeason(s);

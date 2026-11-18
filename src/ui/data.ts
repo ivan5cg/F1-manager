@@ -30,7 +30,7 @@ import { buildTrack, Track } from "../sim/track";
 import type { TeamDef, DriverDef } from "../sim/session";
 import { buildGrid, GridChange, Market, PLAYER_TEAM_ID, costOf, trueTech } from "../sim/market";
 import { applyDev, DEV_RIVAL } from "../sim/development";
-import type { SeasonState } from "../sim/season";
+import { type SeasonState, type SeatSwap, personId } from "../sim/season";
 
 /** Los 11 equipos reales (modo clásico y base del modo «crear equipo»). */
 export const BASE_TEAMS = teamsJson.equipos as unknown as TeamDef[];
@@ -81,6 +81,34 @@ setTeams(BASE_TEAMS);
 /** Parrilla de una temporada tras `round` carreras. */
 export function gridOf(s: SeasonState | null, round = s?.round ?? 0): { teams: TeamDef[]; changes: GridChange[] } {
   if (!s) return { teams: BASE_TEAMS, changes: [] };
+  const g = gridBase(s, round);
+  return s.swaps?.length ? { ...g, teams: applySwaps(g.teams, s.swaps, round) } : g;
+}
+
+/** Cambios de piloto a mitad de temporada hasta esa ronda: el asiento (id del coche) pasa a llevarlo otro. */
+function applySwaps(teams: TeamDef[], swaps: SeatSwap[], round: number): TeamDef[] {
+  const out = teams.map((t) => ({ ...t, pilotos: [...t.pilotos] }));
+  for (const x of swaps) {
+    if (x.round > round) continue;
+    let id = 0;
+    for (const t of out) for (let k = 0; k < t.pilotos.length; k++, id++) if (id === x.seat) t.pilotos[k] = x.in;
+  }
+  return out;
+}
+
+/** Quién es un piloto del mundial (id de asiento o, si ya no corre, 1000 + el cambio en el que salió). */
+export function who(s: SeasonState | null, id: number): { id: number; d: DriverDef; team: TeamDef } {
+  if (id < 1000 || !s?.swaps) return DRIVERS[id];
+  const x = s.swaps[id - 1000];
+  return { id, d: x.out, team: DRIVERS[x.seat].team };
+}
+
+/** Quién llevaba un asiento en una ronda (índice, 0 la primera). */
+export function whoAt(s: SeasonState | null, round: number, seat: number): { id: number; d: DriverDef; team: TeamDef } {
+  return s ? who(s, personId(s, round, seat)) : DRIVERS[seat];
+}
+
+function gridBase(s: SeasonState, round: number): { teams: TeamDef[]; changes: GridChange[] } {
   const r = Math.min(round, calendarOf(s).length - 1);
   // temporadas siguientes: los equipos tal como empiezan ese año (career.ts)
   const base = s.grid ?? BASE_TEAMS;
@@ -110,8 +138,12 @@ export function devContext(s: SeasonState): { left: number | null; pubK: number;
   }
   return { left: MARKET.techo - spent, pubK: pub / 0.06, realK: real / 0.06 };
 }
+let CUR: SeasonState | null = null;
+/** Quién es un piloto del mundial de la temporada activa (con los que ya no corren). */
+export const person = (id: number) => who(CUR, id);
 /** Deja como activa la parrilla de la temporada (llamar al cargarla y al pasar de ronda). */
 export function useSeason(s: SeasonState | null) {
+  CUR = s;
   const g = gridOf(s);
   GRID_CHANGES = g.changes;
   setTeams(g.teams);

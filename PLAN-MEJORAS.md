@@ -208,9 +208,16 @@ Hecho (noviembre de 2026):
   `history`, `news`, `devBonus`, `aviso`, `trueSeed` (los valores ocultos no cambian de un año a otro). Las de antes
   son 2026 y siguen igual.
 - `npx tsx scripts/temporadas.ts [n] [semilla] [equipo|propio] [--completo]`: varias temporadas sin correr carreras.
-- Sin hacer: renovar o cambiar a un piloto con contrato en vigor (cláusula); salarios y techo de gasto en las
-  temporadas siguientes de «crear equipo» (el gasto sigue siendo el de la primera); cambiar de jefe, técnico o motor;
-  que te despidan de verdad; los contratos reales de 2026 (son una estimación).
+- Después: fichajes con contrato en vigor pagando la cláusula (`clauseFor`: la mitad de lo que le queda por cobrar),
+  tuyos y de otros equipos; salarios (`salaryFor`, `SeasonState.salaries`), que en «crear equipo» ocupan el techo
+  desde la segunda temporada (`devContext`); la parrilla real de F2 de 2026 en el mercado (`serie: "F2"`) y una
+  cantera que se renueva (`f2Newcomer`, cuatro jóvenes inventados al año).
+- Cambios de piloto a mitad de temporada (`SeasonState.swaps`, `SeatSwap`): lesiones tras un accidente, destituciones
+  de la IA (`midSeason` en career.ts, `applyMidSeason` al acabar cada carrera) y los tuyos entre carreras (`swapSheet`).
+  `gridOf` aplica los cambios por ronda y el mundial cuenta por persona (`personId`: el asiento si lo lleva ahora, o
+  1000 + el cambio en el que salió; `who`, `person`, `whoAt` en data.ts); constructores, por asiento.
+- Sin hacer: cambiar de jefe, técnico o motor; que te despidan de verdad; los
+  contratos reales de 2026 (son una estimación).
 
 Lo que decía la tarea:
 - Al acabar la temporada: pantalla de cierre (campeones, objetivos) y **«Empezar la temporada 2027»**.
@@ -513,10 +520,13 @@ y decir en el PR que cambia resultados.
 
 ## Orden recomendado (lo que queda)
 
-Nada de los bloques. Lo que más se notaría ahora:
-- **Adelantamientos con la parrilla de verdad:** con los 25 circuitos (`realismo.ts --carreras=6`) todo queda dentro
-  de margen (coche de seguridad 47 %, virtual 38 %, bandera roja 9 %, abandonos 1,6, sanciones 1,1, gana el de la
-  pole 43 %, adelantamientos 0,82 del objetivo), pero Madrid, Hungaroring y Yas Marina salen en ~0,45 y Lusail en
-  0,61: `calibra.ts` calibra con la parrilla aproximada de `carrera.ts` (más mezclada) y el banco corre la
-  clasificación. Recalibrar con la clasificación (`benchRace(..., quali = true)`) bajaría un poco el umbral de esos.
-- Los fichajes con contrato en vigor y los salarios en las temporadas siguientes de «crear equipo».
+Nada de los bloques. Hecho después (noviembre de 2026):
+- **Abandonos:** unos 3 por carrera (`FAIL_LAPS` 540 con la fiabilidad del equipo a la 2,5, `CRASH_P` 0,11; tres de
+  cada cuatro averías leves acaban en el garaje). El banco pide ahora de 2,8 a 4,5.
+- **Umbrales con la clasificación:** todos los circuitos recalibrados con `calibra.ts --clasif` (la parrilla sale de
+  correr la clasificación, como en el juego y en `realismo.ts`).
+- **Mercado:** F2 de 2026, cantera, cláusulas y salarios (ver 3.4).
+
+- **Cambios de piloto a mitad de temporada:** lesiones, destituciones y los tuyos (ver 3.4).
+
+Lo que más se notaría ahora: cambiar de jefe de equipo, director técnico o motor entre temporadas en «crear equipo».

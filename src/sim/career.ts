@@ -10,6 +10,7 @@
 // Todo sale de la semilla de la temporada: la misma partida da el mismo mercado.
 import { Rng, clamp } from "./rng";
 import type { TeamDef, DriverDef } from "./session";
+import type { SeatSwap } from "./season";
 
 export const FIRST_YEAR = 2026;
 /** Cuánto de la ventaja (o desventaja) del coche al acabar la temporada se conserva al año siguiente. */
@@ -296,4 +297,73 @@ export function offSeason(inp: OffSeasonInput): OffSeasonOutput {
 /** Presupuesto de desarrollo del año siguiente según los objetivos: más por cada uno cumplido, menos por cada fallado. */
 export function objectivesBonus(done: number, total: number): number {
   return done * OBJ_BONUS - (total - done) * OBJ_MALUS;
+}
+
+// ------------------------------------------------------------------ a mitad de temporada
+/** Un asiento en la carrera que acaba de terminar. */
+export interface SeatNow { seat: number; d: DriverDef; teamId: string; team: string; player: boolean; mate: number }
+
+export interface MidSeasonInput {
+  next: number; // índice de la próxima ronda (los cambios valen desde ella)
+  rounds: number; // carreras de la temporada
+  year: number;
+  seed: number;
+  seats: SeatNow[];
+  /** Resultado de la carrera que acaba de terminar (por asiento) y puntos de cada asiento en la temporada. */
+  race: { seat: number; status: string; reason?: string }[];
+  points: Map<number, number>;
+  /** Pilotos sin equipo; los reservas de cada equipo (por id de equipo), que son los primeros en sustituir. */
+  pool: DriverDef[];
+  reserves: Record<string, string[]>;
+  /** Cambios que ya ha habido esta temporada. */
+  swaps: SeatSwap[];
+}
+
+/**
+ * Cambios de piloto tras una carrera: un accidente fuerte puede dejar a un piloto lesionado unas carreras (le sustituye
+ * el reserva del equipo o el mejor libre, y vuelve después); y pasado un tercio de la temporada, un equipo de la IA
+ * puede destituir al piloto que no rinde (muy por detrás de su compañero) por uno mejor de los libres o de la F2.
+ */
+export function midSeason(inp: MidSeasonInput): { swaps: SeatSwap[]; pool: DriverDef[]; news: string[] } {
+  const rng = new Rng((inp.seed * 131 + inp.next * 7919 + inp.year) >>> 0);
+  const swaps: SeatSwap[] = [];
+  const news: string[] = [];
+  let pool = [...inp.pool];
+  if (inp.next >= inp.rounds) return { swaps, pool, news };
+  const busy = new Set(inp.swaps.filter((x) => x.round >= inp.next).map((x) => x.seat)); // ya con un cambio pendiente
+  const take = (teamId: string, better = 0): DriverDef | undefined => {
+    const res = inp.reserves[teamId]?.map((a) => pool.find((d) => d.abrev === a)).find((d) => d);
+    const pick = better ? pool.filter((d) => rating(d) > better).sort((a, b) => rating(b) - rating(a))[0] : res ?? pool.slice().sort((a, b) => rating(b) - rating(a))[0];
+    if (pick) pool = pool.filter((d) => d !== pick);
+    return pick;
+  };
+  // lesiones
+  for (const r of inp.race) {
+    const st = inp.seats.find((x) => x.seat === r.seat);
+    if (!st || busy.has(r.seat) || r.status !== "out" || !/^accidente/.test(r.reason ?? "") || !rng.chance(0.15)) continue;
+    const sub = take(st.teamId);
+    if (!sub) continue;
+    const n = rng.int(1, 3);
+    swaps.push({ round: inp.next, seat: r.seat, in: sub, out: st.d, why: `lesión de ${st.d.nombre}` });
+    if (inp.next + n < inp.rounds) swaps.push({ round: inp.next + n, seat: r.seat, in: st.d, out: sub, why: `vuelve ${st.d.nombre}` });
+    busy.add(r.seat);
+    news.push(`🚑 ${st.d.nombre} (${st.team}) se ha lesionado en el accidente: se pierde ${n === 1 ? "la próxima carrera" : `las ${n} próximas carreras`}. Le sustituye ${sub.nombre}.`);
+  }
+  // destituciones (solo equipos de la IA, una por equipo y temporada)
+  if (inp.next >= inp.rounds / 3) {
+    for (const st of inp.seats) {
+      if (st.player || busy.has(st.seat) || busy.has(st.mate)) continue;
+      if (inp.swaps.some((x) => x.why.startsWith("destitu") && inp.seats.find((y) => y.seat === x.seat)?.teamId === st.teamId)) continue;
+      const mine = inp.points.get(st.seat) ?? 0, mate = inp.points.get(st.mate) ?? 0;
+      const mateD = inp.seats.find((x) => x.seat === st.mate)?.d;
+      if (!mateD || mate < 10 || mine > mate * 0.25 || rating(st.d) > rating(mateD) - 3 || !rng.chance(0.1)) continue;
+      const sub = take(st.teamId, rating(st.d));
+      if (!sub) continue;
+      swaps.push({ round: inp.next, seat: st.seat, in: sub, out: st.d, why: "destituido" });
+      pool.push(st.d);
+      busy.add(st.seat);
+      news.push(`🔄 ${st.team} destituye a ${st.d.nombre} (${mine} puntos frente a ${mate} de su compañero) y sube a ${sub.nombre}${sub.serie ? ` desde la ${sub.serie}` : ""}.`);
+    }
+  }
+  return { swaps, pool, news };
 }

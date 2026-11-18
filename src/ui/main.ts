@@ -3,6 +3,7 @@ import "./style.css";
 // tema visual (las fichas de color están en style.css)
 document.documentElement.dataset.tema = "grafito";
 import { TEAMS, CIRCUITS, ROUNDS, DRIVERS, getTrack, useSeason, devContext, CALENDARS } from "./data";
+import { applyMidSeason } from "./nextSeason";
 import { newDev } from "../sim/development";
 import { builderScreen, PLAYER_TEAM_ID } from "./teamBuilder";
 import { loadSeason, saveSeason, loadSession, clearSession, isParked, setActiveSlot, deleteSlot, initStore, roomyStorage, askPersist, slotList, loadPrefs, getActiveSlot } from "./store";
@@ -44,6 +45,9 @@ function finishSession(wk: Weekend, kind: SessionKind, sess: Session) {
     s.rounds.push({ round: st.round, circuitId: st.circuitId, q: st.results.Q, sprint: st.results.SPRINT, race: st.results.RACE, raceTable: st.scoring?.RACE, sprintTable: st.scoring?.SPRINT, summary: st.summaries?.RACE, sprintSummary: st.summaries?.SPRINT });
     s.round++;
     s.weekend = null;
+    // cambios de piloto para la próxima carrera: lesiones tras un accidente y destituciones
+    const mid = applyMidSeason(s);
+    if (mid.length) extra += `<div class="panel"><div class="hd"><span class="t">Cambios de pilotos</span></div><div class="bd small">${mid.map((t) => `<div>${esc(t)}</div>`).join("")}</div></div>`;
     // el mundial tras la carrera: los cinco primeros, y tus pilotos y tu equipo estén donde estén
     const all = driverStandings(s, DRIVERS.length);
     const before = driverStandings({ ...s, rounds: s.rounds.slice(0, -1) }, DRIVERS.length);
@@ -83,7 +87,7 @@ function finishSession(wk: Weekend, kind: SessionKind, sess: Session) {
     const myTeam = TEAMS.find((t) => t.id === s.playerTeam)!;
     void shareSheet({
       kind, year: s.year ?? 2026, circuitId: st.circuitId, rows, points: pointsFor(rows, table), sum, playerTeam: s.playerTeam, teamName: myTeam.nombre, teamColor: myTeam.color,
-      standing: ds.map((x, i) => ({ id: x.id, pos: i + 1, points: x.points })).filter((x) => DRIVERS[x.id].team.id === s.playerTeam),
+      standing: ds.map((x, i) => ({ id: x.id, pos: i + 1, points: x.points })).filter((x) => x.id < 1000 && DRIVERS[x.id].team.id === s.playerTeam),
     });
   };
   window.scrollTo(0, 0);
