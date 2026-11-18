@@ -5,7 +5,7 @@ import { puLife } from "../sim/powerunit";
 import { knowledgeTable, longRunsPanel, weekendLongRuns, setPills } from "./hubs";
 import { runToEnd } from "./simulate";
 import { Weekend } from "../sim/weekend";
-import { Session, Car, RaceEvent, SESSION_NAMES, SessionKind, isRaceKind, isQualiKind, PUSH_NAMES, ENGINE_NAMES, ERS_NAMES, SOC_MAX, fmtMinSec, GRAIN_WORDS } from "../sim/session";
+import { Session, Car, RaceEvent, SESSION_NAMES, SessionKind, isRaceKind, isQualiKind, PUSH_NAMES, ENGINE_NAMES, ERS_NAMES, SOC_MAX, fmtMinSec, GRAIN_WORDS, PIT_MODE_NAMES } from "../sim/session";
 import { COMPOUNDS, Compound, DRY, ALL, setWear, TyreSet, WET } from "../sim/tyres";
 import { rainAt, forecast, RadarFrame, windNow } from "../sim/weather";
 import { renderField, colorize, terrain, RADAR_STEPS, fmtHour } from "./radar";
@@ -1489,6 +1489,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     open(`<div class="row"><b class="up grow">Parada de ${esc(c.d.nombre)}</b><span class="dim small">quedan ${left} v</span></div>
       <div class="small dim">Para al final de esta vuelta. Usados: ${used}.${kind === "RACE" ? " En seco hay que usar dos compuestos." : ""} El % es la goma que queda.</div>
       ${setButtons(c, (s) => s !== c.tyres && !s.punctured, c.pitRequest ?? undefined)}
+      ${race ? `<div class="row small" style="gap:6px;margin:2px 0 4px"><span class="dim">Parada</span><div class="seg">${PIT_MODE_NAMES.map((n, i) => `<button data-pm="${i}" class="${(c.pitMode ?? 1) === i ? "on" : ""}">${n}</button>`).join("")}</div></div><div class="small dim" style="margin-bottom:6px">Segura: +0,4 s y casi nunca sale mal. Rápida: −0,25 s, pero sale mal el doble de veces y es más fácil una salida insegura (5 s). Pídela con tiempo: a menos de ~2,5 s de la entrada ya no llega.</div>` : ""}
       ${race ? (() => { const os = stopOptions(sess, c).filter((o) => fitsWater(o.c)); if (!os.length) return ""; const catches = os.filter((o) => o.catchLaps !== null); return `<div style="margin:-2px 0 8px">${exitLine(os[0])}${catches.length ? `<div class="small">${catches.map((o) => `${tyreHtml(o.c)} alcanza a ${o.ahead!.car.d.abrev} en ${o.catchLaps} v`).join(" · ")}</div>` : ""}<div class="small dim">Más detalle en «Muro».</div></div>`; })() : ""}
       <div class="btnrow" style="padding:0"><button data-close>${c.pitRequest ? "Mantener" : "Cerrar"}</button>${c.pitRequest ? `<button class="red" id="cancel">Anular parada</button>` : ""}</div>`, (el, close) => {
       el.querySelectorAll<HTMLButtonElement>("[data-set]").forEach((b) => (b.onclick = () => {
@@ -1499,6 +1500,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       }));
       const cb = el.querySelector<HTMLButtonElement>("#cancel");
       if (cb) cb.onclick = () => { c.pitRequest = null; close(); };
+      el.querySelectorAll<HTMLButtonElement>("[data-pm]").forEach((b) => (b.onclick = () => { c.pitMode = Number(b.dataset.pm); el.querySelectorAll<HTMLElement>("[data-pm]").forEach((x) => x.classList.toggle("on", x === b)); }));
     });
   }
   function redSheet(c: Car) {

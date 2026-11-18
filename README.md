@@ -199,6 +199,11 @@ de agua y aceite, presión hidráulica, frenos, batería…) y va a más cada vu
 una batería tocados dan algo menos de potencia y unos frenos tocados fallan más. El ingeniero te lo dice por radio, la
 tarjeta del piloto enseña cómo va (⚠️ y el %) y la IA cuida las suyas.
 
+**Paradas.** La parada hay que pedirla con tiempo: a menos de ~2,5 s de la entrada del pit-lane el piloto ya no
+puede meterse y para en la vuelta siguiente. En la hoja de la parada se elige cómo: **segura** (+0,4 s, casi nunca sale
+mal), **normal** o **rápida** (−0,25 s, sale mal el doble de veces y es más fácil soltar el coche justo cuando llega
+otro: salida insegura, 5 s). Si el compañero acaba de parar, los mecánicos van con prisa y sale mal más a menudo.
+
 **Salida.** Cada piloto reacciona y tracciona distinto (su nota de salida, con azar), el blando arranca mejor que el medio y el duro, y de vez en cuando alguien se queda clavado. Hasta la primera frenada hay sitio a los lados: los puestos se ganan o se pierden por pura arrancada. En la primera vuelta se pasa en casi cualquier curva, pero la diferencia de agarre cuenta la mitad (van en grupo).
 
 **Adelantamientos.** En cada frenada se compara la **ventaja del que ataca, en segundos por vuelta**, con un umbral:

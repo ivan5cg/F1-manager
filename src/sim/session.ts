@@ -69,6 +69,13 @@ const CRASH_P = 0.08;
 const TL_P = 0.0011;
 /** Probabilidad de dañar el fondo en un bordillo por cada paso de altura por debajo de lo que pide el circuito. */
 const KERB_P = 0.00003;
+/** Segundos que necesita el piloto para reaccionar a la orden de parar (si llega más tarde, para en la siguiente). */
+const PIT_REACT = 2.5;
+/** Parada segura, normal y rápida: segundos de más (o de menos), probabilidad de que salga mal y de salida insegura. */
+const PIT_MODE_T = [0.4, 0, -0.25];
+const PIT_MODE_P = [0.02, 0.05, 0.09];
+const UNSAFE_P = [0, 0.025, 0.08];
+export const PIT_MODE_NAMES = ["Segura", "Normal", "Rápida"];
 /** Averías que avisan: lo que ve la telemetría. Las que no están aquí rompen de golpe. */
 const FAULT_SIGNS: Record<string, string> = {
   motor: "temperatura de agua y aceite muy alta",
@@ -281,6 +288,10 @@ export interface Car {
   nose?: "auto" | "yes" | "no";
   /** Cómo se defiende del que le ataca: auto (lo decide el equipo), defender (cierra la puerta) o no pelear. */
   fight?: "auto" | "defend" | "yield";
+  /** Parada: 0 segura, 1 normal, 2 rápida (más corta, pero con más riesgo de que salga mal o de salida insegura). */
+  pitMode?: number;
+  /** Cuándo se pidió la parada que tiene pendiente (s de sesión): el piloto necesita unos segundos para reaccionar. */
+  pitCallT?: number;
   /** Avería que se está gestando: qué es, lo cerca que está de romperse (0 a 1) y si es de la unidad de potencia. */
   fault?: { what: string; lvl: number; pu: boolean; warned: number };
 }
@@ -1144,8 +1155,8 @@ export class Session {
     // un accidente fuerte (barreras dañadas) puede parar la carrera
     if (kind === "crash" && severity >= 0.7 && this.rng.chance((urban ? 0.32 : 0.2) * severity)) { this.redFlag(`accidente de ${c.d.abrev}, reparación de barreras`); return; }
     let pSC: number, pVSC: number;
-    if (kind === "crash") { pSC = urban ? 0.75 : 0.35 + 0.4 * severity; pVSC = urban ? 0.2 : 0.42; }
-    else if (kind === "failure") { pSC = urban ? 0.45 : 0.12 + 0.3 * severity; pVSC = urban ? 0.4 : 0.55; }
+    if (kind === "crash") { pSC = urban ? 0.75 : 0.45 + 0.4 * severity; pVSC = urban ? 0.2 : 0.4; }
+    else if (kind === "failure") { pSC = urban ? 0.45 : 0.18 + 0.3 * severity; pVSC = urban ? 0.4 : 0.55; }
     else { pSC = urban ? 0.25 : 0.08; pVSC = urban ? 0.45 : 0.35; }
     const r = this.rng.next();
     if (r < pSC) this.deploy("sc", why, severity + (urban ? 0.2 : 0));
@@ -1379,9 +1390,18 @@ export class Session {
     const prevPos = ((oldS % L) + L) % L;
     const newPos = ((c.s % L) + L) % L;
     const passedEntry = prevPos < this.track.pit.entry && (newPos >= this.track.pit.entry || newPos < prevPos);
+    if (!c.pitRequest) c.pitCallT = undefined;
+    else if (c.pitCallT === undefined) c.pitCallT = this.t;
     if (passedEntry && oldS > 0) {
-      if (isRaceKind(this.kind)) { if (c.pitRequest && !this.chequered) this.enterPit(c, oldS); }
-      else if (c.run?.phase === "in") this.enterLaneIn(c);
+      if (isRaceKind(this.kind)) {
+        if (c.pitRequest && !this.chequered) {
+          // la parada pedida justo antes de la entrada no llega: el piloto ya no puede meterse
+          if (c.player && !this.autoPlayers && this.t - c.pitCallT! < PIT_REACT) {
+            c.pitCallT = this.t - PIT_REACT;
+            this.log({ kind: "radio", carId: c.id, text: `📻 ${c.d.abrev}: "¡Demasiado tarde, ya he pasado la entrada! Paro en la siguiente."`, important: true });
+          } else this.enterPit(c, oldS);
+        }
+      } else if (c.run?.phase === "in") this.enterLaneIn(c);
     }
   }
 
@@ -2201,8 +2221,12 @@ export class Session {
     const lapBase = Math.floor(entryS / this.L) * this.L;
     const entryAbs = lapBase + tr.pit.entry;
     const exitAbs = lapBase + this.L + tr.pit.exit;
-    let stationary = Math.max(1.9, this.rng.gauss(c.team.boxes, 0.12));
-    if (this.rng.chance(0.05)) stationary += this.rng.range(1.5, 7);
+    // parada segura, normal o rápida (la del jugador; la IA, normal); con el compañero parando justo antes, los
+    // mecánicos van con prisa y sale mal más a menudo
+    const mode = c.player && !this.autoPlayers ? c.pitMode ?? 1 : 1;
+    const stacked = this.cars.some((o) => o !== c && o.team === c.team && o.loc === "pit");
+    let stationary = Math.max(1.9, this.rng.gauss(c.team.boxes + PIT_MODE_T[mode], 0.12));
+    if (this.rng.chance(PIT_MODE_P[mode] * (stacked ? 2.2 : 1))) stationary += this.rng.range(1.5, 7);
     const noseChange = this.changeNose(c);
     if (noseChange) stationary += NOSE_TIME;
     // la sanción de tiempo se cumple parado, antes de que toquen el coche
@@ -2272,6 +2296,10 @@ export class Session {
       c.loc = "track";
       c.pit = undefined;
       c.pitOutT = this.t;
+      // salida insegura: lo sueltan justo cuando llega otro por la calle o por la pista
+      const mode = c.player && !this.autoPlayers ? c.pitMode ?? 1 : 1;
+      const near = this.cars.some((o) => o !== c && (o.loc === "track" || o.loc === "pit") && c.s - o.s > 0 && c.s - o.s < 35);
+      if (near && this.rng.chance(UNSAFE_P[mode])) this.penalize(c, 5, "salida insegura del box");
       if (c.player) this.log({ kind: "pit", carId: c.id, text: `↪️ ${c.d.abrev} sale de boxes P${this.order().indexOf(c) + 1}`, important: true });
     }
   }
