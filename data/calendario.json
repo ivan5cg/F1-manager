@@ -1,4 +1,5 @@
 {
+ "_nota": "rondas: la temporada corta (9 grandes premios, la de siempre). completa: la de 2026 tal como es (Baréin y Arabia Saudí se cancelaron en marzo; el GP de Baréin se corrió en Sepang el 4 de octubre), con el formato de cada fin de semana si no es el de su circuito. rondasV1: las primeras partidas (5 carreras).",
  "temporada": 2026,
  "rondas": [
   "suzuka",
@@ -10,6 +11,37 @@
   "sepang",
   "singapur",
   "interlagos"
+ ],
+ "completa": [
+  "melbourne",
+  "shanghai",
+  "suzuka",
+  "miami",
+  "montreal",
+  "monaco",
+  "barcelona",
+  "spielberg",
+  {
+   "id": "silverstone",
+   "formato": "sprint"
+  },
+  "spa",
+  "hungaroring",
+  "zandvoort",
+  "monza",
+  "madrid",
+  "baku",
+  "sepang",
+  "singapur",
+  "austin",
+  "mexico",
+  {
+   "id": "interlagos",
+   "formato": "normal"
+  },
+  "lasvegas",
+  "lusail",
+  "yasmarina"
  ],
  "rondasV1": [
   "silverstone",
