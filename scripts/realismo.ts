@@ -71,7 +71,7 @@ const METRICS: { k: string; name: string; ref: [number, number] | null; f: (r: R
   { k: "vscp", name: "% carreras con virtual", ref: [20, 50], f: (r) => pct(r.map((x) => x.vsc > 0)) },
   { k: "neut", name: "% carreras neutralizadas (SC o VSC)", ref: [50, 80], f: (r) => pct(r.map((x) => x.sc + x.vsc > 0)) },
   { k: "red", name: "% carreras con bandera roja", ref: [2, 12], f: (r) => pct(r.map((x) => x.red > 0)) },
-  { k: "ret", name: "abandonos por carrera", ref: [1.3, 3.5], f: (r) => mean(r.map((x) => x.retire)), dec: 1 },
+  { k: "ret", name: "abandonos por carrera", ref: [2.8, 4.5], f: (r) => mean(r.map((x) => x.retire)), dec: 1 },
   { k: "cont", name: "toques por carrera", ref: [0.5, 3], f: (r) => mean(r.map((x) => x.contacts)), dec: 1 },
   { k: "offs", name: "salidas y trompos por carrera", ref: null, f: (r) => mean(r.map((x) => x.offs)), dec: 1 },
   { k: "pens", name: "sanciones por carrera", ref: [0.8, 4], f: (r) => mean(r.map((x) => x.pens)), dec: 1 },

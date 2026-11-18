@@ -64,7 +64,7 @@ const SPRINT_HALF = [4, 3.5, 3, 2.5, 2, 1.5, 1, 0.5];
 const CAR_DRY = 0.0035;
 const ENGINE_FAIL = [0.6, 1, 2.2];
 /** De los errores en curva, cuántos acaban contra las barreras (en seco). */
-const CRASH_P = 0.08;
+const CRASH_P = 0.11;
 /** Probabilidad de pisar fuera de los límites en cada curva rápida de carrera (al ritmo normal). */
 const TL_P = 0.0011;
 /** Probabilidad de dañar el fondo en un bordillo por cada paso de altura por debajo de lo que pide el circuito. */
@@ -149,6 +149,8 @@ export interface DriverDef {
   ataque: number; defensa: number; agresividad: number; salida: number;
   /** Año de nacimiento y de su primera carrera de F1 (sin él, nunca ha corrido un gran premio: novato). */
   nacimiento?: number; debut?: number;
+  /** Categoría en la que corre si no está en la F1 (p. ej. «F2»). */
+  serie?: string;
 }
 
 /**
@@ -1190,11 +1192,11 @@ export class Session {
     }
     const urban = !!this.track.def.entorno;
     // un accidente fuerte (barreras dañadas) puede parar la carrera
-    if (kind === "crash" && severity >= 0.7 && this.rng.chance((urban ? 0.26 : 0.14) * severity)) { this.redFlag(`accidente de ${c.d.abrev}, reparación de barreras`); return; }
+    if (kind === "crash" && severity >= 0.7 && this.rng.chance((urban ? 0.16 : 0.08) * severity)) { this.redFlag(`accidente de ${c.d.abrev}, reparación de barreras`); return; }
     let pSC: number, pVSC: number;
     if (kind === "crash") { pSC = urban ? 0.75 : 0.45 + 0.4 * severity; pVSC = urban ? 0.2 : 0.4; }
-    else if (kind === "failure") { pSC = urban ? 0.45 : 0.18 + 0.3 * severity; pVSC = urban ? 0.4 : 0.55; }
-    else { pSC = urban ? 0.25 : 0.08; pVSC = urban ? 0.45 : 0.35; }
+    else if (kind === "failure") { pSC = urban ? 0.45 : 0.18 + 0.3 * severity; pVSC = urban ? 0.4 : 0.42; }
+    else { pSC = urban ? 0.25 : 0.08; pVSC = urban ? 0.4 : 0.28; }
     const r = this.rng.next();
     if (r < pSC) this.deploy("sc", why, severity + (urban ? 0.2 : 0));
     else if (r < pSC + pVSC) this.deploy("vsc", why, severity);
@@ -1237,7 +1239,8 @@ export class Session {
   /** Avería en carrera: muchas dejan llegar al garaje (sin neutralizar); si no, el coche se queda en la pista. */
   private failure(c: Car, what: string) {
     const sev = this.rng.range(0, 0.6);
-    if (sev < 0.3 && this.rng.chance(0.5)) this.retire(c, `avería (${what}), se retira en boxes`, 0, "garage");
+    // la mayoría avisan lo justo para llegar al garaje; las que no, dejan el coche en la pista
+    if (sev < 0.42 && this.rng.chance(0.75)) this.retire(c, `avería (${what}), se retira en boxes`, 0, "garage");
     else this.retire(c, `avería (${what})`, sev, "failure");
   }
 
@@ -1615,7 +1618,8 @@ export class Session {
     for (const c of this.cars) {
       if (c.loc !== "track") continue;
       if (c.fault) { this.faultLap(c); continue; }
-      const hz = (1 / FAIL_LAPS) * c.team.fiabilidad * ENGINE_FAIL[c.engine] * (1 + c.floor * 5);
+      // la fiabilidad de cada equipo pesa mucho: los coches frágiles se rompen bastante más que los buenos
+      const hz = (1 / FAIL_LAPS) * Math.pow(c.team.fiabilidad, 2.5) * ENGINE_FAIL[c.engine] * (1 + c.floor * 5);
       if (c.e.pu) {
         // con unidades de potencia: la mitad de las averías son del motor y crecen con su desgaste
         if (this.rng.chance(hz * 0.5 * puHazard(puLife(c.e.pu.km0 + c.puKm)))) {
@@ -2163,6 +2167,8 @@ export class Session {
       this.log({ kind: "incident", text: `💢 Toque entre ${c.d.abrev} y ${a.d.abrev}: ${c.d.abrev} daña el alerón delantero`, carId: c.id, important: c.player || a.player, pause: c.player || a.player });
       if (c.player) this.log({ kind: "radio", carId: c.id, text: `📻 Ingeniero: ${c.d.abrev}, alerón dañado: perdemos ~${this.wingLoss(c).toFixed(1)} s por vuelta. Cambiar el morro suma ${NOSE_TIME} s a la parada.`, important: true });
       if (this.rng.chance(0.3)) this.incident(c, `restos del alerón de ${c.d.abrev} en la pista`, 0.2, "debris");
+      // a veces el golpe ha tocado algo más (suspensión, radiador): llega a boxes y se retira
+      if (this.rng.chance(0.18)) this.retire(c, "daños tras el toque", 0, "garage");
     } else if (r < 0.62) {
       const victim = this.rng.chance(0.5) ? a : c;
       victim.slowPuncture = true;
