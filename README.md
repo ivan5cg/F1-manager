@@ -143,7 +143,7 @@ En la realidad, en 2026 el GP de Baréin no se corrió en Sakhir: se trasladó a
 
 ## Modo escenario
 
-Desde el inicio, «Escenarios»: diez carreras reales de 2010 a 2024 que empiezan **a mitad**, en el momento en que se
+Desde el inicio, «Escenarios»: once carreras reales de 2010 a 2024 que empiezan **a mitad**, en el momento en que se
 decidieron, con los equipos, los pilotos y el reglamento de aquel año. Tienes un objetivo y tres estrellas (la primera
 es superarlo). Lo que pasa desde ahí lo decide la simulación y tú: la historia puede salir distinta. No toca tus
 partidas: no se guarda a medias y, al salir, vuelve la parrilla de 2026.
@@ -153,11 +153,12 @@ partidas: no se guarda a medias y, al salir, vuelve la parrilla de 2026.
 | 2010 | Abu Dabi | Ferrari | Vuelta 12, Alonso 4.º; Petrov y Rosberg ya han parado | Alonso campeón |
 | 2011 | Canadá | McLaren | Vuelta 40, Button último con la pista secándose | Button en los puntos (y ganar) |
 | 2012 | Malasia | Sauber | Vuelta 38, Pérez a 1,3 s de Alonso con intermedios | Pérez 2.º o mejor (y ganar) |
-| 2012 | Brasil | Red Bull | Fin de la vuelta 1, Vettel último y tocado, con chubascos | Vettel campeón |
+| 2012 | Brasil | Ferrari | Fin de la vuelta 1, Alonso 5.º y Vettel último y tocado, con chubascos | Alonso campeón |
 | 2016 | Mónaco | Red Bull | Vuelta 30, Hamilton con lluvia extrema y Ricciardo detrás con intermedios | Ricciardo gana |
 | 2020 | Italia | AlphaTauri | Salida parada tras la bandera roja, Gasly 2.º | Gasly en el podio (y ganar) |
 | 2021 | Hungría | Alpine | Vuelta 4, Ocon líder y Hamilton último tras parar | Ocon en el podio (y ganar) |
 | 2021 | Abu Dabi | Mercedes | Vuelta 52; en la 53 sale el coche de seguridad | Hamilton campeón |
+| 2023 | Mónaco | Aston Martin | Vuelta 50, Alonso a 11 s de Verstappen y la lluvia a punto de llegar | Alonso gana |
 | 2023 | Países Bajos | Aston Martin | Vuelta 60, en seco, con un chaparrón a pocos minutos | Alonso en el podio (y ganar) |
 | 2024 | Miami | McLaren | Vuelta 27, Norris líder sin haber parado | Norris en el podio (y ganar) |
 

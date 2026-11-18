@@ -106,7 +106,7 @@ export function startScreen(nav: Nav, notice = "") {
       </div>
     </div></div>
     <div class="panel"><div class="hd"><span class="t">Modo escenario</span></div><div class="bd">
-      <button class="newcard wide" id="scen"><b>Escenarios</b><span>Diez carreras reales de 2010 a 2024, a mitad de carrera y con la parrilla de aquel año. Te toca decidir en el muro: Abu Dabi 2010, Canadá 2011, Mónaco 2016, Abu Dabi 2021...</span></button>
+      <button class="newcard wide" id="scen"><b>Escenarios</b><span>Once carreras reales de 2010 a 2024, a mitad de carrera y con la parrilla de aquel año. Te toca decidir en el muro: Abu Dabi 2010, Canadá 2011, Mónaco 2016, Abu Dabi 2021...</span></button>
     </div></div>
     <div style="padding:0 10px"><button id="import" style="width:100%">Importar partida desde un archivo</button><input type="file" id="importf" accept=".json,application/json" hidden></div>
   </div>`;

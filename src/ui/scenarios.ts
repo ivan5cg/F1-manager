@@ -46,7 +46,7 @@ export function scenariosScreen(nav: ScenarioNav) {
   const done = ESCENARIOS.reduce((a, d) => a + best(d.id), 0);
   app().innerHTML = `<div style="padding-bottom:16px">
     <div class="scenhead"><span class="kick">Modo escenario</span><h1>Escenarios</h1>
-      <div>Diez momentos reales de 2010 a 2024, con la parrilla y el reglamento de aquel año. La carrera empieza donde se decidió y desde ahí la historia puede cambiar.</div>
+      <div>Once momentos reales de 2010 a 2024, con la parrilla y el reglamento de aquel año. La carrera empieza donde se decidió y desde ahí la historia puede cambiar.</div>
       <div class="small" style="margin-top:6px">${starsHtml(Math.min(3, Math.round(done / ESCENARIOS.length)))} <span class="mono">${done}/${ESCENARIOS.length * 3}</span> estrellas</div></div>
     <div class="scenlist">${ESCENARIOS.map((d) => {
       const t = teamOf(d), c = CIRCUITS[d.circuito];

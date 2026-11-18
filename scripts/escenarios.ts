@@ -34,8 +34,13 @@ for (const def of ESCENARIOS.filter((d) => !only || d.id === only)) {
     const ok = evaluate(def, rows, idOf);
     ok.forEach((x, i) => { if (x) stars[i]++; });
     const top = rows.slice(0, 6).map((x) => sess.carById(x.id).d.abrev).join(" ");
+    // los que nombran los objetivos (el rival por el título, por ejemplo)
+    const keys = new Set<string>();
+    const walk = (o: any) => { if (o.k) keys.add(o.k); if (o.de && Array.isArray(o.de)) o.de.forEach(walk); else if (o.de) keys.add(o.de); if (o.puntos) Object.keys(o.puntos).forEach((k) => keys.add(k)); };
+    def.objetivos.forEach(walk);
+    const named = [...keys].map((k) => { const x = rows.find((y) => y.id === idOf.get(k))!; return `${k} ${x.status === "fin" ? "P" + x.pos : x.status}`; }).join(", ");
     const mine = rows.filter((x) => sess.carById(x.id).player).map((x) => `${sess.carById(x.id).d.abrev} P${x.pos}${x.status !== "fin" ? `(${x.status})` : ""} ${x.stops}p`).join(", ");
-    console.log(`   #${r + 1}: ${top} | tuyos: ${mine} | objetivos ${ok.map((x) => (x ? "★" : "·")).join("")} | ${sess.stats.sc} SC ${sess.stats.vsc} VSC ${sess.stats.red} roja`);
+    console.log(`   #${r + 1}: ${top} | tuyos: ${mine} | ${named} | objetivos ${ok.map((x) => (x ? "★" : "·")).join("")} | ${sess.stats.sc} SC ${sess.stats.vsc} VSC ${sess.stats.red} roja`);
   }
   console.log(`   estrellas en ${runs}: ${stars.join(" / ")} · ${((Date.now() - t0) / runs / 1000).toFixed(1)} s por carrera`);
   void COMPOUNDS;

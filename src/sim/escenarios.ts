@@ -1,4 +1,4 @@
-// Los escenarios: diez momentos reales de la F1 de 2010 en adelante, con la parrilla de aquel año.
+// Los escenarios: once momentos reales de la F1 de 2010 en adelante, con la parrilla de aquel año.
 // Los niveles de pilotos y coches son estimaciones (como los de 2026, en la misma escala) y la situación de partida
 // (huecos, edad de los neumáticos) está aproximada a partir de lo que se sabe de cada carrera.
 import type { Compound } from "./tyres";
@@ -70,6 +70,7 @@ export const PILOTOS: Record<string, PilotoReg> = {
   SAR: R("Logan Sargeant", "SAR", 2000, 2023, { regularidad: -5 }),
   LAW: R("Liam Lawson", "LAW", 2002, 2023, { agresividad: 6 }),
   ZHO: R("Zhou Guanyu", "ZHO", 1999, 2022),
+  DEV: R("Nyck de Vries", "DEV", 1995, 2022),
 };
 
 // ------------------------------------------------------------------ ayudas
@@ -118,7 +119,7 @@ const G2011: EquipoEsc[] = [
 const G2012 = (tarde: boolean): EquipoEsc[] => [
   T("redbull", "Red Bull", "Renault", "#2A3A80", tarde ? 2.7 : 2.0, -0.5, 2.6, [["VET", 1, 96], ["WEB", 2, 91]], { resistencia: -0.3, fiabilidad: 1.05, estrategia: 88, meteo: 84 }),
   T("mclaren", "McLaren", "Mercedes", "#C3C7CC", tarde ? 2.7 : 2.3, 1.4, 2.7, [["BUT", 3, 92], ["HAM", 4, 95]], { resistencia: 0.1, fiabilidad: 0.95, estrategia: 84, meteo: 86 }),
-  T("ferrari", "Ferrari", "Ferrari", "#D40000", tarde ? 1.8 : 1.0, 0.9, 2.6, [["ALO", 5, 97], ["MAS", 6, tarde ? 89 : 86]], { estrategia: 84, meteo: 84 }),
+  T("ferrari", "Ferrari", "Ferrari", "#D40000", tarde ? 2.3 : 1.0, 0.9, 2.6, [["ALO", 5, 97], ["MAS", 6, tarde ? 89 : 86]], { estrategia: 84, meteo: 84 }),
   T("mercedes", "Mercedes", "Mercedes", "#8E99A3", tarde ? 0.8 : 1.6, 1.4, 2.8, [["MSC", 7, 88], ["ROS", 8, 90]], { resistencia: 0.3 }),
   T("lotus", "Lotus", "Renault", "#C9A227", tarde ? 1.5 : 1.8, -0.5, 2.8, [["RAI", 9, 92], ["GRO", 10, 88]], { desgaste: 0.96 }),
   T("forceindia", "Force India", "Mercedes", "#F28C28", tarde ? 1.1 : 0.6, 1.4, 2.9, [["DIR", 11, 87], ["HUL", 12, 88]], { resistencia: 0.1 }),
@@ -171,15 +172,17 @@ const G2021 = (tarde: boolean): EquipoEsc[] => [
   T("haas", "Haas", "Ferrari", "#B6BABD", -1.6, 0.4, 2.7, [["MIC", 47, 84], ["MAZ", 9, 79]], { fiabilidad: 1.1 }),
 ];
 
-const G2023: EquipoEsc[] = [
+/** 2023: `mayo` para Mónaco (Aston Martin aún 2.º coche, McLaren antes de su mejora, De Vries en AlphaTauri) frente a
+ *  agosto (Zandvoort). */
+const G2023 = (mayo: boolean): EquipoEsc[] => [
   T("redbull", "Red Bull", "Honda RBPT", "#3671C6", 3.0, 1.6, 2.1, [["MAX", 1, 98], ["PER", 11, 89]], { resistencia: -0.2, fiabilidad: 0.85, estrategia: 90, meteo: 86 }),
   T("mercedes", "Mercedes", "Mercedes", "#27F4D2", 1.6, 1.6, 2.4, [["HAM", 44, 94], ["RUS", 63, 92]]),
-  T("ferrari", "Ferrari", "Ferrari", "#E8002D", 1.6, 1.2, 2.4, [["LEC", 16, 93], ["SAI", 55, 91]]),
-  T("astonmartin", "Aston Martin", "Mercedes", "#229971", 1.5, 1.6, 2.4, [["ALO", 14, 94], ["STR", 18, 86]], { estrategia: 82, meteo: 82 }),
-  T("mclaren", "McLaren", "Mercedes", "#FF8000", 1.8, 1.6, 2.3, [["NOR", 4, 93], ["PIA", 81, 90]]),
-  T("alpine", "Alpine", "Renault", "#2293D1", 0.6, -0.4, 2.5, [["GAS", 10, 90], ["OCO", 31, 88]]),
+  T("ferrari", "Ferrari", "Ferrari", "#E8002D", mayo ? 1.7 : 1.6, 1.2, 2.4, [["LEC", 16, 93], ["SAI", 55, 91]]),
+  T("astonmartin", "Aston Martin", "Mercedes", "#229971", mayo ? 2.2 : 1.5, 1.6, 2.4, [["ALO", 14, 94], ["STR", 18, 86]], { estrategia: 82, meteo: 82 }),
+  T("mclaren", "McLaren", "Mercedes", "#FF8000", mayo ? 0.5 : 1.8, 1.6, 2.3, [["NOR", 4, 93], ["PIA", 81, 90]]),
+  T("alpine", "Alpine", "Renault", "#2293D1", mayo ? 1.1 : 0.6, -0.4, 2.5, [["GAS", 10, 90], ["OCO", 31, 88]]),
   T("williams", "Williams", "Mercedes", "#64C4FF", 0.4, 1.6, 2.6, [["ALB", 23, 90], ["SAR", 2, 80]], { resistencia: -0.4 }),
-  T("alphatauri", "AlphaTauri", "Honda RBPT", "#5E8FAA", -0.2, 1.6, 2.5, [["TSU", 22, 87], ["LAW", 40, 84]]),
+  T("alphatauri", "AlphaTauri", "Honda RBPT", "#5E8FAA", -0.2, 1.6, 2.5, [["TSU", 22, 87], mayo ? ["DEV", 21, 83] : ["LAW", 40, 84]]),
   T("alfaromeo", "Alfa Romeo", "Ferrari", "#C92D4B", -0.2, 1.2, 2.7, [["BOT", 77, 88], ["ZHO", 24, 86]]),
   T("haas", "Haas", "Ferrari", "#B6BABD", -0.4, 1.2, 2.6, [["MAG", 20, 87], ["HUL", 27, 88]], { desgaste: 1.04 }),
 ];
@@ -260,10 +263,10 @@ export const ESCENARIOS: EscenarioDef[] = [
     objetivos: [pos("PER", 2, "Pérez termina 2.º o mejor"), pos("PER", 1, "Pérez gana"), margen("PER", 3, "Pérez gana por más de 3 s")],
   },
   {
-    id: "brasil-2012", year: 2012, circuito: "interlagos", gp: "Gran Premio de Brasil", equipo: "redbull",
-    titulo: "Tricampeón desde el último puesto", vueltas: 71, vuelta: 1, hora: "14:03",
+    id: "brasil-2012", year: 2012, circuito: "interlagos", gp: "Gran Premio de Brasil", equipo: "ferrari",
+    titulo: "Trece puntos en Interlagos", vueltas: 71, vuelta: 1, hora: "14:03",
     historia: "Interlagos decidía el mundial. Vettel llegaba con 273 puntos y Alonso con 260. En la primera vuelta Senna tocó a Vettel en la curva 4: el Red Bull trompeó y se quedó último con el pontón dañado. Con una lluvia que iba y venía, Vettel remontó hasta el 6.º puesto. Alonso fue 2.º, detrás de Button, y Vettel fue tricampeón por tres puntos.",
-    situacion: "Fin de la vuelta 1 de 71. Vettel es último, con el pontón y el escape tocados, y pierde algo en cada vuelta. Alonso va 5.º. Si Alonso gana, a Vettel le basta con ser 4.º (con 285 puntos cada uno, el desempate es por victorias y Vettel tiene más). Llegan chubascos: lisos, intermedios y otra vez lisos. Cada parada cuenta.",
+    situacion: "Fin de la vuelta 1 de 71. Alonso va 5.º y Vettel, que llegaba con 13 puntos más, es último con el pontón y el escape tocados: pierde algo en cada vuelta, pero lleva el coche más rápido. Si Alonso gana, Vettel no puede pasar del 5.º (con 285 puntos cada uno, el desempate es por victorias y Vettel tiene más); si Alonso es 2.º, Vettel tiene que acabar 8.º o peor. Llegan chubascos: lisos, intermedios y otra vez lisos. Cada parada cuenta.",
     nota: "Los duros y medios de Pirelli son aquí duros (H) y medios (M). Con KERS y DRS (2012), sin coche de seguridad virtual.",
     tiempo: { base: "seco", lluvia: [{ en: 8, mmh: 3, dura: 14 }, { en: 55, mmh: 2.5, dura: 14 }, { en: 85, mmh: 5, dura: 25 }] },
     equipos: G2012(true),
@@ -275,9 +278,9 @@ export const ESCENARIOS: EscenarioDef[] = [
       out("SEN", "toque con Vettel en la curva 4", 1), out("PER", "toque en la primera vuelta", 1),
     ],
     objetivos: [
-      { tipo: "campeon", k: "VET", puntos: { VET: 273, ALO: 260 }, victorias: { VET: 5, ALO: 3 }, txt: "Vettel, campeón del mundo" },
-      todos("Vettel campeón y 4.º o mejor", { tipo: "campeon", k: "VET", puntos: { VET: 273, ALO: 260 }, victorias: { VET: 5, ALO: 3 }, txt: "" }, pos("VET", 4, "")),
-      todos("Vettel campeón ganando la carrera", { tipo: "campeon", k: "VET", puntos: { VET: 273, ALO: 260 }, victorias: { VET: 5, ALO: 3 }, txt: "" }, pos("VET", 1, "")),
+      { tipo: "campeon", k: "ALO", puntos: { VET: 273, ALO: 260 }, victorias: { VET: 5, ALO: 3 }, txt: "Alonso, campeón del mundo" },
+      todos("Alonso campeón y Massa en el podio", { tipo: "campeon", k: "ALO", puntos: { VET: 273, ALO: 260 }, victorias: { VET: 5, ALO: 3 }, txt: "" }, pos("MAS", 3, "")),
+      todos("Alonso campeón ganando la carrera", { tipo: "campeon", k: "ALO", puntos: { VET: 273, ALO: 260 }, victorias: { VET: 5, ALO: 3 }, txt: "" }, pos("ALO", 1, "")),
     ],
   },
   {
@@ -355,13 +358,30 @@ export const ESCENARIOS: EscenarioDef[] = [
     ],
   },
   {
+    id: "monaco-2023", year: 2023, circuito: "monaco", gp: "Gran Premio de Mónaco", equipo: "astonmartin",
+    titulo: "La 33 bajo la lluvia", vueltas: 78, vuelta: 50, hora: "16:04",
+    historia: "Verstappen salió desde la pole con medios y Alonso, 2.º, con duros. Ninguno paró: Verstappen alargó sus medios y Alonso le siguió a unos diez segundos. A falta de 25 vueltas empezó a llover en la zona del Casino y Portier. Aston Martin paró a Alonso para poner medios y una vuelta después tuvo que volver a llamarle para poner intermedios. Verstappen, que había rozado el muro con los lisos gastados, paró directamente para poner intermedios y ganó. Alonso fue 2.º y la victoria 33 se le escapó.",
+    situacion: "Vuelta 50 de 78. Verstappen lidera con medios de 50 vueltas y Alonso le sigue a 11 s con los duros de la salida. Ninguno ha parado. El radar ve llegar lluvia en pocos minutos: primero débil y luego fuerte. En Mónaco no se adelanta, así que todo se juega en boxes: ¿cuándo paras y con qué?",
+    nota: "Los C2, C3 y C4 de Pirelli son duros, medios y blandos. Con DRS y coche de seguridad virtual (2023).",
+    tiempo: { base: "seco", lluvia: [{ en: 3, mmh: 1.2, dura: 10 }, { en: 9, mmh: 3, dura: 30 }], viento: 24 },
+    equipos: G2023(true),
+    coches: [
+      car("MAX", 0, "M", 50), car("ALO", 11.0, "H", 50), car("OCO", 29, "H", 18, ["M"]), car("SAI", 31, "H", 17, ["M"]), car("HAM", 35, "H", 18, ["M"]),
+      car("LEC", 38, "M", 20, ["H"]), car("RUS", 42, "H", 17, ["M"]), car("GAS", 46, "H", 18, ["M"]), car("NOR", 62, "H", 22, ["M"]), car("PIA", 66, "H", 21, ["M"]),
+      car("BOT", 71, "M", 15, ["H"]), car("DEV", 2, "H", 20, ["M"], { doblado: 1 }), car("ZHO", 6, "H", 19, ["M"], { doblado: 1 }), car("ALB", 9, "H", 22, ["M"], { doblado: 1 }),
+      car("TSU", 12, "H", 20, ["M"], { doblado: 1 }), car("STR", 15, "H", 21, ["M"], { doblado: 1 }), car("PER", 19, "H", 49, ["M"], { doblado: 1 }), car("MAG", 24, "H", 22, ["M"], { doblado: 1 }),
+      car("HUL", 28, "H", 22, ["M"], { doblado: 1 }), car("SAR", 33, "H", 24, ["M"], { doblado: 1 }),
+    ],
+    objetivos: [pos("ALO", 1, "Alonso gana: la 33"), margen("ALO", 5, "Alonso gana por más de 5 s"), todos("Alonso gana y Stroll suma puntos", pos("ALO", 1, ""), pos("STR", 10, ""))],
+  },
+  {
     id: "zandvoort-2023", year: 2023, circuito: "zandvoort", gp: "Gran Premio de los Países Bajos", equipo: "astonmartin",
     titulo: "Diluvio en las dunas", vueltas: 72, vuelta: 60, hora: "16:42",
     historia: "Llovió en la primera vuelta, la pista se secó y a falta de diez vueltas cayó un aguacero. Pérez se golpeó contra el muro al entrar a boxes, Zhou se salió en la recta y hubo bandera roja. En la reanudación Alonso, con el Aston Martin, aguantó 2.º detrás de Verstappen, que igualó el récord de nueve victorias seguidas.",
     situacion: "Vuelta 60 de 72. La pista está seca y todos llevan lisos. Verstappen lidera, Pérez va 2.º y Alonso 3.º, a 8 s. El radar ve venir un chaparrón fuerte en pocos minutos. ¿Cuándo pones intermedios? ¿Y si hacen falta los de lluvia extrema?",
     nota: "Con DRS y coche de seguridad virtual (2023).",
     tiempo: { base: "seco", lluvia: [{ en: 3, mmh: 12, dura: 22 }], viento: 30 },
-    equipos: G2023,
+    equipos: G2023(false),
     coches: [
       car("MAX", 0, "H", 22, ["I", "M"]), car("PER", 5.5, "H", 22, ["I", "M"]), car("ALO", 8.0, "H", 24, ["I", "M"]), car("GAS", 14, "M", 20, ["I", "H"]),
       car("SAI", 18, "H", 25, ["I", "M"]), car("HAM", 24, "M", 18, ["I", "H"]), car("NOR", 26, "M", 20, ["I", "H"]), car("ALB", 31, "H", 30, ["I", "M"]),
