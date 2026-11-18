@@ -8,7 +8,7 @@ import { Track, Minisector, msTimeAtGrip, MIN_MASS, REF_CAR } from "./track";
 import { type Setup, type SessionSetup, WET_SHIFT, SETUP_Q, SETUP_GRIP } from "./setup";
 import { Compound, COMPOUNDS, DRY, HiddenTyre, TyreSet, setGrip, waterGrip, updateSet, axleGrip, warmBlankets, setWear, bestWaterGrip, WET, treadT, blisterT, grainT, driverRough } from "./tyres";
 import { WeatherState, stepWeather, rainAt, evaporation, waterStep, windNow } from "./weather";
-import { PU_WEAR, puLife, puPowerLoss, puHazard } from "./powerunit";
+import { PU_WEAR, puLife, puPowerLoss, puHazard, FAIL_LAPS } from "./powerunit";
 import { Plan, planStrategy, aiDecide, aiModes, aiErs, TeamKnowledge, practiceProgram, qualiTick, pickSet, learnFromRun, aiRedFlagTyres, practiceWeather, wrongTyresForWater, teamForecast, ruleSatisfied, NOSE_TIME } from "./strategy";
 
 export const PUSH_NAMES = ["Conservar", "Gestionar", "Normal", "Atacar", "Al límite"];
@@ -63,14 +63,26 @@ const SPRINT_HALF = [4, 3.5, 3, 2.5, 2, 1.5, 1, 0.5];
 /** Fracción del agua de la trazada que aparta cada coche al pasar (a ritmo de carrera). */
 const CAR_DRY = 0.0035;
 const ENGINE_FAIL = [0.6, 1, 2.2];
-/** Vueltas de coche entre averías (equipo con fiabilidad 1, motor normal). */
-const FAIL_LAPS = 1700;
 /** De los errores en curva, cuántos acaban contra las barreras (en seco). */
 const CRASH_P = 0.08;
 /** Probabilidad de pisar fuera de los límites en cada curva rápida de carrera (al ritmo normal). */
 const TL_P = 0.0011;
 /** Probabilidad de dañar el fondo en un bordillo por cada paso de altura por debajo de lo que pide el circuito. */
 const KERB_P = 0.00003;
+/** Averías que avisan: lo que ve la telemetría. Las que no están aquí rompen de golpe. */
+const FAULT_SIGNS: Record<string, string> = {
+  motor: "temperatura de agua y aceite muy alta",
+  "unidad de potencia": "la unidad de potencia pierde presión de aceite",
+  "MGU-K": "el MGU-K se está calentando",
+  batería: "la batería se calienta demasiado",
+  "caja de cambios": "la caja de cambios pierde presión: los cambios van lentos",
+  hidráulica: "la presión hidráulica está bajando",
+  frenos: "temperatura de frenos muy alta, el disco se está gastando",
+};
+/** Lo que avanza una avería por vuelta, y cuánto según el modo de motor (Ahorro, Normal, Potencia) y el ritmo. */
+const FAULT_GROW = 0.07;
+const FAULT_ENGINE = [0.22, 1, 2];
+const FAULT_PUSH = [0.55, 0.75, 1, 1.2, 1.45];
 /** Ventaja de más (s/vuelta) que necesita el que ataca si el de delante cierra la puerta. */
 const DEFEND_T = 0.35;
 
@@ -269,6 +281,8 @@ export interface Car {
   nose?: "auto" | "yes" | "no";
   /** Cómo se defiende del que le ataca: auto (lo decide el equipo), defender (cierra la puerta) o no pelear. */
   fight?: "auto" | "defend" | "yield";
+  /** Avería que se está gestando: qué es, lo cerca que está de romperse (0 a 1) y si es de la unidad de potencia. */
+  fault?: { what: string; lvl: number; pu: boolean; warned: number };
 }
 
 export type FlagState = "green" | "vsc" | "sc" | "sc_in" | "red";
@@ -1139,6 +1153,39 @@ export class Session {
     else this.yellow(ms, kind !== "debris", this.rng.range(50, 140), why);
   }
 
+  /**
+   * Empieza una avería. La mitad rompe de golpe; el resto avisa antes (temperaturas, presión) y va a más cada vuelta:
+   * mucho más despacio con el motor en Ahorro y levantando (ritmo bajo), así que a veces se puede llegar a meta.
+   */
+  private fault(c: Car, what: string, pu: boolean) {
+    if (c.fault || !FAULT_SIGNS[what] || this.rng.chance(0.5)) { if (pu) c.puBroken = true; return this.failure(c, what); }
+    c.fault = { what, lvl: this.rng.range(0.25, 0.5), pu, warned: 0 };
+    this.faultRadio(c);
+  }
+
+  /** Cada vuelta: la avería avanza según cómo se le trate; al llegar a 1, se rompe. */
+  private faultLap(c: Car) {
+    const f = c.fault!;
+    const grow = FAULT_GROW * FAULT_ENGINE[c.engine] * FAULT_PUSH[c.push] * this.rng.range(0.6, 1.4);
+    f.lvl += grow;
+    if (f.lvl >= 1) {
+      c.fault = undefined;
+      if (f.pu) c.puBroken = true;
+      return this.failure(c, f.what);
+    }
+    if (f.lvl > 0.75 && f.warned < 2) { f.warned = 2; this.faultRadio(c); }
+  }
+
+  private faultRadio(c: Car) {
+    const f = c.fault!;
+    if (!c.player) return;
+    const sign = FAULT_SIGNS[f.what];
+    const txt = f.warned === 2
+      ? `📻 Ingeniero: ${c.d.abrev}, ${sign} va a peor. Si no lo cuidamos, no llegamos.`
+      : `📻 Ingeniero: ${c.d.abrev}, ${sign}. Motor en Ahorro y levantar antes de frenar: así puede aguantar.`;
+    this.log({ kind: "radio", carId: c.id, text: txt, important: true, pause: true });
+  }
+
   /** Avería en carrera: muchas dejan llegar al garaje (sin neutralizar); si no, el coche se queda en la pista. */
   private failure(c: Car, what: string) {
     const sev = this.rng.range(0, 0.6);
@@ -1173,6 +1220,8 @@ export class Session {
     const scale = t / this.tRef[m.i];
     let power = c.team.potencia * 0.6 + ENGINE_POWER[c.engine] + (c.soc > 0.05 || c.ers === 0 ? ERS_POWER[c.ers] : -3.5);
     if (c.e.pu) power -= puPowerLoss(puLife(c.e.pu.km0 + c.puKm));
+    // un motor o una batería tocados no dan todo
+    if (c.fault && (c.fault.what === "motor" || c.fault.what === "unidad de potencia" || c.fault.what === "MGU-K" || c.fault.what === "batería")) power -= 1.2 * c.fault.lvl;
     if (c.drs && m.drs) power += MO_POWER;
     let dragCut = -c.team.resistencia - WATER_DRAG * Math.min(3, water);
     if (c.aheadId >= 0) dragCut += tow(c.followGap) * m.throttle;
@@ -1505,17 +1554,17 @@ export class Session {
     if (this.avgWater() > 1.8 && this.flag === "green") { this.deploy("sc", "demasiada agua en pista", 0.4); this.scWet = true; }
     for (const c of this.cars) {
       if (c.loc !== "track") continue;
+      if (c.fault) { this.faultLap(c); continue; }
       const hz = (1 / FAIL_LAPS) * c.team.fiabilidad * ENGINE_FAIL[c.engine] * (1 + c.floor * 5);
       if (c.e.pu) {
         // con unidades de potencia: la mitad de las averías son del motor y crecen con su desgaste
         if (this.rng.chance(hz * 0.5 * puHazard(puLife(c.e.pu.km0 + c.puKm)))) {
-          c.puBroken = true;
-          this.failure(c, this.rng.pick(["motor", "unidad de potencia", "MGU-K", "batería"]));
+          this.fault(c, this.rng.pick(["motor", "unidad de potencia", "MGU-K", "batería"]), true);
         } else if (this.rng.chance(hz * 0.5)) {
-          this.failure(c, this.rng.pick(["caja de cambios", "hidráulica", "fallo eléctrico", "frenos"]));
+          this.fault(c, this.rng.pick(["caja de cambios", "hidráulica", "fallo eléctrico", "frenos"]), false);
         }
       } else if (this.rng.chance(hz)) {
-        this.failure(c, this.rng.pick(["motor", "caja de cambios", "hidráulica", "fallo eléctrico", "frenos", "batería"]));
+        this.fault(c, this.rng.pick(["motor", "caja de cambios", "hidráulica", "fallo eléctrico", "frenos", "batería"]), false);
       }
     }
   }
@@ -1863,6 +1912,7 @@ export class Session {
     // agarre frente al que daría el neumático adecuado para esa agua (slicks en mojado, gastados...)
     const deficit = Math.max(0, 0.9 - setGrip(tyres, water) / (sp.base * bestWaterGrip(water))) * 5;
     let p = 1.1e-4 * PUSH_ERR[c.push] * (1 + (85 - c.d.regularidad) / 25) * (1 + deficit + coldF);
+    if (c.fault?.what === "frenos") p *= 1 + 2 * c.fault.lvl;
     p *= 1 + 5 * Math.min(1.2, water) * (1.3 - c.d.lluvia / 100);
     const wind = windNow(this.weather).speed;
     if (wind > 25) p *= 1 + ((wind - 25) / 25) * m.aero;

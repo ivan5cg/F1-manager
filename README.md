@@ -193,6 +193,12 @@ otra estrategia), sin perder tiempo en la pelea. En automático el equipo cierra
 si hay puntos en juego. El Muro dice, para el de delante y el de detrás, la ventaja que lleva cada uno, la que hace
 falta y si se puede pasar (contando si defiendes).
 
+**Averías que avisan.** La mitad de las averías rompen de golpe; el resto avisa antes por la telemetría (temperatura
+de agua y aceite, presión hidráulica, frenos, batería…) y va a más cada vuelta. Con el motor en Ahorro y el ritmo bajo
+(levantando antes de frenar) avanza mucho más despacio, así que a veces se llega a meta; mientras tanto, un motor o
+una batería tocados dan algo menos de potencia y unos frenos tocados fallan más. El ingeniero te lo dice por radio, la
+tarjeta del piloto enseña cómo va (⚠️ y el %) y la IA cuida las suyas.
+
 **Salida.** Cada piloto reacciona y tracciona distinto (su nota de salida, con azar), el blando arranca mejor que el medio y el duro, y de vez en cuando alguien se queda clavado. Hasta la primera frenada hay sitio a los lados: los puestos se ganan o se pierden por pura arrancada. En la primera vuelta se pasa en casi cualquier curva, pero la diferencia de agarre cuenta la mitad (van en grupo).
 
 **Adelantamientos.** En cada frenada se compara la **ventaja del que ataca, en segundos por vuelta**, con un umbral:

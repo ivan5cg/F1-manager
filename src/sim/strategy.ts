@@ -662,11 +662,14 @@ export function aiModes(sess: Session, car: Car, left: number) {
   if (cap < 2 && (gapB < 0.8 || gapA < 0.8) && toEnd <= 10) push = Math.max(push, Math.min(2, cap + 1));
   if (fuelLaps < left + 0.3) push = Math.min(push, 1);
   if (fuelLaps < left - 0.5) push = 0;
+  // una avería que avisa: a cuidarla para llegar (motor en Ahorro y levantando)
+  if (car.fault) push = Math.min(push, car.fault.lvl > 0.7 ? 0 : 1);
   if (!car.player || car.autoPush || sess.autoPlayers) car.push = push;
   if (!car.player || sess.autoPlayers) {
     // motor: a tope solo en plena pelea y con combustible de sobra (castiga la fiabilidad)
     const fight = (gapA < 0.7 && !cooling) || gapB < 0.7;
     car.engine = fuelLaps < left - 0.3 ? 0 : fight && fuelLaps > left + 0.8 && sess.flag === "green" ? 2 : 1;
+    if (car.fault) car.engine = 0;
   }
   // órdenes de equipo: si el compañero viene pegado y es claramente más rápido (otra estrategia, gomas mucho más
   // nuevas), el equipo le abre paso en vez de dejar que se estorben. En tu equipo lo decides tú.

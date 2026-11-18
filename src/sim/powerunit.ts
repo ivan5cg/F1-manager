@@ -17,6 +17,9 @@ export interface PuState {
   base?: number; // unidades que tenía al empezar el fin de semana (las de después se han estrenado en él)
 }
 
+/** Vueltas de coche entre averías en carrera (equipo con fiabilidad 1, motor normal). */
+export const FAIL_LAPS = 1300;
+
 export const puLife = (km: number) => km / PU_LIFE_KM;
 /** Potencia que se pierde (en las mismas unidades que `potencia`, %) según la vida gastada. */
 export function puPowerLoss(u: number): number {
@@ -29,7 +32,7 @@ export function puHazard(u: number): number {
 /** Probabilidad de avería de la unidad en una carrera de `laps` vueltas de `lapKm` km, a modo normal. */
 export function puRaceRisk(km0: number, fiab: number, laps: number, lapKm: number): number {
   let p = 0;
-  for (let l = 0; l < laps; l++) p += (fiab / 2600) * 0.5 * puHazard(puLife(km0 + l * lapKm));
+  for (let l = 0; l < laps; l++) p += (fiab / FAIL_LAPS) * 0.5 * puHazard(puLife(km0 + l * lapKm));
   return 1 - Math.exp(-p);
 }
 
