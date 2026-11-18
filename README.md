@@ -75,12 +75,20 @@ En la realidad, en 2026 el GP de Baréin no se corrió en Sakhir: se trasladó a
   ninguno y la directiva avisa de que el jefe de equipo peligra.
 - **Varias temporadas:** al acabar el año, «Empezar la temporada 2027» (y así cada año) en la misma partida. Antes se
   ve el resumen (campeones, tu puesto, los objetivos y lo que cambia el presupuesto) y se decide qué hacer con tus
-  pilotos a los que se les acaba el contrato: renovar o cambiarlos por uno de los libres (reservas, libres y novatos).
+  pilotos: seguir (o renovar si se les acaba el contrato) o cambiarlos por otro. Se puede fichar a cualquiera: a los
+  libres, a los reservas, a los de la F2 o a uno de otro equipo pagando su cláusula (la mitad de lo que le queda por
+  cobrar); romper el contrato de uno tuyo también se paga. Las cláusulas salen del presupuesto de desarrollo.
   - **Pilotos:** cumplen años. Mejoran hasta los ~28, se mantienen y empeoran desde los ~33; desde los 33 alguno se
     retira (los que siguen arriba aguantan más). Los contratos de la primera temporada son una estimación del juego.
   - **Mercado:** cada equipo renueva a quien le sirve según lo bueno que es su coche, y los mejores coches eligen
-    primero; a veces uno se lleva al que acababa contrato en un equipo peor. Suben novatos (algunos inventados, de la
-    F2). Las noticias del mercado salen al empezar la temporada.
+    primero; a veces uno se lleva al que acababa contrato en un equipo peor. Los asientos libres se llenan con los
+    mejores que queden: libres, reservas y los de la **F2**. Está la parrilla real de F2 de 2026 (Câmara, Tsolov,
+    Dunne, Herta, Minì…; sus valoraciones son estimaciones del juego) y cada año llegan a la F2 unos cuantos jóvenes
+    nuevos (inventados) que van madurando hasta que algún equipo los sube. Las noticias del mercado salen al empezar
+    la temporada.
+  - **Salarios:** cada piloto cobra según lo bueno que es (de ~0,5 M un novato a ~55 M el mejor). En «crea tu
+    equipo», desde la segunda temporada el techo de gasto lo ocupan los salarios de ese año (tus pilotos, jefe y
+    técnico) y el motor, y lo que sobra va al desarrollo, como en la primera.
   - **Coches:** el del año siguiente sale de cómo acabó cada uno, con su desarrollo, con una regresión a la media:
     se conserva un 65 % de la ventaja o la desventaja. Con «crea tu equipo», el tuyo ya no es un equipo nuevo.
   - En «crea tu equipo» los valores reales (ocultos) de pilotos, jefe, técnico y motor no cambian de un año a otro;

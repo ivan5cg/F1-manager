@@ -1,7 +1,7 @@
 // Banco de pruebas de la carrera: corre varias carreras en seco (sin libres ni clasificación) y mide lo que
 // importa para calibrar los adelantamientos: cuántos hay, cuánto tiempo se pasa en tren y, sobre todo, la
 // probabilidad de pasar en una vuelta según la ventaja de ritmo en aire limpio del que persigue.
-//   npx tsx scripts/carrera.ts silverstone [carreras=6] [semilla=1] [--detalle]
+//   npx tsx scripts/carrera.ts silverstone [carreras=6] [semilla=1] [--detalle] [--clasif]
 import { setPassT, setPassW } from "../src/sim/session";
 import { benchRace, circuit } from "./banco";
 
@@ -9,6 +9,8 @@ const id = process.argv[2] ?? "silverstone";
 const nRaces = Number(process.argv[3] ?? 6);
 const seed0 = Number(process.argv[4] ?? 1);
 const detail = process.argv.includes("--detalle");
+// --clasif: la parrilla sale de correr la clasificación (como en el juego), no de una por ritmo con azar
+const quali = process.argv.includes("--clasif");
 // --umbral=1.8 prueba otro umbral de adelantamiento sin tocar el circuito
 const um = process.argv.find((a) => a.startsWith("--umbral="));
 if (um) setPassT(Number(um.split("=")[1]));
@@ -25,7 +27,7 @@ const t0 = Date.now();
 
 for (let r = 0; r < nRaces; r++) {
   const seed = seed0 + r;
-  const s = benchRace(id, seed);
+  const s = benchRace(id, seed, true, quali);
   const lapsSeen = new Map<number, number>();
   const watch = new Map<number, { a: number; stopsC: number; stopsA: number; lap: number }>();
   const streak = new Map<number, { a: number; n: number }>();

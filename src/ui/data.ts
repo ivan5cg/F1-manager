@@ -100,7 +100,15 @@ export function devContext(s: SeasonState): { left: number | null; pubK: number;
   if (!s.equipo) return { left: null, pubK: 1, realK: 1 };
   const tech = MARKET.tecnicos.find((x) => x.nombre === s.equipo!.tecnico);
   const pub = tech?.desarrollo ?? 0.06, real = tech ? trueTech(tech, s.trueSeed ?? s.seed).desarrollo : pub;
-  return { left: MARKET.techo - costOf(MARKET, s.equipo), pubK: pub / 0.06, realK: real / 0.06 };
+  // temporadas siguientes: el techo lo gastan los salarios de ese año (tus pilotos, jefe y técnico) y el motor;
+  // las cláusulas de la primera ya se pagaron
+  let spent = costOf(MARKET, s.equipo);
+  if (s.salaries) {
+    const e = s.equipo;
+    spent = (MARKET.jefes.find((x) => x.nombre === e.jefe)?.salario ?? 0) + (tech?.salario ?? 0) + (MARKET.motores.find((x) => x.id === e.motor)?.precio ?? 0)
+      + e.pilotos.reduce((a, p) => a + (s.salaries![p] ?? 0), 0);
+  }
+  return { left: MARKET.techo - spent, pubK: pub / 0.06, realK: real / 0.06 };
 }
 /** Deja como activa la parrilla de la temporada (llamar al cargarla y al pasar de ronda). */
 export function useSeason(s: SeasonState | null) {

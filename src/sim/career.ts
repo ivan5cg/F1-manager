@@ -73,6 +73,18 @@ export function retireChance(d: DriverDef, year: number): number {
   return Math.min(0.95, p);
 }
 
+/** Salario (M por temporada) que pide un piloto según lo bueno que es: de ~0,5 M un novato a ~55 M el mejor. */
+export function salaryFor(d: DriverDef): number {
+  const r = rating(d);
+  return r <= 78 ? 0.5 : Math.round((0.5 + 55 * Math.pow((r - 78) / 17, 2.4)) * 10) / 10;
+}
+
+/** Lo que cuesta romper un contrato en vigor: la mitad de lo que le queda por cobrar (como mínimo, 1 M). */
+export function clauseFor(salary: number, until: number, year: number): number {
+  const left = until - year + 1; // temporadas que le quedan contando la que empieza
+  return left <= 0 ? 0 : Math.max(1, Math.round(left * salary * 0.5 * 10) / 10);
+}
+
 /** Años de contrato que se firman: los novatos y los mayores, cortos; los buenos en su mejor edad, largos. */
 function contractYears(d: DriverDef, year: number, rng: Rng): number {
   const age = ageOf(d, year);
@@ -113,6 +125,14 @@ export function rookie(year: number, rng: Rng, used: Set<string>, numbers: Set<n
   };
 }
 
+/** Un joven que llega a la F2 desde la F3 (inventado): aún le falta para la F1, pero con los años puede llegar. */
+export function f2Newcomer(year: number, rng: Rng, used: Set<string>, numbers: Set<number>): DriverDef {
+  const d = rookie(year, rng, used, numbers);
+  const k = rng.range(2.5, 5.5);
+  const r = (x: number) => Math.round(clamp(x - k, 66, 86));
+  return { ...d, ritmo: r(d.ritmo), regularidad: r(d.regularidad), neumaticos: r(d.neumaticos), lluvia: r(d.lluvia), ataque: r(d.ataque), defensa: r(d.defensa), salida: r(d.salida), nacimiento: year - rng.int(18, 19), debut: undefined, serie: "F2" };
+}
+
 /** Lo bueno que es un coche (para ordenar la parrilla). */
 export const carLevel = (t: TeamDef) => t.agarre + 0.4 * t.potencia - 0.3 * t.resistencia;
 
@@ -127,7 +147,10 @@ export interface OffSeasonInput {
   /** Pilotos sin equipo (libres, reservas, novatos). */
   pool: DriverDef[];
   contracts: Record<string, number>;
-  /** Tus pilotos y lo que decides con cada uno: seguir (renovar si acaba) o cambiarlo por uno del grupo de libres. */
+  /** Salario de cada piloto con contrato (M por temporada). */
+  salaries: Record<string, number>;
+  /** Tus pilotos y lo que decides con cada uno: seguir (renovar si acaba) o cambiarlo por otro: uno libre o de otro
+   *  equipo (si tiene contrato, pagando su cláusula). Romper el contrato del tuyo también se paga. */
   mine: { d: DriverDef; keep: boolean; sign?: string }[];
 }
 
@@ -136,7 +159,10 @@ export interface OffSeasonOutput {
   mine: DriverDef[]; // tus pilotos para la temporada nueva
   pool: DriverDef[];
   contracts: Record<string, number>;
+  salaries: Record<string, number>;
   news: string[];
+  /** Lo que has pagado en cláusulas (M), que sale del presupuesto de desarrollo. */
+  cost: number;
 }
 
 /**
@@ -148,6 +174,9 @@ export function offSeason(inp: OffSeasonInput): OffSeasonOutput {
   const y = inp.year;
   const news: string[] = [];
   const contracts = { ...inp.contracts };
+  const salaries = { ...inp.salaries };
+  let cost = 0;
+  const sign = (d: DriverDef) => { contracts[d.abrev] = y + contractYears(d, y, rng) - 1; salaries[d.abrev] = salaryFor(d); };
   const used = new Set<string>([...inp.base.flatMap((t) => t.pilotos.map((d) => d.abrev)), ...inp.pool.map((d) => d.abrev), ...inp.mine.map((m) => m.d.abrev)]);
   const numbers = new Set<number>([...inp.base.flatMap((t) => t.pilotos.map((d) => d.numero)), ...inp.mine.map((m) => m.d.numero)]);
   const age = (d: DriverDef) => ageDriver(d, y, rng);
@@ -157,6 +186,36 @@ export function offSeason(inp: OffSeasonInput): OffSeasonOutput {
   let pool = inp.pool.map(age);
   const mineAged = inp.mine.map((m) => ({ ...m, d: age(m.d) }));
 
+  // 1b. tus fichajes van primero: de los libres, o de otro equipo pagando la cláusula si tiene contrato
+  const mine: DriverDef[] = [];
+  for (const m of mineAged) {
+    if (m.keep) {
+      if ((contracts[m.d.abrev] ?? y) < y) sign(m.d);
+      mine.push(m.d);
+      continue;
+    }
+    const out = clauseFor(salaries[m.d.abrev] ?? salaryFor(m.d), contracts[m.d.abrev] ?? y - 1, y);
+    cost += out;
+    pool.push(m.d);
+    let pick = pool.find((d) => d.abrev === m.sign && d !== m.d);
+    let from = "";
+    if (!pick) {
+      for (const x of teams) x.seats.forEach((d, j) => {
+        if (pick || !d || d.abrev !== m.sign) return;
+        pick = d;
+        x.seats[j] = null;
+        from = x.t.nombre;
+        const c = clauseFor(salaries[d.abrev] ?? salaryFor(d), contracts[d.abrev] ?? y - 1, y);
+        cost += c;
+        if (c) from += ` (cláusula de ${c} M)`;
+      });
+    }
+    pick ??= pool.slice().sort((a, b) => rating(b) - rating(a)).find((d) => d !== m.d)!;
+    pool = pool.filter((d) => d !== pick);
+    sign(pick);
+    news.push(`✍️ Fichas a ${pick.nombre}${from ? ` de ${from}` : ""} en lugar de ${m.d.nombre}${out ? ` (romper su contrato cuesta ${out} M)` : ""}.`);
+    mine.push(pick);
+  }
   // 2. retiradas (los de la IA; los tuyos, si se retiran, también: lo dice la noticia)
   for (const x of teams) x.seats = x.seats.map((d) => {
     if (d && rng.chance(retireChance(d, y))) { news.push(`🏁 ${d.nombre} se retira a los ${ageOf(d, y)} años (${x.t.nombre}).`); return null; }
@@ -173,7 +232,7 @@ export function offSeason(inp: OffSeasonInput): OffSeasonOutput {
     if (!d || (contracts[d.abrev] ?? y) >= y) return d;
     free.add(d.abrev);
     if (rating(d) >= want(x) - 1.5 - rng.range(0, 2)) {
-      contracts[d.abrev] = y + contractYears(d, y, rng) - 1;
+      sign(d);
       return d;
     }
     news.push(`🔚 ${x.t.nombre} no renueva a ${d.nombre}.`);
@@ -193,48 +252,34 @@ export function offSeason(inp: OffSeasonInput): OffSeasonOutput {
       x.seats[k] = c.d;
       c.o.seats[c.j] = null;
       free.delete(c.d!.abrev);
-      contracts[c.d!.abrev] = y + contractYears(c.d!, y, rng) - 1;
+      sign(c.d!);
       news.push(`🔁 ${c.d!.nombre} deja ${c.o.t.nombre} y se va a ${x.t.nombre}.`);
     }
   }
 
-  // 4. tus pilotos: los que sigues (con contrato renovado si acababa) y los que cambias por uno del grupo de libres
-  const mine: DriverDef[] = [];
-  for (const m of mineAged) {
-    if (m.keep) {
-      if ((contracts[m.d.abrev] ?? y) < y) contracts[m.d.abrev] = y + contractYears(m.d, y, rng) - 1;
-      mine.push(m.d);
-      continue;
-    }
-    pool.push(m.d);
-    const pick = pool.find((d) => d.abrev === m.sign) ?? pool.slice().sort((a, b) => rating(b) - rating(a)).find((d) => d.abrev !== m.d.abrev)!;
-    pool = pool.filter((d) => d !== pick);
-    contracts[pick.abrev] = y + contractYears(pick, y, rng) - 1;
-    news.push(`✍️ Fichas a ${pick.nombre} en lugar de ${m.d.nombre}.`);
-    mine.push(pick);
-  }
-
-  // 5. asientos libres: los mejores equipos eligen primero entre los mejores que queden; si no hay nadie que valga,
-  // sube un novato (de los reservas o uno nuevo de la F2)
-  for (let k = 0; k < 2; k++) pool.push(rookie(y, rng, used, numbers));
+  // 5. asientos libres: los mejores equipos eligen primero entre los mejores que queden (libres, reservas y los de la
+  // F2, que con los años van llegando); solo si no queda nadie sube un novato inventado. Cada año llegan a la F2
+  // unos cuantos jóvenes nuevos (inventados) que irán madurando.
+  for (let k = 0; k < 4; k++) pool.push(f2Newcomer(y, rng, used, numbers));
   for (const x of order) {
     x.seats = x.seats.map((d) => {
       if (d) return d;
       pool.sort((a, b) => rating(b) - rating(a) + rng.gauss(0, 0.6));
       let pick = pool.find((p) => released.get(p.abrev) !== x.t.id);
-      if (!pick || (rating(pick) < 79 && rng.chance(0.6))) {
+      if (!pick) {
         const r = rookie(y, rng, used, numbers);
         pool.push(r);
         pick = r;
       }
       pool = pool.filter((p) => p !== pick);
-      contracts[pick.abrev] = y + contractYears(pick, y, rng) - 1;
+      sign(pick);
       news.push(pick.debut === y ? `🆕 ${x.t.nombre} sube a ${pick.nombre}, novato de ${ageOf(pick, y)} años.` : `✍️ ${x.t.nombre} ficha a ${pick.nombre}.`);
       return pick;
     });
   }
   // el grupo de libres no crece sin fin: se quedan los 24 mejores
-  pool = pool.sort((a, b) => rating(b) - rating(a)).slice(0, 24);
+  // (los mejores, y los jóvenes de la F2 que pueden llegar)
+  pool = pool.sort((a, b) => rating(b) + (ageOf(b, y) <= 21 ? 3 : 0) - rating(a) - (ageOf(a, y) <= 21 ? 3 : 0)).slice(0, 40);
 
   // 6. coches: regresión a la media desde como acabó cada uno
   const finals = new Map(inp.final.map((t) => [t.id, t]));
@@ -243,7 +288,9 @@ export function offSeason(inp: OffSeasonInput): OffSeasonOutput {
     const f = finals.get(t.id) ?? t;
     return { ...t, pilotos: seats as DriverDef[], agarre: Math.round((inp.meanAgarre + CAR_CARRY * (f.agarre - endMean) + rng.gauss(0, 0.3)) * 100) / 100 };
   });
-  return { base, mine, pool, contracts, news };
+  // salarios solo de los que tienen equipo
+  for (const k of Object.keys(salaries)) if (!base.some((t) => t.pilotos.some((d) => d.abrev === k)) && !mine.some((d) => d.abrev === k)) delete salaries[k];
+  return { base, mine, pool, contracts, salaries, news, cost: Math.round(cost * 10) / 10 };
 }
 
 /** Presupuesto de desarrollo del año siguiente según los objetivos: más por cada uno cumplido, menos por cada fallado. */

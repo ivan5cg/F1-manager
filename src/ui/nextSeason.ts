@@ -5,7 +5,7 @@ import { $, esc, setBack } from "./common";
 import type { SeasonState } from "../sim/season";
 import { driverStandings, teamStandings } from "../sim/season";
 import { objectiveStatus } from "../sim/objectives";
-import { offSeason, initialContracts, rating, ageOf, FIRST_YEAR, objectivesBonus, SeasonRecord, CAR_CARRY, OBJ_BONUS, OBJ_MALUS } from "../sim/career";
+import { offSeason, initialContracts, rating, ageOf, FIRST_YEAR, objectivesBonus, SeasonRecord, CAR_CARRY, OBJ_BONUS, OBJ_MALUS, salaryFor, clauseFor } from "../sim/career";
 import { publicDriver, trueTech, NEW_TEAM, PLAYER_TEAM_ID } from "../sim/market";
 import type { DriverDef, TeamDef } from "../sim/session";
 
@@ -64,6 +64,24 @@ function poolOf(s: SeasonState, taken: Set<string>): DriverDef[] {
   return p.filter((d) => !taken.has(d.abrev));
 }
 
+/** Salarios de la temporada: los guardados o, en la primera, los del mercado (y si no está, lo que pediría). */
+function salariesOf(s: SeasonState, drivers: DriverDef[]): Record<string, number> {
+  if (s.salaries) return s.salaries;
+  const out: Record<string, number> = {};
+  for (const d of drivers) out[d.abrev] = MARKET.pilotos.find((p) => p.abrev === d.abrev)?.salario ?? salaryFor(d);
+  return out;
+}
+
+/** Lo que cuesta cambiar a uno de tus pilotos por otro (cláusulas: la del tuyo si tiene contrato y la del nuevo si es
+ *  de otro equipo). */
+function swapCost(s: SeasonState, out: DriverDef, inAbrev: string | undefined, contracts: Record<string, number>, sal: Record<string, number>, ai: TeamDef[]): number {
+  const y = yearOf(s) + 1;
+  let c = clauseFor(sal[out.abrev] ?? salaryFor(out), contracts[out.abrev] ?? y - 1, y);
+  const other = ai.flatMap((t) => t.pilotos).find((d) => d.abrev === inAbrev);
+  if (other) c += clauseFor(sal[other.abrev] ?? salaryFor(other), contracts[other.abrev] ?? y - 1, y);
+  return Math.round(c * 10) / 10;
+}
+
 /** La temporada siguiente, con tus decisiones sobre tus pilotos. */
 export function buildNextSeason(s: SeasonState, choices: { keep: boolean; sign?: string }[]): SeasonState {
   const y = yearOf(s) + 1;
@@ -71,9 +89,10 @@ export function buildNextSeason(s: SeasonState, choices: { keep: boolean; sign?:
   const taken = new Set([...ai.flatMap((t) => t.pilotos.map((d) => d.abrev)), ...mine.map((d) => d.abrev)]);
   const allTeams = [...ai, { ...ai[0], id: "_mios", pilotos: mine }];
   const contracts = s.contracts ?? initialContracts(allTeams, yearOf(s), s.seed);
+  const salaries = salariesOf(s, allTeams.flatMap((t) => t.pilotos));
   const meanAgarre = BASE_TEAMS.reduce((a, t) => a + t.agarre, 0) / BASE_TEAMS.length;
   const out = offSeason({
-    year: y, seed: s.seed, final: fin, base: ai, meanAgarre, pool: poolOf(s, taken), contracts,
+    year: y, seed: s.seed, final: fin, base: ai, meanAgarre, pool: poolOf(s, taken), contracts, salaries,
     mine: mine.map((d, i) => ({ d, keep: choices[i]?.keep ?? true, sign: choices[i]?.sign })),
   });
   // tu coche: lo mismo que los demás, desde como acabó el tuyo
@@ -86,9 +105,10 @@ export function buildNextSeason(s: SeasonState, choices: { keep: boolean; sign?:
   const next: SeasonState = {
     v: 1, playerTeam: s.playerTeam, seed, round: 0, weekend: null, rounds: [],
     calendar: s.calendar ? [...s.calendar] : [...CALENDARS.corta.ids], ...(s.formatos ? { formatos: { ...s.formatos } } : {}),
-    year: y, trueSeed: s.trueSeed ?? s.seed, pool: out.pool, contracts: out.contracts, news: out.news,
+    year: y, trueSeed: s.trueSeed ?? s.seed, pool: out.pool, contracts: out.contracts, salaries: out.salaries, news: out.news,
     history: [...(s.history ?? []), rec],
-    devBonus: rec.objetivos.length ? objectivesBonus(done, rec.objetivos.length) : 0,
+    // los objetivos suben o bajan el presupuesto; las cláusulas que has pagado salen de él
+    devBonus: (rec.objetivos.length ? objectivesBonus(done, rec.objetivos.length) : 0) - out.cost,
     aviso: rec.objetivos.length && done === 0 ? (s.aviso ?? 0) + 1 : 0,
   };
   if (s.equipo) {
@@ -116,20 +136,33 @@ export function offSeasonScreen(s: SeasonState, onDone: (next: SeasonState) => v
   const { ai, mine } = rosters(s);
   const taken = new Set([...ai.flatMap((t) => t.pilotos.map((d) => d.abrev)), ...mine.map((d) => d.abrev)]);
   const contracts = s.contracts ?? initialContracts([...ai, { ...ai[0], id: "_mios", pilotos: mine }], y, s.seed);
-  const pool = poolOf(s, taken).sort((a, b) => rating(b) - rating(a)).slice(0, 12);
+  const sal = salariesOf(s, [...ai.flatMap((t) => t.pilotos), ...mine]);
+  // a quién se puede fichar: los libres (con los de la F2) y los de los demás equipos (pagando su cláusula)
+  const pool = poolOf(s, taken).sort((a, b) => rating(b) - rating(a)).slice(0, 20);
+  const teamOf = new Map(ai.flatMap((t) => t.pilotos.map((d) => [d.abrev, t.nombre] as [string, string])));
+  const others = ai.flatMap((t) => t.pilotos).sort((a, b) => rating(b) - rating(a));
+  const options = [...pool, ...others];
   const done = rec.objetivos.filter((o) => o.done).length;
   const bonus = rec.objetivos.length ? objectivesBonus(done, rec.objetivos.length) : 0;
   const warn = rec.objetivos.length && done === 0 && (s.aviso ?? 0) >= 1;
   const choices = mine.map(() => ({ keep: true, sign: undefined as string | undefined }));
+  const cost = () => choices.reduce((a, c, i) => a + (c.keep ? 0 : swapCost(s, mine[i], c.sign, contracts, sal, ai)), 0);
+  const optLabel = (p: DriverDef) => {
+    const t = teamOf.get(p.abrev);
+    const cl = t ? clauseFor(sal[p.abrev] ?? salaryFor(p), contracts[p.abrev] ?? y, y + 1) : 0;
+    return `${esc(p.nombre)} · ${ageOf(p, y + 1)} años · ritmo ${p.ritmo} · ${t ? `${esc(t)}${cl ? `, cláusula ${cl} M` : ", acaba contrato"}` : p.serie ? esc(p.serie) : "libre"}${p.debut === undefined ? " · sin experiencia en F1" : ""} · pide ${salaryFor(p)} M`;
+  };
   const card = (d: DriverDef, i: number) => {
     const until = contracts[d.abrev] ?? y;
     const ends = until <= y;
     const c = choices[i];
+    const out = clauseFor(sal[d.abrev] ?? salaryFor(d), until, y + 1);
     return `<div class="list-item" style="display:block">
-      <div class="row"><b class="grow">${esc(d.nombre)}</b><span class="small dim">${ageOf(d, y + 1)} años en ${y + 1} · ritmo ${d.ritmo}</span></div>
-      <div class="small ${ends ? "yellow" : "dim"}">${ends ? `Se le acaba el contrato.` : `Con contrato hasta ${until}.`}</div>
-      ${ends ? `<div class="seg" style="margin-top:4px"><button data-keep="${i}" class="${c.keep ? "on" : ""}">Renovar</button><button data-swap="${i}" class="${c.keep ? "" : "on"}">Cambiar</button></div>
-      ${c.keep ? "" : `<select data-sign="${i}" style="width:100%">${pool.filter((p) => !choices.some((o, j) => j !== i && !o.keep && o.sign === p.abrev)).map((p) => `<option value="${p.abrev}" ${c.sign === p.abrev ? "selected" : ""}>${esc(p.nombre)} · ${ageOf(p, y + 1)} años · ritmo ${p.ritmo}${p.debut === undefined ? " · sin experiencia en F1" : ""}</option>`).join("")}</select>`}` : ""}
+      <div class="row"><b class="grow">${esc(d.nombre)}</b><span class="small dim">${ageOf(d, y + 1)} años en ${y + 1} · ritmo ${d.ritmo} · ${sal[d.abrev] ?? salaryFor(d)} M/año</span></div>
+      <div class="small ${ends ? "yellow" : "dim"}">${ends ? `Se le acaba el contrato (renovar: pide ${salaryFor(d)} M/año).` : `Con contrato hasta ${until}: romperlo cuesta ${out} M.`}</div>
+      <div class="seg" style="margin-top:4px"><button data-keep="${i}" class="${c.keep ? "on" : ""}">${ends ? "Renovar" : "Seguir"}</button><button data-swap="${i}" class="${c.keep ? "" : "on"}">Cambiar</button></div>
+      ${c.keep ? "" : `<select data-sign="${i}" style="width:100%">${options.filter((p) => !choices.some((o, j) => j !== i && !o.keep && o.sign === p.abrev)).map((p) => `<option value="${p.abrev}" ${c.sign === p.abrev ? "selected" : ""}>${optLabel(p)}</option>`).join("")}</select>
+      <div class="small dim">Cuesta ${swapCost(s, d, c.sign, contracts, sal, ai)} M del presupuesto de desarrollo de ${y + 1}.</div>`}
     </div>`;
   };
   const render = () => {
@@ -140,11 +173,11 @@ export function offSeasonScreen(s: SeasonState, onDone: (next: SeasonState) => v
       </div></div>
       ${rec.objetivos.length ? `<div class="panel"><div class="hd"><span class="t">La directiva</span><span class="small">${done} de ${rec.objetivos.length} objetivos</span></div><div class="bd small">
         ${rec.objetivos.map((o) => `<div>${o.done ? "✅" : "❌"} ${esc(o.text)}</div>`).join("")}
-        <div style="margin-top:6px">Presupuesto de desarrollo para ${y + 1}: <b class="${bonus >= 0 ? "green" : "redt"}">${bonus >= 0 ? "+" : "−"}${Math.abs(bonus)} M</b> (${OBJ_BONUS} M más por cada objetivo cumplido y ${OBJ_MALUS} M menos por cada uno fallado).</div>
+        <div style="margin-top:6px">Presupuesto de desarrollo para ${y + 1}: <b class="${bonus >= 0 ? "green" : "redt"}">${bonus >= 0 ? "+" : "−"}${Math.abs(bonus)} M</b> (${OBJ_BONUS} M más por cada objetivo cumplido y ${OBJ_MALUS} M menos por cada uno fallado)${cost() ? `, y <b class="redt">−${Math.round(cost() * 10) / 10} M</b> en cláusulas` : ""}.</div>
         ${warn ? `<div class="redt" style="margin-top:6px">⚠️ Segunda temporada seguida sin cumplir ningún objetivo: la directiva avisa de que el jefe de equipo peligra.</div>` : done === 0 && rec.objetivos.length ? `<div class="yellow" style="margin-top:6px">La directiva no está nada contenta.</div>` : ""}
       </div></div>` : ""}
       <div class="panel"><div class="hd"><span class="t">Tus pilotos para ${y + 1}</span></div><div class="bd" style="padding:0">${mine.map(card).join("")}
-        <div class="small dim" style="padding:6px 10px">Con los años, los jóvenes ganan ritmo y oficio y los mayores pierden algo de ritmo; alguno se retira. Los demás equipos renuevan o fichan por su cuenta, y suben novatos.</div>
+        <div class="small dim" style="padding:6px 10px">Se puede fichar a cualquiera: a los libres y los de la F2, o a uno de otro equipo pagando su cláusula (la mitad de lo que le queda por cobrar); romper el contrato de uno tuyo también se paga. Las cláusulas salen del presupuesto de desarrollo. Con los años, los jóvenes ganan ritmo y oficio y los mayores pierden algo de ritmo; alguno se retira. Los demás equipos renuevan o fichan por su cuenta, y suben novatos de la F2.</div>
       </div></div>
       <div class="sticky-cta"><button class="red big-cta" id="go">Empezar la temporada ${y + 1}</button></div>
     </div>`;
@@ -154,7 +187,7 @@ export function offSeasonScreen(s: SeasonState, onDone: (next: SeasonState) => v
     document.querySelectorAll<HTMLElement>("[data-swap]").forEach((b) => (b.onclick = () => {
       const c = choices[Number(b.dataset.swap)];
       c.keep = false;
-      c.sign = pool.find((p) => !choices.some((o) => o !== c && !o.keep && o.sign === p.abrev))?.abrev;
+      c.sign = options.find((p) => !choices.some((o) => o !== c && !o.keep && o.sign === p.abrev))?.abrev;
       render();
     }));
     document.querySelectorAll<HTMLSelectElement>("[data-sign]").forEach((el) => (el.onchange = () => { choices[Number(el.dataset.sign)].sign = el.value; render(); }));

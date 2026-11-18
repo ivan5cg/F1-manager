@@ -69,6 +69,8 @@ export interface SeasonState {
   /** Pilotos sin equipo (libres, reservas y novatos) y hasta qué año tiene contrato cada piloto. */
   pool?: DriverDef[];
   contracts?: Record<string, number>;
+  /** Salario de cada piloto con contrato (M por temporada; en «crear equipo», los tuyos cuentan en el techo de gasto). */
+  salaries?: Record<string, number>;
   /** Temporadas anteriores, lo que ha pasado en el mercado antes de esta y lo que cambia el presupuesto. */
   history?: SeasonRecord[];
   news?: string[];

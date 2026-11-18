@@ -13,7 +13,7 @@ const ATTRS = ["ritmo", "regularidad", "neumaticos", "lluvia", "ataque", "defens
 type Attr = (typeof ATTRS)[number];
 
 export interface MarketDriver extends Partial<Record<Attr, number>> {
-  abrev: string; nombre?: string; numero?: number; nacimiento?: number; debut?: number;
+  abrev: string; nombre?: string; numero?: number; nacimiento?: number; debut?: number; serie?: string;
   equipo: string | null; rol: Role; salario: number; inc: number; nota?: string;
 }
 export interface MarketBoss { nombre: string; equipo: string | null; estrategia: number; meteo: number; boxes: number; salario: number; inc: number; nota?: string }
@@ -82,6 +82,7 @@ export function publicDriver(m: Market, base: TeamDef[], abrev: string, extra?: 
   for (const a of ATTRS) d[a] = x[a] ?? 75;
   if (x.nacimiento) d.nacimiento = x.nacimiento;
   if (x.debut) d.debut = x.debut;
+  if (x.serie) d.serie = x.serie;
   return d as unknown as DriverDef;
 }
 
