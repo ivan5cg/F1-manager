@@ -26,9 +26,9 @@ Tamaño: **P** pequeño (un PR corto), **M** medio, **G** grande (varios PR).
 
 **Lo que queda, en este orden:** 3.1 (en tandas) → 3.4 (y con ella, el resto de 3.5).
 
-Además, fuera de los bloques 1 a 5, está hecho el **Bloque 6 · Competición** (adelantamientos, salida e IA de carrera y
-clasificación) y pendiente el **Bloque 7 · Motor de simulación** (banco de realismo, neutralizaciones, sanciones,
-daños…): ver al final.
+Además, fuera de los bloques 1 a 5, están hechos el **Bloque 6 · Competición** (adelantamientos, salida e IA de
+carrera y clasificación) y el **Bloque 7 · Motor de simulación** (banco de realismo, neutralizaciones, sanciones,
+daños, defender, averías con aviso, paradas, carácter de los pilotos y vuelta de formación): ver al final.
 
 ## Reglas para quien lo haga
 
@@ -369,12 +369,44 @@ de los equipos»).
 
 Esta lista está reordenada, con medidas y con lo que falla, en el **Bloque 7**.
 
-## Bloque 7 · Motor de simulación · ⏳ Pendiente (cambia resultados a propósito)
+## Bloque 7 · Motor de simulación · ✅ Hecho (cambia resultados a propósito)
+
+Todo en `src/sim/session.ts` (y algo de `strategy.ts`, `pitwall.ts`, `powerunit.ts`); el detalle para el jugador, en el
+README («Neutralizaciones», «Sanciones», «Daños», «Pelear o no», «Averías que avisan», «Paradas», «Pilotos con carácter»
+y «Vuelta de formación»). Se midió cada paso con `npx tsx scripts/realismo.ts --carreras=8` (o 10) y `--antes`.
+
+| Tarea | Dónde | Cifras para retocar |
+|---|---|---|
+| 7.0 Banco de realismo | `scripts/realismo.ts`, `scripts/banco.ts`, `Session.stats` | márgenes en `METRICS` |
+| 7.1 Neutralizaciones | `incident`, `deploy`, `yellow`/`yellowAt`, `lappedCars`, `restartGo`, `standingRestart`, `jumpTo` | `FAIL_LAPS` (powerunit), `CRASH_P`, probabilidades de `incident` |
+| 7.2 Sanciones | `penalize`, `finishCar`, `trackLimits`, `stewards`, `probes` | `TL_P` |
+| 7.3 Daños | `damageFloor`, `changeNose`, `wingLoss`; IA en `aiDecide` («alerón») | `KERB_P`, `NOSE_TIME` (strategy) |
+| 7.4 Defender / no pelear | `fightMode`, `overtakeCheck`, `passOutlook` | `DEFEND_T` |
+| 7.5 Averías con aviso | `fault`, `faultLap`, `faultRadio`; IA en `aiModes` | `FAULT_GROW`, `FAULT_ENGINE`, `FAULT_PUSH`, `FAULT_SIGNS` |
+| 7.6 Paradas | `enterPit`, `pitStep`, `moveCar` (entrada) | `PIT_REACT`, `PIT_MODE_T`, `PIT_MODE_P`, `UNSAFE_P` |
+| 7.7 Carácter y formación | `greenness`, `shake`, `conf`, `formationLap`, `RIVALS` | `CONF_PACE`, `FORMATION_GAIN` |
+
+Cómo quedó el banco (10 carreras por circuito, en seco y con clasificación): carreras con coche de seguridad 26 → 50 %,
+con virtual 18 → 45 %, neutralizadas 41 → 73 %, bandera roja 4 → 9 %, abandonos 0,8 → 1,6 por carrera, sanciones 0 →
+1,1, gana el de la pole 34 → 39 %; los adelantamientos siguen en el objetivo (1,00) y no ha hecho falta recalibrar.
+Lo único fuera de margen es la dispersión de los adelantamientos (0,36 frente a 0,35), por mezclar estrategias de una
+y dos paradas.
+
+Notas para quien siga:
+- Las instantáneas a mitad de sesión guardan solas los campos nuevos (`snapshot.ts` copia todo lo que no es una
+  referencia); las de antes, al cargarlas, los dejan en su valor por defecto.
+- Los pilotos tienen ahora `nacimiento` y `debut` en `data/equipos-2026.json` y `mercado-2026.json`; `Session` recibe
+  `year` del fin de semana (`WeekendState.year`) para saber quién es novato.
+- Ideas sin hacer: penalización en la parrilla de la carrera siguiente para el que provoca un toque y abandona; las
+  banderas azules ignoradas; la salida parada tras bandera roja con lluvia (ahora se reanuda detrás del coche de
+  seguridad); la vuelta de formación con frenos fríos.
+
+### El análisis de partida
 
 Análisis de noviembre de 2026, leyendo `session.ts`, `strategy.ts` y `tyres.ts` y corriendo 16 carreras en seco:
 `npx tsx scripts/carrera.ts <circuito> 4 1 --detalle` en Mónaco, Monza, Silverstone y Suzuka.
 
-### Lo que se ha medido
+#### Lo que se midió
 
 | Circuito | Adelantamientos (real) | Pasa en una vuelta con 1–1,5 s de ventaja | Atascado 3+ vueltas tras el mismo | Paradas 1 / 2 / 3 |
 |---|---|---|---|---|
@@ -392,7 +424,7 @@ Análisis de noviembre de 2026, leyendo `session.ts`, `strategy.ts` y `tyres.ts`
   nada para hacer frente a eso.
 - Abandonos: unos 1,1 por carrera (18 en 16).
 
-### Lo que falla o está a medias
+#### Lo que fallaba o estaba a medias
 
 - **El daño en el fondo no existe:** `c.floor` se lee en `msTime` (agarre) y en `onLeaderLap` (averías), pero nunca
   se le da valor; siempre es 0.
@@ -402,7 +434,7 @@ Análisis de noviembre de 2026, leyendo `session.ts`, `strategy.ts` y `tyres.ts`
 - **Coche de seguridad:** dura de 3 a 5 vueltas al azar (`deploy`), sea cual sea el accidente o dónde quede el
   coche. Los doblados no se desdoblan y la relanzada es solo una bandera verde.
 
-### Tareas, por orden
+#### Tareas, por orden (todas hechas)
 
 **7.0 Banco de realismo (P) · primero.** Casi todo lo que sigue cambia resultados y `carrera.ts` solo mide
 adelantamientos. Ampliarlo (o un `scripts/realismo.ts`) para que saque por circuito, con márgenes de referencia:
@@ -439,8 +471,6 @@ Para cada tarea: azar solo con `this.rng`/`fork()`, volver a calibrar si cambian
 y decir en el PR que cambia resultados.
 
 ## Orden recomendado (lo que queda)
-
-Simulación: 7.0 → 7.1 y 7.2 → 7.3 → 7.4 → el resto del Bloque 7.
 
 Gestión: 3.1 (en tandas, cuando haya tiempo: es sobre todo trabajo de datos) → 3.4 (toca casi todo:
 temporada, mercado, guardado) y, con ella, el resto de 3.5.
