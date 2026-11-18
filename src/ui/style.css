@@ -114,6 +114,7 @@ table.tv tr.me td { color: var(--gold1); }
 .tr .flag.pit { background: linear-gradient(#fff, #d4d4d4); color: #000; }
 .tr .flag.mo { background: linear-gradient(#fff, #d4d4d4); color: #000; }
 .tr .flag.outl { background: #3a3a3e; }
+.tr .flag.pen { background: #c8102e; color: #fff; }
 .cut { height: 2px; background: var(--red1); margin: 1px 0; }
 
 .side { display: flex; flex-direction: column; gap: 4px; min-height: 0; }

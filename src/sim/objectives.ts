@@ -12,14 +12,16 @@ export interface Objective { kind: ObjKind; target: number }
 const carLevel = (t: TeamDef) => t.agarre + 0.4 * t.potencia - 0.3 * t.resistencia;
 
 /** Objetivos de una temporada a partir de la parrilla de salida (el puesto del coche del jugador en ella). */
-export function objectivesFor(teams: TeamDef[], playerTeam: string): Objective[] {
+export function objectivesFor(teams: TeamDef[], playerTeam: string, races = 9): Objective[] {
   const order = teams.slice().sort((a, b) => carLevel(b) - carLevel(a));
   const r = order.findIndex((t) => t.id === playerTeam) + 1, n = teams.length;
   const champ: Objective = { kind: "constructores", target: Math.min(n - 1, r <= 2 ? r : r + 1) };
-  if (r <= 2) return [champ, { kind: "victorias", target: 2 }];
-  if (r <= 4) return [champ, { kind: "podios", target: 2 }];
-  if (r <= 7) return [champ, { kind: "puntuar", target: 5 }];
-  return [champ, { kind: "puntuar", target: 2 }];
+  // en una temporada más larga se piden más (las mismas por carrera que en la de 9)
+  const k = (x: number) => Math.max(x, Math.round((x * races) / 9));
+  if (r <= 2) return [champ, { kind: "victorias", target: k(2) }];
+  if (r <= 4) return [champ, { kind: "podios", target: k(2) }];
+  if (r <= 7) return [champ, { kind: "puntuar", target: k(5) }];
+  return [champ, { kind: "puntuar", target: k(2) }];
 }
 
 export interface ObjStatus { text: string; now: string; state: "done" | "failed" | "on" | "off" }

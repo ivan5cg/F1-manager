@@ -5,7 +5,7 @@ import { puLife } from "../sim/powerunit";
 import { knowledgeTable, longRunsPanel, weekendLongRuns, setPills } from "./hubs";
 import { runToEnd } from "./simulate";
 import { Weekend } from "../sim/weekend";
-import { Session, Car, RaceEvent, SESSION_NAMES, SessionKind, isRaceKind, isQualiKind, PUSH_NAMES, ENGINE_NAMES, ERS_NAMES, SOC_MAX, fmtMinSec, GRAIN_WORDS } from "../sim/session";
+import { Session, Car, RaceEvent, SESSION_NAMES, SessionKind, isRaceKind, isQualiKind, PUSH_NAMES, ENGINE_NAMES, ERS_NAMES, SOC_MAX, fmtMinSec, GRAIN_WORDS, PIT_MODE_NAMES } from "../sim/session";
 import { COMPOUNDS, Compound, DRY, ALL, setWear, TyreSet, WET } from "../sim/tyres";
 import { rainAt, forecast, RadarFrame, windNow } from "../sim/weather";
 import { renderField, colorize, terrain, RADAR_STEPS, fmtHour } from "./radar";
@@ -1102,6 +1102,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       for (let j = 0; j < 3; j++) if (!isNaN(c.secCur[j])) k = tcls(c.secCur[j], c.secBest[j], sess.secBest[j]);
       return `<span class="flag vl ${c.lapValid ? k : "bad"}" title="En vuelta lanzada: tócalo para ver su vuelta en el mapa">▶</span>`;
     }
+    if (race && c.penS) return `<span class="flag pen" title="Sanción pendiente: se cumple en la próxima parada o se suma al final">+${c.penS}s</span>`;
     if (c.drs) return `<span class="flag mo">MO</span>`;
     return "";
   }
@@ -1488,6 +1489,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     open(`<div class="row"><b class="up grow">Parada de ${esc(c.d.nombre)}</b><span class="dim small">quedan ${left} v</span></div>
       <div class="small dim">Para al final de esta vuelta. Usados: ${used}.${kind === "RACE" ? " En seco hay que usar dos compuestos." : ""} El % es la goma que queda.</div>
       ${setButtons(c, (s) => s !== c.tyres && !s.punctured, c.pitRequest ?? undefined)}
+      ${race ? `<div class="row small" style="gap:6px;margin:2px 0 4px"><span class="dim">Parada</span><div class="seg">${PIT_MODE_NAMES.map((n, i) => `<button data-pm="${i}" class="${(c.pitMode ?? 1) === i ? "on" : ""}">${n}</button>`).join("")}</div></div><div class="small dim" style="margin-bottom:6px">Segura: +0,4 s y casi nunca sale mal. Rápida: −0,25 s, pero sale mal el doble de veces y es más fácil una salida insegura (5 s). Pídela con tiempo: a menos de ~2,5 s de la entrada ya no llega.</div>` : ""}
       ${race ? (() => { const os = stopOptions(sess, c).filter((o) => fitsWater(o.c)); if (!os.length) return ""; const catches = os.filter((o) => o.catchLaps !== null); return `<div style="margin:-2px 0 8px">${exitLine(os[0])}${catches.length ? `<div class="small">${catches.map((o) => `${tyreHtml(o.c)} alcanza a ${o.ahead!.car.d.abrev} en ${o.catchLaps} v`).join(" · ")}</div>` : ""}<div class="small dim">Más detalle en «Muro».</div></div>`; })() : ""}
       <div class="btnrow" style="padding:0"><button data-close>${c.pitRequest ? "Mantener" : "Cerrar"}</button>${c.pitRequest ? `<button class="red" id="cancel">Anular parada</button>` : ""}</div>`, (el, close) => {
       el.querySelectorAll<HTMLButtonElement>("[data-set]").forEach((b) => (b.onclick = () => {
@@ -1498,6 +1500,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       }));
       const cb = el.querySelector<HTMLButtonElement>("#cancel");
       if (cb) cb.onclick = () => { c.pitRequest = null; close(); };
+      el.querySelectorAll<HTMLButtonElement>("[data-pm]").forEach((b) => (b.onclick = () => { c.pitMode = Number(b.dataset.pm); el.querySelectorAll<HTMLElement>("[data-pm]").forEach((x) => x.classList.toggle("on", x === b)); }));
     });
   }
   function redSheet(c: Car) {
@@ -1613,10 +1616,10 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       const cell = (k: string, v: string, wide = false) => `<div class="${wide ? "w2" : ""}"><i>${k}</i><b class="mono">${v}</b></div>`;
       const sp = t ? COMPOUNDS[t.c] : null;
       return `<div class="pcard">
-        <div class="pc-h"><span class="teamdot" style="background:${c.team.color}"></span><b class="nm">${esc(shortName(c.d.nombre))}</b>${t ? `${tyreHtml(t.c)}<span class="dim">${t.laps} v · ${sp!.opt - sp!.window}–${sp!.opt + sp!.window}°</span>` : `<span class="dim">en el garaje</span>`}${c.wing > 0 ? `<span class="yellow">alerón</span>` : ""}${race ? `<button data-let="${idx}" title="Dejar pasar al compañero">Dejar pasar</button>` : ""}</div>
+        <div class="pc-h"><span class="teamdot" style="background:${c.team.color}"></span><b class="nm">${esc(shortName(c.d.nombre))}</b>${t ? `${tyreHtml(t.c)}<span class="dim">${t.laps} v · ${sp!.opt - sp!.window}–${sp!.opt + sp!.window}°</span>` : `<span class="dim">en el garaje</span>`}${c.wing > 0 ? `<span class="yellow" title="Lo que cuesta por vuelta">alerón −${sess.wingLoss(c).toFixed(1)} s</span>` : ""}${race && c.fault ? `<span class="redt" title="Motor en Ahorro y ritmo bajo para que aguante">⚠️ ${esc(c.fault.what)} ${Math.round(c.fault.lvl * 100)} %</span>` : ""}${c.floor > 0 ? `<span class="redt" title="No se puede arreglar en boxes">fondo −${(c.floor * 100 * sess.secPerGrip).toFixed(1)} s</span>` : ""}${race && c.penS ? `<span class="redt" title="Se cumple en la próxima parada o se suma al final">+${c.penS} s</span>` : ""}${race && (c.tlStrikes ?? 0) >= 3 ? `<span class="dim" title="Bandera blanca y negra: límites de pista">🏁 ${c.tlStrikes}</span>` : ""}${race ? `<button data-let="${idx}" title="Dejar pasar al compañero">Dejar pasar</button>` : ""}</div>
         ${t ? `<div class="pc-t">${axle("Del.", t.F, 0)}${axle("Tras.", t.R, 1)}</div>` : ""}
         <div class="pc-s">${cell("Última", fmtLap(c.lapTimes[c.lapTimes.length - 1]))}${cell("Mejor", fmtLap(c.best))}${t ? cell("Posible", fmtLap(sess.estLap(c))) : ""}${cell("Combust.", `${c.fuel.toFixed(1)} kg${race ? ` <small>${fuelDelta >= 0 ? "+" : ""}${fuelDelta.toFixed(1)} v</small>` : ""}`)}${cell("Batería", `${Math.round((c.soc / SOC_MAX) * 100)} %`)}${c.e.pu ? cell("Motor", `${Math.round(puLife(c.e.pu.km0 + c.puKm) * 100)} % vida`) : ""}${race ? cell("Plan", plan || "—", !c.e.pu) : ""}</div>
-        ${race ? `<div class="pc-c">${seg("push", "Ritmo", PUSH_NAMES, c.push)}${seg("engine", "Motor", ENGINE_NAMES, c.engine)}${seg("ers", "Batería", ERS_SHORT, c.ers, c.autoErs)}</div>` : ""}
+        ${race ? `<div class="pc-c">${seg("push", "Ritmo", PUSH_NAMES, c.push)}${seg("engine", "Motor", ENGINE_NAMES, c.engine)}${seg("ers", "Batería", ERS_SHORT, c.ers, c.autoErs)}${seg("fight", "Pelea", ["Defender", "No pelear"], c.fight === "yield" ? 1 : 0, (c.fight ?? "auto") === "auto")}${c.wing > 0 ? seg("nose", "Morro", ["Cambiar", "Dejar"], c.nose === "no" ? 1 : 0, (c.nose ?? "auto") === "auto") : ""}</div>` : ""}
       </div>`;
     };
     const body = () => mine().map(card).join("");
@@ -1639,6 +1642,8 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
         if (k === "push") c.push = Number(b.dataset.v);
         if (k === "engine") c.engine = Number(b.dataset.v);
         if (k === "ers") { if (b.dataset.v === "auto") c.autoErs = true; else { c.autoErs = false; c.ers = Number(b.dataset.v); } }
+        if (k === "fight") c.fight = b.dataset.v === "auto" ? "auto" : b.dataset.v === "0" ? "defend" : "yield";
+        if (k === "nose") c.nose = b.dataset.v === "auto" ? "auto" : b.dataset.v === "0" ? "yes" : "no";
         pb.innerHTML = body();
       };
       el.querySelectorAll<HTMLElement>("[data-close]").forEach((b) => (b.onclick = () => close()));
@@ -1783,7 +1788,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
         const adv = `${out.adv >= 0 ? "+" : "−"}${Math.abs(out.adv).toFixed(1)} s/v`;
         return k === "attack"
           ? `<div class="mw-uc"><span class="tab">En pista</span> Pasar a <b>${o.d.abrev}</b> (a ${gap.toFixed(1)} s): ventaja <b>${adv}</b> llegando pegado; aquí hacen falta ~${out.need.toFixed(1)} · <span class="${good ? "green" : "redt"}">${word}</span></div>`
-          : `<div class="mw-uc"><span class="tab">En pista</span> <b>${o.d.abrev}</b> (a ${gap.toFixed(1)} s detrás) tiene <b>${adv}</b> sobre ti; hacen falta ~${out.need.toFixed(1)} · <span class="${good ? "green" : "redt"}">${out.p < 0.08 ? "aguantas sin problema" : out.p < 0.3 ? "puedes aguantarle" : out.p < 0.6 ? "te puede pasar" : "te va a pasar"}</span></div>`;
+          : `<div class="mw-uc"><span class="tab">En pista</span> <b>${o.d.abrev}</b> (a ${gap.toFixed(1)} s detrás) tiene <b>${adv}</b> sobre ti; hacen falta ~${out.need.toFixed(1)}${sess.fightMode(c) === "defend" ? " (cerrando la puerta)" : sess.fightMode(c) === "yield" ? " (no peleas: le dejas pasar)" : ""} · <span class="${good ? "green" : "redt"}">${out.p < 0.08 ? "aguantas sin problema" : out.p < 0.3 ? "puedes aguantarle" : out.p < 0.6 ? "te puede pasar" : "te va a pasar"}</span></div>`;
       };
       const req = c.pitRequest ? c.e.sets.find((x) => x.id === c.pitRequest) : null;
       return `<div class="panel" style="margin:6px 0"><div class="hd"><span class="t"><span class="teamdot" style="background:${c.team.color}"></span>${esc(c.d.nombre)} · P${sess.order().indexOf(c) + 1}</span>${c.tyres ? `${tyreHtml(c.tyres.c)}<span class="small dim">${c.tyres.laps} v</span>` : ""}</div><div class="bd">

@@ -13,21 +13,22 @@ Tamaño: **P** pequeño (un PR corto), **M** medio, **G** grande (varios PR).
 | 2.1 Motores | ✅ Hecho | `src/ui/audio.ts`, `map3d.ts` (`audioView`), `sessionView.ts` |
 | 2.2 Ambiente | ✅ Hecho | ídem |
 | 2.3 Radio del equipo | ✅ Hecho | ídem |
-| 3.1 Calendario más largo | ⏳ Pendiente | — |
+| 3.1 Calendario más largo | ✅ Hecho | `data/calendario.json` (`completa`), `data/circuitos/*.json`, `scripts/nuevos.py`, `src/ui/data.ts` (`CALENDARS`, `circuitOf`, `devRounds`), `weekend.ts` (`horarioFor`, `dayName`) |
 | 3.2 Reglajes | ✅ Hecho (cambia resultados) | `src/sim/setup.ts`, `session.ts`, `weekend.ts`, `hubs.ts`, `scripts/reglajes.ts` |
 | 3.3 Desarrollo del coche | ✅ Hecho (cambia resultados en temporadas nuevas) | `src/sim/development.ts`, `market.ts`, `src/ui/data.ts`, `hubs.ts` |
-| 3.4 Varias temporadas | ⏳ Pendiente | — |
-| 3.5 Objetivos de la directiva | 🟡 Hecho a medias (falta lo que depende de 3.4) | `src/sim/objectives.ts`, `hubs.ts` |
+| 3.4 Varias temporadas | ✅ Hecho (cambia resultados desde la 2.ª temporada) | `src/sim/career.ts`, `src/ui/nextSeason.ts`, `season.ts`, `data.ts` (`gridOf`), `market.ts` (`buildGrid`), `scripts/temporadas.ts` |
+| 3.5 Objetivos de la directiva | ✅ Hecho | `src/sim/objectives.ts`, `career.ts` (`objectivesBonus`), `nextSeason.ts`, `hubs.ts` |
 | 4.1 Más cámaras | ✅ Hecho | `map3d.ts` (`MORE_CAMS`, `camList`, `setCamera`), `sessionView.ts` |
 | 4.2 Rótulos de tele | ✅ Hecho | `sessionView.ts` (`tvTick`, `tvShow`), `style.css` |
 | 5.1 Niveles de detalle | ✅ Hecho | `map3d.ts` (`propBuilder`, `propLod`, manzanas, árboles), `car3d.ts` (`carMinGeometry`) |
 | 5.2 Nubes y lluvia | ✅ Hecho | `map3d.ts` (cielo: `cloudSides`, `updateStorm`; `uDrops`; spray `aSpl`), `car3d.ts` (`DROPS_GLSL`), `audio.ts` (`thunder`) |
 | 5.3 Hora del día | ✅ Hecho | `map3d.ts` (`winOn`, `uCity`, `townLights`, caja de sombras) |
 
-**Lo que queda, en este orden:** 3.1 (en tandas) → 3.4 (y con ella, el resto de 3.5).
+**Los bloques 1 a 7 están hechos.** Ideas sin hacer, al final de cada tarea.
 
-Además, fuera de los bloques 1 a 5, está hecho el **Bloque 6 · Competición** (adelantamientos, salida e IA de carrera y
-clasificación): ver al final.
+Además, fuera de los bloques 1 a 5, están hechos el **Bloque 6 · Competición** (adelantamientos, salida e IA de
+carrera y clasificación) y el **Bloque 7 · Motor de simulación** (banco de realismo, neutralizaciones, sanciones,
+daños, defender, averías con aviso, paradas, carácter de los pilotos y vuelta de formación): ver al final.
 
 ## Reglas para quien lo haga
 
@@ -116,7 +117,26 @@ coche seguido (o tu primer piloto en pista, o el primero que esté rodando) y lo
 
 ## Bloque 3 · Profundidad de juego (gestión)
 
-### 3.1 Calendario más largo (G) · ⏳ Pendiente
+### 3.1 Calendario más largo (G) · ✅ Hecho
+
+Hecho (noviembre de 2026):
+- Calendario **completo** de 2026 tal como es (23 carreras: Baréin y Arabia Saudí se cancelaron y el GP de Baréin se
+  corrió en Sepang) junto al **corto** de siempre: se elige en el inicio (`Prefs.calendario`) y la temporada guarda el
+  suyo (`calendar`) y el formato de los fines de semana que no corren con el de su circuito (`formatos`: Silverstone
+  sprint, Interlagos normal). `circuitOf(s, id)` da los datos del circuito para esa temporada; el horario del otro
+  formato va en `horarioOtro` y los fines de semana de jueves a sábado (Bakú, Las Vegas), en `dias: "JVS"`.
+- 15 circuitos nuevos con `python3 scripts/nuevos.py <caché>`: TUM donde está y es el trazado actual (Shanghái,
+  Montreal, Barcelona, Spielberg, Hungaroring, Zandvoort, Austin, México); bacinger en el resto (Melbourne y Yas
+  Marina porque los de TUM son de antes de sus reformas; Miami, Madrid, Bakú, Las Vegas y Lusail). Después,
+  `relieve.py <caché> <ids>` y, en los urbanos (Bakú y Las Vegas), `entorno.py <caché> <ids>` (`SEA`: el Caspio está a
+  −27 m). Poles reales de 2026 (las de Las Vegas, Catar y Abu Dabi, estimadas) y umbral calibrado con `calibra.ts`.
+- En una temporada larga el desarrollo se reparte (`devRounds`: rivales y presupuesto dan lo mismo en la temporada) y
+  el cupo de unidades de potencia sube (`quotaFor`: 5 para 23 carreras; `PuState.quota`).
+- Sin hacer: el clima, la pérdida en boxes, la carga, la abrasividad y los adelantamientos de los nuevos son
+  estimaciones propias (lo dice cada «fuente»); faltan Yeda y Sakhir en el completo (cancelados en 2026); Imola,
+  Portimão y otros no están.
+
+Lo que decía la tarea:
 - Añadir circuitos con la misma calidad que los actuales: trazado (TUMFTM tiene, entre otros, Budapest, Montreal,
   Melbourne, Catalunya, Austin, MexicoCity, Shanghai, Spielberg, YasMarina, Zandvoort; bacinger tiene además Imola,
   Bakú, Yeda, Miami, Las Vegas, Catar…), relieve y anchura (`scripts/relieve.py`, añadir a `CIRCUITS`), clima
@@ -176,7 +196,30 @@ coche seguido (o tu primer piloto en pista, o el primero que esté rodando) y lo
 - Consumo por equipo: `Session.fuelLap(c)` sustituye a `fuelPerLap` donde importa el coche (por defecto 1: no
   cambia nada).
 
-### 3.4 Varias temporadas seguidas (G) · ⏳ Pendiente
+### 3.4 Varias temporadas seguidas (G) · ✅ Hecho
+
+Hecho (noviembre de 2026):
+- Al acabar: «Empezar la temporada 2027» → `offSeasonScreen` (resumen, objetivos y presupuesto, tus pilotos con
+  contrato que acaba: renovar o cambiar por uno libre) → `buildNextSeason` → `nav.nextSeason` (misma partida).
+- `career.ts` (`offSeason`): edad (`ageStep`), retiradas (`retireChance`), renovaciones según el coche, traspasos a
+  equipos mejores, novatos inventados (`rookie`) y regresión del coche (`CAR_CARRY` = 0,65). Noticias del mercado
+  al empezar (`newsPanel`) y temporadas anteriores (`historyPanel`).
+- `SeasonState`: `year`, `grid` (equipos del año), `misPilotos` y `carry` («crear equipo»), `pool`, `contracts`,
+  `history`, `news`, `devBonus`, `aviso`, `trueSeed` (los valores ocultos no cambian de un año a otro). Las de antes
+  son 2026 y siguen igual.
+- `npx tsx scripts/temporadas.ts [n] [semilla] [equipo|propio] [--completo]`: varias temporadas sin correr carreras.
+- Después: fichajes con contrato en vigor pagando la cláusula (`clauseFor`: la mitad de lo que le queda por cobrar),
+  tuyos y de otros equipos; salarios (`salaryFor`, `SeasonState.salaries`), que en «crear equipo» ocupan el techo
+  desde la segunda temporada (`devContext`); la parrilla real de F2 de 2026 en el mercado (`serie: "F2"`) y una
+  cantera que se renueva (`f2Newcomer`, cuatro jóvenes inventados al año).
+- Cambios de piloto a mitad de temporada (`SeasonState.swaps`, `SeatSwap`): lesiones tras un accidente, destituciones
+  de la IA (`midSeason` en career.ts, `applyMidSeason` al acabar cada carrera) y los tuyos entre carreras (`swapSheet`).
+  `gridOf` aplica los cambios por ronda y el mundial cuenta por persona (`personId`: el asiento si lo lleva ahora, o
+  1000 + el cambio en el que salió; `who`, `person`, `whoAt` en data.ts); constructores, por asiento.
+- Sin hacer: cambiar de jefe, técnico o motor; que te despidan de verdad; los
+  contratos reales de 2026 (son una estimación).
+
+Lo que decía la tarea:
 - Al acabar la temporada: pantalla de cierre (campeones, objetivos) y **«Empezar la temporada 2027»**.
 - Pilotos: la edad (añadir `nacimiento` a los pilotos en `data/equipos-2026.json` y `mercado-2026.json`) hace que
   mejoren hasta ~28 años y empeoren desde ~34; retiradas por edad; novatos que suben (inventados, del mercado de
@@ -196,7 +239,13 @@ coche seguido (o tu primer piloto en pista, o el primero que esté rodando) y lo
   - Muchas cosas dicen «2026» a fuego: las claves de guardado (`muro-temporada-2026`), los títulos de `hubs.ts` y los
     datos. Las claves pueden seguir igual (son por ranura, no por año).
 
-### 3.5 Objetivos de la directiva (P) · 🟡 Hecho a medias
+### 3.5 Objetivos de la directiva (P) · ✅ Hecho
+
+Hecho: los objetivos escalan con la longitud del calendario, y al acabar suben (6 M por objetivo cumplido) o bajan
+(5 M por fallado) el presupuesto de desarrollo del año siguiente (`objectivesBonus`, `SeasonState.devBonus`); dos
+temporadas seguidas sin cumplir ninguno, aviso de que el jefe de equipo peligra (`aviso`).
+
+Lo que decía la tarea:
 - Hecho: `objectivesFor` pone dos al abrir la temporada según el puesto del coche en la parrilla de salida (agarre,
   potencia y resistencia): constructores (top 2: su puesto; resto: uno más) y, según el nivel, 2 victorias,
   2 podios, puntuar en 5 carreras o puntuar en 2. Panel en la pantalla de temporada con su progreso (cumplido, ya
@@ -366,7 +415,121 @@ de los equipos»).
 8. **Paradas con más juego:** tiempo de reacción del equipo (pedir la parada tarde y no llegar), salida insegura,
    y elegir entre parada rápida con riesgo o segura.
 
+Esta lista está reordenada, con medidas y con lo que falla, en el **Bloque 7**.
+
+## Bloque 7 · Motor de simulación · ✅ Hecho (cambia resultados a propósito)
+
+Todo en `src/sim/session.ts` (y algo de `strategy.ts`, `pitwall.ts`, `powerunit.ts`); el detalle para el jugador, en el
+README («Neutralizaciones», «Sanciones», «Daños», «Pelear o no», «Averías que avisan», «Paradas», «Pilotos con carácter»
+y «Vuelta de formación»). Se midió cada paso con `npx tsx scripts/realismo.ts --carreras=8` (o 10) y `--antes`.
+
+| Tarea | Dónde | Cifras para retocar |
+|---|---|---|
+| 7.0 Banco de realismo | `scripts/realismo.ts`, `scripts/banco.ts`, `Session.stats` | márgenes en `METRICS` |
+| 7.1 Neutralizaciones | `incident`, `deploy`, `yellow`/`yellowAt`, `lappedCars`, `restartGo`, `standingRestart`, `jumpTo` | `FAIL_LAPS` (powerunit), `CRASH_P`, probabilidades de `incident` |
+| 7.2 Sanciones | `penalize`, `finishCar`, `trackLimits`, `stewards`, `probes` | `TL_P` |
+| 7.3 Daños | `damageFloor`, `changeNose`, `wingLoss`; IA en `aiDecide` («alerón») | `KERB_P`, `NOSE_TIME` (strategy) |
+| 7.4 Defender / no pelear | `fightMode`, `overtakeCheck`, `passOutlook` | `DEFEND_T` |
+| 7.5 Averías con aviso | `fault`, `faultLap`, `faultRadio`; IA en `aiModes` | `FAULT_GROW`, `FAULT_ENGINE`, `FAULT_PUSH`, `FAULT_SIGNS` |
+| 7.6 Paradas | `enterPit`, `pitStep`, `moveCar` (entrada) | `PIT_REACT`, `PIT_MODE_T`, `PIT_MODE_P`, `UNSAFE_P` |
+| 7.7 Carácter y formación | `greenness`, `shake`, `conf`, `formationLap`, `RIVALS` | `CONF_PACE`, `FORMATION_GAIN` |
+
+Cómo quedó el banco (10 carreras por circuito, en seco y con clasificación): carreras con coche de seguridad 26 → 50 %,
+con virtual 18 → 45 %, neutralizadas 41 → 73 %, bandera roja 4 → 9 %, abandonos 0,8 → 1,6 por carrera, sanciones 0 →
+1,1, gana el de la pole 34 → 39 %; los adelantamientos siguen en el objetivo (1,00) y no ha hecho falta recalibrar.
+Lo único fuera de margen es la dispersión de los adelantamientos (0,36 frente a 0,35), por mezclar estrategias de una
+y dos paradas.
+
+Notas para quien siga:
+- Las instantáneas a mitad de sesión guardan solas los campos nuevos (`snapshot.ts` copia todo lo que no es una
+  referencia); las de antes, al cargarlas, los dejan en su valor por defecto.
+- Los pilotos tienen ahora `nacimiento` y `debut` en `data/equipos-2026.json` y `mercado-2026.json`; `Session` recibe
+  `year` del fin de semana (`WeekendState.year`) para saber quién es novato.
+- Ideas sin hacer: penalización en la parrilla de la carrera siguiente para el que provoca un toque y abandona; las
+  banderas azules ignoradas; la salida parada tras bandera roja con lluvia (ahora se reanuda detrás del coche de
+  seguridad); la vuelta de formación con frenos fríos.
+
+### El análisis de partida
+
+Análisis de noviembre de 2026, leyendo `session.ts`, `strategy.ts` y `tyres.ts` y corriendo 16 carreras en seco:
+`npx tsx scripts/carrera.ts <circuito> 4 1 --detalle` en Mónaco, Monza, Silverstone y Suzuka.
+
+#### Lo que se midió
+
+| Circuito | Adelantamientos (real) | Pasa en una vuelta con 1–1,5 s de ventaja | Atascado 3+ vueltas tras el mismo | Paradas 1 / 2 / 3 |
+|---|---|---|---|---|
+| Mónaco | 24,5 (8,8) | 3 % | 63 por carrera | 42 / 37 / 5 |
+| Monza | 133 (47) | 40 % | 59 | 77 / 6 |
+| Silverstone | 53,5 (34,5) | 23 % | 49 | 63 / 19 |
+| Suzuka | 92,5 (40,5) | 34 % | 37 | 47 / 38 |
+
+- Que haya más adelantamientos que en la realidad es a propósito (`calibra.ts` apunta a 2,4 veces la media real).
+- **Pocas neutralizaciones:** en 16 carreras, 5 coches de seguridad, 4 virtuales y ninguna bandera roja (en la
+  realidad, coche de seguridad más o menos en una de cada dos). Es lo que más decisiones da al muro.
+- **Mucha dispersión:** en Suzuka una carrera tuvo 164 adelantamientos y otra 62. En la de 164 se pasan de 3 a 9
+  coches por vuelta toda la carrera, sin incidentes, por mezclar estrategias de una y dos paradas.
+- **Trenes:** de 37 a 63 veces por carrera un coche pasa 3 vueltas o más detrás del mismo, y el jugador no tiene
+  nada para hacer frente a eso.
+- Abandonos: unos 1,1 por carrera (18 en 16).
+
+#### Lo que fallaba o estaba a medias
+
+- **El daño en el fondo no existe:** `c.floor` se lee en `msTime` (agarre) y en `onLeaderLap` (averías), pero nunca
+  se le da valor; siempre es 0.
+- **Los toques no tienen culpable:** en `contact()` el alerón dañado es siempre el del que ataca, y no hay sanciones.
+- **En carrera no hay límites de pista:** solo se anulan vueltas en libres y clasificación (`onMsEnter`).
+- **Banderas azules:** solo cuestan al doblado (de 0,2 a 0,6 s en `overtakeCheck`); el que dobla no pierde nada.
+- **Coche de seguridad:** dura de 3 a 5 vueltas al azar (`deploy`), sea cual sea el accidente o dónde quede el
+  coche. Los doblados no se desdoblan y la relanzada es solo una bandera verde.
+
+#### Tareas, por orden (todas hechas)
+
+**7.0 Banco de realismo (P) · primero.** Casi todo lo que sigue cambia resultados y `carrera.ts` solo mide
+adelantamientos. Ampliarlo (o un `scripts/realismo.ts`) para que saque por circuito, con márgenes de referencia:
+coches de seguridad, virtuales y banderas rojas por carrera, abandonos, reparto de paradas, cuántas gana el de la pole,
+diferencia del 1.º al 10.º y dispersión de los adelantamientos. Cada PR del bloque enseña el antes y el después.
+
+**7.1 Neutralizaciones creíbles (M).** Junta los puntos 2 y 3 de la lista del Bloque 6 y la calibración:
+- más incidentes, hasta acercarse a un coche de seguridad cada dos carreras;
+- duración según lo grave que sea y dónde quede el coche (escapatoria o en la trazada);
+- doble amarilla en carrera y banderas amarillas por sector en clasificación (vuelta estropeada al que pasa por ahí);
+- doblados que se desdoblan y relanzada que marca el líder.
+
+**7.2 Sanciones con culpable (M), con 7.1 en el mismo PR o justo después** (punto 1 del Bloque 6). En `contact()`
+se decide quién tiene la culpa según quién ataca y lo agresivo que es cada uno. Sanciones de 5 o 10 s por causar un
+toque, por límites de pista en carrera (con bandera blanca y negra antes) y por salir de boxes de forma insegura. Se
+cumplen en la parada o se suman al final: decisión nueva para el muro (cumplirla ahora o aguantar).
+
+**7.3 Daños que se quedan (P/M).** Dar valor a `floor` con bordillos, toques y salidas de pista: el coche pierde
+X s/vuelta y avería más. El ingeniero lo dice por radio y el jugador decide si para (hoy el morro se cambia solo,
+cuando `wing > 0.012`, en `enterPit`).
+
+**7.4 «Defender» y «no pelear» por piloto (P)** (punto 5 del Bloque 6). `passOutlook` ya da la ventaja y la
+probabilidad de pasar: sale barato y responde a los trenes medidos arriba.
+
+**7.5 Averías con aviso (M)** (punto 7). `puHazard` ya existe: faltan síntomas antes de la avería (temperaturas,
+presión) y poder llegar a meta bajando el motor.
+
+**7.6 Paradas con más juego (P/M)** (punto 8): pedir la parada tarde y no llegar, paradas que salen mal al parar los
+dos coches seguidos, y la salida insegura enlazada con 7.2.
+
+**7.7 Pilotos con carácter y vuelta de formación (M)** (puntos 6 y 4). Se notan menos.
+
+Para cada tarea: azar solo con `this.rng`/`fork()`, volver a calibrar si cambian los adelantamientos (`calibra.ts`)
+y decir en el PR que cambia resultados.
+
 ## Orden recomendado (lo que queda)
 
-3.1 (en tandas, cuando haya tiempo: es sobre todo trabajo de datos) → 3.4 (toca casi todo:
-temporada, mercado, guardado) y, con ella, el resto de 3.5.
+Nada de los bloques. Hecho después (noviembre de 2026):
+- **Abandonos:** unos 3 por carrera (`FAIL_LAPS` 540 con la fiabilidad del equipo a la 2,5, `CRASH_P` 0,11; tres de
+  cada cuatro averías leves acaban en el garaje). El banco pide ahora de 2,8 a 4,5.
+- **Umbrales con la clasificación:** todos los circuitos recalibrados con `calibra.ts --clasif` (la parrilla sale de
+  correr la clasificación, como en el juego y en `realismo.ts`). Banco final (25 circuitos × 6 carreras): coche de seguridad
+  52 %, virtual 50 %, bandera roja 7 %, abandonos 3,0, sanciones 1,0, gana el de la pole 35 %, adelantamientos 0,76
+  del objetivo: todo dentro de margen. Mónaco (0,43) y Hungaroring (0,58) siguen algo bajos: `calibra.ts` mide con una
+  sola semilla (101) y sin la primera vuelta; con más carreras (`--carreras=10`) afinaría.
+- **Mercado:** F2 de 2026, cantera, cláusulas y salarios (ver 3.4).
+
+- **Cambios de piloto a mitad de temporada:** lesiones, destituciones y los tuyos (ver 3.4).
+
+Lo que más se notaría ahora: cambiar de jefe de equipo, director técnico o motor entre temporadas en «crear equipo».

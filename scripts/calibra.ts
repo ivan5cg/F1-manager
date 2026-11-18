@@ -1,6 +1,7 @@
 // Calibra el umbral de adelantamiento de cada circuito (`adelantamientos.umbral`): busca por bisección la ventaja
 // con la que salen, en carreras en seco, los adelantamientos del objetivo (sin contar la primera vuelta).
-//   npx tsx scripts/calibra.ts [circuito ...] [--carreras=6] [--escribe]
+//   npx tsx scripts/calibra.ts [circuito ...] [--carreras=6] [--escribe] [--clasif]
+// --clasif: con la parrilla de la clasificación (como en el juego y en realismo.ts); más lento, pero más fiel.
 // El objetivo es la media real del circuito por OBJ_K. No se busca clavar el total histórico: con él, para que salieran
 // tan pocos habría que pedir tanta ventaja que no se pasaría ni con gomas mucho más nuevas (lo que tenía el juego
 // antes). Se fija la curva (en un circuito normal, ~35 % por vuelta con 1–1,5 s de ventaja) y los datos reales
@@ -13,11 +14,12 @@ const OBJ_K = 2.4;
 const args = process.argv.slice(2);
 const n = Number(args.find((a) => a.startsWith("--carreras="))?.split("=")[1] ?? 6);
 const write = args.includes("--escribe");
+const quali = args.includes("--clasif");
 let ids = args.filter((a) => !a.startsWith("--"));
 if (!ids.length) ids = readdirSync("data/circuitos").filter((f) => f.endsWith(".json")).map((f) => f.replace(".json", ""));
 
 function run(id: string, t: number): number {
-  const out = execFileSync("npx", ["tsx", "scripts/carrera.ts", id, String(n), "101", `--umbral=${t}`], { encoding: "utf8" });
+  const out = execFileSync("npx", ["tsx", "scripts/carrera.ts", id, String(n), "101", `--umbral=${t}`, ...(quali ? ["--clasif"] : [])], { encoding: "utf8" });
   const m = out.match(/adelantamientos por carrera: ([\d.]+) \(([\d.]+) en la primera vuelta\)/);
   if (!m) throw new Error("sin resultado: " + out.slice(-300));
   return Number(m[1]) - Number(m[2]);

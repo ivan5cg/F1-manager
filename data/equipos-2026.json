@@ -1,5 +1,5 @@
 {
- "_nota": "Parrilla real 2026 (lista de inscritos FIA). agarre/potencia/resistencia en % respecto a la referencia; desgaste <1 cuida neumáticos; boxes: segundos parado; fiabilidad: multiplicador de averías; estrategia/meteo 0-100. Los valores de rendimiento son una estimación a partir del mundial de constructores 2026.",
+ "_nota": "Parrilla real 2026 (lista de inscritos FIA). agarre/potencia/resistencia en % respecto a la referencia; desgaste <1 cuida neumáticos; boxes: segundos parado; fiabilidad: multiplicador de averías; estrategia/meteo 0-100. Los valores de rendimiento son una estimación a partir del mundial de constructores 2026. nacimiento: año de nacimiento; debut: año de su primera carrera de F1.",
  "equipos": [
   {
    "id": "mercedes",
@@ -26,7 +26,9 @@
      "ataque": 86,
      "defensa": 90,
      "agresividad": 62,
-     "salida": 85
+     "salida": 85,
+     "nacimiento": 1998,
+     "debut": 2019
     },
     {
      "nombre": "Kimi Antonelli",
@@ -39,7 +41,9 @@
      "ataque": 90,
      "defensa": 84,
      "agresividad": 74,
-     "salida": 86
+     "salida": 86,
+     "nacimiento": 2006,
+     "debut": 2025
     }
    ]
   },
@@ -68,7 +72,9 @@
      "ataque": 90,
      "defensa": 87,
      "agresividad": 70,
-     "salida": 82
+     "salida": 82,
+     "nacimiento": 1997,
+     "debut": 2018
     },
     {
      "nombre": "Lewis Hamilton",
@@ -81,7 +87,9 @@
      "ataque": 88,
      "defensa": 90,
      "agresividad": 62,
-     "salida": 84
+     "salida": 84,
+     "nacimiento": 1985,
+     "debut": 2007
     }
    ]
   },
@@ -110,7 +118,9 @@
      "ataque": 94,
      "defensa": 93,
      "agresividad": 78,
-     "salida": 88
+     "salida": 88,
+     "nacimiento": 1997,
+     "debut": 2015
     },
     {
      "nombre": "Isack Hadjar",
@@ -123,7 +133,9 @@
      "ataque": 84,
      "defensa": 80,
      "agresividad": 72,
-     "salida": 80
+     "salida": 80,
+     "nacimiento": 2004,
+     "debut": 2025
     }
    ]
   },
@@ -152,7 +164,9 @@
      "ataque": 86,
      "defensa": 85,
      "agresividad": 60,
-     "salida": 80
+     "salida": 80,
+     "nacimiento": 1999,
+     "debut": 2019
     },
     {
      "nombre": "Oscar Piastri",
@@ -165,7 +179,9 @@
      "ataque": 87,
      "defensa": 88,
      "agresividad": 64,
-     "salida": 83
+     "salida": 83,
+     "nacimiento": 2001,
+     "debut": 2023
     }
    ]
   },
@@ -194,7 +210,9 @@
      "ataque": 84,
      "defensa": 84,
      "agresividad": 78,
-     "salida": 80
+     "salida": 80,
+     "nacimiento": 2002,
+     "debut": 2023
     },
     {
      "nombre": "Arvid Lindblad",
@@ -207,7 +225,9 @@
      "ataque": 83,
      "defensa": 78,
      "agresividad": 74,
-     "salida": 82
+     "salida": 82,
+     "nacimiento": 2007,
+     "debut": 2026
     }
    ]
   },
@@ -236,7 +256,9 @@
      "ataque": 84,
      "defensa": 85,
      "agresividad": 64,
-     "salida": 82
+     "salida": 82,
+     "nacimiento": 1996,
+     "debut": 2017
     },
     {
      "nombre": "Franco Colapinto",
@@ -249,7 +271,9 @@
      "ataque": 80,
      "defensa": 78,
      "agresividad": 76,
-     "salida": 78
+     "salida": 78,
+     "nacimiento": 2003,
+     "debut": 2024
     }
    ]
   },
@@ -278,7 +302,9 @@
      "ataque": 80,
      "defensa": 86,
      "agresividad": 66,
-     "salida": 82
+     "salida": 82,
+     "nacimiento": 1996,
+     "debut": 2016
     },
     {
      "nombre": "Oliver Bearman",
@@ -291,7 +317,9 @@
      "ataque": 86,
      "defensa": 80,
      "agresividad": 74,
-     "salida": 80
+     "salida": 80,
+     "nacimiento": 2005,
+     "debut": 2024
     }
    ]
   },
@@ -320,7 +348,9 @@
      "ataque": 82,
      "defensa": 86,
      "agresividad": 58,
-     "salida": 82
+     "salida": 82,
+     "nacimiento": 1987,
+     "debut": 2010
     },
     {
      "nombre": "Gabriel Bortoleto",
@@ -333,7 +363,9 @@
      "ataque": 82,
      "defensa": 80,
      "agresividad": 68,
-     "salida": 80
+     "salida": 80,
+     "nacimiento": 2004,
+     "debut": 2025
     }
    ]
   },
@@ -362,7 +394,9 @@
      "ataque": 86,
      "defensa": 90,
      "agresividad": 60,
-     "salida": 84
+     "salida": 84,
+     "nacimiento": 1994,
+     "debut": 2015
     },
     {
      "nombre": "Alexander Albon",
@@ -375,7 +409,9 @@
      "ataque": 84,
      "defensa": 86,
      "agresividad": 60,
-     "salida": 82
+     "salida": 82,
+     "nacimiento": 1996,
+     "debut": 2019
     }
    ]
   },
@@ -404,7 +440,9 @@
      "ataque": 88,
      "defensa": 94,
      "agresividad": 66,
-     "salida": 90
+     "salida": 90,
+     "nacimiento": 1981,
+     "debut": 2001
     },
     {
      "nombre": "Lance Stroll",
@@ -417,7 +455,9 @@
      "ataque": 78,
      "defensa": 78,
      "agresividad": 64,
-     "salida": 82
+     "salida": 82,
+     "nacimiento": 1998,
+     "debut": 2017
     }
    ]
   },
@@ -446,7 +486,9 @@
      "ataque": 84,
      "defensa": 86,
      "agresividad": 62,
-     "salida": 82
+     "salida": 82,
+     "nacimiento": 1990,
+     "debut": 2011
     },
     {
      "nombre": "Valtteri Bottas",
@@ -459,7 +501,9 @@
      "ataque": 78,
      "defensa": 84,
      "agresividad": 52,
-     "salida": 84
+     "salida": 84,
+     "nacimiento": 1989,
+     "debut": 2013
     }
    ]
   }

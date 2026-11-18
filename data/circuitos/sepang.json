@@ -29,7 +29,7 @@
  },
  "adelantamientos": {
   "objetivo": 45.0,
-  "umbral": 1.6,
+  "umbral": 1.97,
   "fuente": "estimación: circuito de dos rectas largas con horquillas al final (73 en 2017, con DRS)"
  },
  "clima": {

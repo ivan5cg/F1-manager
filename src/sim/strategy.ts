@@ -8,6 +8,9 @@ import { msTimeAtGrip } from "./track";
 import { forecast, Forecast } from "./weather";
 import type { Session, Car, TeamDef, Run } from "./session";
 
+/** Segundos de más que cuesta cambiar el morro en una parada. */
+export const NOSE_TIME = 7.5;
+
 export interface Stint { c: Compound; endLap: number; setId?: string }
 export interface Plan { stints: Stint[]; total?: number; /** vueltas que se ha retrasado ya la parada por tráfico */ hold?: number }
 
@@ -511,6 +514,13 @@ export function aiDecide(sess: Session, car: Car, adviceOnly = false): string | 
     const pit = enumeratePlans(sess, car, k, done, null, 0, 0, true)[0];
     if (stay && pit && stay.total! - (pit.total! + lossGreen + sess.trafficCost) > 2) { box = true; why = "gomas acabadas"; say = "con estas gomas perdemos más que parando"; }
   }
+  // alerón dañado: lo que se pierde por vuelta hasta la parada prevista (o hasta el final, si no hay más) frente a
+  // adelantar la parada o hacer una de más para cambiar el morro
+  if (!box && car.wing > 0.008 && left > 3 && anyDry && sess.flag !== "red") {
+    const perLap = sess.wingLoss(car);
+    const gain = stopsLeft > 0 ? perLap * Math.max(0, plannedEnd - done) - 3 : perLap * left - (lossGreen + NOSE_TIME + sess.trafficCost);
+    if (gain > 2 && sess.rng.chance(sharp)) { box = true; why = "alerón"; say = `con el alerón dañado perdemos ${perLap.toFixed(1)} s por vuelta`; }
+  }
   // neutralización: la parada cuesta la mitad. Se compara parar ahora con seguir con el plan (con lo que cree
   // saber el equipo de sus neumáticos), contando los puestos que se pierden en pista y la cola en el box
   if ((sess.flag === "sc" || sess.flag === "vsc") && left > 3 && !fresh && anyDry && !box) {
@@ -652,11 +662,14 @@ export function aiModes(sess: Session, car: Car, left: number) {
   if (cap < 2 && (gapB < 0.8 || gapA < 0.8) && toEnd <= 10) push = Math.max(push, Math.min(2, cap + 1));
   if (fuelLaps < left + 0.3) push = Math.min(push, 1);
   if (fuelLaps < left - 0.5) push = 0;
+  // una avería que avisa: a cuidarla para llegar (motor en Ahorro y levantando)
+  if (car.fault) push = Math.min(push, car.fault.lvl > 0.7 ? 0 : 1);
   if (!car.player || car.autoPush || sess.autoPlayers) car.push = push;
   if (!car.player || sess.autoPlayers) {
     // motor: a tope solo en plena pelea y con combustible de sobra (castiga la fiabilidad)
     const fight = (gapA < 0.7 && !cooling) || gapB < 0.7;
     car.engine = fuelLaps < left - 0.3 ? 0 : fight && fuelLaps > left + 0.8 && sess.flag === "green" ? 2 : 1;
+    if (car.fault) car.engine = 0;
   }
   // órdenes de equipo: si el compañero viene pegado y es claramente más rápido (otra estrategia, gomas mucho más
   // nuevas), el equipo le abre paso en vez de dejar que se estorben. En tu equipo lo decides tú.

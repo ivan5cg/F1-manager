@@ -13,7 +13,7 @@ const ATTRS = ["ritmo", "regularidad", "neumaticos", "lluvia", "ataque", "defens
 type Attr = (typeof ATTRS)[number];
 
 export interface MarketDriver extends Partial<Record<Attr, number>> {
-  abrev: string; nombre?: string; numero?: number;
+  abrev: string; nombre?: string; numero?: number; nacimiento?: number; debut?: number; serie?: string;
   equipo: string | null; rol: Role; salario: number; inc: number; nota?: string;
 }
 export interface MarketBoss { nombre: string; equipo: string | null; estrategia: number; meteo: number; boxes: number; salario: number; inc: number; nota?: string }
@@ -72,16 +72,22 @@ function z(seed: number, key: string, n: number): number[] {
 /** Dispersión del valor real de cada atributo de un piloto con incertidumbre 1. */
 const DRIVER_SD: Record<Attr, number> = { ritmo: 1.3, regularidad: 1.2, neumaticos: 1.2, lluvia: 1.5, ataque: 1.0, defensa: 1.0, agresividad: 2, salida: 1.2 };
 
-export function publicDriver(m: Market, base: TeamDef[], abrev: string): DriverDef {
+export function publicDriver(m: Market, base: TeamDef[], abrev: string, extra?: DriverDef[]): DriverDef {
+  // temporadas siguientes: los pilotos ya han cambiado (edad, fichajes, novatos)
+  const e = extra?.find((p) => p.abrev === abrev);
+  if (e) return { ...e };
   for (const t of base) { const d = t.pilotos.find((p) => p.abrev === abrev); if (d) return { ...d }; }
   const x = m.pilotos.find((p) => p.abrev === abrev)!;
   const d: Record<string, unknown> = { nombre: x.nombre, abrev: x.abrev, numero: x.numero };
   for (const a of ATTRS) d[a] = x[a] ?? 75;
+  if (x.nacimiento) d.nacimiento = x.nacimiento;
+  if (x.debut) d.debut = x.debut;
+  if (x.serie) d.serie = x.serie;
   return d as unknown as DriverDef;
 }
 
-export function trueDriver(m: Market, base: TeamDef[], abrev: string, seed: number): DriverDef {
-  const d = publicDriver(m, base, abrev);
+export function trueDriver(m: Market, base: TeamDef[], abrev: string, seed: number, extra?: DriverDef[]): DriverDef {
+  const d = publicDriver(m, base, abrev, extra);
   const inc = m.pilotos.find((p) => p.abrev === abrev)?.inc ?? 1;
   const g = z(seed, "p:" + abrev, ATTRS.length);
   ATTRS.forEach((a, i) => {
@@ -128,7 +134,8 @@ export interface GridChange { team: string; out: string; in: string; what: "pilo
  * sustitutos y sus valores reales, y el tuyo al final. `changes` cuenta quién ha tenido que cubrir a quién.
  * ownDev: el coche del jugador evoluciona por piezas (development.ts) y aquí no gana nada solo.
  */
-export function buildGrid(base: TeamDef[], m: Market, spec: CustomTeam, seed: number, round: number, ownDev = false): { teams: TeamDef[]; changes: GridChange[] } {
+export function buildGrid(base: TeamDef[], m: Market, spec: CustomTeam, seed: number, round: number, ownDev = false, carry?: { agarre: number; extra?: DriverDef[] }): { teams: TeamDef[]; changes: GridChange[] } {
+  const extra = carry?.extra;
   const signed = new Set(spec.pilotos);
   const used = new Set(spec.pilotos);
   for (const t of base) for (const p of t.pilotos) if (!signed.has(p.abrev)) used.add(p.abrev);
@@ -176,7 +183,7 @@ export function buildGrid(base: TeamDef[], m: Market, spec: CustomTeam, seed: nu
     id: PLAYER_TEAM_ID, nombre: spec.nombre, motor: e.nombre, color: spec.color,
     // con desarrollo por piezas (development.ts) lo que gana el coche lo ponen las piezas que lleguen; si no
     // (temporadas de antes), mejora solo según su director técnico y lo que quedó del techo de gasto
-    agarre: td.diseno + NEW_TEAM.agarre + ((ownDev ? 0 : td.desarrollo * devBudgetMult(m, spec)) - dm) * round,
+    agarre: td.diseno + NEW_TEAM.agarre + (carry?.agarre ?? 0) + ((ownDev ? 0 : td.desarrollo * devBudgetMult(m, spec)) - dm) * round,
     potencia: e.potencia,
     resistencia: td.resistencia,
     desgaste: td.desgaste,
@@ -184,7 +191,7 @@ export function buildGrid(base: TeamDef[], m: Market, spec: CustomTeam, seed: nu
     fiabilidad: e.fiabilidad * td.fiabilidad * NEW_TEAM.fiabilidad,
     estrategia: Math.round(j.estrategia),
     meteo: Math.round(j.meteo),
-    pilotos: spec.pilotos.map((a) => trueDriver(m, base, a, seed)),
+    pilotos: spec.pilotos.map((a) => trueDriver(m, base, a, seed, extra)),
     ...(spec.librea ? { librea: spec.librea } : {}),
   });
   return { teams, changes };

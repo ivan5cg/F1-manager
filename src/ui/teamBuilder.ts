@@ -9,7 +9,7 @@ import {
   CustomTeam, MarketBoss, MarketDriver, MarketEngine, MarketTech, buildGrid, costOf, clauseOf, priceOf, publicDriver, trueDriver,
   trueBoss, trueTech, trueEngine, band, DRIVER_BAND_SD, devBudgetMult, NEW_TEAM, PLAYER_TEAM_ID, devMean,
 } from "../sim/market";
-import { PU_QUOTA, PU_PENALTY, PU_LIFE_KM, PU_WEEKEND_KM, puLife, puPowerLoss, puRaceRisk, fitUnit, PuState } from "../sim/powerunit";
+import { PU_QUOTA, quotaOf, PU_PENALTY, PU_LIFE_KM, PU_WEEKEND_KM, puLife, puPowerLoss, puRaceRisk, fitUnit, PuState } from "../sim/powerunit";
 
 const app = () => document.getElementById("app")!;
 const M = MARKET;
@@ -33,8 +33,8 @@ const DEV_ROUNDS = ROUNDS.length - 1;
 const SEC_PER_GRIP = 90 / 180;
 
 // ------------------------------------------------------------------ informes de cada elemento
-function driverBars(abrev: string, inc: number, real?: ReturnType<typeof trueDriver>, seen = 0): string {
-  const pub = publicDriver(M, BASE_TEAMS, abrev);
+function driverBars(abrev: string, inc: number, real?: ReturnType<typeof trueDriver>, seen = 0, extra?: import("../sim/session").DriverDef[]): string {
+  const pub = publicDriver(M, BASE_TEAMS, abrev, extra);
   const b = (k: "ritmo" | "neumaticos" | "lluvia" | "regularidad") => band(pub[k], real ? real[k] : pub[k], DRIVER_BAND_SD[k] * inc, seen);
   return bar("Ritmo", ...b("ritmo"), 72, 99, rng2(b("ritmo"))) + bar("Regular.", ...b("regularidad"), 72, 99, rng2(b("regularidad"))) + bar("Neumát.", ...b("neumaticos"), 72, 99, rng2(b("neumaticos"))) + bar("Lluvia", ...b("lluvia"), 72, 99, rng2(b("lluvia")));
 }
@@ -180,18 +180,20 @@ export function myTeamPanel(s: SeasonState, teams: TeamDef[]): string {
   const t = M.tecnicos.find((x) => x.nombre === spec.tecnico)!;
   const e = M.motores.find((x) => x.id === spec.motor)!;
   const mult = devBudgetMult(M, spec);
+  // temporadas siguientes: tus pilotos tal como son ahora (edad, fichajes, novatos); los valores reales, de la primera
+  const extra = s.misPilotos, ts = s.trueSeed ?? s.seed;
   const drivers = spec.pilotos.map((a) => {
-    const md = M.pilotos.find((p) => p.abrev === a)!;
-    const d = publicDriver(M, BASE_TEAMS, a);
-    return `<div class="mkh" style="margin-top:6px"><b class="grow">#${d.numero} ${esc(d.nombre)}</b>${incDots(md.inc)}</div>${driverBars(a, md.inc, trueDriver(M, BASE_TEAMS, a, s.seed), seen)}`;
+    const inc = M.pilotos.find((p) => p.abrev === a)?.inc ?? 2;
+    const d = publicDriver(M, BASE_TEAMS, a, extra);
+    return `<div class="mkh" style="margin-top:6px"><b class="grow">#${d.numero} ${esc(d.nombre)}</b>${incDots(inc)}</div>${driverBars(a, inc, trueDriver(M, BASE_TEAMS, a, ts, extra), seen, extra)}`;
   }).join("");
   const rank = 1 + teams.filter((x) => x.id !== PLAYER_TEAM_ID && x.agarre > me.agarre).length;
   return `<div class="panel"><div class="hd"><span class="t">${esc(spec.nombre)} · lo que sabéis</span></div><div class="bd">
     <div class="small dim">Gasto ${fmtM(costOf(M, spec))} de ${fmtM(M.techo)} · desarrollo ×${fx(mult, 2)}. ${seen ? `Tras ${seen} carrera${seen > 1 ? "s" : ""} los datos afinan las horquillas.` : "Antes de rodar solo hay los informes del mercado."}</div>
     ${drivers}
-    <div class="mkh" style="margin-top:8px"><b class="grow">Jefe de equipo: ${esc(j.nombre)}</b>${incDots(j.inc)}</div>${bossBars(j, trueBoss(j, s.seed), seen)}
-    <div class="mkh" style="margin-top:8px"><b class="grow">Director técnico: ${esc(t.nombre)}</b>${incDots(t.inc)}</div>${techBars(t, trueTech(t, s.seed), seen, mult)}
-    <div class="mkh" style="margin-top:8px"><b class="grow">Motor ${esc(e.nombre)}</b>${incDots(e.inc)}</div>${engineBars(e, trueEngine(e, s.seed), seen)}
+    <div class="mkh" style="margin-top:8px"><b class="grow">Jefe de equipo: ${esc(j.nombre)}</b>${incDots(j.inc)}</div>${bossBars(j, trueBoss(j, ts), seen)}
+    <div class="mkh" style="margin-top:8px"><b class="grow">Director técnico: ${esc(t.nombre)}</b>${incDots(t.inc)}</div>${techBars(t, trueTech(t, ts), seen, mult)}
+    <div class="mkh" style="margin-top:8px"><b class="grow">Motor ${esc(e.nombre)}</b>${incDots(e.inc)}</div>${engineBars(e, trueEngine(e, ts), seen)}
     ${seen ? `<div class="small" style="margin-top:6px">Por agarre, vuestro coche es ahora el ${rank}.º de ${teams.length} según los datos de pista.</div>` : ""}
   </div></div>`;
 }
@@ -207,7 +209,7 @@ export function puSummary(pu: Record<number, PuState> | undefined, ids: number[]
   return ids.map((id, k) => {
     const p = pu[id];
     if (!p) return "";
-    return `<div class="row small" style="gap:6px;margin-top:3px"><b style="width:44px">${esc(names[k])}</b><span class="grow">${p.units.map((u, i) => `<span class="pill${i === p.cur ? " yellow" : ""}" style="${u.broken ? "opacity:.45;text-decoration:line-through" : ""}">U${i + 1} ${Math.round(puLife(u.km) * 100)} %</span>`).join(" ")}</span><span class="dim">${Math.min(p.units.length, PU_QUOTA)}/${PU_QUOTA} del cupo${p.units.length > PU_QUOTA ? ` <span class="redt">+${p.units.length - PU_QUOTA}</span>` : ""}</span></div>`;
+    return `<div class="row small" style="gap:6px;margin-top:3px"><b style="width:44px">${esc(names[k])}</b><span class="grow">${p.units.map((u, i) => `<span class="pill${i === p.cur ? " yellow" : ""}" style="${u.broken ? "opacity:.45;text-decoration:line-through" : ""}">U${i + 1} ${Math.round(puLife(u.km) * 100)} %</span>`).join(" ")}</span><span class="dim">${Math.min(p.units.length, quotaOf(p))}/${quotaOf(p)} del cupo${p.units.length > quotaOf(p) ? ` <span class="redt">+${p.units.length - quotaOf(p)}</span>` : ""}</span></div>`;
   }).join("");
 }
 
@@ -221,7 +223,7 @@ export function puPanel(st: WeekendState, ids: number[], names: string[], team: 
     const base = p.base ?? p.units.length;
     const opts = p.units.map((u, i) => ({ u, i })).filter(({ u, i }) => !u.broken && (i < base || i === p.cur));
     const newIdx = p.units.findIndex((u, i) => i >= base && !u.broken);
-    const nextNewExtra = (newIdx >= 0 ? newIdx : p.units.length) >= PU_QUOTA;
+    const nextNewExtra = (newIdx >= 0 ? newIdx : p.units.length) >= quotaOf(p);
     const line = (km: number, i: number | "new", label: string) => {
       const u = puLife(km);
       const on = i === "new" ? p.cur >= base : i === p.cur;
@@ -230,7 +232,7 @@ export function puPanel(st: WeekendState, ids: number[], names: string[], team: 
       return `<div class="puopt${on ? " on" : ""}"${editable ? ` data-pu="${id}" data-u="${i}"` : ""}><span class="chk">${on ? "✔" : ""}</span><b style="width:76px">${label}</b><span class="grow small">${Math.round(u * 100)} % de vida · ${loss < 0.005 ? "sin pérdida" : `−${fx(loss, 2)} s/v`} · avería en carrera ~${fx(risk * 100, risk < 0.1 ? 1 : 0)} %</span></div>`;
     };
     const fresh = !opts.some(({ i }) => i >= base);
-    return `<div style="margin-bottom:8px"><div class="row"><b class="grow">${esc(names[k])}</b><span class="small dim">${Math.min(p.units.length, PU_QUOTA)} de ${PU_QUOTA} del cupo usadas</span></div>
+    return `<div style="margin-bottom:8px"><div class="row"><b class="grow">${esc(names[k])}</b><span class="small dim">${Math.min(p.units.length, quotaOf(p))} de ${quotaOf(p)} del cupo usadas</span></div>
       ${opts.filter(({ i }) => i < base).map(({ u, i }) => line(u.km, i, `Unidad ${i + 1}`)).join("")}
       ${editable || p.cur >= base ? line(p.cur >= base ? p.units[p.cur].km : 0, "new", fresh && !editable ? "" : `Nueva (U${(newIdx >= 0 ? newIdx : p.units.length) + 1})`) : ""}
       ${(editable || p.cur >= base) && nextNewExtra ? `<div class="small ${p.cur >= base ? "redt" : "dim"}">Una nueva está fuera del cupo: ${PU_PENALTY} puestos de sanción en la parrilla de la carrera.</div>` : ""}

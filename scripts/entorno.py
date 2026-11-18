@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Altitud del terreno alrededor de los circuitos urbanos (dónde hay mar y cómo sube la ciudad).
 
-  python3 scripts/entorno.py [carpeta-de-caché]
+  python3 scripts/entorno.py [carpeta-de-caché] [id ...]
 
 Sitúa el trazado del juego sobre el mapa igual que scripts/relieve.py y lee en una rejilla
 de N × N puntos (en coordenadas del juego, centrada en el circuito) la altitud de las teselas
@@ -10,7 +10,7 @@ de N × N puntos (en coordenadas del juego, centrada en el circuito) la altitud 
 Campo que escribe: "entorno": {"x0", "y0", "paso", "n", "h": [...]} con la altitud en metros
 (fila a fila, de y0 hacia arriba). La simulación no lo usa: es para dibujar el mapa 3D.
 """
-import json, math, os, re
+import json, math, os, re, sys
 import numpy as np
 # las funciones de scripts/relieve.py (todo menos su bucle final)
 lib_path = os.path.join(os.path.dirname(__file__), "relieve.py")
@@ -21,7 +21,9 @@ exec(compile(lib, lib_path, "exec"), g)
 ROOT, fetch, resample, fit, elevation, CIRCUITS = g["ROOT"], g["fetch"], g["resample"], g["fit"], g["elevation"], g["CIRCUITS"]
 
 N = 72
-for cid in ("monaco", "singapur"):
+SEA = {"baku": -27.0}
+# python3 scripts/entorno.py <caché> <id> ...: solo esos (por defecto, los urbanos)
+for cid in (sys.argv[2:] or ("monaco", "singapur", "baku", "lasvegas")):
     bac = CIRCUITS[cid][0]
     path = os.path.join(ROOT, cid + ".json")
     d = json.load(open(path, encoding="utf8"))
@@ -41,6 +43,8 @@ for cid in ("monaco", "singapur"):
     grid = np.array([[x0 + i * paso, y0 + j * paso] for j in range(N) for i in range(N)])
     m = to_map(grid)
     h = np.array([elevation(lat0 + y / mlat, lon0 + x / mlon) for x, y in m])
+    # el mar del juego está a 0 m: el Caspio está a unos 27 m por debajo (así sale en las teselas) del nivel del mar
+    h = h - SEA.get(cid, 0.0)
     hh = [int(round(max(-5.0, float(v)))) for v in h]
     txt = open(path, encoding="utf8").read()
     txt = re.sub(r',\s*"entorno"\s*:\s*\{.*?\}', "", txt, flags=re.S)

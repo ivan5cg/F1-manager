@@ -1,5 +1,5 @@
 {
- "_nota": "Mercado del modo «crear equipo». salario y precio en millones por temporada; inc = incertidumbre (1 conocido, 3 casi desconocido): el valor real de cada temporada se aparta del publicado. Los valores publicados de los titulares son los de equipos-2026.json. Cargos y reservas según la prensa de principios de 2026; los marcados con nota no están confirmados. Las valoraciones son estimaciones del juego.",
+ "_nota": "Mercado del modo «crear equipo». salario y precio en millones por temporada; inc = incertidumbre (1 conocido, 3 casi desconocido): el valor real de cada temporada se aparta del publicado. Los valores publicados de los titulares son los de equipos-2026.json. Cargos y reservas según la prensa de principios de 2026; los marcados con nota no están confirmados. Las valoraciones son estimaciones del juego. nacimiento y debut (año de su primera carrera de F1; sin él, nunca ha corrido un gran premio) como en equipos-2026.json. serie: los que corren en F2 en 2026 (alineación oficial de fiaformula2.com); sus valoraciones y años de nacimiento son estimaciones del juego.",
  "techo": 100,
  "pilotos": [
   {
@@ -171,7 +171,8 @@
    "ataque": 80,
    "defensa": 80,
    "agresividad": 64,
-   "salida": 80
+   "salida": 80,
+   "nacimiento": 2002
   },
   {
    "nombre": "Antonio Giovinazzi",
@@ -189,7 +190,9 @@
    "defensa": 80,
    "agresividad": 62,
    "salida": 80,
-   "nota": "reserva de Ferrari en años anteriores; sin confirmar para 2026"
+   "nota": "reserva de Ferrari en años anteriores; sin confirmar para 2026",
+   "nacimiento": 1993,
+   "debut": 2017
   },
   {
    "nombre": "Yuki Tsunoda",
@@ -206,7 +209,9 @@
    "ataque": 85,
    "defensa": 80,
    "agresividad": 74,
-   "salida": 82
+   "salida": 82,
+   "nacimiento": 2000,
+   "debut": 2021
   },
   {
    "nombre": "Pato O'Ward",
@@ -223,7 +228,8 @@
    "ataque": 84,
    "defensa": 80,
    "agresividad": 72,
-   "salida": 82
+   "salida": 82,
+   "nacimiento": 1999
   },
   {
    "nombre": "Leonardo Fornaroli",
@@ -240,7 +246,8 @@
    "ataque": 80,
    "defensa": 82,
    "agresividad": 62,
-   "salida": 80
+   "salida": 80,
+   "nacimiento": 2004
   },
   {
    "nombre": "Ayumu Iwasa",
@@ -257,7 +264,8 @@
    "ataque": 82,
    "defensa": 78,
    "agresividad": 68,
-   "salida": 80
+   "salida": 80,
+   "nacimiento": 2001
   },
   {
    "nombre": "Paul Aron",
@@ -274,7 +282,8 @@
    "ataque": 80,
    "defensa": 78,
    "agresividad": 70,
-   "salida": 78
+   "salida": 78,
+   "nacimiento": 2004
   },
   {
    "nombre": "Ryo Hirakawa",
@@ -291,7 +300,8 @@
    "ataque": 78,
    "defensa": 80,
    "agresividad": 60,
-   "salida": 80
+   "salida": 80,
+   "nacimiento": 1994
   },
   {
    "nombre": "Luke Browning",
@@ -309,7 +319,8 @@
    "defensa": 78,
    "agresividad": 66,
    "salida": 78,
-   "nota": "sin confirmar"
+   "nota": "sin confirmar",
+   "nacimiento": 2002
   },
   {
    "nombre": "Jak Crawford",
@@ -326,7 +337,8 @@
    "ataque": 82,
    "defensa": 78,
    "agresividad": 70,
-   "salida": 80
+   "salida": 80,
+   "nacimiento": 2005
   },
   {
    "nombre": "Zhou Guanyu",
@@ -343,7 +355,9 @@
    "ataque": 78,
    "defensa": 82,
    "agresividad": 58,
-   "salida": 80
+   "salida": 80,
+   "nacimiento": 1999,
+   "debut": 2022
   },
   {
    "nombre": "Mick Schumacher",
@@ -360,7 +374,9 @@
    "ataque": 80,
    "defensa": 80,
    "agresividad": 62,
-   "salida": 80
+   "salida": 80,
+   "nacimiento": 1999,
+   "debut": 2021
   },
   {
    "nombre": "Kevin Magnussen",
@@ -377,7 +393,9 @@
    "ataque": 84,
    "defensa": 88,
    "agresividad": 82,
-   "salida": 82
+   "salida": 82,
+   "nacimiento": 1992,
+   "debut": 2014
   },
   {
    "nombre": "Jack Doohan",
@@ -394,7 +412,9 @@
    "ataque": 80,
    "defensa": 76,
    "agresividad": 74,
-   "salida": 78
+   "salida": 78,
+   "nacimiento": 2003,
+   "debut": 2024
   },
   {
    "nombre": "Felipe Drugovich",
@@ -411,7 +431,8 @@
    "ataque": 80,
    "defensa": 80,
    "agresividad": 62,
-   "salida": 80
+   "salida": 80,
+   "nacimiento": 2000
   },
   {
    "nombre": "Théo Pourchaire",
@@ -428,7 +449,8 @@
    "ataque": 80,
    "defensa": 78,
    "agresividad": 64,
-   "salida": 80
+   "salida": 80,
+   "nacimiento": 2003
   },
   {
    "nombre": "Nyck de Vries",
@@ -445,7 +467,9 @@
    "ataque": 78,
    "defensa": 78,
    "agresividad": 60,
-   "salida": 80
+   "salida": 80,
+   "nacimiento": 1995,
+   "debut": 2022
   },
   {
    "nombre": "Logan Sargeant",
@@ -462,7 +486,9 @@
    "ataque": 76,
    "defensa": 74,
    "agresividad": 66,
-   "salida": 76
+   "salida": 76,
+   "nacimiento": 2000,
+   "debut": 2023
   },
   {
    "nombre": "Richard Verschoor",
@@ -479,7 +505,8 @@
    "ataque": 80,
    "defensa": 80,
    "agresividad": 62,
-   "salida": 80
+   "salida": 80,
+   "nacimiento": 2000
   },
   {
    "nombre": "Alex Dunne",
@@ -496,7 +523,10 @@
    "ataque": 84,
    "defensa": 78,
    "agresividad": 78,
-   "salida": 80
+   "salida": 80,
+   "nacimiento": 2005,
+   "nota": "F2 en 2026 (Rodin)",
+   "serie": "F2"
   },
   {
    "nombre": "Gabriele Minì",
@@ -513,7 +543,10 @@
    "ataque": 80,
    "defensa": 78,
    "agresividad": 66,
-   "salida": 78
+   "salida": 78,
+   "nacimiento": 2005,
+   "nota": "F2 en 2026 (MP Motorsport)",
+   "serie": "F2"
   },
   {
    "nombre": "Dino Beganovic",
@@ -530,7 +563,10 @@
    "ataque": 80,
    "defensa": 78,
    "agresividad": 66,
-   "salida": 78
+   "salida": 78,
+   "nacimiento": 2004,
+   "nota": "F2 en 2026 (DAMS)",
+   "serie": "F2"
   },
   {
    "nombre": "Victor Martins",
@@ -547,7 +583,8 @@
    "ataque": 80,
    "defensa": 78,
    "agresividad": 66,
-   "salida": 78
+   "salida": 78,
+   "nacimiento": 2001
   },
   {
    "nombre": "Sebastián Montoya",
@@ -564,7 +601,10 @@
    "ataque": 78,
    "defensa": 76,
    "agresividad": 64,
-   "salida": 78
+   "salida": 78,
+   "nacimiento": 2005,
+   "nota": "F2 en 2026 (Prema)",
+   "serie": "F2"
   },
   {
    "nombre": "Kush Maini",
@@ -581,7 +621,350 @@
    "ataque": 78,
    "defensa": 76,
    "agresividad": 66,
-   "salida": 78
+   "salida": 78,
+   "nacimiento": 2000,
+   "nota": "F2 en 2026 (ART)",
+   "serie": "F2"
+  },
+  {
+   "nombre": "Rafael Câmara",
+   "abrev": "CAM",
+   "numero": 4,
+   "equipo": null,
+   "rol": "libre",
+   "salario": 0.5,
+   "inc": 3,
+   "ritmo": 84,
+   "regularidad": 82,
+   "neumaticos": 81,
+   "lluvia": 82,
+   "ataque": 84,
+   "defensa": 81,
+   "agresividad": 68,
+   "salida": 82,
+   "nacimiento": 2005,
+   "serie": "F2",
+   "nota": "F2 en 2026 (Invicta)"
+  },
+  {
+   "nombre": "Joshua Dürksen",
+   "abrev": "DUR",
+   "numero": 13,
+   "equipo": null,
+   "rol": "libre",
+   "salario": 0.5,
+   "inc": 3,
+   "ritmo": 81,
+   "regularidad": 79,
+   "neumaticos": 78,
+   "lluvia": 79,
+   "ataque": 81,
+   "defensa": 78,
+   "agresividad": 68,
+   "salida": 79,
+   "nacimiento": 2003,
+   "serie": "F2",
+   "nota": "F2 en 2026 (Invicta)"
+  },
+  {
+   "nombre": "Ritomo Miyata",
+   "abrev": "MIY",
+   "numero": 32,
+   "equipo": null,
+   "rol": "libre",
+   "salario": 0.5,
+   "inc": 3,
+   "ritmo": 80,
+   "regularidad": 78,
+   "neumaticos": 77,
+   "lluvia": 78,
+   "ataque": 80,
+   "defensa": 77,
+   "agresividad": 68,
+   "salida": 78,
+   "nacimiento": 1999,
+   "serie": "F2",
+   "nota": "F2 en 2026 (Hitech)"
+  },
+  {
+   "nombre": "Colton Herta",
+   "abrev": "HER",
+   "numero": 39,
+   "equipo": null,
+   "rol": "libre",
+   "salario": 0.5,
+   "inc": 3,
+   "ritmo": 83,
+   "regularidad": 81,
+   "neumaticos": 80,
+   "lluvia": 81,
+   "ataque": 83,
+   "defensa": 80,
+   "agresividad": 68,
+   "salida": 81,
+   "nacimiento": 2000,
+   "serie": "F2",
+   "nota": "F2 en 2026 (Hitech)"
+  },
+  {
+   "nombre": "Noel León",
+   "abrev": "LEO",
+   "numero": 45,
+   "equipo": null,
+   "rol": "libre",
+   "salario": 0.5,
+   "inc": 3,
+   "ritmo": 80,
+   "regularidad": 78,
+   "neumaticos": 77,
+   "lluvia": 78,
+   "ataque": 80,
+   "defensa": 77,
+   "agresividad": 68,
+   "salida": 78,
+   "nacimiento": 2004,
+   "serie": "F2",
+   "nota": "F2 en 2026 (Campos)"
+  },
+  {
+   "nombre": "Nikola Tsolov",
+   "abrev": "TSO",
+   "numero": 46,
+   "equipo": null,
+   "rol": "libre",
+   "salario": 0.5,
+   "inc": 3,
+   "ritmo": 83,
+   "regularidad": 81,
+   "neumaticos": 80,
+   "lluvia": 81,
+   "ataque": 83,
+   "defensa": 80,
+   "agresividad": 68,
+   "salida": 81,
+   "nacimiento": 2006,
+   "serie": "F2",
+   "nota": "F2 en 2026 (Campos)"
+  },
+  {
+   "nombre": "Roman Bilinski",
+   "abrev": "BIL",
+   "numero": 48,
+   "equipo": null,
+   "rol": "libre",
+   "salario": 0.5,
+   "inc": 3,
+   "ritmo": 79,
+   "regularidad": 77,
+   "neumaticos": 76,
+   "lluvia": 77,
+   "ataque": 79,
+   "defensa": 76,
+   "agresividad": 68,
+   "salida": 77,
+   "nacimiento": 2004,
+   "serie": "F2",
+   "nota": "F2 en 2026 (DAMS)"
+  },
+  {
+   "nombre": "Oliver Goethe",
+   "abrev": "GOE",
+   "numero": 49,
+   "equipo": null,
+   "rol": "libre",
+   "salario": 0.5,
+   "inc": 3,
+   "ritmo": 80,
+   "regularidad": 78,
+   "neumaticos": 77,
+   "lluvia": 78,
+   "ataque": 80,
+   "defensa": 77,
+   "agresividad": 68,
+   "salida": 78,
+   "nacimiento": 2004,
+   "serie": "F2",
+   "nota": "F2 en 2026 (MP Motorsport)"
+  },
+  {
+   "nombre": "Mari Boya",
+   "abrev": "BOY",
+   "numero": 50,
+   "equipo": null,
+   "rol": "libre",
+   "salario": 0.5,
+   "inc": 3,
+   "ritmo": 79,
+   "regularidad": 77,
+   "neumaticos": 76,
+   "lluvia": 77,
+   "ataque": 79,
+   "defensa": 76,
+   "agresividad": 68,
+   "salida": 77,
+   "nacimiento": 2004,
+   "serie": "F2",
+   "nota": "F2 en 2026 (Prema)"
+  },
+  {
+   "nombre": "Martinius Stenshorne",
+   "abrev": "STE",
+   "numero": 51,
+   "equipo": null,
+   "rol": "libre",
+   "salario": 0.5,
+   "inc": 3,
+   "ritmo": 81,
+   "regularidad": 79,
+   "neumaticos": 78,
+   "lluvia": 79,
+   "ataque": 81,
+   "defensa": 78,
+   "agresividad": 68,
+   "salida": 79,
+   "nacimiento": 2005,
+   "serie": "F2",
+   "nota": "F2 en 2026 (Rodin)"
+  },
+  {
+   "nombre": "Tasanapol Inthraphuvasak",
+   "abrev": "INT",
+   "numero": 52,
+   "equipo": null,
+   "rol": "libre",
+   "salario": 0.5,
+   "inc": 3,
+   "ritmo": 79,
+   "regularidad": 77,
+   "neumaticos": 76,
+   "lluvia": 77,
+   "ataque": 79,
+   "defensa": 76,
+   "agresividad": 68,
+   "salida": 77,
+   "nacimiento": 2006,
+   "serie": "F2",
+   "nota": "F2 en 2026 (ART)"
+  },
+  {
+   "nombre": "Emerson Fittipaldi Jr.",
+   "abrev": "FIT",
+   "numero": 53,
+   "equipo": null,
+   "rol": "libre",
+   "salario": 0.5,
+   "inc": 3,
+   "ritmo": 78,
+   "regularidad": 76,
+   "neumaticos": 75,
+   "lluvia": 76,
+   "ataque": 78,
+   "defensa": 75,
+   "agresividad": 68,
+   "salida": 76,
+   "nacimiento": 2007,
+   "serie": "F2",
+   "nota": "F2 en 2026 (AIX Racing)"
+  },
+  {
+   "nombre": "Cian Shields",
+   "abrev": "SHI",
+   "numero": 54,
+   "equipo": null,
+   "rol": "libre",
+   "salario": 0.5,
+   "inc": 3,
+   "ritmo": 77,
+   "regularidad": 75,
+   "neumaticos": 74,
+   "lluvia": 75,
+   "ataque": 77,
+   "defensa": 74,
+   "agresividad": 68,
+   "salida": 75,
+   "nacimiento": 2005,
+   "serie": "F2",
+   "nota": "F2 en 2026 (AIX Racing)"
+  },
+  {
+   "nombre": "Hiroki Yamakoshi",
+   "abrev": "YAM",
+   "numero": 56,
+   "equipo": null,
+   "rol": "libre",
+   "salario": 0.5,
+   "inc": 3,
+   "ritmo": 77,
+   "regularidad": 75,
+   "neumaticos": 74,
+   "lluvia": 75,
+   "ataque": 77,
+   "defensa": 74,
+   "agresividad": 68,
+   "salida": 75,
+   "nacimiento": 2006,
+   "serie": "F2",
+   "nota": "F2 en 2026 (Van Amersfoort)"
+  },
+  {
+   "nombre": "Rafael Villagomez",
+   "abrev": "VIL",
+   "numero": 57,
+   "equipo": null,
+   "rol": "libre",
+   "salario": 0.5,
+   "inc": 3,
+   "ritmo": 78,
+   "regularidad": 76,
+   "neumaticos": 75,
+   "lluvia": 76,
+   "ataque": 78,
+   "defensa": 75,
+   "agresividad": 68,
+   "salida": 76,
+   "nacimiento": 2001,
+   "serie": "F2",
+   "nota": "F2 en 2026 (Van Amersfoort)"
+  },
+  {
+   "nombre": "Laurens van Hoepen",
+   "abrev": "HOE",
+   "numero": 58,
+   "equipo": null,
+   "rol": "libre",
+   "salario": 0.5,
+   "inc": 3,
+   "ritmo": 80,
+   "regularidad": 78,
+   "neumaticos": 77,
+   "lluvia": 78,
+   "ataque": 80,
+   "defensa": 77,
+   "agresividad": 68,
+   "salida": 78,
+   "nacimiento": 2005,
+   "serie": "F2",
+   "nota": "F2 en 2026 (Trident)"
+  },
+  {
+   "nombre": "John Bennett",
+   "abrev": "BEN",
+   "numero": 59,
+   "equipo": null,
+   "rol": "libre",
+   "salario": 0.5,
+   "inc": 3,
+   "ritmo": 78,
+   "regularidad": 76,
+   "neumaticos": 75,
+   "lluvia": 76,
+   "ataque": 78,
+   "defensa": 75,
+   "agresividad": 68,
+   "salida": 76,
+   "nacimiento": 2005,
+   "serie": "F2",
+   "nota": "F2 en 2026 (Trident)"
   }
  ],
  "jefes": [

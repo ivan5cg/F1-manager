@@ -4,7 +4,7 @@
 // cada coche y la pérdida en boxes del circuito; no saben qué harán los rivales.
 import type { Session, Car } from "./session";
 import { Compound, DRY, WET } from "./tyres";
-import { stintProfile, availableSets } from "./strategy";
+import { stintProfile, availableSets, NOSE_TIME } from "./strategy";
 
 /** Calentar el juego nuevo en la vuelta de salida (s): los duros tardan más. */
 const OUT_LAP: Record<Compound, number> = { S: 0.6, M: 0.9, H: 1.3, I: 0.5, W: 0.4 };
@@ -14,10 +14,12 @@ export function pitLoss(sess: Session, c: Car): number {
   const def = sess.track.def;
   // la calle de boxes está medida para que la pérdida sea la del circuito con una parada de 2,4 s
   // (menos ~1 s que el circuito ya cuenta en la entrada y la salida); se corrige con la del equipo
-  let loss = def.boxes.perdida - 1.0 + (c.team.boxes - 2.4) + (c.wing > 0.012 ? 7.5 : 0);
+  const nose = c.wing > 0 && (c.nose === "yes" || (c.nose !== "no" && sess.wingLoss(c) * (sess.laps - sess.lapsDone(c)) > NOSE_TIME));
+  let loss = def.boxes.perdida - 1.0 + (c.team.boxes - 2.4) + (nose ? NOSE_TIME : 0);
   if (sess.flag === "sc" || sess.flag === "sc_in") loss *= 0.45;
   else if (sess.flag === "vsc") loss *= 0.6;
-  return loss;
+  // la sanción pendiente se cumple parado (si no, se suma al final)
+  return loss + (c.penS ?? 0);
 }
 
 /** Ritmo reciente: mediana de las últimas vueltas limpias (sin la de boxes ni las lentas). */

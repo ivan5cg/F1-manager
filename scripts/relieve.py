@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Altitud y anchura reales de cada circuito, guardadas en data/circuitos/*.json.
 
-  python3 scripts/relieve.py [carpeta-de-caché]
+  python3 scripts/relieve.py [carpeta-de-caché] [id ...]
 
 Para cada circuito:
   1. Sitúa el trazado del juego (metros locales) sobre el mapa: lo ajusta al trazado
@@ -37,7 +37,25 @@ CIRCUITS = {
     "bahrein": ("bh-2002", "Sakhir", "horario", "derecha"),
     "sepang": ("my-1999", "Sepang", "horario", "derecha"),
     "singapur": ("sg-2008", None, "antihorario", "izquierda"),
+    # calendario completo (scripts/nuevos.py)
+    "melbourne": ("au-1953", None, "horario", "derecha"),
+    "shanghai": ("cn-2004", "Shanghai", "horario", "derecha"),
+    "miami": ("us-2022", None, "antihorario", "derecha"),
+    "montreal": ("ca-1978", "Montreal", "horario", "derecha"),
+    "barcelona": ("es-1991", "Catalunya", "horario", "derecha"),
+    "spielberg": ("at-1969", "Spielberg", "horario", "derecha"),
+    "hungaroring": ("hu-1986", "Budapest", "horario", "derecha"),
+    "zandvoort": ("nl-1948", "Zandvoort", "horario", "derecha"),
+    "madrid": ("es-2026", None, "horario", "derecha"),
+    "baku": ("az-2016", None, "antihorario", "izquierda"),
+    "austin": ("us-2012", "Austin", "antihorario", "derecha"),
+    "mexico": ("mx-1962", "MexicoCity", "horario", "derecha"),
+    "lasvegas": ("us-2023", None, "antihorario", "derecha"),
+    "lusail": ("qa-2004", None, "horario", "derecha"),
+    "yasmarina": ("ae-2009", None, "antihorario", "izquierda"),
 }
+# python3 scripts/relieve.py <caché> <id> ...: solo esos circuitos
+ONLY = sys.argv[2:]
 
 def fetch(url, name):
     path = os.path.join(CACHE, name)
@@ -121,6 +139,7 @@ def write_fields(path, relieve, ancho, sentido, lado, nota):
     open(path, "w", encoding="utf8").write(txt[:end].rstrip() + extra + "\n}\n")
 
 for cid, (bac, tum, sentido_real, lado) in CIRCUITS.items():
+    if ONLY and cid not in ONLY: continue
     path = os.path.join(ROOT, cid + ".json")
     d = json.load(open(path, encoding="utf8"))
     esc = d.get("escala", 1)
