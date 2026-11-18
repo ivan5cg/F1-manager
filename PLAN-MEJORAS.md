@@ -513,5 +513,10 @@ y decir en el PR que cambia resultados.
 
 ## Orden recomendado (lo que queda)
 
-Nada de los bloques. Lo que más se notaría ahora: los fichajes con contrato en vigor y los salarios en las
-temporadas siguientes de «crear equipo», y calibrar el banco de realismo con el calendario completo.
+Nada de los bloques. Lo que más se notaría ahora:
+- **Adelantamientos con la parrilla de verdad:** con los 25 circuitos (`realismo.ts --carreras=6`) todo queda dentro
+  de margen (coche de seguridad 47 %, virtual 38 %, bandera roja 9 %, abandonos 1,6, sanciones 1,1, gana el de la
+  pole 43 %, adelantamientos 0,82 del objetivo), pero Madrid, Hungaroring y Yas Marina salen en ~0,45 y Lusail en
+  0,61: `calibra.ts` calibra con la parrilla aproximada de `carrera.ts` (más mezclada) y el banco corre la
+  clasificación. Recalibrar con la clasificación (`benchRace(..., quali = true)`) bajaría un poco el umbral de esos.
+- Los fichajes con contrato en vigor y los salarios en las temporadas siguientes de «crear equipo».
