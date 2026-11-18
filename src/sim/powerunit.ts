@@ -14,6 +14,7 @@ export interface PuUnit { km: number; broken?: boolean }
 export interface PuState {
   units: PuUnit[];
   cur: number;
+  quota?: number; // unidades del cupo de la temporada (sin él, PU_QUOTA: la temporada corta)
   base?: number; // unidades que tenía al empezar el fin de semana (las de después se han estrenado en él)
 }
 
@@ -36,13 +37,16 @@ export function puRaceRisk(km0: number, fiab: number, laps: number, lapKm: numbe
   return 1 - Math.exp(-p);
 }
 
-export const newPu = (): PuState => ({ units: [{ km: 0 }], cur: 0 });
+export const newPu = (quota?: number): PuState => (quota && quota !== PU_QUOTA ? { units: [{ km: 0 }], cur: 0, quota } : { units: [{ km: 0 }], cur: 0 });
+export const quotaOf = (p: PuState) => p.quota ?? PU_QUOTA;
+/** Cupo para una temporada de n carreras: las mismas carreras por unidad que en la corta (2 para 9). */
+export const quotaFor = (races: number) => Math.max(PU_QUOTA, Math.round((races * PU_QUOTA) / 9));
 export const clonePu = (p: Record<number, PuState>): Record<number, PuState> => JSON.parse(JSON.stringify(p));
 
 /** Puestos de sanción del fin de semana: unidades estrenadas en él más allá del cupo. */
 export function puPenalty(p: PuState): number {
   let n = 0;
-  for (let i = Math.max(PU_QUOTA, p.base ?? p.units.length); i < p.units.length; i++) n++;
+  for (let i = Math.max(quotaOf(p), p.base ?? p.units.length); i < p.units.length; i++) n++;
   return n * PU_PENALTY;
 }
 
@@ -91,7 +95,7 @@ export function autoFit(p: PuState, weekendKm = PU_WEEKEND_KM) {
   if (!cur.broken && puLife(cur.km) + w <= 1) return;
   const spare = bestSpare(p, 1 - w);
   if (spare >= 0 && spare !== p.cur) { fitUnit(p, spare); return; }
-  if (p.units.length < PU_QUOTA) { fitUnit(p, "new"); return; }
+  if (p.units.length < quotaOf(p)) { fitUnit(p, "new"); return; }
   const least = bestSpare(p, PU_STRETCH - w);
   if (least >= 0) { if (least !== p.cur) fitUnit(p, least); return; }
   fitUnit(p, "new");

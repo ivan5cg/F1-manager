@@ -13,18 +13,18 @@ Tamaño: **P** pequeño (un PR corto), **M** medio, **G** grande (varios PR).
 | 2.1 Motores | ✅ Hecho | `src/ui/audio.ts`, `map3d.ts` (`audioView`), `sessionView.ts` |
 | 2.2 Ambiente | ✅ Hecho | ídem |
 | 2.3 Radio del equipo | ✅ Hecho | ídem |
-| 3.1 Calendario más largo | ⏳ Pendiente | — |
+| 3.1 Calendario más largo | ✅ Hecho | `data/calendario.json` (`completa`), `data/circuitos/*.json`, `scripts/nuevos.py`, `src/ui/data.ts` (`CALENDARS`, `circuitOf`, `devRounds`), `weekend.ts` (`horarioFor`, `dayName`) |
 | 3.2 Reglajes | ✅ Hecho (cambia resultados) | `src/sim/setup.ts`, `session.ts`, `weekend.ts`, `hubs.ts`, `scripts/reglajes.ts` |
 | 3.3 Desarrollo del coche | ✅ Hecho (cambia resultados en temporadas nuevas) | `src/sim/development.ts`, `market.ts`, `src/ui/data.ts`, `hubs.ts` |
-| 3.4 Varias temporadas | ⏳ Pendiente | — |
-| 3.5 Objetivos de la directiva | 🟡 Hecho a medias (falta lo que depende de 3.4) | `src/sim/objectives.ts`, `hubs.ts` |
+| 3.4 Varias temporadas | ✅ Hecho (cambia resultados desde la 2.ª temporada) | `src/sim/career.ts`, `src/ui/nextSeason.ts`, `season.ts`, `data.ts` (`gridOf`), `market.ts` (`buildGrid`), `scripts/temporadas.ts` |
+| 3.5 Objetivos de la directiva | ✅ Hecho | `src/sim/objectives.ts`, `career.ts` (`objectivesBonus`), `nextSeason.ts`, `hubs.ts` |
 | 4.1 Más cámaras | ✅ Hecho | `map3d.ts` (`MORE_CAMS`, `camList`, `setCamera`), `sessionView.ts` |
 | 4.2 Rótulos de tele | ✅ Hecho | `sessionView.ts` (`tvTick`, `tvShow`), `style.css` |
 | 5.1 Niveles de detalle | ✅ Hecho | `map3d.ts` (`propBuilder`, `propLod`, manzanas, árboles), `car3d.ts` (`carMinGeometry`) |
 | 5.2 Nubes y lluvia | ✅ Hecho | `map3d.ts` (cielo: `cloudSides`, `updateStorm`; `uDrops`; spray `aSpl`), `car3d.ts` (`DROPS_GLSL`), `audio.ts` (`thunder`) |
 | 5.3 Hora del día | ✅ Hecho | `map3d.ts` (`winOn`, `uCity`, `townLights`, caja de sombras) |
 
-**Lo que queda, en este orden:** 3.1 (en tandas) → 3.4 (y con ella, el resto de 3.5).
+**Los bloques 1 a 7 están hechos.** Ideas sin hacer, al final de cada tarea.
 
 Además, fuera de los bloques 1 a 5, están hechos el **Bloque 6 · Competición** (adelantamientos, salida e IA de
 carrera y clasificación) y el **Bloque 7 · Motor de simulación** (banco de realismo, neutralizaciones, sanciones,
@@ -117,7 +117,26 @@ coche seguido (o tu primer piloto en pista, o el primero que esté rodando) y lo
 
 ## Bloque 3 · Profundidad de juego (gestión)
 
-### 3.1 Calendario más largo (G) · ⏳ Pendiente
+### 3.1 Calendario más largo (G) · ✅ Hecho
+
+Hecho (noviembre de 2026):
+- Calendario **completo** de 2026 tal como es (23 carreras: Baréin y Arabia Saudí se cancelaron y el GP de Baréin se
+  corrió en Sepang) junto al **corto** de siempre: se elige en el inicio (`Prefs.calendario`) y la temporada guarda el
+  suyo (`calendar`) y el formato de los fines de semana que no corren con el de su circuito (`formatos`: Silverstone
+  sprint, Interlagos normal). `circuitOf(s, id)` da los datos del circuito para esa temporada; el horario del otro
+  formato va en `horarioOtro` y los fines de semana de jueves a sábado (Bakú, Las Vegas), en `dias: "JVS"`.
+- 15 circuitos nuevos con `python3 scripts/nuevos.py <caché>`: TUM donde está y es el trazado actual (Shanghái,
+  Montreal, Barcelona, Spielberg, Hungaroring, Zandvoort, Austin, México); bacinger en el resto (Melbourne y Yas
+  Marina porque los de TUM son de antes de sus reformas; Miami, Madrid, Bakú, Las Vegas y Lusail). Después,
+  `relieve.py <caché> <ids>` y, en los urbanos (Bakú y Las Vegas), `entorno.py <caché> <ids>` (`SEA`: el Caspio está a
+  −27 m). Poles reales de 2026 (las de Las Vegas, Catar y Abu Dabi, estimadas) y umbral calibrado con `calibra.ts`.
+- En una temporada larga el desarrollo se reparte (`devRounds`: rivales y presupuesto dan lo mismo en la temporada) y
+  el cupo de unidades de potencia sube (`quotaFor`: 5 para 23 carreras; `PuState.quota`).
+- Sin hacer: el clima, la pérdida en boxes, la carga, la abrasividad y los adelantamientos de los nuevos son
+  estimaciones propias (lo dice cada «fuente»); faltan Yeda y Sakhir en el completo (cancelados en 2026); Imola,
+  Portimão y otros no están.
+
+Lo que decía la tarea:
 - Añadir circuitos con la misma calidad que los actuales: trazado (TUMFTM tiene, entre otros, Budapest, Montreal,
   Melbourne, Catalunya, Austin, MexicoCity, Shanghai, Spielberg, YasMarina, Zandvoort; bacinger tiene además Imola,
   Bakú, Yeda, Miami, Las Vegas, Catar…), relieve y anchura (`scripts/relieve.py`, añadir a `CIRCUITS`), clima
@@ -177,7 +196,23 @@ coche seguido (o tu primer piloto en pista, o el primero que esté rodando) y lo
 - Consumo por equipo: `Session.fuelLap(c)` sustituye a `fuelPerLap` donde importa el coche (por defecto 1: no
   cambia nada).
 
-### 3.4 Varias temporadas seguidas (G) · ⏳ Pendiente
+### 3.4 Varias temporadas seguidas (G) · ✅ Hecho
+
+Hecho (noviembre de 2026):
+- Al acabar: «Empezar la temporada 2027» → `offSeasonScreen` (resumen, objetivos y presupuesto, tus pilotos con
+  contrato que acaba: renovar o cambiar por uno libre) → `buildNextSeason` → `nav.nextSeason` (misma partida).
+- `career.ts` (`offSeason`): edad (`ageStep`), retiradas (`retireChance`), renovaciones según el coche, traspasos a
+  equipos mejores, novatos inventados (`rookie`) y regresión del coche (`CAR_CARRY` = 0,65). Noticias del mercado
+  al empezar (`newsPanel`) y temporadas anteriores (`historyPanel`).
+- `SeasonState`: `year`, `grid` (equipos del año), `misPilotos` y `carry` («crear equipo»), `pool`, `contracts`,
+  `history`, `news`, `devBonus`, `aviso`, `trueSeed` (los valores ocultos no cambian de un año a otro). Las de antes
+  son 2026 y siguen igual.
+- `npx tsx scripts/temporadas.ts [n] [semilla] [equipo|propio] [--completo]`: varias temporadas sin correr carreras.
+- Sin hacer: renovar o cambiar a un piloto con contrato en vigor (cláusula); salarios y techo de gasto en las
+  temporadas siguientes de «crear equipo» (el gasto sigue siendo el de la primera); cambiar de jefe, técnico o motor;
+  que te despidan de verdad; los contratos reales de 2026 (son una estimación).
+
+Lo que decía la tarea:
 - Al acabar la temporada: pantalla de cierre (campeones, objetivos) y **«Empezar la temporada 2027»**.
 - Pilotos: la edad (añadir `nacimiento` a los pilotos en `data/equipos-2026.json` y `mercado-2026.json`) hace que
   mejoren hasta ~28 años y empeoren desde ~34; retiradas por edad; novatos que suben (inventados, del mercado de
@@ -197,7 +232,13 @@ coche seguido (o tu primer piloto en pista, o el primero que esté rodando) y lo
   - Muchas cosas dicen «2026» a fuego: las claves de guardado (`muro-temporada-2026`), los títulos de `hubs.ts` y los
     datos. Las claves pueden seguir igual (son por ranura, no por año).
 
-### 3.5 Objetivos de la directiva (P) · 🟡 Hecho a medias
+### 3.5 Objetivos de la directiva (P) · ✅ Hecho
+
+Hecho: los objetivos escalan con la longitud del calendario, y al acabar suben (6 M por objetivo cumplido) o bajan
+(5 M por fallado) el presupuesto de desarrollo del año siguiente (`objectivesBonus`, `SeasonState.devBonus`); dos
+temporadas seguidas sin cumplir ninguno, aviso de que el jefe de equipo peligra (`aviso`).
+
+Lo que decía la tarea:
 - Hecho: `objectivesFor` pone dos al abrir la temporada según el puesto del coche en la parrilla de salida (agarre,
   potencia y resistencia): constructores (top 2: su puesto; resto: uno más) y, según el nivel, 2 victorias,
   2 podios, puntuar en 5 carreras o puntuar en 2. Panel en la pantalla de temporada con su progreso (cumplido, ya
@@ -472,5 +513,5 @@ y decir en el PR que cambia resultados.
 
 ## Orden recomendado (lo que queda)
 
-Gestión: 3.1 (en tandas, cuando haya tiempo: es sobre todo trabajo de datos) → 3.4 (toca casi todo:
-temporada, mercado, guardado) y, con ella, el resto de 3.5.
+Nada de los bloques. Lo que más se notaría ahora: los fichajes con contrato en vigor y los salarios en las
+temporadas siguientes de «crear equipo», y calibrar el banco de realismo con el calendario completo.

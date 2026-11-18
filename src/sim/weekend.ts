@@ -37,10 +37,10 @@ export interface WeekendState {
  * Unidades de potencia al empezar un fin de semana (modo «crear equipo»): las que traía cada piloto de
  * la carrera anterior; el equipo decide si cambia (la de tus pilotos es una propuesta que puedes cambiar).
  */
-export function preparePu(st: WeekendState, prev: Record<number, PuState> | undefined, nCars: number) {
+export function preparePu(st: WeekendState, prev: Record<number, PuState> | undefined, nCars: number, quota?: number) {
   const pu = prev ? clonePu(prev) : {};
   for (let id = 0; id < nCars; id++) {
-    const p = (pu[id] ??= newPu());
+    const p = (pu[id] ??= newPu(quota));
     p.base = p.units.length;
     autoFit(p);
   }
@@ -49,8 +49,12 @@ export function preparePu(st: WeekendState, prev: Record<number, PuState> | unde
 
 export const NORMAL_SESSIONS: SessionKind[] = ["FP1", "FP2", "FP3", "Q", "RACE"];
 export const SPRINT_SESSIONS: SessionKind[] = ["FP1", "SQ", "SPRINT", "Q", "RACE"];
-const DAY: Record<string, number> = { V: 0, S: 1, D: 2 };
 export const DAY_NAMES = ["Viernes", "Sábado", "Domingo"];
+const DAY_FULL: Record<string, string> = { J: "Jueves", V: "Viernes", S: "Sábado", D: "Domingo" };
+/** Los tres días del fin de semana de un circuito (letras): casi siempre viernes a domingo; en Bakú y Las Vegas, de jueves a sábado. */
+const daysOf = (def: any): string => def.dias ?? "VSD";
+/** Horario del circuito para un formato: el suyo, o el del otro formato si el calendario lo cambia (horarioOtro). */
+export const horarioFor = (def: any, sprint: boolean) => (sprint === (def.formato === "sprint") ? def.horario : def.horarioOtro ?? def.horario);
 
 export function newWeekend(round: number, def: any, teams: TeamDef[], seed: number): WeekendState {
   const rng = new Rng(seed);
@@ -102,11 +106,14 @@ export class Weekend {
   /** Día (0..2) y hora local (min) de una sesión. */
   when(kind: SessionKind): { day: number; clock: number } {
     const key = { FP1: "fp1", FP2: "fp2", FP3: "fp3", SQ: "sq", Q: "q", SPRINT: "sprint", RACE: "carrera" }[kind];
-    const txt: string = this.def.horario[key];
+    const txt: string = horarioFor(this.def, this.st.sprint)[key];
     const [d, hm] = txt.split(" ");
     const [h, m] = hm.split(":").map(Number);
-    return { day: DAY[d], clock: h * 60 + m };
+    return { day: Math.max(0, daysOf(this.def).indexOf(d)), clock: h * 60 + m };
   }
+
+  /** Nombre del día (0 a 2) del fin de semana. */
+  dayName(i: number): string { return DAY_FULL[daysOf(this.def)[i]] ?? DAY_NAMES[i]; }
 
   entrants(): Entrant[] {
     const out: Entrant[] = [];

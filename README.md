@@ -33,6 +33,15 @@ npm run dev        # abre la URL que muestra (también desde el móvil en la mis
 
 ## La temporada
 
+Al empezar una temporada se elige el calendario: el **corto** (9 grandes premios, abajo) o el **completo**, el de 2026
+tal como es: 23 grandes premios (Baréin y Arabia Saudí se cancelaron en marzo y el GP de Baréin se corrió en Sepang)
+con seis sprints (China, Miami, Canadá, Gran Bretaña, Países Bajos y Singapur). En el completo, Silverstone es sprint e
+Interlagos no; Bakú y Las Vegas corren de jueves a sábado. En una temporada larga el desarrollo se reparte entre todas
+las carreras (los rivales y el presupuesto dan lo mismo en la temporada entera) y, en «crea tu equipo», el cupo de
+unidades de potencia sube a 5 (las mismas carreras por unidad que 2 en la corta).
+
+Calendario corto:
+
 | Ronda | Gran Premio | Circuito | Fecha | Formato |
 |---|---|---|---|---|
 | 1 | Japón | Suzuka | 29 de marzo | Normal |
@@ -48,7 +57,7 @@ npm run dev        # abre la URL que muestra (también desde el móvil en la mis
 En la realidad, en 2026 el GP de Baréin no se corrió en Sakhir: se trasladó a Sepang el 4 de octubre. Aquí hay las dos carreras. Las temporadas empezadas antes de cambiar el calendario siguen con el suyo (5 u 8 carreras, con el circuito ficticio de Sierra Norte).
 
 - **Formato normal:** Libres 1, Libres 2, Libres 3, Clasificación (Q1 18', Q2 15', Q3 12'; caen 6 y 6; con tu equipo hay 24 coches y en Q1 caen 7) y Carrera.
-- **Formato sprint:** Libres 1, Clasificación sprint (SQ1 12', SQ2 10', SQ3 8'; medios en SQ1 y SQ2, blandos en SQ3), Sprint (21 vueltas en Singapur y 24 en Interlagos), Clasificación y Carrera.
+- **Formato sprint:** Libres 1, Clasificación sprint (SQ1 12', SQ2 10', SQ3 8'; medios en SQ1 y SQ2, blandos en SQ3), Sprint (unos 100 km: 21 vueltas en Singapur, 24 en Interlagos, 19 en Shanghái y Miami, 23 en Montreal, 17 en Silverstone y 24 en Zandvoort), Clasificación y Carrera.
 - **Desarrollo del coche** (en la pantalla de temporada): un presupuesto por temporada (40 M con un equipo real; en
   «crea tu equipo», de 25 a 50 M según lo que quedó del techo de gasto) para pedir piezas de aerodinámica (agarre),
   motor y eficiencia (potencia y algo menos de consumo, con un tope en la temporada más bajo si el motor es de
@@ -61,6 +70,23 @@ En la realidad, en 2026 el GP de Baréin no se corrió en Sakhir: se trasladó a
   (por ejemplo, «acabar entre los 5 primeros de constructores» y «subir 2 veces al podio»; con el peor coche,
   «puntuar en 2 carreras»). Se ven en la pantalla de temporada con cómo van, y se marcan cuando ya no se pueden
   cumplir.
+  En el calendario completo se piden más (las mismas por carrera). Al acabar, cumplirlos sube el presupuesto de
+  desarrollo del año siguiente (6 M por objetivo) y fallarlos lo baja (5 M); dos temporadas seguidas sin cumplir
+  ninguno y la directiva avisa de que el jefe de equipo peligra.
+- **Varias temporadas:** al acabar el año, «Empezar la temporada 2027» (y así cada año) en la misma partida. Antes se
+  ve el resumen (campeones, tu puesto, los objetivos y lo que cambia el presupuesto) y se decide qué hacer con tus
+  pilotos a los que se les acaba el contrato: renovar o cambiarlos por uno de los libres (reservas, libres y novatos).
+  - **Pilotos:** cumplen años. Mejoran hasta los ~28, se mantienen y empeoran desde los ~33; desde los 33 alguno se
+    retira (los que siguen arriba aguantan más). Los contratos de la primera temporada son una estimación del juego.
+  - **Mercado:** cada equipo renueva a quien le sirve según lo bueno que es su coche, y los mejores coches eligen
+    primero; a veces uno se lleva al que acababa contrato en un equipo peor. Suben novatos (algunos inventados, de la
+    F2). Las noticias del mercado salen al empezar la temporada.
+  - **Coches:** el del año siguiente sale de cómo acabó cada uno, con su desarrollo, con una regresión a la media:
+    se conserva un 65 % de la ventaja o la desventaja. Con «crea tu equipo», el tuyo ya no es un equipo nuevo.
+  - En «crea tu equipo» los valores reales (ocultos) de pilotos, jefe, técnico y motor no cambian de un año a otro;
+    los pilotos sí cambian con la edad. La pantalla de temporada guarda las temporadas anteriores.
+  - `npx tsx scripts/temporadas.ts [temporadas] [semilla] [equipo|propio] [--completo]` pasa varias temporadas sin
+    correr las carreras (resultados por ritmo) para ver cómo evolucionan pilotos, coches y presupuesto.
 - **Puntos:** 25-18-15-12-10-8-6-4-2-1 en carrera; 8-7-6-5-4-3-2-1 en la sprint. Mundial de pilotos y de constructores.
 - La partida se guarda sola al terminar cada sesión y también a mitad de una: cada pocos segundos y al salir de la app. Si se cierra el navegador o entra una llamada, al volver la sesión sigue exactamente donde estaba.
 - Hay **3 partidas** (en el inicio: seguir, exportar o borrar cada una). Todo se guarda en el navegador del dispositivo, sin cuenta ni servidor: para hacer una copia de seguridad o seguir en otro dispositivo, «Exportar a un archivo» y luego «Importar partida» allí.
@@ -136,7 +162,7 @@ Todo es determinista a partir de la semilla de la temporada.
 
 **Simulación a 20 Hz.** Cada coche avanza en pasos de 0,05 s sobre el perfil de velocidad del circuito, escalado por el tiempo que tardaría él en ese tramo con su adherencia, potencia, resistencia y masa de ese instante. Un fin de semana entero se calcula en ~7 s.
 
-**Circuitos reales** (`data/circuitos/`). Silverstone, Spa, Monza, Interlagos y Suzuka usan la línea central real del trazado; Mónaco y Marina Bay, su trazado en GeoJSON convertido a metros. De la curvatura sale la velocidad máxima en cada punto (masa puntual con carga aerodinámica, potencia y frenada), con la carga de cada circuito (Monza baja). Sakhir y Sepang también usan la línea central real. Cada circuito se calibra contra la pole real de 2026: Suzuka 1:28.778, Mónaco 1:12.051, Silverstone 1:28.111, Spa 1:44.361, Monza 1:21.786, Sepang 1:35.130 (con mucho calor) y Singapur 1:31.373. Interlagos está estimada en ~1:12.1 y Sakhir en ~1:33.0 (la pole de 2025 más lo que han perdido los coches de 2026). Los adelantamientos de cada circuito se calibran con su media real por carrera: Monza ~47, Sakhir ~46, Sepang ~45 (estimado), Spa ~41, Suzuka ~40, Interlagos ~40, Singapur ~35, Silverstone ~35 y Mónaco ~9. Baréin en abril es casi siempre seco; Sepang en octubre tiene tormentas de tarde. La pérdida en boxes es la de cada circuito. Zonas de adelantamiento y de modo adelantamiento (MO, el sustituto del DRS en 2026) salen de la geometría.
+**Circuitos reales** (`data/circuitos/`). Silverstone, Spa, Monza, Interlagos y Suzuka usan la línea central real del trazado; Mónaco y Marina Bay, su trazado en GeoJSON convertido a metros. De la curvatura sale la velocidad máxima en cada punto (masa puntual con carga aerodinámica, potencia y frenada), con la carga de cada circuito (Monza baja). Sakhir y Sepang también usan la línea central real. Cada circuito se calibra contra la pole real de 2026: Suzuka 1:28.778, Mónaco 1:12.051, Silverstone 1:28.111, Spa 1:44.361, Monza 1:21.786, Sepang 1:35.130 (con mucho calor) y Singapur 1:31.373. Interlagos está estimada en ~1:12.1 y Sakhir en ~1:33.0 (la pole de 2025 más lo que han perdido los coches de 2026). Los adelantamientos de cada circuito se calibran con su media real por carrera: Monza ~47, Sakhir ~46, Sepang ~45 (estimado), Spa ~41, Suzuka ~40, Interlagos ~40, Singapur ~35, Silverstone ~35 y Mónaco ~9. Baréin en abril es casi siempre seco; Sepang en octubre tiene tormentas de tarde. Los 15 del calendario completo (Melbourne, Shanghái, Miami, Montreal, Barcelona, Spielberg, Hungaroring, Zandvoort, Madrid, Bakú, Austin, México, Las Vegas, Lusail y Yas Marina) se calibran con su pole real de 2026 (las tres que aún no se han corrido, estimadas) y su umbral de adelantamiento con `calibra.ts`; Bakú y Las Vegas son urbanos (más coches de seguridad y edificios en el 3D). La pérdida en boxes es la de cada circuito. Zonas de adelantamiento y de modo adelantamiento (MO, el sustituto del DRS en 2026) salen de la geometría.
 
 **Neumáticos** (`src/sim/tyres.ts`). Duro, medio, blando, intermedio y lluvia. Por eje: temperatura de carcasa y de superficie, ventana de cada compuesto, desgaste con precipicio, graining y ampollas.
 
@@ -244,7 +270,7 @@ Cada circuito tiene su balance. En Monza ir a rebufo compensa; en Silverstone o 
 - Ante la lluvia, cada muro reacciona a su ritmo.
 - En la vuelta de salida, cada piloto levanta para abrir hueco con el de delante: en Monza para quedarse a rebufo, en el resto para tener aire limpio. No todos lo hacen igual de bien, así que hay quien empieza la vuelta pegado a otro, y quien va lanzado a veces se encuentra a uno lento que no se aparta a tiempo.
 
-**Banderas rojas** en todas las sesiones, por accidente fuerte (barreras dañadas) o por lluvia torrencial (agua estancada en algún sector o chaparrón muy fuerte). En carrera se para todo, se pueden cambiar los neumáticos sin perder tiempo y se reanuda detrás del coche de seguridad; con lluvia no se reanuda hasta que la pista lo permite.
+**Banderas rojas** en todas las sesiones, por accidente fuerte (barreras dañadas) o por lluvia torrencial (agua estancada en algún sector o chaparrón muy fuerte). En carrera se para todo, se pueden cambiar los neumáticos sin perder tiempo y se reanuda con salida parada (con lluvia, detrás del coche de seguridad y no hasta que la pista lo permite).
 
 **Reglamento de tiempo y carreras acortadas:**
 - Una carrera dura como mucho 2 h sin contar las suspensiones, y 3 h en total. Al cumplirse, bandera a cuadros al final de esa vuelta.
@@ -257,7 +283,7 @@ Cada circuito tiene su balance. En Monza ir a rebufo compensa; en Silverstone o 
 
 ## Parrilla 2026
 
-`data/equipos-2026.json`: los 11 equipos y 22 pilotos reales con sus números. El rendimiento de cada coche es una estimación a partir del mundial de constructores 2026 tras México (Mercedes, Ferrari, Red Bull, McLaren, Racing Bulls, Alpine, Haas, Audi, Williams, Aston Martin, Cadillac); la potencia, del motor de cada equipo. Los atributos de los pilotos son una valoración propia y se pueden editar.
+`data/equipos-2026.json`: los 11 equipos y 22 pilotos reales con sus números. El rendimiento de cada coche es una estimación a partir del mundial de constructores 2026 tras México (Mercedes, Ferrari, Red Bull, McLaren, Racing Bulls, Alpine, Haas, Audi, Williams, Aston Martin, Cadillac); la potencia, del motor de cada equipo. Los atributos de los pilotos son una valoración propia y se pueden editar. Cada piloto lleva su año de nacimiento y el de su primera carrera de F1 (`nacimiento`, `debut`): con ellos se sabe quién es novato y cómo cambia con los años.
 
 `data/mercado-2026.json`: el mercado del modo «crear equipo»: precios, incertidumbre, reservas y pilotos libres, jefes de equipo, directores técnicos y motores. Los cargos y reservas son los de la prensa de principios de 2026; los que no estaban confirmados llevan una nota. Las valoraciones son estimaciones del juego.
 
@@ -407,7 +433,10 @@ clasificación.
 
 ## Fuentes
 
-- Trazados: [TUMFTM racetrack-database](https://github.com/TUMFTM/racetrack-database), licencia LGPL-3.0 (copia en `data/circuitos/LICENCIA-TRAZADOS-TUM.txt`); Mónaco y Marina Bay de [bacinger/f1-circuits](https://github.com/bacinger/f1-circuits), licencia MIT (copia en `data/circuitos/LICENCIA-TRAZADOS-BACINGER.txt`).
+- Trazados: [TUMFTM racetrack-database](https://github.com/TUMFTM/racetrack-database), licencia LGPL-3.0 (copia en `data/circuitos/LICENCIA-TRAZADOS-TUM.txt`); Mónaco, Marina Bay, Melbourne, Miami, Madrid, Bakú, Las Vegas, Lusail y Yas Marina de [bacinger/f1-circuits](https://github.com/bacinger/f1-circuits), licencia MIT (copia en `data/circuitos/LICENCIA-TRAZADOS-BACINGER.txt`). Melbourne y Yas Marina, de bacinger porque los de TUM son de antes de sus reformas (2022 y 2021). Los circuitos del calendario completo los crea `python3 scripts/nuevos.py` (después, `scripts/relieve.py` y, en Bakú y Las Vegas, `scripts/entorno.py`).
+- Calendario completo de 2026: [Planet F1: se cancelan Baréin y Arabia Saudí](https://www.planetf1.com/news/bahrain-saudi-arabian-f1-2026-cancelled), [GPFans: el GP de Baréin vuelve en Sepang](https://www.gpfans.com/en/f1-news/1088263/f1-bahrain-grand-prix-confirmed-2026-return-malaysia-sepang/).
+- Poles 2026 del calendario completo: [Wikipedia: GP de Australia](https://en.wikipedia.org/wiki/2026_Australian_Grand_Prix), [FIA: clasificación de China](https://www.fia.com/sites/default/files/2026_02_chn_f1_q0_timing_qualifyingsessionprovisionalclassification_v01.pdf), [formula1.com: pole de Miami](https://www.formula1.com/en/latest/article/antonelli-storms-to-miami-grand-prix-pole-ahead-of-verstappen-and-leclerc.RV6Gs6Sku3GUiB4V4hki5), [FIA: pole de Canadá](https://www.fia.com/news/f1-late-surge-earns-russell-pole-canadian-gp-ahead-antonelli-and-norris), [FIA: clasificación de Barcelona](https://www.fia.com/system/files/decision-document/2026_barcelona-catalunya_grand_prix_-_final_qualifying_classification.pdf), [formula1.com: pole de Austria](https://formula1.com/en/latest/article/russell-beats-leclerc-and-hamilton-to-austrian-gp-pole-after-dramatic-late-verstappen-crash.6oiA7Tyo3B89DFJNLWtG8P), [FIA: pole de Hungría](https://admin.fia.com/news/f1-norris-snatches-hungarian-grand-prix-pole-just-0012s-ahead-hamilton), [FIA: pole de Países Bajos](https://api.fia.com/news/f1-norris-claims-pole-dutch-grand-prix-ahead-russell-and-antonelli), [McLaren: pole de Madrid](https://www.mclaren.com/racing/formula-1/2026/spanish-grand-prix/qualifying-report/), [formula1.com: pole de Azerbaiyán](https://www.formula1.com/en/latest/article/russell-charges-to-pole-position-as-antonelli-suffers-shock-exit-in-qualifying-for-azerbaijan-gp.6vFe7216mR8JZuWE4QIB4w), [formula1.com: pole de Estados Unidos](https://www.formula1.com/en/latest/article/antonelli-seizes-pole-position-ahead-of-verstappen-in-qualifying-at-the-united-states-gp.4xdH4w09GhNDOJdknowRAk), [Planet F1: clasificación de México](https://www.planetf1.com/news/f1-results-mexico-city-grand-prix-2026-qualifying). Las Vegas, Catar y Abu Dabi aún no se han corrido: su pole es la anterior (2025; en Las Vegas, la seca de 2024) más lo que han perdido de mediana los coches de 2026 (×1,027).
+- Circuitos del calendario completo: clima (medias aproximadas del mes), pérdida en boxes, horarios, carga aerodinámica, abrasividad y adelantamientos por carrera son estimaciones propias (en Madrid, con lo poco que se adelantó en 2026: [GPBlog](https://www.gpblog.com/en/general/damning-madring-stat-exposes-madrid-gps-major-racing-failure)); lo dice el campo «fuente» de cada dato.
 - Poles 2026 de los circuitos nuevos: [FIA: Antonelli, pole en Japón](https://api.fia.com/news/f1-antonelli-takes-second-pole-2026-ahead-russell-and-piastri-japan), [FIA: clasificación de Mónaco 2026](https://www.fia.com/system/files/decision-document/2026_monaco_grand_prix_-_final_qualifying_classification.pdf), [Formula One History: clasificación de Singapur 2026](https://www.formulaonehistory.com/2026-singapore-gp-qualifying/).
 - Calendario y horarios: [The Race: calendario 2026](https://www.the-race.com/formula-1/f1-2026-calendar-when-is-next-race/), [Crash.net: horario de Singapur 2026](https://www.crash.net/f1/news/1106593/1/f1-2026-singapore-grand-prix-start-time-and-full-weekend-schedule).
 - Adelantamientos por circuito: [F1 Race Review: circuitos por adelantamientos](https://www.f1-race-review.com/stats/best-track-by-overtakes/), [GPBlog: Mónaco 2024](https://www.gpblog.com/en/news/very-little-overtaking-at-grand-prix-of-monaco-2024.html).

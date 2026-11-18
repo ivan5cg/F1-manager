@@ -778,7 +778,8 @@ function buildTrackData(tr, id) {
   for (let i = 0; i < n; i++) line[i] = -0.6 * clamp(1.7 * narrow[i] - 1.9 * wide[i], -1, 1);
   line = blur(blur(line, Math.round(18 / ds), n), Math.round(18 / ds), n);
   // escapatorias: metros de grava por fuera de las curvas (izquierda y derecha)
-  const street = id === "monaco" || id === "singapur";
+  // urbanos: los que traen su entorno (Mónaco, Singapur, Bakú, Las Vegas)
+  const street = !!tr.def.entorno;
   // anchura real por punto (campo «ancho»), como proporción de la media
   const an = tr.def.ancho;
   let wr = new Float32Array(n).fill(1), wReal = street ? 5 : 6.5;
@@ -1208,7 +1209,7 @@ function buildWorld() {
       // el terreno de verdad: el mar (y el puerto) por debajo del agua, la ladera de Mónaco; Singapur es llano
       // (su modelo de superficie trae los edificios, que se ponen aparte)
       wet = T.env.wet(x, z);
-      far = wet ? T.env.sea - 6 : track.id === "singapur" ? Math.max(T.env.sea + 1.5, Math.min(T.env.at(x, z), T.hmean + 2)) : T.env.at(x, z);
+      far = wet ? T.env.sea - 6 : track.id === "singapur" || track.id === "lasvegas" ? Math.max(T.env.sea + 1.5, Math.min(T.env.at(x, z), T.hmean + 2)) : T.env.at(x, z);
       b = sstep(T.SH * T.Wov * 1.6, T.SH * T.Wov * 1.6 + 110, d);
     }
     return { h: Math.min(near + (far - near) * b - 1, cap - 1.5), d, wet };
@@ -1558,7 +1559,7 @@ function buildWorld() {
   }
   // calles: una fila de edificios a cada lado, pegados a la acera, y manzanas detrás
   if (street) {
-    const tower = track.id === "singapur";
+    const tower = track.id === "singapur" || track.id === "lasvegas";
     const PAL = tower ? [0x6f8fa6, 0x8aa5b5, 0x5c7a8c, 0xaab8c2, 0x7d9aa0, 0xd9dcdf, 0x9bb7c9] : [0xe9dcc0, 0xd9b77e, 0xe3a68a, 0xefe2a8, 0xf1ede4, 0xe9b9a9, 0xcfc3a8, 0xf0d6b0];
     for (const sg of [1, -1]) {
       let s = 0;
@@ -1617,7 +1618,7 @@ function buildWorld() {
   }
   // torres de focos de las carreras de noche: un poste junto a la valla cada 85 m, alternando lados, con la batería de
   // focos en un brazo sobre la pista
-  const towers = [], night = track.id === "singapur" || track.id === "bahrein";
+  const towers = [], night = ["singapur", "bahrein", "lasvegas", "lusail", "yasmarina"].includes(track.id);
   if (night) for (let k = 0; k < Math.floor(T.L / 85); k++) {
     const s = 40 + k * 85, sg = k % 2 ? PS : -PS;
     if (sg === PS && ramp(s) > 0.02) continue;

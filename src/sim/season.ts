@@ -1,5 +1,6 @@
 // Minitemporada: calendario, puntos y clasificaciones de pilotos y constructores.
-import type { TeamDef, ResultRow } from "./session";
+import type { TeamDef, ResultRow, DriverDef } from "./session";
+import type { SeasonRecord } from "./career";
 import type { WeekendState } from "./weekend";
 import type { Compound } from "./tyres";
 import type { CustomTeam } from "./market";
@@ -41,6 +42,8 @@ export interface SeasonState {
   seed: number;
   round: number; // índice de la ronda en curso
   calendar?: string[]; // ids de los circuitos, en orden (las temporadas antiguas no lo tienen: 5 carreras)
+  /** Formato de los fines de semana que no corren con el de su circuito (calendario completo: Silverstone sprint, Interlagos normal). */
+  formatos?: Record<string, "normal" | "sprint">;
   weekend: WeekendState | null;
   rounds: RoundResult[];
   /** Modo «crear equipo»: lo que fichó el jugador (su equipo es el último de la parrilla). */
@@ -51,6 +54,27 @@ export interface SeasonState {
   dev?: DevState;
   /** Objetivos de la directiva para la temporada (se ponen al abrirla por primera vez). */
   objetivos?: Objective[];
+  // ---- varias temporadas (career.ts): las de la primera temporada no tienen nada de esto (es 2026)
+  /** Año de la temporada (sin él, 2026). */
+  year?: number;
+  /** «Crear equipo»: semilla de los valores reales (ocultos) de pilotos, jefes, técnicos y motores: la de la primera
+   *  temporada, para que no cambien de un año a otro (sin ella, la de la temporada). */
+  trueSeed?: number;
+  /** Equipos de la temporada (coches y pilotos) si ya no son los de 2026: con equipo real, los 11; en «crear
+   *  equipo», los de la IA. */
+  grid?: TeamDef[];
+  /** «Crear equipo»: tus pilotos tal como son esta temporada (con su edad) y lo que conserva tu coche del año pasado. */
+  misPilotos?: DriverDef[];
+  carry?: number;
+  /** Pilotos sin equipo (libres, reservas y novatos) y hasta qué año tiene contrato cada piloto. */
+  pool?: DriverDef[];
+  contracts?: Record<string, number>;
+  /** Temporadas anteriores, lo que ha pasado en el mercado antes de esta y lo que cambia el presupuesto. */
+  history?: SeasonRecord[];
+  news?: string[];
+  devBonus?: number;
+  /** Temporadas seguidas sin cumplir ningún objetivo (con dos, la directiva avisa de que el jefe peligra). */
+  aviso?: number;
 }
 
 export function pointsFor(rows: ResultRow[] | undefined, table: number[]): Map<number, number> {

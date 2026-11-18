@@ -2,10 +2,10 @@ import "./style.css";
 
 // tema visual (las fichas de color están en style.css)
 document.documentElement.dataset.tema = "grafito";
-import { TEAMS, CIRCUITS, ROUNDS, DRIVERS, getTrack, useSeason, devContext } from "./data";
+import { TEAMS, CIRCUITS, ROUNDS, DRIVERS, getTrack, useSeason, devContext, CALENDARS } from "./data";
 import { newDev } from "../sim/development";
 import { builderScreen, PLAYER_TEAM_ID } from "./teamBuilder";
-import { loadSeason, saveSeason, loadSession, clearSession, isParked, setActiveSlot, deleteSlot, initStore, roomyStorage, askPersist, slotList } from "./store";
+import { loadSeason, saveSeason, loadSession, clearSession, isParked, setActiveSlot, deleteSlot, initStore, roomyStorage, askPersist, slotList, loadPrefs, getActiveSlot } from "./store";
 import type { SessionSnapshot } from "../sim/snapshot";
 import { startScreen, seasonScreen, weekendScreen, resultsScreen, longRunsPanel, teamPickerScreen, Nav } from "./hubs";
 import { sessionView } from "./sessionView";
@@ -82,7 +82,7 @@ function finishSession(wk: Weekend, kind: SessionKind, sess: Session) {
     const ds = driverStandings(s, DRIVERS.length);
     const myTeam = TEAMS.find((t) => t.id === s.playerTeam)!;
     void shareSheet({
-      kind, circuitId: st.circuitId, rows, points: pointsFor(rows, table), sum, playerTeam: s.playerTeam, teamName: myTeam.nombre, teamColor: myTeam.color,
+      kind, year: s.year ?? 2026, circuitId: st.circuitId, rows, points: pointsFor(rows, table), sum, playerTeam: s.playerTeam, teamName: myTeam.nombre, teamColor: myTeam.color,
       standing: ds.map((x, i) => ({ id: x.id, pos: i + 1, points: x.points })).filter((x) => DRIVERS[x.id].team.id === s.playerTeam),
     });
   };
@@ -109,9 +109,17 @@ function enter() {
   }
 }
 
+/** Calendario elegido en el inicio para las temporadas nuevas (el corto si no se ha tocado). */
+function chosenCalendar(): { calendar: string[]; formatos?: Record<string, "normal" | "sprint"> } {
+  const c = CALENDARS[loadPrefs().calendario ?? "corta"];
+  return Object.keys(c.formatos).length ? { calendar: [...c.ids], formatos: { ...c.formatos } } : { calendar: [...c.ids] };
+}
+
 /** Temporada nueva en una partida: lo que hubiera en ella se borra. */
 function newSeason(slot: number, s: SeasonState) {
   s.dev = newDev(devContext(s).left); // presupuesto de desarrollo de la temporada
+  // temporadas siguientes: los objetivos del año pasado suben o bajan el presupuesto
+  if (s.devBonus) s.dev.budget = Math.max(15, s.dev.budget + s.devBonus);
   // la primera partida: se pide al navegador que no borre los datos por su cuenta
   if (!slotList().some((x) => x.season)) askPersist();
   deleteSlot(slot);
@@ -127,15 +135,16 @@ const nav: Nav = {
   open(slot: number) { activate(slot); enter(); },
   pickTeam(slot: number) { teamPickerScreen(nav, slot); },
   startReal(slot: number, team: string) {
-    newSeason(slot, { v: 1, playerTeam: team, seed: Math.floor(Math.random() * 1e6), round: 0, weekend: null, rounds: [], calendar: [...ROUNDS] });
+    newSeason(slot, { v: 1, playerTeam: team, seed: Math.floor(Math.random() * 1e6), round: 0, weekend: null, rounds: [], ...chosenCalendar() });
   },
   build(slot: number) {
     builderScreen(() => nav.home(), (spec) => {
-      newSeason(slot, { v: 1, playerTeam: PLAYER_TEAM_ID, seed: Math.floor(Math.random() * 1e6), round: 0, weekend: null, rounds: [], calendar: [...ROUNDS], equipo: spec });
+      newSeason(slot, { v: 1, playerTeam: PLAYER_TEAM_ID, seed: Math.floor(Math.random() * 1e6), round: 0, weekend: null, rounds: [], ...chosenCalendar(), equipo: spec });
     });
     window.scrollTo(0, 0);
   },
   season() { if (season) seasonScreen(nav, season); else nav.home(); window.scrollTo(0, 0); },
+  nextSeason(next: SeasonState) { newSeason(getActiveSlot(), next); },
   weekend() { if (season?.weekend) weekendScreen(nav, season, pendingSnap()); else nav.season(); window.scrollTo(0, 0); },
   session(kind: SessionKind, snap?: SessionSnapshot) {
     const s = season!;

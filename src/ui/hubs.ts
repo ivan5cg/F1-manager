@@ -1,12 +1,13 @@
 import type { SessionSnapshot } from "../sim/snapshot";
-import { TEAMS, BASE_TEAMS, CIRCUITS, ROUNDS, DRIVERS, GRID_CHANGES, getTrack, calendarOf, devContext, gridOf } from "./data";
+import { TEAMS, BASE_TEAMS, CIRCUITS, ROUNDS, DRIVERS, GRID_CHANGES, getTrack, calendarOf, devContext, gridOf, CALENDARS, circuitOf, devRounds } from "./data";
 import { objectivesFor, objectiveStatus } from "../sim/objectives";
 import { DEV_AREAS, DEV_SIZES, DEV_RIVAL, MOTOR_CAP, DevArea, DevSize, devLeft, devExpect, orderPart, newDev, isWorks, devGains } from "../sim/development";
 import { myTeamPanel, puSummary, puPanel, wirePu, PLAYER_TEAM_ID } from "./teamBuilder";
 import { $, esc, fmtLap, fmtRace, tyreHtml, fmtDate, sheet, setLabel, groupSets, flagHtml, setBack } from "./common";
 import { SeasonState, RoundResult, RaceSummary, driverStandings, teamStandings, RACE_POINTS, SPRINT_POINTS } from "../sim/season";
 import { Weekend, WeekendState, newWeekend, preparePu, DAY_NAMES } from "../sim/weekend";
-import { puPenalty } from "../sim/powerunit";
+import { puPenalty, quotaFor } from "../sim/powerunit";
+import { yearOf, offSeasonScreen, historyPanel, newsPanel } from "./nextSeason";
 import { startAttract } from "./attract";
 import { saveFile, helmetSvg, circuitSvg, skyGradient, lightAt, reducedMotion, forecastIcon } from "./visual";
 import { SESSION_NAMES, SessionKind, ResultRow, isRaceKind, isQualiKind, Car, Session, LongRun, TeamDef, DriverDef } from "../sim/session";
@@ -32,6 +33,8 @@ export interface Nav {
   build(slot: number): void;
   /** Simula la sesión entera sin entrar en ella (el equipo lleva a tus pilotos). */
   simulate(kind: SessionKind): void;
+  /** Empieza la temporada siguiente en la misma partida. */
+  nextSeason(next: SeasonState): void;
 }
 
 const app = () => document.getElementById("app")!;
@@ -65,9 +68,9 @@ function chooseSlot(what: string, onPick: (slot: number) => void) {
 /** Por dónde va una temporada guardada. */
 function slotWhere(s: SeasonState): string {
   const cal = calendarOf(s);
-  if (s.round >= cal.length) return "Temporada terminada";
+  if (s.round >= cal.length) return `Temporada ${yearOf(s)} terminada`;
   const c = CIRCUITS[cal[s.round]];
-  return `Ronda ${s.round + 1}/${cal.length} · ${flagHtml(c.bandera)} ${esc(c.gp.replace("Gran Premio de ", "GP de "))}`;
+  return `${yearOf(s)} · Ronda ${s.round + 1}/${cal.length} · ${flagHtml(c.bandera)} ${esc(c.gp.replace("Gran Premio de ", "GP de "))}`;
 }
 
 export function startScreen(nav: Nav, notice = "") {
@@ -78,7 +81,7 @@ export function startScreen(nav: Nav, notice = "") {
   <div style="padding-bottom:16px">
     <div class="hero"><canvas id="herocv" aria-hidden="true"></canvas>
       <div class="herolive" id="herolive"></div>
-      <div class="herotxt"><span class="kick">Temporada 2026</span><h1>Muro de Boxes</h1><div>${ROUNDS.length} grandes premios. Tú decides en el muro.</div></div>
+      <div class="herotxt"><span class="kick">Temporada 2026</span><h1>Muro de Boxes</h1><div>${ROUNDS.length} o ${CALENDARS.completa.ids.length} grandes premios. Tú decides en el muro.</div></div>
     </div>
     ${any && isSafariLike() && !installed() && !loadPrefs().sinAvisoSafari ? `<div class="notice" id="safari"><div class="grow small">Instala el juego en la pantalla de inicio (Compartir → «Añadir a pantalla de inicio») o exporta la partida: Safari borra los datos de las webs que no se usan en 7 días.</div><button id="safarix" aria-label="No volver a mostrar">✕</button></div>` : ""}
     ${any ? `<div class="panel"><div class="hd"><span class="t">Tus partidas</span></div><div class="bd" style="padding:0">
@@ -93,6 +96,8 @@ export function startScreen(nav: Nav, notice = "") {
       <div class="small dim" style="padding:6px 10px">Las partidas se guardan en este navegador. Para no perderlas o llevarlas a otro dispositivo, expórtalas (⋯) e impórtalas allí.<span id="stuse"></span></div>
     </div></div>` : ""}
     <div class="panel"><div class="hd"><span class="t">Nueva temporada</span></div><div class="bd">
+      <div class="row small" style="gap:6px;margin-bottom:4px"><span class="dim">Calendario</span><div class="seg grow" id="calseg" style="margin:0">${(["corta", "completa"] as const).map((k) => `<button data-cal="${k}" class="${(loadPrefs().calendario ?? "corta") === k ? "on" : ""}">${k === "corta" ? `Corto · ${ROUNDS.length} GP` : `Completo · ${CALENDARS.completa.ids.length} GP`}</button>`).join("")}</div></div>
+      <div class="small dim" style="margin-bottom:8px">El corto es una minitemporada de ${ROUNDS.length} carreras; el completo, el calendario real de 2026, con seis sprints.</div>
       <div class="newcards">
         <button class="newcard" id="real"><b>Equipo real</b><span>Uno de los 11 equipos de 2026, tal cual: desde los que aspiran a ganar hasta el farolillo rojo.</span></button>
         <button class="newcard" id="build"><b>Crea tu equipo</b><span>Ficha pilotos, jefe, técnico y motor con 100 M de techo de gasto, y gestiona las unidades de potencia.</span></button>
@@ -101,6 +106,10 @@ export function startScreen(nav: Nav, notice = "") {
     <div style="padding:0 10px"><button id="import" style="width:100%">Importar partida desde un archivo</button><input type="file" id="importf" accept=".json,application/json" hidden></div>
   </div>`;
   $("#real").onclick = () => chooseSlot("Nueva temporada", (slot) => nav.pickTeam(slot));
+  document.querySelectorAll<HTMLButtonElement>("[data-cal]").forEach((b) => (b.onclick = () => {
+    const p = loadPrefs(); p.calendario = b.dataset.cal as "corta" | "completa"; savePrefs(p);
+    document.querySelectorAll<HTMLElement>("[data-cal]").forEach((x) => x.classList.toggle("on", x === b));
+  }));
   const sx = document.getElementById("safarix");
   if (sx) sx.onclick = () => { const p = loadPrefs(); p.sinAvisoSafari = true; savePrefs(p); document.getElementById("safari")?.remove(); };
   $("#build").onclick = () => chooseSlot("Nueva temporada", (slot) => nav.build(slot));
@@ -204,7 +213,7 @@ export function seasonScreen(nav: Nav, s: SeasonState) {
   // temporadas empezadas antes del desarrollo por piezas: si aún no se ha corrido nada, se les pone ya
   if (!s.dev && s.round === 0 && !s.rounds.length) { s.dev = newDev(devContext(s).left); saveSeason(s); }
   // objetivos de la directiva: según cómo era el coche frente a la parrilla al empezar
-  if (!s.objetivos) { s.objetivos = objectivesFor(gridOf(s, 0).teams, s.playerTeam); saveSeason(s); }
+  if (!s.objetivos) { s.objetivos = objectivesFor(gridOf(s, 0).teams, s.playerTeam, calendarOf(s).length); saveSeason(s); }
   const ds = driverStandings(s, DRIVERS.length);
   const ts = teamStandings(s, TEAMS);
   const ROUNDS_S = calendarOf(s);
@@ -217,19 +226,20 @@ export function seasonScreen(nav: Nav, s: SeasonState) {
   const prevPos = new Map(driverStandings({ ...s, rounds: s.rounds.slice(0, -1) }, DRIVERS.length).map((x, i) => [x.id, i]));
   app().innerHTML = `
   <div style="padding-bottom:16px">
-    <div class="panel"><div class="hd"><span class="t">Temporada 2026 · ${esc(myTeam.nombre)}</span><button id="home">Inicio</button></div><div class="bd">
+    <div class="panel"><div class="hd"><span class="t">Temporada ${yearOf(s)} · ${esc(myTeam.nombre)}</span><button id="home">Inicio</button></div><div class="bd">
       ${done ? `<div class="champ">${helmetSvg(champ!.team.color, champ!.d.numero, champ!.d.abrev, 72)}<div><span class="kick">Campeón del mundo</span><h1>🏆 ${esc(champ!.d.nombre)}</h1><div class="dim">${esc(champ!.team.nombre)} · ${ds[0].points} puntos</div></div></div>` : `<button class="red big-cta" id="go">${flagOf(ROUNDS_S[s.round])} ${s.weekend && s.weekend.round === s.round + 1 && s.weekend.next > 0 ? "Seguir en el" : "Ir al"} ${esc(CIRCUITS[ROUNDS_S[s.round]].gp)}</button>`}
       ${s.rounds.length ? `<div class="small" style="margin-top:8px">${esc(myTeam.nombre)}: <b>${ord(myPos)}</b> de constructores con ${ts[myPos - 1].points} pts · ${mine.map(({ x, i }) => `${esc(DRIVERS[x.id].d.abrev)} ${ord(i + 1)} (${x.points})`).join(" · ")}</div>` : ""}
     </div></div>
     ${s.equipo ? myTeamPanel(s, TEAMS) : ""}
     ${s.equipo && s.pu ? `<div class="panel"><div class="hd"><span class="t">Unidades de potencia</span></div><div class="bd">${puSummary(s.pu, DRIVERS.filter((d) => d.team.id === PLAYER_TEAM_ID).map((d) => d.id), DRIVERS.filter((d) => d.team.id === PLAYER_TEAM_ID).map((d) => d.d.abrev))}<div class="small dim" style="margin-top:4px">Porcentaje de vida gastada de cada unidad (en amarillo, la montada; tachadas, las rotas).</div></div></div>` : ""}
     ${exportDue(getActiveSlot(), s.rounds.length) ? `<div class="notice" id="expnote"><div class="grow small">Llevas ${s.rounds.length} carreras sin copia de seguridad. Como el juego no está instalado, el navegador podría borrar la partida: expórtala a un archivo.</div><button id="expnow">Exportar</button><button id="expx" title="No volver a recordarlo" aria-label="No volver a recordarlo">✕</button></div>` : ""}
+    ${newsPanel(s)}
     ${objectivesPanel(s, ROUNDS_S.length, done)}
     ${devPanel(s, myTeam, ROUNDS_S, done)}
     ${s.equipo && GRID_CHANGES.length ? `<div class="panel"><div class="hd"><span class="t">La parrilla tras tus fichajes</span></div><div class="bd small">${GRID_CHANGES.map((c) => `${esc(c.team)}: ${c.what === "piloto" ? `${esc(c.in)} por ${esc(c.out)}` : `interino por ${esc(c.out)}`}`).join("<br>")}</div></div>` : ""}
     <div class="panel"><div class="hd"><span class="t">Calendario</span></div><div class="bd" style="padding:0">
       <div class="calstrip" id="calstrip">${ROUNDS_S.map((id, i) => {
-        const c = CIRCUITS[id];
+        const c = circuitOf(s, id);
         const r = s.rounds.find((x) => x.round === i + 1);
         const win = r?.race?.find((x) => x.status === "fin");
         const best = r?.race ? r.race.map((row, k) => ({ row, k })).filter(({ row }) => DRIVERS[row.id].team.id === s.playerTeam && row.status === "fin").map(({ k }) => k + 1) : [];
@@ -257,7 +267,8 @@ export function seasonScreen(nav: Nav, s: SeasonState) {
     <div class="panel"><div class="hd"><span class="t">Mundial de constructores</span></div><div class="bd cbars">
       ${ts.map((x, i) => `<div class="cbar${x.team.id === s.playerTeam ? " me" : ""}"><span class="pos">${i + 1}</span><span class="cn">${esc(x.team.nombre)}</span><span class="cb"><i style="--w:${ts[0].points ? Math.max(1.5, (100 * x.points) / ts[0].points) : 1.5}%;background:${x.team.color};animation-delay:${i * 45}ms"></i></span><b class="mono">${x.points}</b></div>`).join("")}
     </div></div>
-    ${done ? `<div style="padding:0 10px"><button class="red big-cta" id="again">Nueva temporada</button></div>` : ""}
+    ${historyPanel(s)}
+    ${done ? `<div style="padding:0 10px;display:grid;gap:8px"><button class="red big-cta" id="nextyear">Empezar la temporada ${yearOf(s) + 1}</button><button id="again">Otra partida</button></div>` : ""}
   </div>`;
   setBack(() => nav.home());
   $("#home").onclick = () => nav.home();
@@ -270,13 +281,17 @@ export function seasonScreen(nav: Nav, s: SeasonState) {
   document.querySelectorAll<HTMLElement>("[data-round]").forEach((el) => (el.onclick = () => { const r = s.rounds.find((x) => x.round === Number(el.dataset.round)); if (r) roundSheet(r, s.playerTeam); }));
   if (!done) $("#go").onclick = () => {
     if (!s.weekend || s.weekend.round !== s.round + 1) {
-      s.weekend = newWeekend(s.round + 1, CIRCUITS[ROUNDS_S[s.round]], TEAMS, s.seed * 1000 + s.round * 97 + 1);
-      if (s.equipo) preparePu(s.weekend, s.pu, DRIVERS.length);
+      s.weekend = newWeekend(s.round + 1, circuitOf(s, ROUNDS_S[s.round]), TEAMS, s.seed * 1000 + s.round * 97 + 1);
+      s.weekend.year = yearOf(s);
+      if (s.equipo) preparePu(s.weekend, s.pu, DRIVERS.length, quotaFor(ROUNDS_S.length));
       saveSeason(s);
     }
     nav.weekend();
   };
-  else $("#again").onclick = () => nav.home();
+  else {
+    $("#again").onclick = () => nav.home();
+    $("#nextyear").onclick = () => offSeasonScreen(s, (next) => nav.nextSeason(next), () => nav.season());
+  }
   wireDev(s, () => { const y = window.scrollY; seasonScreen(nav, s); window.scrollTo(0, y); });
   const en = document.getElementById("expnow");
   if (en) en.onclick = () => { exportToFile(getActiveSlot()); document.getElementById("expnote")?.remove(); };
@@ -320,7 +335,7 @@ function devPanel(s: SeasonState, team: TeamDef, cal: string[], done: boolean): 
     }).join("")}</div></div>`).join("")}</div>`;
   const parts = d.parts.slice().sort((a, b) => b.id - a.id);
   return `<div class="panel"><div class="hd"><span class="t">Desarrollo del coche</span><span class="small">Quedan <b>${String(left).replace(".", ",")} M</b> de ${d.budget} M</span></div><div class="bd">
-    <div class="small" style="margin-bottom:6px">Pide piezas con el presupuesto de la temporada: las pequeñas y medianas tardan 2 rondas en llegar y las grandes, 3. Una de cada cuatro rinde menos de lo que esperaban tus ingenieros. ${s.equipo ? "Los rivales evolucionan según su director técnico." : `Los rivales mejoran por su cuenta (unos ${fmtS(DEV_RIVAL * AERO_S).slice(1)} por ronda): si no pides piezas, te quedas atrás.`}</div>
+    <div class="small" style="margin-bottom:6px">Pide piezas con el presupuesto de la temporada: las pequeñas y medianas tardan 2 rondas en llegar y las grandes, 3. Una de cada cuatro rinde menos de lo que esperaban tus ingenieros. ${s.equipo ? "Los rivales evolucionan según su director técnico." : `Los rivales mejoran por su cuenta (unos ${fmtS(DEV_RIVAL * devRounds(s, 1) * AERO_S).slice(1)} por ronda): si no pides piezas, te quedas atrás.`}</div>
     ${now.aero || now.motor || now.fiab ? `<div class="small" style="margin-bottom:6px">Ya en el coche: ${[now.aero ? `aerodinámica ${devGainText("aero", now.aero)}` : "", now.motor ? `motor ${devGainText("motor", now.motor)}` : "", now.fiab ? `fiabilidad ${devGainText("fiab", now.fiab)}` : ""].filter(Boolean).join(" · ")}.</div>` : ""}
     ${order}
     ${parts.length ? `<div class="devparts">${parts.map((p) => {
@@ -518,13 +533,13 @@ export function weekendScreen(nav: Nav, s: SeasonState, pending: SessionSnapshot
     <div class="panel"><div class="hd"><span class="t">Ronda ${st.round} · ${flagHtml(def.bandera)} ${esc(def.pais)}</span><button id="back">Temporada</button></div><div class="bd gphero${lightAt(heroClock) === "noche" ? " night" : ""}" style="background:${skyGradient(heroClock, heroGloom)}">
       <canvas id="mini"></canvas>
       <div class="gpt"><h1>${esc(def.gp)}</h1>
-      <div>${esc(def.nombre)} · ${(track.length / 1000).toFixed(3)} km · ${def.vueltas} vueltas${def.formato === "sprint" ? ` · <span class="yellow">sprint (${def.vueltasSprint} v)</span>` : ""} · ${fmtDate(def.fecha)}</div></div>
-      ${next ? `<div class="gpnext">${forecastIcon(outlook.find((o) => o.kind === next)?.rain ?? 0, heroClock)}<span><b>${DAY_NAMES[wk.when(next).day]} ${String(Math.floor(heroClock / 60)).padStart(2, "0")}:${String(heroClock % 60).padStart(2, "0")}</b> · ${SESSION_NAMES[next]}</span></div>` : ""}
+      <div>${esc(def.nombre)} · ${(track.length / 1000).toFixed(3)} km · ${def.vueltas} vueltas${st.sprint ? ` · <span class="yellow">sprint (${def.vueltasSprint} v)</span>` : ""} · ${fmtDate(def.fecha)}</div></div>
+      ${next ? `<div class="gpnext">${forecastIcon(outlook.find((o) => o.kind === next)?.rain ?? 0, heroClock)}<span><b>${wk.dayName(wk.when(next).day)} ${String(Math.floor(heroClock / 60)).padStart(2, "0")}:${String(heroClock % 60).padStart(2, "0")}</b> · ${SESSION_NAMES[next]}</span></div>` : ""}
       <div class="tline">${sessions.map((k, i) => {
         const res = st.results[k];
         const best = res ? res.map((r, j) => ({ r, j })).filter(({ r }) => DRIVERS[r.id].team.id === s.playerTeam).map(({ j }) => j + 1).sort((a, b) => a - b)[0] : undefined;
         const SHORT: Record<SessionKind, string> = { FP1: "L1", FP2: "L2", FP3: "L3", SQ: "QS", SPRINT: "S", Q: "Q", RACE: "C" };
-        return `<div class="tn${res ? " done" : i === st.next ? " now" : ""}"><i></i><b>${SHORT[k]}</b><span>${DAY_NAMES[wk.when(k).day].slice(0, 3)}</span>${best ? `<em>P${best}</em>` : ""}</div>`;
+        return `<div class="tn${res ? " done" : i === st.next ? " now" : ""}"><i></i><b>${SHORT[k]}</b><span>${wk.dayName(wk.when(k).day).slice(0, 3)}</span>${best ? `<em>P${best}</em>` : ""}</div>`;
       }).join("")}</div>
     </div></div>
     ${tips.length ? `<div class="panel"><div class="hd"><span class="t">¿Y ahora qué?</span></div><div class="bd small">${tips.map((t) => `<div class="tip">${t}</div>`).join("")}</div></div>` : ""}
@@ -537,12 +552,12 @@ export function weekendScreen(nav: Nav, s: SeasonState, pending: SessionSnapshot
         const top = res?.[0];
         const myRes = res ? res.map((r, k) => ({ r, k })).filter(({ r }) => DRIVERS[r.id].team.id === s.playerTeam).map(({ r, k }) => `${DRIVERS[r.id].d.abrev} P${k + 1}`).join(" · ") : "";
         return `<div class="list-item${isNext ? " next" : ""}">
-          <div style="width:62px" class="small dim up">${DAY_NAMES[w.day].slice(0, 3)} ${String(Math.floor(w.clock / 60)).padStart(2, "0")}:${String(w.clock % 60).padStart(2, "0")}</div>
+          <div style="width:62px" class="small dim up">${wk.dayName(w.day).slice(0, 3)} ${String(Math.floor(w.clock / 60)).padStart(2, "0")}:${String(w.clock % 60).padStart(2, "0")}</div>
           <div class="grow"><b class="up">${SESSION_NAMES[kind]}</b><br><span class="small dim">${res ? `🏁 ${esc(DRIVERS[top!.id].d.abrev)} ${isRaceKind(kind) ? "" : fmtLap(top!.best)} · <span class="yellow">${myRes}</span>` : ol ? `${forecastIcon(ol.rain, w.clock)}lluvia ${Math.round(ol.rain * 100)} % · ${ol.air[0].toFixed(0)}–${ol.air[1].toFixed(0)} °C · asfalto ~${ol.track.toFixed(0)} °C` : ""}</span></div>
           ${res ? `<button data-res="${kind}">Ver</button>` : isNext ? (pending ? `<button class="red" id="resume">Reanudar</button>` : `<button id="sim" title="El equipo lleva a tus pilotos y se calcula la sesión entera">Simular</button><button class="red" id="play">Empezar</button>`) : ""}
         </div>`;
       }).join("")}
-      <div class="small dim" style="padding:6px 10px">${next ? `Previsión de tu meteorólogo (fiabilidad ${team.meteo}/100): probabilidad de lluvia durante la sesión y temperaturas. ` : ""}Clima típico: ${esc(def.clima.fuente)}.${past.length ? ` Hasta ahora: ${past.map(({ d, i }) => `${DAY_NAMES[i].toLowerCase()}, ${SCENARIO_NAMES[d.scenario].toLowerCase()}`).join("; ")}.` : ""}${pending ? ` <span class="yellow">Tienes ${SESSION_NAMES[pending.kind].toLowerCase()} a medias: «Reanudar» la retoma donde la dejaste.</span>` : ""}</div>
+      <div class="small dim" style="padding:6px 10px">${next ? `Previsión de tu meteorólogo (fiabilidad ${team.meteo}/100): probabilidad de lluvia durante la sesión y temperaturas. ` : ""}Clima típico: ${esc(def.clima.fuente)}.${past.length ? ` Hasta ahora: ${past.map(({ d, i }) => `${wk.dayName(i).toLowerCase()}, ${SCENARIO_NAMES[d.scenario].toLowerCase()}`).join("; ")}.` : ""}${pending ? ` <span class="yellow">Tienes ${SESSION_NAMES[pending.kind].toLowerCase()} a medias: «Reanudar» la retoma donde la dejaste.</span>` : ""}</div>
     </div></div>
     ${setupPanel(wk, team, mine.map((e) => ({ id: e.id, name: e.d.nombre })), !!pending)}
     ${puPanel(st, mine.map((e) => e.id), mine.map((e) => e.d.nombre), team, def.vueltas, track.length / 1000)}

@@ -10,6 +10,21 @@ import monaco from "../../data/circuitos/monaco.json";
 import singapur from "../../data/circuitos/singapur.json";
 import bahrein from "../../data/circuitos/bahrein.json";
 import sepang from "../../data/circuitos/sepang.json";
+import melbourne from "../../data/circuitos/melbourne.json";
+import shanghai from "../../data/circuitos/shanghai.json";
+import miami from "../../data/circuitos/miami.json";
+import montreal from "../../data/circuitos/montreal.json";
+import barcelona from "../../data/circuitos/barcelona.json";
+import spielberg from "../../data/circuitos/spielberg.json";
+import hungaroring from "../../data/circuitos/hungaroring.json";
+import zandvoort from "../../data/circuitos/zandvoort.json";
+import madrid from "../../data/circuitos/madrid.json";
+import baku from "../../data/circuitos/baku.json";
+import austin from "../../data/circuitos/austin.json";
+import mexico from "../../data/circuitos/mexico.json";
+import lasvegas from "../../data/circuitos/lasvegas.json";
+import lusail from "../../data/circuitos/lusail.json";
+import yasmarina from "../../data/circuitos/yasmarina.json";
 import market from "../../data/mercado-2026.json";
 import { buildTrack, Track } from "../sim/track";
 import type { TeamDef, DriverDef } from "../sim/session";
@@ -24,12 +39,33 @@ export const MARKET = market as unknown as Market;
 export let TEAMS: TeamDef[] = BASE_TEAMS;
 /** Quién ha tenido que cubrir a quién por tus fichajes. */
 export let GRID_CHANGES: GridChange[] = [];
-export const CIRCUITS: Record<string, any> = { silverstone, spa, monza, "sierra-norte": sierra, interlagos, suzuka, monaco, singapur, bahrein, sepang };
-/** Calendario de las temporadas nuevas. */
+export const CIRCUITS: Record<string, any> = { silverstone, spa, monza, "sierra-norte": sierra, interlagos, suzuka, monaco, singapur, bahrein, sepang, melbourne, shanghai, miami, montreal, barcelona, spielberg, hungaroring, zandvoort, madrid, baku, austin, mexico, lasvegas, lusail, yasmarina };
+/** Calendario corto (el de siempre, 9 carreras): el de las temporadas nuevas si no se elige el completo. */
 export const ROUNDS: string[] = cal.rondas;
+type CalEntry = string | { id: string; formato?: "normal" | "sprint" };
+/** Los dos calendarios: ids en orden y el formato de los que no corren con el de su circuito. */
+export const CALENDARS: Record<"corta" | "completa", { ids: string[]; formatos: Record<string, "normal" | "sprint"> }> = {
+  corta: { ids: cal.rondas, formatos: {} },
+  completa: {
+    ids: (cal.completa as CalEntry[]).map((e) => (typeof e === "string" ? e : e.id)),
+    formatos: Object.fromEntries((cal.completa as CalEntry[]).filter((e): e is { id: string; formato: "normal" | "sprint" } => typeof e !== "string" && !!e.formato).map((e) => [e.id, e.formato])),
+  },
+};
 /** Calendario de una temporada: las empezadas antes de ampliar el calendario siguen con el suyo de 5 carreras. */
 export function calendarOf(s: { calendar?: string[] } | null | undefined): string[] {
   return s?.calendar ?? (s ? cal.rondasV1 : cal.rondas);
+}
+/** Datos de un circuito tal como corre en esa temporada (el formato puede no ser el suyo). */
+export function circuitOf(s: { formatos?: Record<string, string> } | null | undefined, id: string): any {
+  const def = CIRCUITS[id];
+  const f = s?.formatos?.[id];
+  return f && f !== def.formato ? { ...def, formato: f } : def;
+}
+/** Cuánto de una temporada de evoluciones se ha hecho tras `round` rondas: la temporada corta tiene 8 rondas de
+ *  evoluciones y una larga reparte las mismas entre todas sus carreras. */
+export function devRounds(s: { calendar?: string[] } | null | undefined, round: number): number {
+  const n = calendarOf(s).length;
+  return n > 9 ? (round * 8) / (n - 1) : round;
 }
 
 export let DRIVERS: { id: number; d: DriverDef; team: TeamDef }[] = [];
@@ -46,12 +82,14 @@ setTeams(BASE_TEAMS);
 export function gridOf(s: SeasonState | null, round = s?.round ?? 0): { teams: TeamDef[]; changes: GridChange[] } {
   if (!s) return { teams: BASE_TEAMS, changes: [] };
   const r = Math.min(round, calendarOf(s).length - 1);
+  // temporadas siguientes: los equipos tal como empiezan ese año (career.ts)
+  const base = s.grid ?? BASE_TEAMS;
   if (!s.equipo) {
     // equipo real: con desarrollo por piezas, los rivales mejoran a un ritmo fijo y el tuyo, con lo que pidas
-    if (!s.dev) return { teams: BASE_TEAMS, changes: [] };
-    return { teams: BASE_TEAMS.map((t) => (t.id === s.playerTeam ? applyDev(t, s.dev, r) : { ...t, agarre: t.agarre + DEV_RIVAL * r })), changes: [] };
+    if (!s.dev) return { teams: base, changes: [] };
+    return { teams: base.map((t) => (t.id === s.playerTeam ? applyDev(t, s.dev, r) : { ...t, agarre: t.agarre + DEV_RIVAL * devRounds(s, r) })), changes: [] };
   }
-  const g = buildGrid(BASE_TEAMS, MARKET, s.equipo, s.seed, r, !!s.dev);
+  const g = buildGrid(base, MARKET, s.equipo, s.trueSeed ?? s.seed, devRounds(s, r), !!s.dev, s.grid ? { agarre: s.carry ?? 0, extra: s.misPilotos } : undefined);
   if (s.dev) g.teams = g.teams.map((t) => (t.id === PLAYER_TEAM_ID ? applyDev(t, s.dev, r) : t));
   return g;
 }
@@ -61,7 +99,7 @@ export function gridOf(s: SeasonState | null, round = s?.round ?? 0): { teams: T
 export function devContext(s: SeasonState): { left: number | null; pubK: number; realK: number } {
   if (!s.equipo) return { left: null, pubK: 1, realK: 1 };
   const tech = MARKET.tecnicos.find((x) => x.nombre === s.equipo!.tecnico);
-  const pub = tech?.desarrollo ?? 0.06, real = tech ? trueTech(tech, s.seed).desarrollo : pub;
+  const pub = tech?.desarrollo ?? 0.06, real = tech ? trueTech(tech, s.trueSeed ?? s.seed).desarrollo : pub;
   return { left: MARKET.techo - costOf(MARKET, s.equipo), pubK: pub / 0.06, realK: real / 0.06 };
 }
 /** Deja como activa la parrilla de la temporada (llamar al cargarla y al pasar de ronda). */

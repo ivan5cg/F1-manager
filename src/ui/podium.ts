@@ -65,6 +65,7 @@ export function animateCounts(root: ParentNode = document, delay = 500, ms = 130
 // ------------------------------------------------------------------ tarjeta para compartir
 export interface ShareInfo {
   kind: "RACE" | "SPRINT";
+  year?: number;
   circuitId: string;
   rows: ResultRow[];
   points: Map<number, number>;
@@ -109,7 +110,7 @@ export async function drawShareCard(info: ShareInfo): Promise<HTMLCanvasElement>
   g.restore();
   // cabecera
   g.fillStyle = "#fff"; g.font = F(700, 34); g.textBaseline = "alphabetic";
-  g.fillText("MURO DE BOXES · TEMPORADA 2026", 70, 110);
+  g.fillText(`MURO DE BOXES · TEMPORADA ${info.year ?? 2026}`, 70, 110);
   g.fillStyle = "#e3261c"; g.fillRect(70, 128, 120, 8);
   g.fillStyle = "#fff"; g.font = F(900, 78);
   const gpName = def.gp.toUpperCase();

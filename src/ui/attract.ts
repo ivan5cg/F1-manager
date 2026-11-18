@@ -2,7 +2,10 @@
 // bucle en un circuito al azar, detrás del título. Se monta «ligera» para no congelar el inicio:
 // tiempo seco directamente a la hora de la carrera, sin simular la mañana, y coches ya en parrilla
 // con una estrategia sencilla. Cada pocas vueltas cambia de circuito.
-import { BASE_TEAMS, CIRCUITS, ROUNDS, getTrack } from "./data";
+import { BASE_TEAMS, CIRCUITS, ROUNDS, CALENDARS, getTrack } from "./data";
+
+/** Circuitos de los dos calendarios (para la carrera de fondo). */
+const ALL = [...new Set([...ROUNDS, ...CALENDARS.completa.ids])];
 import { Weekend, newWeekend } from "../sim/weekend";
 import { Session } from "../sim/session";
 import { createDayWeather } from "../sim/weather";
@@ -42,7 +45,7 @@ function buildRace(id: string, seed: number): { sess: Session; track: Track } {
 
 /** Arranca la carrera de fondo en `cv`; `label` recibe el rótulo «en directo». Se para sola al salir de la pantalla. */
 export function startAttract(cv: HTMLCanvasElement, label: HTMLElement) {
-  let id = ROUNDS[Math.floor(Math.random() * ROUNDS.length)];
+  let id = ALL[Math.floor(Math.random() * ALL.length)];
   let seed = Math.floor(Math.random() * 1e6);
   let { sess, track } = buildRace(id, seed);
   for (let i = 0; i < 500; i++) sess.step(); // ya en marcha
@@ -117,7 +120,7 @@ export function startAttract(cv: HTMLCanvasElement, label: HTMLElement) {
     label.innerHTML = `<span class="livedot"></span>En directo · ${flagHtml(def.bandera)} ${def.gp.replace("Gran Premio de ", "GP de ")} · V${Math.min(sess.laps, sess.leaderLap + 1)}/${sess.laps}${lead ? ` · lidera <b>${lead.d.abrev}</b>` : ""}`;
   }
   function next() {
-    const others = ROUNDS.filter((x) => x !== id);
+    const others = ALL.filter((x) => x !== id);
     id = others[Math.floor(Math.random() * others.length)];
     seed = Math.floor(Math.random() * 1e6);
     ({ sess, track } = buildRace(id, seed));
