@@ -186,6 +186,13 @@ sube algo el riesgo de avería. El morro sí, pero cuesta 7,5 s más: en automá
 de carrera con el alerón dañado cuesta más que eso, y tú puedes elegir «Cambiar» o «Dejar» en la tarjeta. Con el
 alerón muy tocado la IA adelanta la parada, o hace una de más si le sale a cuenta.
 
+**Pelear o no.** En la tarjeta de cada piloto, «Pelea»: **Defender** cierra la puerta (el que ataca necesita
+~0,35 s/vuelta más de ventaja para pasar), pero cada frenada defendida cuesta unas centésimas, calienta y gasta el
+delantero y sube algo el riesgo de toque; **No pelear** deja pasar enseguida al que va más rápido (por ejemplo, uno con
+otra estrategia), sin perder tiempo en la pelea. En automático el equipo cierra la puerta en las ocho últimas vueltas
+si hay puntos en juego. El Muro dice, para el de delante y el de detrás, la ventaja que lleva cada uno, la que hace
+falta y si se puede pasar (contando si defiendes).
+
 **Salida.** Cada piloto reacciona y tracciona distinto (su nota de salida, con azar), el blando arranca mejor que el medio y el duro, y de vez en cuando alguien se queda clavado. Hasta la primera frenada hay sitio a los lados: los puestos se ganan o se pierden por pura arrancada. En la primera vuelta se pasa en casi cualquier curva, pero la diferencia de agarre cuenta la mitad (van en grupo).
 
 **Adelantamientos.** En cada frenada se compara la **ventaja del que ataca, en segundos por vuelta**, con un umbral:

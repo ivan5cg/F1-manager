@@ -71,6 +71,8 @@ const CRASH_P = 0.08;
 const TL_P = 0.0011;
 /** Probabilidad de dañar el fondo en un bordillo por cada paso de altura por debajo de lo que pide el circuito. */
 const KERB_P = 0.00003;
+/** Ventaja de más (s/vuelta) que necesita el que ataca si el de delante cierra la puerta. */
+const DEFEND_T = 0.35;
 
 type IncidentKind = "crash" | "failure" | "debris";
 const ERS_POWER = [-3.5, 0, 2.0, 4.5];
@@ -265,6 +267,8 @@ export interface Car {
   tlStrikes?: number;
   /** Morro en la próxima parada: auto (el equipo hace la cuenta), cambiarlo o dejarlo. */
   nose?: "auto" | "yes" | "no";
+  /** Cómo se defiende del que le ataca: auto (lo decide el equipo), defender (cierra la puerta) o no pelear. */
+  fight?: "auto" | "defend" | "yield";
 }
 
 export type FlagState = "green" | "vsc" | "sc" | "sc_in" | "red";
@@ -856,6 +860,21 @@ export class Session {
       this.scLapsLeft = clamp(2 + Math.round(sev * 2.5) + this.rng.int(0, 1), 2, 6);
       this.log({ kind: "control", text: `🟨 COCHE DE SEGURIDAD — ${why}`, pause: true, important: true });
     }
+  }
+
+  /**
+   * Cómo se defiende c: lo que pida el jugador o, en automático, lo que haría el equipo: cerrar la puerta en las
+   * últimas vueltas cuando hay puntos en juego, y si no, defenderse sin más (lo normal).
+   */
+  fightMode(c: Car): "normal" | "defend" | "yield" {
+    const f = c.player && !this.autoPlayers ? c.fight ?? "auto" : "auto";
+    if (f !== "auto") return f;
+    if (this.laps - this.lapsDone(c) <= 8) {
+      const ord = this.lapOrder[this.leaderLap];
+      const pos = ord ? ord.indexOf(c.id) : -1;
+      if (pos >= 0 && pos < 10) return "defend";
+    }
+    return "normal";
   }
 
   /** Daño en el fondo: menos carga hasta el final (no se arregla en una parada) y algo más de riesgo de avería. */
@@ -1931,11 +1950,26 @@ export class Session {
     const skill = (c.d.ataque - a.d.defensa) / 100;
     const adv = grip + PASS_KS * straight + skill;
     const near = clamp((PASS_REACH - c.followGap) / (PASS_REACH - 0.2), 0.25, 1);
-    const will = 1 / (1 + Math.exp(-(adv - this.passT - extra) / PASS_W));
+    // el de delante puede no pelear (deja pasar al que va más rápido) o cerrar la puerta (cuesta tiempo y gomas)
+    const mode = this.fightMode(a);
+    if (mode === "yield" && adv > 0 && !lap1) {
+      this.grantPass(c, a, this.rng.range(0.15, 0.3));
+      c.passLog = { a: a.id, until: this.t + 10 };
+      a.passedBy = { id: c.id, t: this.t };
+      c.stuck = undefined;
+      return;
+    }
+    const defend = mode === "defend";
+    if (defend) {
+      a.delay += this.rng.range(0.03, 0.09);
+      a.tyres!.F.tSurf += this.rng.range(2, 5);
+      a.tyres!.F.wear = Math.min(1, a.tyres!.F.wear + 0.0004);
+    }
+    const will = 1 / (1 + Math.exp(-(adv - this.passT - extra - (defend ? DEFEND_T : 0)) / PASS_W));
     const real = will > 0.1 && this.t - (c.lastTry ?? -99) > 6;
     // se tocan sobre todo cuando el intento es de verdad y los dos son de no levantar
     if (real || will > 0.5) {
-      const contactP = 0.004 * (0.5 + c.d.agresividad / 100) * (0.5 + a.d.agresividad / 120) * (lap1 ? 2.2 : 1) * (1 + Math.min(1, wAtt) * 1.5) * (1.4 - will);
+      const contactP = 0.004 * (0.5 + c.d.agresividad / 100) * (0.5 + a.d.agresividad / 120) * (lap1 ? 2.2 : 1) * (1 + Math.min(1, wAtt) * 1.5) * (1.4 - will) * (defend ? 1.4 : 1);
       if (this.rng.chance(contactP)) { c.lastTry = this.t; return this.contact(c, a); }
     }
     if (!this.rng.chance(Math.min(0.92, near * will))) {
@@ -1986,7 +2020,9 @@ export class Session {
     const straight = this.msTime(a, prev, this.water[prev.i]).t - this.msTime(c, prev, this.water[prev.i]).t;
     put(c, kc); put(a, ka);
     const adv = grip + PASS_KS * straight + (c.d.ataque - a.d.defensa) / 100;
-    const need = this.passT + extra;
+    const mode = this.fightMode(a);
+    const need = this.passT + extra + (mode === "defend" ? DEFEND_T : 0);
+    if (mode === "yield" && adv > 0) return { adv, need, p: 1 };
     return { adv, need, p: 1 / (1 + Math.exp(-(adv - need) / PASS_W)) };
   }
 
