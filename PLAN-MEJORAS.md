@@ -524,7 +524,10 @@ Nada de los bloques. Hecho después (noviembre de 2026):
 - **Abandonos:** unos 3 por carrera (`FAIL_LAPS` 540 con la fiabilidad del equipo a la 2,5, `CRASH_P` 0,11; tres de
   cada cuatro averías leves acaban en el garaje). El banco pide ahora de 2,8 a 4,5.
 - **Umbrales con la clasificación:** todos los circuitos recalibrados con `calibra.ts --clasif` (la parrilla sale de
-  correr la clasificación, como en el juego y en `realismo.ts`).
+  correr la clasificación, como en el juego y en `realismo.ts`). Banco final (25 circuitos × 6 carreras): coche de seguridad
+  52 %, virtual 50 %, bandera roja 7 %, abandonos 3,0, sanciones 1,0, gana el de la pole 35 %, adelantamientos 0,76
+  del objetivo: todo dentro de margen. Mónaco (0,43) y Hungaroring (0,58) siguen algo bajos: `calibra.ts` mide con una
+  sola semilla (101) y sin la primera vuelta; con más carreras (`--carreras=10`) afinaría.
 - **Mercado:** F2 de 2026, cantera, cláusulas y salarios (ver 3.4).
 
 - **Cambios de piloto a mitad de temporada:** lesiones, destituciones y los tuyos (ver 3.4).
