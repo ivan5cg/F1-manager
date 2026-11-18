@@ -9,7 +9,7 @@ import { type Setup, type SessionSetup, WET_SHIFT, SETUP_Q, SETUP_GRIP } from ".
 import { Compound, COMPOUNDS, DRY, HiddenTyre, TyreSet, setGrip, waterGrip, updateSet, axleGrip, warmBlankets, setWear, bestWaterGrip, WET, treadT, blisterT, grainT, driverRough } from "./tyres";
 import { WeatherState, stepWeather, rainAt, evaporation, waterStep, windNow } from "./weather";
 import { PU_WEAR, puLife, puPowerLoss, puHazard } from "./powerunit";
-import { Plan, planStrategy, aiDecide, aiModes, aiErs, TeamKnowledge, practiceProgram, qualiTick, pickSet, learnFromRun, aiRedFlagTyres, practiceWeather, wrongTyresForWater, teamForecast, ruleSatisfied } from "./strategy";
+import { Plan, planStrategy, aiDecide, aiModes, aiErs, TeamKnowledge, practiceProgram, qualiTick, pickSet, learnFromRun, aiRedFlagTyres, practiceWeather, wrongTyresForWater, teamForecast, ruleSatisfied, NOSE_TIME } from "./strategy";
 
 export const PUSH_NAMES = ["Conservar", "Gestionar", "Normal", "Atacar", "Al límite"];
 export const ENGINE_NAMES = ["Ahorro", "Normal", "Potencia"];
@@ -69,6 +69,9 @@ const FAIL_LAPS = 1700;
 const CRASH_P = 0.08;
 /** Probabilidad de pisar fuera de los límites en cada curva rápida de carrera (al ritmo normal). */
 const TL_P = 0.0011;
+/** Probabilidad de dañar el fondo en un bordillo por cada paso de altura por debajo de lo que pide el circuito. */
+const KERB_P = 0.00003;
+
 type IncidentKind = "crash" | "failure" | "debris";
 const ERS_POWER = [-3.5, 0, 2.0, 4.5];
 const ERS_NET = [1.1, 0, -0.9, -2.4];
@@ -260,6 +263,8 @@ export interface Car {
   penAdded?: number;
   /** Veces que se ha salido de los límites de pista en carrera. */
   tlStrikes?: number;
+  /** Morro en la próxima parada: auto (el equipo hace la cuenta), cambiarlo o dejarlo. */
+  nose?: "auto" | "yes" | "no";
 }
 
 export type FlagState = "green" | "vsc" | "sc" | "sc_in" | "red";
@@ -853,6 +858,24 @@ export class Session {
     }
   }
 
+  /** Daño en el fondo: menos carga hasta el final (no se arregla en una parada) y algo más de riesgo de avería. */
+  private damageFloor(c: Car, x: number, how: string) {
+    c.floor = Math.min(0.03, c.floor + x);
+    if (c.player) this.log({ kind: "radio", carId: c.id, text: `📻 Ingeniero: ${c.d.abrev}, daño en el fondo ${how}. Perdemos ~${(c.floor * 100 * this.secPerGrip).toFixed(1)} s por vuelta y no se puede arreglar en boxes.`, important: true });
+  }
+
+  /** Lo que cuesta por vuelta el alerón dañado (s). */
+  wingLoss(c: Car) { return c.wing * 100 * this.secPerGrip; }
+
+  /** ¿Se cambia el morro en esta parada? En automático, si lo que queda de carrera con el alerón cuesta más que el cambio. */
+  private changeNose(c: Car): boolean {
+    if (c.wing <= 0) return false;
+    const ch = c.player && !this.autoPlayers ? c.nose ?? "auto" : "auto";
+    if (ch === "yes") return true;
+    if (ch === "no") return false;
+    return this.wingLoss(c) * (this.laps - this.lapsDone(c)) > NOSE_TIME;
+  }
+
   /** Sanción de tiempo: se cumple en la próxima parada o se suma al final. */
   penalize(c: Car, secs: number, why: string) {
     if (c.loc === "out" || c.loc === "fin") return;
@@ -1366,6 +1389,11 @@ export class Session {
     if (isRaceKind(this.kind)) {
       this.overtakeCheck(c, m);
       if (c.loc === "track" && m.cornerSens > 0.5 && this.rng.chance(TL_P * PUSH_ERR[c.push] * (1 + (85 - c.d.regularidad) / 40))) this.trackLimits(c, m);
+      // con el coche más bajo de lo que pide el circuito, los bordillos castigan el fondo
+      if (c.loc === "track" && m.cornerSens > 0.5 && c.setup) {
+        const er = this.setupAt(c, m, this.water[m.i])!.er;
+        if (er < -0.5 && this.rng.chance(KERB_P * (-er - 0.5))) this.damageFloor(c, this.rng.range(0.002, 0.006), "en un bordillo");
+      }
     }
     // límites de pista en vuelta lanzada
     if (c.run?.phase === "push" && c.lapValid && m.cornerSens > 0.5 && this.rng.chance(0.001 * PUSH_ERR[c.push])) {
@@ -1838,6 +1866,7 @@ export class Session {
       c.lapValid = false;
       let dmg = "";
       if (this.rng.chance(0.15)) { c.wing += this.rng.range(0.008, 0.03); dmg = " y daña el alerón"; }
+      else if (this.rng.chance(0.25)) { this.damageFloor(c, this.rng.range(0.002, 0.008), "por la grava"); dmg = " y daña el fondo"; }
       // los que más tiempo pierden son los que han trompeado (solo cambia el texto y el dibujo)
       const spin = loss > 3.6;
       this.stats.offs++;
@@ -1981,6 +2010,7 @@ export class Session {
       c.wing += this.rng.range(0.01, 0.035);
       c.delay += this.rng.range(0.5, 2);
       this.log({ kind: "incident", text: `💢 Toque entre ${c.d.abrev} y ${a.d.abrev}: ${c.d.abrev} daña el alerón delantero`, carId: c.id, important: c.player || a.player, pause: c.player || a.player });
+      if (c.player) this.log({ kind: "radio", carId: c.id, text: `📻 Ingeniero: ${c.d.abrev}, alerón dañado: perdemos ~${this.wingLoss(c).toFixed(1)} s por vuelta. Cambiar el morro suma ${NOSE_TIME} s a la parada.`, important: true });
       if (this.rng.chance(0.3)) this.incident(c, `restos del alerón de ${c.d.abrev} en la pista`, 0.2, "debris");
     } else if (r < 0.62) {
       const victim = this.rng.chance(0.5) ? a : c;
@@ -1991,6 +2021,7 @@ export class Session {
       c.delay += this.rng.range(2, 5);
       a.delay += this.rng.range(2, 5);
       c.fx = { k: "off", t: this.t, loss: c.delay }; a.fx = { k: "off", t: this.t, loss: a.delay };
+      for (const x of [c, a]) if (this.rng.chance(0.35)) this.damageFloor(x, this.rng.range(0.003, 0.012), "en el toque");
       this.log({ kind: "incident", text: `💢 ${c.d.abrev} y ${a.d.abrev} se tocan y se van largos`, carId: c.id, important: c.player || a.player });
     } else {
       const victim = this.rng.chance(0.5) ? a : c;
@@ -2086,8 +2117,8 @@ export class Session {
     const exitAbs = lapBase + this.L + tr.pit.exit;
     let stationary = Math.max(1.9, this.rng.gauss(c.team.boxes, 0.12));
     if (this.rng.chance(0.05)) stationary += this.rng.range(1.5, 7);
-    const noseChange = c.wing > 0.012;
-    if (noseChange) stationary += 7.5;
+    const noseChange = this.changeNose(c);
+    if (noseChange) stationary += NOSE_TIME;
     // la sanción de tiempo se cumple parado, antes de que toquen el coche
     const pen = c.penS ?? 0;
     if (pen > 0) {
@@ -2119,7 +2150,7 @@ export class Session {
       p.changed = true;
       const set = c.e.sets.find((s) => s.id === p.setId)!;
       this.mount(c, set);
-      c.wing = 0;
+      if (p.noseChange) { c.wing = 0; c.nose = undefined; }
       c.slowPuncture = false;
       c.stops++;
       c.lastPitLap = this.lapsDone(c);
