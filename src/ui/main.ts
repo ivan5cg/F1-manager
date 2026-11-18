@@ -10,6 +10,7 @@ import { loadSeason, saveSeason, loadSession, clearSession, isParked, setActiveS
 import type { SessionSnapshot } from "../sim/snapshot";
 import { startScreen, seasonScreen, weekendScreen, resultsScreen, longRunsPanel, teamPickerScreen, Nav } from "./hubs";
 import { sessionView } from "./sessionView";
+import { scenariosScreen } from "./scenarios";
 import { SeasonState, driverStandings, teamStandings, pointsFor, RACE_POINTS, SPRINT_POINTS } from "../sim/season";
 import { podiumHtml, standingsHtml, animateCounts, shareSheet } from "./podium";
 import { Weekend } from "../sim/weekend";
@@ -158,6 +159,10 @@ const nav: Nav = {
     const wk = new Weekend(st, getTrack(st.circuitId), TEAMS, s.playerTeam);
     // salir a medias: la sesión queda guardada y se retoma con «Reanudar» en el fin de semana
     sessionView(wk, kind, (sess) => finishSession(wk, kind, sess), snap, () => nav.weekend());
+  },
+  scenarios() {
+    // al volver, la parrilla vuelve a ser la de la partida activa
+    scenariosScreen({ home: () => { useSeason(season); nav.home(); } });
   },
   simulate(kind: SessionKind) {
     const s = season!;

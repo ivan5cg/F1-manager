@@ -78,6 +78,13 @@ function setTeams(teams: TeamDef[]) {
 }
 setTeams(BASE_TEAMS);
 
+/** Modo escenario: la parrilla de aquel año sustituye a la de la partida mientras se juega (al salir, useSeason). */
+export function useGrid(teams: TeamDef[]) {
+  CUR = null;
+  GRID_CHANGES = [];
+  setTeams(teams);
+}
+
 /** Parrilla de una temporada tras `round` carreras. */
 export function gridOf(s: SeasonState | null, round = s?.round ?? 0): { teams: TeamDef[]; changes: GridChange[] } {
   if (!s) return { teams: BASE_TEAMS, changes: [] };

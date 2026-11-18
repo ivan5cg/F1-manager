@@ -1,6 +1,6 @@
 # Muro de Boxes
 
-Juego de estrategia de Fórmula 1 centrado en el **fin de semana de carrera**: eres el muro de boxes de tus dos pilotos en una temporada de 9 grandes premios. Dos modos:
+Juego de estrategia de Fórmula 1 centrado en el **fin de semana de carrera**: eres el muro de boxes de tus dos pilotos en una temporada de 9 grandes premios. Dos modos de temporada (y además el [modo escenario](#modo-escenario)):
 
 - **Equipo real:** eliges uno de los 11 equipos de la parrilla real de 2026 y lo llevas tal cual es.
 - **Crea tu equipo:** fichas pilotos, jefe de equipo, director técnico y motor con un techo de gasto de 100 millones, y gestionas las unidades de potencia durante el año (ver más abajo).
@@ -140,6 +140,46 @@ En la realidad, en 2026 el GP de Baréin no se corrió en Sakhir: se trasladó a
   - **Undercut:** si el de detrás para ya y tú respondes en la vuelta siguiente, ¿te pasa? Y al revés con el de delante.
   - **Huecos en meta** de las últimas 15 vueltas con el de delante, el de detrás y tu compañero. Tocando la gráfica se ven los de cada vuelta.
 - ⏸ ×1 ×2 ×4 ×8 ×16 ×64 (teclas 1-6) y ⏭ (simular hasta el final). La sesión se pausa sola en los momentos clave.
+
+## Modo escenario
+
+Desde el inicio, «Escenarios»: once carreras reales de 2010 a 2024 que empiezan **a mitad**, en el momento en que se
+decidieron, con los equipos, los pilotos y el reglamento de aquel año. Tienes un objetivo y tres estrellas (la primera
+es superarlo). Lo que pasa desde ahí lo decide la simulación y tú: la historia puede salir distinta. No toca tus
+partidas: no se guarda a medias y, al salir, vuelve la parrilla de 2026.
+
+| Año | Gran premio | Equipo | Empieza | Objetivo |
+|---|---|---|---|---|
+| 2010 | Abu Dabi | Ferrari | Vuelta 12, Alonso 4.º; Petrov y Rosberg ya han parado | Alonso campeón |
+| 2011 | Canadá | McLaren | Vuelta 40, Button último con la pista secándose | Button en los puntos (y ganar) |
+| 2012 | Malasia | Sauber | Vuelta 38, Pérez a 1,3 s de Alonso con intermedios | Pérez 2.º o mejor (y ganar) |
+| 2012 | Brasil | Ferrari | Fin de la vuelta 1, Alonso 5.º y Vettel último y tocado, con chubascos | Alonso campeón |
+| 2016 | Mónaco | Red Bull | Vuelta 30, Hamilton con lluvia extrema y Ricciardo detrás con intermedios | Ricciardo gana |
+| 2020 | Italia | AlphaTauri | Salida parada tras la bandera roja, Gasly 2.º | Gasly en el podio (y ganar) |
+| 2021 | Hungría | Alpine | Vuelta 4, Ocon líder y Hamilton último tras parar | Ocon en el podio (y ganar) |
+| 2021 | Abu Dabi | Mercedes | Vuelta 52; en la 53 sale el coche de seguridad | Hamilton campeón |
+| 2023 | Mónaco | Aston Martin | Vuelta 50, Alonso a 11 s de Verstappen y la lluvia a punto de llegar | Alonso gana |
+| 2023 | Países Bajos | Aston Martin | Vuelta 60, en seco, con un chaparrón a pocos minutos | Alonso en el podio (y ganar) |
+| 2024 | Miami | McLaren | Vuelta 27, Norris líder sin haber parado | Norris en el podio (y ganar) |
+
+- **Reglamento de la época:** 2010 sin DRS ni batería; 2011-2013 con KERS (la parte eléctrica pesa poco) y DRS; desde
+  2014, híbridos con DRS; coche de seguridad virtual desde 2015. El DRS usa el mismo segundo en el punto de detección
+  que el modo adelantamiento. Nunca hay repostaje (desde 2010 no lo hay). La interfaz quita lo que no existía.
+- **La situación de partida** se coloca directamente: orden, huecos (y doblados), neumático montado y gastado con el
+  mismo modelo de la carrera, compuestos ya usados, paradas, daños, agua en pista, bandera (coche de seguridad o salida
+  parada) y lo que ya ha abandonado.
+- **El tiempo tiene guion:** bandas de lluvia que llegan al circuito a la hora prevista (se ven venir en el radar); en
+  seco no nace nada por su cuenta.
+- **Lo que no depende de ti** también puede ir en el guion: el coche de seguridad de Miami 2024 sale en la vuelta 28 y
+  el de Abu Dabi 2021 en la 53. En Abu Dabi, Red Bull espera a ver qué haces: si paras a Hamilton, Verstappen se queda
+  fuera.
+- **Los niveles** de pilotos y coches de cada año son estimaciones en la misma escala que los de 2026, y los huecos y
+  la edad de los neumáticos, aproximados. Los compuestos de cada carrera se pasan a blando, medio y duro. Se corre en
+  el trazado actual de cada circuito (en Abu Dabi 2010 no era el mismo) y con el ritmo de los coches de 2026.
+- Las mejores estrellas de cada escenario se guardan en las preferencias del navegador.
+
+`npx tsx scripts/escenarios.ts [id] [veces] [--detalle]` monta cada escenario y lo corre hasta el final con el equipo
+llevando también a tus pilotos: dice cuántas veces se cumple cada objetivo «sin hacer nada».
 
 ## Crea tu equipo
 

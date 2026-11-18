@@ -126,7 +126,7 @@ export function createLobato(sess: Session, gp: string) {
         `¡Adelantamiento! ${sur(a)} se mete por dentro y pasa a ${sur(b)}. Ya es ${pos}º.`,
         `¡Qué valiente ${sur(a)}! Frena tardísimo y le quita la posición a ${sur(b)}.`,
         `${sur(a)} se lleva por delante... ¡la posición, eh!, a ${sur(b)}. ${pos}º ahora.`,
-        `¡Lo pasa! ${sur(a)} supera a ${sur(b)} con el modo adelantamiento.`,
+        sess.aidShort ? `¡Lo pasa! ${sur(a)} supera a ${sur(b)} con ${sess.aidShort === "DRS" ? "el DRS abierto" : "el modo adelantamiento"}.` : `¡Lo pasa! ${sur(a)} se tira por dentro y supera a ${sur(b)}.`,
       ]));
       return null;
     }
