@@ -1,7 +1,163 @@
 # Plan de mejoras · Muro de Boxes (sin online)
 
-Bloques 1 a 5. Cada tarea, un commit (o varios si es grande).
+Un solo fichero con todo: lo que queda por hacer (bloques 8 a 13, primero) y lo ya hecho (bloques 1 a 7, después, con
+sus notas para quien siga). Cada tarea, un commit (o varios si es grande).
 Tamaño: **P** pequeño (un PR corto), **M** medio, **G** grande (varios PR).
+
+## Lo que queda
+
+Ya hecho de lo que viene ahora (noviembre de 2026):
+- **Radio con personalidad y radios míticas** (fase 1 de la radio, `src/ui/voces.ts`).
+- **Inmersión visual:** monoplaza `.glb` propio con Draco (`public/assets/models`, guía en `docs/GUIA-BLENDER-COCHE.md`),
+  entornos HDRI (`public/assets/env`), texturas PBR de Poly Haven (`public/assets/tex`: asfalto, hierba, grava,
+  hormigón, fachada), banderas SVG (`public/assets/flags`) y brazos del piloto a bordo (`car3d.ts`).
+
+### Orden recomendado
+
+Primero lo que se nota en cada carrera; los gráficos se ven una vez y se olvidan antes.
+
+1. **8.1 Los pilotos responden a tus órdenes** (P): poco trabajo sobre `voces.ts`, ya hecho.
+2. **11.1 Safety Car `.glb`** y **12.1 Cascos con diseño propio** (P/M): lo que más luce de lo visual.
+3. **9.2 Titulares** y **9.3 La directiva te escribe** (P): salen casi gratis de `summary.ts` y `objectives.ts`.
+4. **10.1 Lobato por códigos** (P): quita fallos como el de «P15» tomado por «P1» y prepara 10.2.
+5. **12.2 Planos técnicos en Desarrollo** (M).
+6. **9.1 Rueda de prensa**, **8.2 Moral y desobediencia** y **8.3 Rivalidades** (M/G): lo más profundo, cambia la
+   simulación; medirlo con un script antes de darlo por bueno.
+7. **9.4 a 9.6 Ritual de la temporada**, **10.2 a 10.4** y **13 Gestión**.
+8. **11.2 a 11.4 Árboles, fachadas y mecánicos**: para pulir al final.
+
+### Presupuesto de assets (vale para los bloques 11 y 12)
+
+El juego es una PWA (`public/sw.js`) y se juega en el móvil: cada `.glb` y cada textura alarga la primera carga.
+- Hoy `public/assets` pesa unos 2,5 MB (texturas 1,7 MB, HDRI 0,5 MB, coche 0,1 MB). **Tope: 8 MB en total.**
+- Lo que solo sale en algunos circuitos (fachadas de urbanos, árboles de un bioma) se carga al abrir ese circuito, no
+  al arrancar, y el service worker lo guarda después de la primera vez.
+- Todo `.glb` con Draco y con lo hecho por código como respaldo si no carga (como el coche).
+- Medir con el medidor de rendimiento (1.3) y no subir llamadas ni triángulos de los escalones 0 y 1.
+- Solo assets con licencia libre (CC0, MIT) y apuntados en el README y en `public/assets/LICENCIA-*`. Nada de logos ni
+  marcas reales.
+
+---
+
+## Bloque 8 · Radio y vestuario
+
+### 8.1 Los pilotos responden a tus órdenes (P)
+- Al pedir que pare, que apriete, que ahorre o que deje pasar al compañero, contesta según su carácter: «Recibido»,
+  «¿Ahora? Las gomas van bien...», «¿En serio? Soy más rápido».
+- Solo texto: siempre obedece. Se engancha a las acciones del muro de `sessionView.ts`, igual que la fase 1 a los
+  sucesos con código.
+
+### 8.2 Moral y desobediencia (M/G) · cambia la simulación
+- **Moral** por piloto que dura toda la temporada: sube con buenos resultados y estrategias que le favorecen, y baja
+  con órdenes en contra o paradas que le hunden.
+- Con la moral baja y un carácter volcánico, **a veces no obedece**: no deja pasar o retrasa la parada una vuelta.
+- Afecta un poco a su ritmo y a si quiere renovar en el mercado.
+- Medir con un script (como `scripts/radio.ts`) cuántas veces desobedecen en muchas carreras. Azar con su propio `Rng`.
+
+### 8.3 Rivalidades que se recuerden (M) · cambia la simulación
+- Si dos se tocan o se adelantan mucho, nace una rivalidad que se arrastra de carrera a carrera (hoy `RIVALS` en
+  `session.ts` solo vive en una carrera). Se nota en lo agresivos que defienden.
+- Lobato la menciona («¡Otra vez estos dos!») y la radio también.
+
+## Bloque 9 · El fin de semana fuera de la pista
+
+### 9.1 Rueda de prensa (M)
+- Entre sesiones, una o dos preguntas con respuestas a elegir («¿Hay favoritismo hacia tu primer piloto?»). Cada
+  respuesta toca la moral de los pilotos (8.2) o la paciencia de la directiva. Mejor después de 8.2.
+
+### 9.2 Titulares tras la carrera (P)
+- Una portada de prensa ficticia («Golpe de estrategia en Silverstone», «El muro, otra vez en entredicho»), generada
+  desde el resumen de carrera que ya existe (`summary.ts`). Periódico inventado, sin cabeceras reales.
+
+### 9.3 La directiva te escribe (P)
+- Mensajes cortos del jefe tras cada gran premio, a partir de los objetivos (`objectives.ts`: «Esperaba el podio con
+  este coche»).
+
+### 9.4 Récords e hitos (P)
+- Primera victoria, primer podio del equipo, cien carreras, récord del circuito. Lobato y un rótulo lo celebran, y
+  queda en un historial.
+
+### 9.5 Previa de cada gran premio (P)
+- Una tarjeta con la historia del circuito, la clave estratégica («Mónaco: la clasificación lo es todo») y la
+  previsión, como el arranque de una retransmisión. Con la bandera del país (ya están en `public/assets/flags`).
+
+### 9.6 Gala de fin de temporada y sala de trofeos (M)
+- Gala: mejor adelantamiento, mejor estrategia, piloto del año, sacados de los datos de las carreras.
+- Sala de trofeos del equipo: las copas de cada victoria y los resultados de los escenarios y grandes premios sueltos.
+
+## Bloque 10 · Lobato y el ambiente
+
+### 10.1 Lobato por códigos (P)
+- Que reaccione al código de cada suceso (`RaceEvent.code`, como la radio) en vez de leer el texto con expresiones
+  regulares. Así se evitan fallos como el de «P15» tomado por «P1». Va antes que 10.2 y 10.3.
+
+### 10.2 Lobato con memoria (P/M)
+- Que recuerde lo que pasó antes («Recordemos que en Mónaco se le escapó por la estrategia», «es su tercera pole
+  seguida»). Usa el historial de 9.4.
+
+### 10.3 Un segundo comentarista (M)
+- Un experto técnico en el box que explique la estrategia («Están pensando en el undercut»). Personaje inventado, no
+  una persona real.
+
+### 10.4 Público y sonido según el circuito (P/M)
+- Más ruido cuando adelanta el piloto local, banderas en las gradas del 3D (texturas de `public/assets/flags`) y un
+  himno inventado en el podio (`audio.ts`, sin archivos).
+
+## Bloque 11 · Entorno y boxes en 3D
+
+Ojo: el Safety Car (`SC_GEO`, `scCar` en `map3d.ts`), los árboles (con LOD de 124/26 triángulos), las fachadas
+(`fachada.webp`) y los mecánicos con gatos y pistolas ya existen hechos por código. Aquí se trata de mejorarlos,
+no de crearlos. Respetar el presupuesto de assets.
+
+### 11.1 Safety Car `.glb` (P/M) · lo primero del bloque
+- Sale en la mitad de las carreras y la cámara lo sigue: ahora es lo que más desentona al lado del monoplaza nuevo.
+- Mismo camino que el coche: `.glb` con Draco en `public/assets/models` (en `manifest.json`), una versión ligera, y
+  `SC_GEO` de respaldo. Luces del techo que parpadeen (material emisivo) y el `scBar` de siempre. Coche genérico, sin
+  marca.
+
+### 11.2 Árboles por bioma (M)
+- Hoy los árboles son lo que más triángulos pone (~99 000 de cerca). Un modelo `.glb` por bioma (mediterráneo,
+  templado, tropical, desierto), no tres: con instancing y su nivel ligero, sin pasar de los 124 / 26 triángulos de
+  ahora. Si con ese tope no quedan mejor, mejor una textura con transparencia en la copa que más geometría.
+- El bioma, un campo nuevo en `data/circuitos/*.json`; cargar solo el del circuito.
+
+### 11.3 Fachadas urbanas (M)
+- Solo en los urbanos con `entorno` (Mónaco, Singapur, Bakú, Las Vegas): dos o tres texturas PBR más de fachada por
+  estilo (mediterránea, torre de cristal) y tejados y cornisas dentro de `B.near(fn)` para que solo se vean de cerca.
+- Cuidado con lo que ya se probó en 5.1 (ventanas en Mónaco y Singapur).
+
+### 11.4 Mecánicos `.glb` (G) · lo último
+- Ya están hechos por código y animados. Un `.glb` necesita esqueleto y animaciones para no quedar como estatuas, y se
+  ven unos segundos por parada. Antes que eso, mejorar los de ahora: monos y cascos con los colores del equipo.
+
+## Bloque 12 · Pantallas e identidad 2D
+
+### 12.1 Cascos con diseño propio (P/M)
+- `helmetSvg` (`src/ui/visual.ts`) ya pinta un casco de lado con el color del equipo y el número. Darle a cada piloto
+  un diseño propio (franjas, estrella, degradado, colores de su bandera) sacado de un hash de su id, para que no haga
+  falta dibujar ninguno a mano. Que el casco del 3D (`car3d.ts`) use los mismos colores.
+- Sale en muchas pantallas (`hubs.ts`, `podium.ts`, `sessionView.ts`, `grandPrix.ts`, `scenarios.ts`).
+
+### 12.2 Planos técnicos en Desarrollo y Reglajes (M)
+- Un SVG del coche visto desde arriba y de lado, como un plano, en el panel «Desarrollo del coche» (`hubs.ts`): se
+  ilumina la pieza que mejoras (alerón, suelo, motor, fiabilidad) y cuándo llega.
+- En «Reglajes», el mismo plano de lado con la altura y el ángulo del alerón que cambian con los valores.
+- `dev.png` (en la raíz) es la referencia de cómo se ve ahora esa pantalla.
+
+### 12.3 Escudos de equipo (P)
+- Escudos vectoriales **inventados** para los equipos creados en «crear equipo» (forma, colores e iniciales). Para los
+  equipos reales, nada de logos: sus colores y su nombre, como ahora.
+
+## Bloque 13 · Gestión
+
+- Cambiar de jefe de equipo, director técnico o motor entre temporadas en «crear equipo».
+- Que te despidan de verdad (hoy solo hay un aviso, `aviso` en 3.5).
+- Penalización en la parrilla de la carrera siguiente para el que provoca un toque y abandona; banderas azules
+  ignoradas; salida parada tras bandera roja con lluvia (ideas sin hacer del Bloque 7).
+
+---
+
+# Lo ya hecho
 
 ## Estado (noviembre de 2026)
 
@@ -518,9 +674,8 @@ dos coches seguidos, y la salida insegura enlazada con 7.2.
 Para cada tarea: azar solo con `this.rng`/`fork()`, volver a calibrar si cambian los adelantamientos (`calibra.ts`)
 y decir en el PR que cambia resultados.
 
-## Orden recomendado (lo que queda)
+## Hecho después de los bloques (noviembre de 2026)
 
-Nada de los bloques. Hecho después (noviembre de 2026):
 - **Abandonos:** unos 3 por carrera (`FAIL_LAPS` 540 con la fiabilidad del equipo a la 2,5, `CRASH_P` 0,11; tres de
   cada cuatro averías leves acaban en el garaje). El banco pide ahora de 2,8 a 4,5.
 - **Umbrales con la clasificación:** todos los circuitos recalibrados con `calibra.ts --clasif` (la parrilla sale de
@@ -532,4 +687,4 @@ Nada de los bloques. Hecho después (noviembre de 2026):
 
 - **Cambios de piloto a mitad de temporada:** lesiones, destituciones y los tuyos (ver 3.4).
 
-Lo que más se notaría ahora: cambiar de jefe de equipo, director técnico o motor entre temporadas en «crear equipo».
+Lo que queda, arriba del todo («Lo que queda»).
