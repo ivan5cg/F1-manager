@@ -164,7 +164,7 @@ export function createLobato(sess: Session, gp: string) {
       }
       return null;
     }
-    if (e.kind === "info" && quali && (m = t.match(/(\w+) ([\d:.]+) — P1/)) && e.carId !== undefined) {
+    if (e.kind === "info" && quali && (m = t.match(/(\w+) ([\d:.]+) — P1(?!\d)/)) && e.carId !== undefined) {
       const c = sess.carById(e.carId);
       return say(spanish(c) ? `¡${nm(c)} se pone primero! ¡Vamos! ${m[2]}.` : pick([`${sur(c)} se pone primero con un ${m[2]}.`, `¡Mejor tiempo para ${sur(c)}! ${m[2]}, la referencia.`]));
     }
