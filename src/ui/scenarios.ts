@@ -82,7 +82,7 @@ function briefing(nav: ScenarioNav, def: EscenarioDef) {
       ${mine.map(({ x }) => {
         const p = PILOTOS[x.k], num = t.pilotos.find(([k]) => k === x.k)![1];
         const where = x.fuera ? `<span class="redt">fuera: ${esc(x.fuera)}</span>` : `P${run.indexOf(x) + 1}${x.doblado ? ` · a ${x.doblado} v` : x.gap ? ` · +${x.gap.toFixed(1)} s` : ""} · ${tyreHtml(x.c ?? "M")} <span class="dim">${x.edad ?? 0} v</span>${x.fondo ? ` · <span class="yellow">fondo dañado</span>` : ""}`;
-        return `<div class="row" style="margin:4px 0">${helmetSvg(t.color, num, p.abrev, 26)}<b class="grow">${esc(p.nombre)}</b><span class="small">${where}</span></div>`;
+        return `<div class="row" style="margin:4px 0">${helmetSvg(t.color, num, p.abrev, 26, p.nombre)}<b class="grow">${esc(p.nombre)}</b><span class="small">${where}</span></div>`;
       }).join("")}
     </div></div>
     <div class="panel"><div class="hd"><span class="t">Objetivos</span></div><div class="bd">${def.objetivos.map(objHtml).join("")}</div></div>

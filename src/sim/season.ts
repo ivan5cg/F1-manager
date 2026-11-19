@@ -34,6 +34,8 @@ export interface RoundResult {
   sprintTable?: number[];
   summary?: RaceSummary;
   sprintSummary?: RaceSummary;
+  /** Lo que escribió la directiva tras la carrera. */
+  board?: string;
 }
 
 export interface SeasonState {

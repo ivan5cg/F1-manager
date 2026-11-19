@@ -19,6 +19,7 @@ import { SCENARIO_NAMES } from "../sim/weather";
 import { gpWhere } from "./grandPrix";
 import { GP_SLOT, hasSession, saveSeason, loadSeason, slotList, getActiveSlot, deleteSlot, exportSlot, checkImport, importInto, SLOTS, storageUse, installed, isSafariLike, markExported, exportDue, loadPrefs, savePrefs } from "./store";
 import { raceSummaryHtml, drawRaceSummary, photosHtml } from "./summary";
+import { headlines, portadaHtml, boardHtml } from "./prensa";
 
 export interface Nav {
   home(): void;
@@ -210,7 +211,7 @@ export function teamPickerScreen(nav: Nav, slot: number) {
       <div class="panel"><div class="bd" style="padding:0">
         ${BT.map((t) => `<div class="list-item" data-team="${t.id}" style="cursor:pointer;${pick === t.id ? "background:rgba(225,6,0,.22)" : ""}">
           <span class="teamdot" style="background:${t.color};height:40px;width:6px"></span>
-          <span class="hpair">${t.pilotos.map((p) => helmetSvg(t.color, p.numero, p.abrev, 30)).join("")}</span>
+          <span class="hpair">${t.pilotos.map((p) => helmetSvg(t.color, p.numero, p.abrev, 30, p.nombre)).join("")}</span>
           <div class="grow"><b class="up">${esc(t.nombre)}</b> <span class="dim small">· motor ${esc(t.motor)}</span><br><span class="small">${t.pilotos.map((p) => `#${p.numero} ${esc(p.nombre)}`).join(" · ")}</span>
             <div class="row small" style="gap:6px;margin-top:3px"><span class="lvl"><i style="width:${Math.round(12 + (88 * (t.agarre - gMin)) / (gMax - gMin))}%"></i></span><span class="dim">coche ${ord(rank("agarre", t))} · motor ${ord(rank("potencia", t))} · <span class="${rank("agarre", t) <= 4 ? "green" : rank("agarre", t) >= 8 ? "yellow" : ""}">${level(t)}</span></span></div></div>
           <span class="small" style="width:14px">${pick === t.id ? "✔" : ""}</span></div>`).join("")}
@@ -246,7 +247,7 @@ export function seasonScreen(nav: Nav, s: SeasonState) {
   app().innerHTML = `
   <div style="padding-bottom:16px">
     <div class="panel"><div class="hd"><span class="t">Temporada ${yearOf(s)} · ${esc(myTeam.nombre)}</span><button id="home">Inicio</button></div><div class="bd">
-      ${done ? `<div class="champ">${helmetSvg(champ!.team.color, champ!.d.numero, champ!.d.abrev, 72)}<div><span class="kick">Campeón del mundo</span><h1>🏆 ${esc(champ!.d.nombre)}</h1><div class="dim">${esc(champ!.team.nombre)} · ${ds[0].points} puntos</div></div></div>` : `<button class="red big-cta" id="go">${flagOf(ROUNDS_S[s.round])} ${s.weekend && s.weekend.round === s.round + 1 && s.weekend.next > 0 ? "Seguir en el" : "Ir al"} ${esc(CIRCUITS[ROUNDS_S[s.round]].gp)}</button>`}
+      ${done ? `<div class="champ">${helmetSvg(champ!.team.color, champ!.d.numero, champ!.d.abrev, 72, champ!.d.nombre)}<div><span class="kick">Campeón del mundo</span><h1>🏆 ${esc(champ!.d.nombre)}</h1><div class="dim">${esc(champ!.team.nombre)} · ${ds[0].points} puntos</div></div></div>` : `<button class="red big-cta" id="go">${flagOf(ROUNDS_S[s.round])} ${s.weekend && s.weekend.round === s.round + 1 && s.weekend.next > 0 ? "Seguir en el" : "Ir al"} ${esc(CIRCUITS[ROUNDS_S[s.round]].gp)}</button>`}
       ${s.rounds.length ? `<div class="small" style="margin-top:8px">${esc(myTeam.nombre)}: <b>${ord(myPos)}</b> de constructores con ${ts[myPos - 1].points} pts · ${mine.map(({ x, i }) => `${esc(DRIVERS[x.id].d.abrev)} ${ord(i + 1)} (${x.points})`).join(" · ")}</div>` : ""}
     </div></div>
     ${s.equipo ? myTeamPanel(s, TEAMS) : ""}
@@ -282,7 +283,7 @@ export function seasonScreen(nav: Nav, s: SeasonState) {
         const d = person(x.id);
         const was = prevPos.get(x.id);
         const mv = s.rounds.length > 1 && was !== undefined ? was - i : 0;
-        return `<tr class="${d.team.id === s.playerTeam ? "me" : ""}"><td class="mono"><span class="pos">${i + 1}</span></td><td class="hcell">${helmetSvg(d.team.color, d.d.numero, d.d.abrev, 24)}${esc(d.d.nombre)}${mv ? ` <span class="${mv > 0 ? "green" : "redt"} small">${mv > 0 ? "▲" : "▼"}${Math.abs(mv)}</span>` : ""}</td><td class="dim small">${esc(d.team.nombre)}</td><td class="mono" style="text-align:right"><b>${x.points}</b></td></tr>`;
+        return `<tr class="${d.team.id === s.playerTeam ? "me" : ""}"><td class="mono"><span class="pos">${i + 1}</span></td><td class="hcell">${helmetSvg(d.team.color, d.d.numero, d.d.abrev, 24, d.d.nombre)}${esc(d.d.nombre)}${mv ? ` <span class="${mv > 0 ? "green" : "redt"} small">${mv > 0 ? "▲" : "▼"}${Math.abs(mv)}</span>` : ""}</td><td class="dim small">${esc(d.team.nombre)}</td><td class="mono" style="text-align:right"><b>${x.points}</b></td></tr>`;
       }).join("")}</table>
     </div></div>
     <div class="panel"><div class="hd"><span class="t">Mundial de constructores</span></div><div class="bd cbars">
@@ -446,6 +447,7 @@ function roundSheet(r: RoundResult, playerTeam: string) {
   const block = (kind: SessionKind, rows: ResultRow[] | undefined, table?: number[], sum?: RaceSummary) => !rows ? "" :
     `<h2 style="margin-top:14px">${SESSION_NAMES[kind]}</h2>${resultsTable(kind, rows, playerTeam, table)}${sum ? `<div class="sumwrap" data-sumwrap="${kind}">${sum.photos?.length ? photosHtml(sum.photos) : ""}${raceSummaryHtml(sum)}</div>` : ""}`;
   const { el } = sheet(`<div class="row"><h1 class="grow" style="font-size:18px">${flagHtml(c.bandera)} ${esc(c.gp)}</h1><button data-close>Cerrar</button></div>
+    ${r.summary ? portadaHtml(headlines(r.summary, r.race, c.gp, playerTeam), "Edición del lunes") : ""}${r.board ? boardHtml(r.board, TEAMS.find((t) => t.id === playerTeam)?.nombre ?? "") : ""}
     ${block("RACE", r.race, r.raceTable, r.summary)}${block("SPRINT", r.sprint, r.sprintTable, r.sprintSummary)}${block("Q", r.q)}
     ${!r.summary ? `<div class="small dim" style="margin-top:8px">De esta carrera no se guardaron las gráficas (se corrió con una versión anterior).</div>` : ""}
     <button data-close style="width:100%;margin-top:10px">Cerrar</button>`);
@@ -768,7 +770,7 @@ export function mineHeadline(kind: SessionKind, rows: ResultRow[], playerTeam: s
     } else {
       detail = `${fmtLap(r.best)}${i > 0 && isFinite(r.best) && isFinite(rows[0].best) ? ` (+${(r.best - rows[0].best).toFixed(3)})` : ""} · ${r.laps} v`;
     }
-    return `<div class="row mineline"><span class="posbox mono">${i + 1}</span>${helmetSvg(d.team.color, d.d.numero, d.d.abrev, 30)}<b class="up">${esc(d.d.nombre)}</b><span class="grow small" style="text-align:right">${detail}</span></div>`;
+    return `<div class="row mineline"><span class="posbox mono">${i + 1}</span>${helmetSvg(d.team.color, d.d.numero, d.d.abrev, 30, d.d.nombre)}<b class="up">${esc(d.d.nombre)}</b><span class="grow small" style="text-align:right">${detail}</span></div>`;
   });
   return lines.length ? `<div class="panel"><div class="hd"><span class="t">Tus pilotos</span></div><div class="bd">${lines.join("")}</div></div>` : "";
 }

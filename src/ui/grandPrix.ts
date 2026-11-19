@@ -6,6 +6,7 @@ import { helmetSvg, circuitSvg } from "./visual";
 import { resultsTable, mineHeadline, type Nav } from "./hubs";
 import { podiumHtml } from "./podium";
 import { raceSummaryHtml, drawRaceSummary, photosHtml } from "./summary";
+import { headlines, portadaHtml } from "./prensa";
 import { newWeekend, type WeekendState } from "../sim/weekend";
 import type { SeasonState, GpWeather } from "../sim/season";
 import type { Scenario } from "../sim/weather";
@@ -76,7 +77,7 @@ export function gpSetupScreen(nav: Nav, onStart: (p: GpPick) => void, prev?: Par
       <div class="panel"><div class="hd"><span class="t">1 · Equipo</span>${t ? `<span class="small">${esc(t.nombre)}</span>` : ""}</div><div class="bd" style="padding:0">
         ${BASE_TEAMS.map((x) => `<div class="list-item" data-team="${x.id}" style="cursor:pointer;${team === x.id ? "background:rgba(225,6,0,.22)" : ""}">
           <span class="teamdot" style="background:${x.color};height:34px;width:6px"></span>
-          <span class="hpair">${x.pilotos.map((p) => helmetSvg(x.color, p.numero, p.abrev, 26)).join("")}</span>
+          <span class="hpair">${x.pilotos.map((p) => helmetSvg(x.color, p.numero, p.abrev, 26, p.nombre)).join("")}</span>
           <div class="grow"><b class="up">${esc(x.nombre)}</b><br><span class="small dim">${x.pilotos.map((p) => esc(p.nombre)).join(" · ")}</span></div>
           <span class="small" style="width:14px">${team === x.id ? "✔" : ""}</span></div>`).join("")}
       </div></div>
@@ -135,6 +136,7 @@ export function gpDoneScreen(nav: Nav, s: SeasonState, again: () => void, other:
     ${rows.length ? podiumHtml(rows, `Podio · ${short(c.gp)}`, s.playerTeam) : ""}
     ${rows.length ? mineHeadline("RACE", rows, s.playerTeam, r.raceTable) : ""}
     ${rows.length ? `<div class="panel"><div class="hd"><span class="t">🏁 Carrera</span></div><div class="bd" style="padding:0">${resultsTable("RACE", rows, s.playerTeam, r.raceTable)}</div></div>` : ""}
+    ${r.summary ? portadaHtml(headlines(r.summary, rows, c.gp, s.playerTeam), "Edición del lunes") : ""}
     ${r.summary ? `<div class="sumwrap" id="gpsum">${r.summary.photos?.length ? photosHtml(r.summary.photos) : ""}${raceSummaryHtml(r.summary)}</div>` : ""}
     ${r.sprint ? `<details class="fold panel"><summary>Sprint</summary>${resultsTable("SPRINT", r.sprint, s.playerTeam, r.sprintTable)}</details>` : ""}
     ${r.q ? `<details class="fold panel"><summary>Clasificación</summary>${resultsTable("Q", r.q, s.playerTeam)}</details>` : ""}

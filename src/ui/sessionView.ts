@@ -1456,7 +1456,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       const wear = t ? setWear(t) : 0;
       const col = t ? wearColor(t) : "#444";
       const tyreInfo = t ? `${tyreHtml(t.c)}<span class="small mono">${t.laps}v ${lifeLeft(t)}%</span>` : `<span class="small dim">${phaseName(c)}</span>`;
-      card.querySelector(".h")!.innerHTML = `<span class="posbox mono">${pos}</span><span class="hm">${helmetSvg(c.team.color, c.d.numero, c.d.abrev, 21)}</span><span class="nm"><span class="dn">${nameFlag(c)}</span><span class="ti">${tyreInfo}</span></span>`;
+      card.querySelector(".h")!.innerHTML = `<span class="posbox mono">${pos}</span><span class="hm">${helmetSvg(c.team.color, c.d.numero, c.d.abrev, 21, c.d.nombre)}</span><span class="nm"><span class="dn">${nameFlag(c)}</span><span class="ti">${tyreInfo}</span></span>`;
       const wi = card.querySelector<HTMLElement>(".wear i")!;
       wi.style.width = `${(1 - wear) * 100}%`; wi.style.background = col;
       const pl = card.querySelector<HTMLElement>(".planl");

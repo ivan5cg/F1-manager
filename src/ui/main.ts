@@ -2,7 +2,7 @@ import "./style.css";
 
 // tema visual (las fichas de color están en style.css)
 document.documentElement.dataset.tema = "grafito";
-import { TEAMS, CIRCUITS, ROUNDS, DRIVERS, getTrack, useSeason, devContext, CALENDARS, circuitOf } from "./data";
+import { TEAMS, CIRCUITS, ROUNDS, DRIVERS, getTrack, useSeason, devContext, CALENDARS, circuitOf, calendarOf } from "./data";
 import { applyMidSeason } from "./nextSeason";
 import { newDev } from "../sim/development";
 import { builderScreen, PLAYER_TEAM_ID } from "./teamBuilder";
@@ -18,6 +18,7 @@ import { Weekend } from "../sim/weekend";
 import { Session, SessionKind, SESSION_NAMES, isRaceKind } from "../sim/session";
 import { raceSummaryHtml, drawRaceSummary, buildSummary, photosHtml } from "./summary";
 import { takeLastPhotos } from "./photos";
+import { headlines, portadaHtml, boardMessage, boardHtml } from "./prensa";
 import { runToEnd } from "./simulate";
 import { esc, setBack } from "./common";
 
@@ -41,7 +42,7 @@ function finishSession(wk: Weekend, kind: SessionKind, sess: Session) {
   const gp = CIRCUITS[st.circuitId].gp;
   const sum = isRaceKind(kind) ? buildSummary(sess) : null;
   if (sum) st.summaries = { ...st.summaries, [kind]: sum };
-  let extra = "";
+  let extra = "", board = "";
   if (kind === "RACE" && s.gp) {
     // gran premio suelto: sin mundial ni cambios de pilotos
     s.rounds.push({ round: st.round, circuitId: st.circuitId, q: st.results.Q, sprint: st.results.SPRINT, race: st.results.RACE, raceTable: st.scoring?.RACE, sprintTable: st.scoring?.SPRINT, summary: st.summaries?.RACE, sprintSummary: st.summaries?.SPRINT });
@@ -60,7 +61,12 @@ function finishSession(wk: Weekend, kind: SessionKind, sess: Session) {
     const before = driverStandings({ ...s, rounds: s.rounds.slice(0, -1) }, DRIVERS.length);
     const ts = teamStandings(s, TEAMS);
     const tp = ts.findIndex((x) => x.team.id === s.playerTeam);
-    extra = standingsHtml(gp, before, all, s.playerTeam, `<div class="small dim" style="margin-top:6px">Constructores: ${esc(ts[tp].team.nombre)}, ${tp + 1}.º con ${ts[tp].points} pts.</div>`);
+    // (los cambios de pilotos van después del mundial; antes se perdían al pintar el mundial)
+    extra = standingsHtml(gp, before, all, s.playerTeam, `<div class="small dim" style="margin-top:6px">Constructores: ${esc(ts[tp].team.nombre)}, ${tp + 1}.º con ${ts[tp].points} pts.</div>`) + extra;
+    // la directiva escribe según los objetivos (con los pilotos que han corrido esta carrera)
+    const myIds = DRIVERS.filter((d) => d.team.id === s.playerTeam).map((d) => d.id);
+    const msg = boardMessage(s, TEAMS, myIds, calendarOf(s).length);
+    if (msg) { s.rounds[s.rounds.length - 1].board = msg; board = boardHtml(msg, ts[tp].team.nombre); }
     // la parrilla de la siguiente ronda (con lo que ha desarrollado cada equipo)
     useSeason(s);
   }
@@ -76,6 +82,8 @@ function finishSession(wk: Weekend, kind: SessionKind, sess: Session) {
     if (roomyStorage() && sum) sum.photos = pics;
   }
   if (sum) extra = raceSummaryHtml(sum) + extra;
+  // la portada del periódico del lunes
+  if (sum && kind === "RACE") extra = portadaHtml(headlines(sum, sess.results(), gp, s.playerTeam), "Edición del lunes") + board + extra;
   saveSeason(s);
   const rows = sess.results();
   // carrera o sprint: podio con confeti y la tarjeta para compartir
