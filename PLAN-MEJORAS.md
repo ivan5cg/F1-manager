@@ -30,6 +30,9 @@ Ya hecho de lo que viene ahora (noviembre de 2026):
   la ligera de lejos; las luces del techo (más una barra que las envuelve) parpadean con `scBar`. `SC_GEO` de
   respaldo. Página de prueba: `sc=1`. Se podría mejorar con un simplificador de verdad (meshoptimizer) si se
   permite instalarlo.
+- **Asfalto sin baldosas:** la textura de 2,7 m se repetía y se veía una cuadrícula. `asfalto.webp` aplanada (paso
+  alto sin costuras, `python3 scripts/assets.py --aplanar`) y el árido leído dos veces en el sombreador (la segunda
+  girada 37° y a otra escala) mezcladas con ruido (`ASF_R` en `map3d.ts`). Una lectura de textura más en la pista.
 - **Inmersión visual:** monoplaza `.glb` propio con Draco (`public/assets/models`, guía en `docs/GUIA-BLENDER-COCHE.md`),
   entornos HDRI (`public/assets/env`), texturas PBR de Poly Haven (`public/assets/tex`: asfalto, hierba, grava,
   hormigón, fachada), banderas SVG (`public/assets/flags`) y brazos del piloto a bordo (`car3d.ts`).

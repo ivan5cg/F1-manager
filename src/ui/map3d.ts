@@ -365,8 +365,14 @@ float cloudS = texture2D(uCloud, vXZ / (2.0 * uTexR) + 0.5).g;
 #if RMODE == 1 || RMODE == 2
   float a = abs(vU);
   float edge = smoothstep(0.80, 0.85, a + (vn(vec2(vV * 0.9, vU * 3.0)) - 0.5) * 0.035 * uDetail);
-  // asfalto: el árido de cerca, manchas de un par de metros y parches de distinto tono a lo lejos
-  vec4 d1 = texture2D(uDet, vXZ / 2.7), d2 = texture2D(uDet, vXZ / 23.0 + 0.31);
+  // asfalto: el árido de cerca, manchas de un par de metros y parches de distinto tono a lo lejos. El árido se lee dos
+  // veces (la segunda girada 37° y a otra escala) y se mezcla con un ruido suave: así no se ven las baldosas de 2,7 m.
+  const mat2 ASF_R = mat2(0.8, 0.6, -0.6, 0.8);
+  vec4 d1a = texture2D(uDet, vXZ / 2.7), d1b = texture2D(uDet, ASF_R * vXZ / 3.3 + 0.47), d2 = texture2D(uDet, vXZ / 23.0 + 0.31);
+  float dmix = smoothstep(0.25, 0.75, vn(vXZ * 0.13));
+  d1b.gb = vec2(0.5) + (d1b.gb - 0.5) * ASF_R; // su relieve, de vuelta a los ejes del mundo
+  vec4 d1 = mix(d1a, d1b, dmix);
+  d1.r = 0.5 + (d1.r - 0.5) * (1.0 + 0.6 * dmix * (1.0 - dmix)); // la mezcla aplana el contraste: se le devuelve
   float big = vn(vXZ * 0.06);
   col *= (0.55 + 0.9 * d1.r) * (0.72 + 0.56 * d2.r) * (0.84 + 0.32 * big);
   dn = (d1.gb - 0.5) * 1.5 + (d2.gb - 0.5) * 0.5;
