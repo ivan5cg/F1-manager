@@ -22,6 +22,7 @@ import { raceSummaryHtml, drawRaceSummary, photosHtml } from "./summary";
 import { headlines, portadaHtml, boardHtml } from "./prensa";
 import { moodPanel, syncMood, prensaHtml, wirePrensa } from "./vestuario";
 import { previaHtml, galaHtml, galaOf, trophyRoomHtml, hitosHtml } from "./ritual";
+import { devPlanoHtml, setupPlanoHtml } from "./planos";
 
 export interface Nav {
   home(): void;
@@ -365,6 +366,7 @@ function devPanel(s: SeasonState, team: TeamDef, cal: string[], done: boolean): 
   const parts = d.parts.slice().sort((a, b) => b.id - a.id);
   return `<div class="panel"><div class="hd"><span class="t">Desarrollo del coche</span><span class="small">Quedan <b>${String(left).replace(".", ",")} M</b> de ${d.budget} M</span></div><div class="bd">
     <div class="small" style="margin-bottom:6px">Pide piezas con el presupuesto de la temporada: las pequeñas y medianas tardan 2 rondas en llegar y las grandes, 3. Una de cada cuatro rinde menos de lo que esperaban tus ingenieros. ${s.equipo ? "Los rivales evolucionan según su director técnico." : `Los rivales mejoran por su cuenta (unos ${fmtS(DEV_RIVAL * devRounds(s, 1) * AERO_S).slice(1)} por ronda): si no pides piezas, te quedas atrás.`}</div>
+    ${devPlanoHtml(d, s.round, (r) => (r < cal.length ? CIRCUITS[cal[r]].gp.replace("Gran Premio de ", "GP de ").replace(/ \(.*\)$/, "") : "después de la última carrera"))}
     ${now.aero || now.motor || now.fiab ? `<div class="small" style="margin-bottom:6px">Ya en el coche: ${[now.aero ? `aerodinámica ${devGainText("aero", now.aero)}` : "", now.motor ? `motor ${devGainText("motor", now.motor)}` : "", now.fiab ? `fiabilidad ${devGainText("fiab", now.fiab)}` : ""].filter(Boolean).join(" · ")}.</div>` : ""}
     ${order}
     ${parts.length ? `<div class="devparts">${parts.map((p) => {
@@ -644,7 +646,7 @@ function setupPanel(wk: Weekend, team: TeamDef, mine: { id: number; name: string
     <div class="small" style="margin-bottom:6px">El ingeniero cree que el óptimo en seco está ${`en carga <b>${range(est.a)}</b> y en altura <b>${range(est.r)}</b>`} (${laps ? `${laps} vueltas de libres` : "sin vueltas de libres todavía"}; cuantas más, más afina). Con la pista mojada pide más carga (unos ${fmtStep(WET_SHIFT.a)}) y más altura (${fmtStep(WET_SHIFT.r)}).</div>
     ${mine.map(({ id, name }) => {
       const cur = carSetup(ss, id, team, true);
-      return `<div class="setrow"><b>${esc(name)}</b>${SETUP_ROWS.map(({ k, name: n, lo, hi }) => `<div class="setline"><span class="small dim">${n}</span><span class="small dim">${lo}</span><div class="seg">${steps.map((v) =>
+      return `<div class="setrow"><b>${esc(name)}</b><div class="pl-set">${setupPlanoHtml(cur.a, cur.r, `ps${id}`)}</div>${SETUP_ROWS.map(({ k, name: n, lo, hi }) => `<div class="setline"><span class="small dim">${n}</span><span class="small dim">${lo}</span><div class="seg">${steps.map((v) =>
         `<button data-su="${id}" data-k="${k}" data-v="${v}" class="${cur[k] === v ? "on" : ""}${prop[k] === v ? " prop" : ""}"${can ? "" : " disabled"}>${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(v)}</button>`).join("")}</div><span class="small dim">${hi}</span></div>`).join("")}</div>`;
     }).join("")}
     ${can && mine.some(({ id }) => ss.cars[id]) ? `<button id="suprop" style="width:100%">Volver a lo que propone el ingeniero</button>` : ""}

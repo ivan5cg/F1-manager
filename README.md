@@ -350,6 +350,24 @@ temporada (el gran premio suelto y los escenarios, como siempre).
 - `npx tsx scripts/hitos.ts [equipo] [carreras] [semilla]` corre varias carreras y vuelca los hitos de cada una, lo que
   sabría Lobato y la gala.
 
+**La retransmisión y el público** (`src/ui/experta.ts`, `audio.ts`, `map3d.ts`):
+- **Begoña Arrieta**, ingeniera de pista retirada (personaje inventado), comenta junto a Lobato en la caja de la
+  izquierda y en Radio (pestaña verde), con su propia voz. Donde él se emociona, ella explica: el undercut de verdad
+  (para con alguien a tiro delante que aún no ha parado) o la respuesta a la parada del de detrás, lo que cuesta
+  parar con coche de seguridad o virtual en ese circuito, el compuesto que monta cada uno de los de delante y si le
+  llega hasta el final, las estrategias cruzadas en cabeza, las gomas gastadas, el aire sucio y el cruce entre lluvia
+  y slicks; en clasificación, la pista que mejora y el tráfico. Habla menos que Lobato (unos 13 comentarios por
+  carrera). Se apaga en Ajustes. `npx tsx scripts/experta.ts [circuito] [semilla]` vuelca sus comentarios.
+- **El público de casa:** cuando adelanta un piloto del país del circuito, la grada ruge más (y si gana, el doble de
+  tiempo); en las gradas del 3D, más o menos la mitad de las banderas de los aficionados son la del país
+  (`public/assets/flags`). Al acabar la carrera suena un **himno inventado** del país del ganador: una fanfarria de
+  metales de unos 7 s generada al momento, distinta para cada país, que no imita ningún himno real.
+
+**Planos técnicos** (`src/ui/planos.ts`): en «Desarrollo del coche», el coche visto desde arriba y de lado como un
+plano, con la pieza montada en dorado (aerodinámica: alerones y fondo; motor: tapa del motor y escape; fiabilidad:
+pontones y caja de cambios) y la que está en fábrica en trazo discontinuo, con el gran premio en que llega. En
+«Reglajes», el perfil de cada piloto: el coche sube o baja con la altura y los alerones se inclinan con la carga.
+
 **Vuelta de formación.** Los neumáticos salen de las mantas a 70 °C y en la vuelta de formación cogen temperatura
 según el compuesto y el asfalto: el blando sale casi en su ventana y el duro, lejos; con frío o con agua, menos.
 

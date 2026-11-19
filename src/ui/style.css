@@ -285,6 +285,7 @@ button.yellow { background: var(--gl-gold); text-shadow: none; }
 /* comentarios de Antonio Lobato: pestaña azul de la tele y texto en cursiva */
 .rm.lob .tab { background: linear-gradient(180deg, #9cc8ff 0%, #3a8be8 46%, #1f66c4 54%, #2a74d6 100%); color: #fff; text-shadow: 0 1px 1px rgba(0, 0, 0, .5); }
 .rm.lob .bar { font-style: italic; }
+.rm.exp .tab { background: linear-gradient(180deg, #c8f0b4 0%, #3caa5a 46%, #2a8a44 54%, #34985a 100%); color: #fff; text-shadow: 0 1px 1px rgba(0, 0, 0, .5); }
 
 /* tiempo: pestañas a la izquierda y caja de hora local con icono */
 .wxbox .tab { clip-path: polygon(0 0, 100% 0, calc(100% - 5px) 100%, 0 100%); padding-right: 9px; text-align: left; }
@@ -1016,3 +1017,14 @@ html[data-tema] .dcard .cl i { color: #aab0ba; }
 .cups { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
 .cup { display: inline-flex; flex-direction: column; align-items: center; font-size: 22px; line-height: 1.1; min-width: 46px; }
 .cup small { font-size: 9px; opacity: .75; max-width: 60px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---------------------------------------------------------------- planos técnicos (12.2) */
+.planos { margin: 4px 0 8px; }
+.pl-v { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+@media (max-width: 520px) { .pl-v { grid-template-columns: 1fr; } }
+.plano { width: 100%; height: auto; display: block; border: 1px solid #2b5585; border-radius: 3px; }
+.pl-leg { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 4px; }
+.pl-k i { display: inline-block; width: 10px; height: 10px; margin-right: 4px; vertical-align: -1px; border: 1px solid #cfe3ff; }
+.pl-k.on i { background: rgba(255,216,74,.5); border-color: #ffd84a; }
+.pl-k.wait i { border: 1px dashed #7fd0ff; }
+.pl-set { max-width: 260px; margin: 4px 0; }
