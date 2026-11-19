@@ -1,0 +1,494 @@
+// La radio de los pilotos con personalidad: cada piloto tiene un carácter y habla a su manera cuando pasa algo
+// (adelanta, le adelantan, se toca, trompea, la parada sale mal, gana...). Y, de vez en cuando, una radio mítica de
+// verdad, si se da una situación parecida y el que la dijo está en pista. Solo interfaz, como Lobato: usa Math.random,
+// no el generador de la sesión, así que no cambia ningún resultado.
+//
+// Reacciona al código de cada suceso (RaceEvent.code), no al texto. Los mensajes en los que la simulación ya hace
+// hablar al piloto (gomas acabadas, plano) se reescriben con su voz; el resto son mensajes nuevos.
+import { Session, Car, RaceEvent, isRaceKind, isQualiKind } from "../sim/session";
+
+export type Caracter = "calmado" | "quejica" | "volcanico" | "cerebral" | "socarron" | "novato" | "autocritico";
+
+/** Carácter de cada piloto (por nombre: hay abreviaturas repetidas entre épocas). Los que no están, según su nombre. */
+const CARACTER: Record<string, Caracter> = {
+  "George Russell": "cerebral", "Kimi Antonelli": "novato", "Charles Leclerc": "volcanico", "Lewis Hamilton": "calmado",
+  "Max Verstappen": "quejica", "Isack Hadjar": "novato", "Lando Norris": "autocritico", "Oscar Piastri": "calmado",
+  "Liam Lawson": "volcanico", "Arvid Lindblad": "novato", "Pierre Gasly": "calmado", "Franco Colapinto": "novato",
+  "Esteban Ocon": "cerebral", "Oliver Bearman": "novato", "Nico Hülkenberg": "calmado", "Gabriel Bortoleto": "novato",
+  "Carlos Sainz": "cerebral", "Alexander Albon": "calmado", "Fernando Alonso": "socarron", "Lance Stroll": "quejica",
+  "Sergio Pérez": "calmado", "Valtteri Bottas": "calmado", "Yuki Tsunoda": "volcanico", "Kevin Magnussen": "volcanico",
+  "Zhou Guanyu": "calmado", "Logan Sargeant": "novato", "Nyck de Vries": "novato", "Mick Schumacher": "novato",
+  "Kimi Räikkönen": "socarron", "Sebastian Vettel": "cerebral", "Mark Webber": "socarron", "Jenson Button": "calmado",
+  "Felipe Massa": "calmado", "Michael Schumacher": "cerebral", "Nico Rosberg": "cerebral", "Robert Kubica": "calmado",
+  "Romain Grosjean": "volcanico", "Pastor Maldonado": "volcanico", "Daniel Ricciardo": "socarron", "Daniil Kvyat": "volcanico",
+  "Kamui Kobayashi": "volcanico", "Nikita Mazepin": "volcanico", "Nicholas Latifi": "calmado", "Antonio Giovinazzi": "calmado",
+  "Marcus Ericsson": "calmado", "Rubens Barrichello": "calmado", "Jaime Alguersuari": "novato", "Pedro de la Rosa": "cerebral",
+};
+const hash = (s: string) => { let h = 7; for (const ch of s) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return h; };
+export const caracterOf = (nombre: string): Caracter => CARACTER[nombre] ?? (["calmado", "cerebral", "novato"] as Caracter[])[hash(nombre) % 3];
+
+/** Cómo suena cada carácter en la voz sintetizada (y un poco distinto cada piloto, para reconocerlo). */
+const VOZ: Record<Caracter, { pitch: number; rate: number }> = {
+  calmado: { pitch: 0.95, rate: 0.98 }, quejica: { pitch: 1.05, rate: 1.1 }, volcanico: { pitch: 1.1, rate: 1.2 },
+  cerebral: { pitch: 1, rate: 1.02 }, socarron: { pitch: 0.88, rate: 1 }, novato: { pitch: 1.15, rate: 1.12 }, autocritico: { pitch: 1.05, rate: 1.08 },
+};
+export interface VoiceTone { pitch: number; rate: number }
+export function voiceOf(nombre: string, engineer = false): VoiceTone {
+  if (engineer) return { pitch: 0.8, rate: 1 };
+  const v = VOZ[caracterOf(nombre)], j = ((hash(nombre) % 11) - 5) / 100;
+  return { pitch: v.pitch + j, rate: v.rate - j / 2 };
+}
+
+type Situ = "gomas" | "plano" | "adelanta" | "adelantado" | "toque" | "trompo" | "dano" | "trafico" | "vueltaP1" | "eliminado" | "pole"
+  | "paradaLenta" | "paradaBuena" | "salePeor" | "estratega" | "aguaSi" | "aguaNo" | "abandono" | "gana" | "podio" | "puntos" | "sinPuntos"
+  | "limites" | "pinchazo" | "companero" | "rivalGana";
+
+// {r}: el rival (apellido); {p}: la posición; {s}: los segundos.
+const FRASES: Record<Situ, Partial<Record<Caracter, string[]>> & { _: string[] }> = {
+  gomas: {
+    _: ["Las gomas se están acabando, noto cómo caen."],
+    calmado: ["Las traseras empiezan a irse. Ya no hay mucho más ahí.", "Noto la caída de las gomas. Pensad en la parada."],
+    quejica: ["¡No tengo gomas! ¡Esto es imposible de conducir!", "¡Las ruedas están muertas! ¿A qué estamos esperando?"],
+    volcanico: ["¡Se acabaron las gomas! ¡Metedme dentro ya!", "¡Esto patina por todas partes! ¡Sin gomas, sin nada!"],
+    cerebral: ["Degradación alta, sobre todo atrás. Yo pararía en dos o tres vueltas.", "La delantera izquierda está en las lonas. Mirad la ventana de parada."],
+    socarron: ["Bueno, chicos, estas gomas ya han dado todo lo que tenían. Y un poco más.", "Si queréis seguir fuera, seguimos. Pero esto ya es un milagro."],
+    novato: ["Eh... las gomas están cayendo mucho, ¿es normal?", "Pierdo agarre en cada curva. ¿Qué hago?"],
+    autocritico: ["Las he gastado demasiado, lo siento. No queda nada.", "He sido muy agresivo con las gomas. Ya no van."],
+  },
+  plano: {
+    _: ["He bloqueado, tengo un plano en el delantero."],
+    quejica: ["¡Plano! ¡Vibra todo el coche, no veo nada!"],
+    volcanico: ["¡Mierda! ¡He bloqueado! ¡Plano en la delantera!"],
+    socarron: ["Un plano. Ahora el coche hace de masajeador."],
+    autocritico: ["He bloqueado como un idiota. Plano en la delantera."],
+    novato: ["He bloqueado... ahora vibra mucho, ¿aguanta?"],
+  },
+  adelanta: {
+    _: ["¡Hecho! Pasado {r}."],
+    calmado: ["Pasado {r}. Seguimos.", "Vale, {r} detrás. A por el siguiente."],
+    quejica: ["¡Por fin! Llevaba vueltas ahí atascado."],
+    volcanico: ["¡VAMOS! ¡Toma ya! ¡Fuera {r}!", "¡Siiií! ¡Por dentro y hasta luego!"],
+    cerebral: ["Pasado {r}. Ahora a cuidar las gomas un par de vueltas.", "Hecho. Dadme el hueco con el de delante."],
+    socarron: ["{r} se ha quedado mirando. Siguiente.", "Ha sido fácil. Demasiado fácil."],
+    novato: ["¡Le he pasado! ¡He pasado a {r}!", "¡Vamos! ¿Habéis visto eso?"],
+    autocritico: ["Pasado. Por fin hago algo bien hoy."],
+  },
+  adelantado: {
+    _: ["Me ha pasado {r}."],
+    calmado: ["{r} tenía más ritmo. No he podido hacer nada.", "Me pasa {r}. Seguimos en lo nuestro."],
+    quejica: ["¡Es que no tengo velocidad punta! ¡Me pasan como si nada!", "¿Qué le pasa a este coche? ¡Me pasa {r} en la recta!"],
+    volcanico: ["¡Me ha echado fuera! ¡Eso no es legal!", "¡Pero qué hace {r}! ¡Me ha cerrado la puerta en la cara!"],
+    cerebral: ["Pasa {r} con más goma. No vale la pena pelearlo, lo recuperamos luego.", "Le dejo ir. Si me defiendo, me como las gomas."],
+    socarron: ["Que pase, que pase. Ya nos veremos más adelante.", "Bueno, {r} tiene prisa. Ya se le acabarán las gomas."],
+    novato: ["Uf, me ha pasado {r}... lo siento, chicos.", "No he podido aguantarle, iba muy rápido."],
+    autocritico: ["He salido fatal de la curva. Culpa mía.", "Le he dejado la puerta abierta. Qué tonto."],
+  },
+  toque: {
+    _: ["¡Nos hemos tocado con {r}!"],
+    calmado: ["Contacto con {r}. Revisad los datos, creo que el coche está bien.", "Toque con {r}. Ha sido un incidente de carrera."],
+    quejica: ["¡Me ha dado {r}! ¡Que lo investiguen!", "¡Me ha sacado! ¡Mirad los daños!"],
+    volcanico: ["¡¿Pero qué hace?! ¡{r} es un idiota!", "¡Me ha tocado! ¡Me ha tocado! ¡Sanción, ya!"],
+    cerebral: ["Contacto con {r}. Mirad la presión de las ruedas y la carga del alerón.", "Toque. Decidme si hay daños antes de forzar."],
+    socarron: ["{r} ha decidido que la pista era suya. Interesante.", "Bueno, {r} y yo nos hemos saludado. Un poco fuerte."],
+    novato: ["¡Perdón, perdón! No le he visto.", "¿Estoy bien? ¿El coche está bien?"],
+    autocritico: ["Ha sido culpa mía. Lo siento, chicos.", "He frenado tarde. Mi error."],
+  },
+  trompo: {
+    _: ["Me he ido. Sigo."],
+    calmado: ["Me he ido. Sigo, todo bien.", "Se me ha ido la trasera. Seguimos."],
+    quejica: ["¡El coche es inconducible! ¡Se me ha ido sin avisar!", "¡No hay agarre! ¡Así no se puede!"],
+    volcanico: ["¡NOOO! ¡Mierda, mierda!", "¡Se me ha ido! ¡Qué rabia!"],
+    cerebral: ["Trompo. Creo que he pisado agua o goma. Seguimos.", "He perdido la trasera en la entrada. Ajusto el freno motor."],
+    socarron: ["He dado una vuelta para ver el paisaje. Ya sigo.", "Bonita vista desde la escapatoria."],
+    novato: ["¡Lo siento! ¡Lo siento mucho!", "Se me ha ido... ¿está bien el coche?"],
+    autocritico: ["Soy un desastre. Perdón, chicos.", "Error mío. Totalmente mío."],
+  },
+  dano: {
+    _: ["Noto el coche raro desde el golpe."],
+    quejica: ["¡El coche está destrozado! ¡No gira!"],
+    volcanico: ["¡Está roto! ¡Lo noto en cada curva!"],
+    cerebral: ["Pierdo carga en las rápidas. Dadme datos para compensar con el diferencial."],
+    socarron: ["El coche ha perdido algo de elegancia. Y de carga."],
+    novato: ["¿Puedo seguir así? Se nota mucho."],
+  },
+  trafico: {
+    _: ["¡Me ha estorbado {r}!"],
+    calmado: ["{r} estaba en medio. Vuelta perdida.", "Tráfico. Hay que buscar otro hueco."],
+    quejica: ["¡{r} en medio de la trazada! ¡Avisadle!", "¡Siempre me toca el tráfico! ¡Siempre!"],
+    volcanico: ["¡¿PERO QUÉ HACE?! ¡{r} me ha destrozado la vuelta!", "¡Que lo sancionen! ¡Me ha bloqueado!"],
+    cerebral: ["Tráfico de {r} en el último sector. Para la próxima, sacadme con más hueco.", "Vuelta comprometida. Os pido mejor sitio en la salida de boxes."],
+    socarron: ["{r} se ha parado a hacer turismo justo delante. Muy amable.", "Me encanta encontrarme a {r} de paseo en vuelta rápida."],
+    novato: ["Había un coche lento... ¿lo denuncio?"],
+    autocritico: ["Debería haber dejado más hueco. Error de los dos."],
+  },
+  vueltaP1: {
+    _: ["¡Buena vuelta!"],
+    calmado: ["Buena vuelta. Hay algo más en el sector 2."],
+    quejica: ["Primero, pero el coche sigue sin girar en lento."],
+    volcanico: ["¡VAMOS! ¡Qué vuelta, qué vuelta!"],
+    cerebral: ["Bien. Dejaría la carga como está para la siguiente."],
+    socarron: ["¿Primero? Pues no iba al límite."],
+    novato: ["¿Primero? ¿De verdad? ¡Increíble!"],
+    autocritico: ["Primero, pero he fallado en la última curva. Había más."],
+  },
+  eliminado: {
+    _: ["Fuera. No había más."],
+    calmado: ["No había más en el coche. Mañana remontamos.", "Fuera. Hemos sacado lo que había."],
+    quejica: ["¡Es que el coche no anda! ¡Así no se puede!", "Fuera otra vez. Tenemos que hablar del coche."],
+    volcanico: ["¡No! ¡Por nada! ¡Por nada!", "¡Qué rabia! ¡Fuera por milésimas!"],
+    cerebral: ["Fuera. Mañana con gomas nuevas a elegir, eso lo podemos aprovechar.", "Nos ha faltado en el sector 1. Revisemos el reglaje."],
+    socarron: ["Mañana hay que adelantar a mucha gente. Mejor, más diversión.", "Bueno, mañana saldremos con la cara lavada."],
+    novato: ["Lo siento mucho, chicos. No he hecho la vuelta.", "No he estado bien. Lo siento."],
+    autocritico: ["La culpa es mía, he fallado la vuelta. Lo siento.", "He sido muy lento. Pido perdón al equipo."],
+  },
+  pole: {
+    _: ["¡Pole! ¡Bien hecho, chicos!"],
+    calmado: ["Pole position. Gran trabajo de todo el equipo. Gracias."],
+    quejica: ["¡Pole! ¡Por fin el coche hace lo que le pido!"],
+    volcanico: ["¡POLE! ¡POLE! ¡VAMOS, VAMOS, VAMOS!"],
+    cerebral: ["Pole. Ahora a pensar en la salida y en la primera tanda."],
+    socarron: ["Pole. Ya os dije que había vuelta."],
+    novato: ["¿Pole? ¡No me lo creo! ¡Gracias, gracias!"],
+    autocritico: ["¡Pole! ¡No sé ni cómo! ¡Gracias, equipo!"],
+  },
+  paradaLenta: {
+    _: ["¿Qué ha pasado en la parada?"],
+    calmado: ["Parada lenta. Pasa. Lo recuperamos en pista."],
+    quejica: ["¡{s} segundos! ¿¡Qué ha pasado ahí!?", "¡Otra parada lenta! ¡Siempre igual!"],
+    volcanico: ["¡¿{s} segundos?! ¡Me habéis arruinado la carrera!", "¡NO! ¡¿Pero qué hacéis?!"],
+    cerebral: ["Parada lenta. Decidme dónde salgo y a quién tengo delante.", "Tranquilos, chicos. Dadme los huecos."],
+    socarron: ["¿Habéis parado a tomar un café?", "{s} segundos. He tenido tiempo de leer el periódico."],
+    novato: ["¿Ha ido algo mal? ¿Sigo?"],
+    autocritico: ["¿Me he pasado de la marca? Perdón si ha sido culpa mía."],
+  },
+  paradaBuena: {
+    _: ["¡Buena parada, chicos!"],
+    volcanico: ["¡Parada de lujo! ¡Sois los mejores!"],
+    socarron: ["Así me gusta. Ni me ha dado tiempo a saludar."],
+    cerebral: ["Gran parada. Ahora, dadme el objetivo de tiempo."],
+  },
+  salePeor: {
+    _: ["He salido en tráfico."],
+    quejica: ["¡He salido detrás de todo el mundo! ¿Para qué hemos parado?"],
+    volcanico: ["¡¿Qué estrategia es esta?! ¡He perdido posiciones!"],
+    cerebral: ["Salgo en tráfico. Necesito que el de delante pare pronto."],
+    socarron: ["Interesante estrategia. Muy interesante."],
+    novato: ["Hay mucha gente delante... ¿era así el plan?"],
+  },
+  estratega: {
+    _: ["Recibido."],
+    calmado: ["Recibido. Cuando digáis."],
+    quejica: ["¿Ahora? Las gomas aún aguantan... bueno, vosotros sabréis."],
+    volcanico: ["¡Decidíos ya! ¿Entro o no entro?"],
+    cerebral: ["De acuerdo, pero mirad el tráfico en la salida antes de llamarme."],
+    socarron: ["¿Seguro? Vale, vale. Vosotros sois los listos."],
+    novato: ["Vale, lo que digáis."],
+    autocritico: ["Ok. Siento haberme comido las gomas tan rápido."],
+  },
+  aguaSi: {
+    _: ["Sí, entro. Esto ya no va."],
+    calmado: ["Sí, entro. Ya no hay agarre."],
+    quejica: ["¡Sí! ¡Metedme ya! ¡Esto es una pista de hielo!"],
+    volcanico: ["¡Box, box, box! ¡Ya!"],
+    socarron: ["Me apetece cambiar de zapatos, sí."],
+    novato: ["Sí, sí, entro. Casi me voy fuera."],
+  },
+  aguaNo: {
+    _: ["Una vuelta más, aguanto."],
+    cerebral: ["Espera. En el sector 3 está casi seco. Una vuelta más.", "Aún no. Si para en dos minutos, ganamos mucho."],
+    socarron: ["Tranquilos, que he corrido con más agua que esto."],
+    calmado: ["Aguanto una vuelta. Os digo."],
+  },
+  abandono: {
+    _: ["Se acabó. Lo siento, chicos."],
+    calmado: ["Se acabó. Una pena. Gracias igualmente, chicos."],
+    quejica: ["¡No! ¡Otra vez! ¿Cuántas van ya?", "¡Siempre me pasa a mí!"],
+    volcanico: ["¡NOOOO! ¡No puede ser! ¡NO!", "¡Mierda! ¡Todo para nada!"],
+    cerebral: ["Fuera. Guardad todos los datos, quiero entender qué ha pasado."],
+    socarron: ["Bueno, hoy tocaba volver pronto al hotel.", "Se ha acabado la fiesta. Otra vez será."],
+    novato: ["¿Ya está? ¿No puedo seguir? Lo siento...", "Lo siento mucho, chicos..."],
+    autocritico: ["Lo siento, he fallado al equipo. De verdad.", "Os he dejado tirados. Perdón."],
+  },
+  gana: {
+    _: ["¡SÍIII! ¡GANAMOS! ¡GRACIAS, CHICOS!"],
+    calmado: ["¡Sí! Gracias, chicos. Victoria de todo el equipo. Enorme.", "¡Lo hemos hecho! Gracias a todos en la fábrica."],
+    quejica: ["¡SÍ! ¡Y eso que el coche no giraba! ¡VAMOS!"],
+    volcanico: ["¡SÍIIIII! ¡VAMOOOS! ¡QUÉ CARRERA, QUÉ CARRERA!", "¡AAAAAH! ¡GANAMOS! ¡GANAMOS!"],
+    cerebral: ["¡Victoria! Estrategia perfecta, chicos. Perfecta.", "¡Sí! Gran trabajo en el muro. Lo teníais todo calculado."],
+    socarron: ["¡Victoria! Os lo dije: paciencia.", "¡Vamos! Ya me estaba aburriendo de no ganar."],
+    novato: ["¡¿Hemos ganado?! ¡NO ME LO CREO! ¡GRACIAS!", "¡Es un sueño! ¡Es un sueño, chicos!"],
+    autocritico: ["¡GANAMOS! ¡No sé ni cómo! ¡Gracias, gracias!"],
+  },
+  podio: {
+    _: ["¡Podio! ¡Bien hecho, chicos!"],
+    calmado: ["Podio. Gran trabajo de todos.", "P{p}. Un buen resultado, chicos."],
+    quejica: ["Podio, pero con otra estrategia ganábamos."],
+    volcanico: ["¡PODIO! ¡VAMOS!"],
+    cerebral: ["P{p}. Buen resultado. Hablamos de la segunda tanda."],
+    socarron: ["Podio. No está mal para empezar."],
+    novato: ["¡Podio! ¡Mi primer podio contigo, equipo!", "¡Estamos en el podio! ¡Increíble!"],
+    autocritico: ["Podio, pero había más. Mis errores nos han costado."],
+  },
+  puntos: {
+    _: ["P{p}. Puntos."],
+    calmado: ["P{p}. Puntos importantes, chicos.", "Puntos. Seguimos sumando."],
+    quejica: ["P{p}. Con este coche no se puede más."],
+    volcanico: ["P{p}... quería más. Mucho más."],
+    cerebral: ["P{p}. Buena gestión. Aprendemos para la próxima."],
+    socarron: ["P{p}. Algo es algo."],
+    novato: ["¡Puntos! ¡Gracias, chicos!"],
+    autocritico: ["P{p}. Tengo que mejorar en la salida."],
+  },
+  sinPuntos: {
+    _: ["P{p}. No había más."],
+    calmado: ["P{p}. Un día difícil. Seguimos trabajando.", "No ha sido nuestro día."],
+    quejica: ["P{p}. ¿Qué queréis que haga con este coche?"],
+    volcanico: ["P{p}. Un desastre. Un desastre total."],
+    cerebral: ["P{p}. Tenemos que entender por qué nos faltaba ritmo."],
+    socarron: ["P{p}. Mañana nadie se acordará de esto."],
+    novato: ["P{p}... lo siento, chicos. Aprenderé."],
+    autocritico: ["P{p}. He estado mal. Lo siento."],
+  },
+  limites: {
+    _: ["¿Límites? Si no me he pasado."],
+    quejica: ["¡¿Límites?! ¡Si estaba dentro!"],
+    volcanico: ["¡Pero si no me he pasado! ¡Que lo miren otra vez!"],
+    socarron: ["Esa línea blanca se mueve, os lo juro."],
+    autocritico: ["Vale, vale. Lo tengo."],
+  },
+  pinchazo: {
+    _: ["¡Pinchazo! ¡Entro!"],
+    quejica: ["¡Pinchazo! ¡No me lo puedo creer!"],
+    volcanico: ["¡PINCHAZO! ¡NO, NO, NO!"],
+    calmado: ["Pinchazo. Entro, preparad las gomas."],
+    socarron: ["Tengo una rueda menos de las que me gustaría. Entro."],
+  },
+  companero: {
+    _: ["Soy más rápido que {r}. ¿Me dejáis pasar?"],
+    quejica: ["¡Estoy perdiendo el tiempo detrás de {r}! ¡Haced algo!"],
+    volcanico: ["¡Soy más rápido! ¡Que se aparte {r}!"],
+    cerebral: ["Tengo un segundo más de ritmo que {r}. Pensad en el equipo."],
+    socarron: ["{r} es muy simpático, pero me está haciendo perder la mañana."],
+    novato: ["Creo que soy un poco más rápido que {r}... ¿puedo intentarlo?"],
+    autocritico: ["Tengo ritmo, pero no quiero arriesgar con {r}. Decidme."],
+  },
+  rivalGana: {
+    _: ["¡Vamos! ¡Victoria, chicos!"],
+    volcanico: ["¡SÍIII! ¡VAMOOOS!"],
+    calmado: ["Gran trabajo, chicos. Gracias."],
+  },
+};
+
+/** Una radio mítica: quién la dijo (o su ingeniero), en qué situación y lo que dijo (traducido y en el original). */
+interface Mitica { id: string; quien: string; ing?: boolean; texto: string; orig: string; donde: string }
+const M: Record<string, Mitica> = {
+  gp2: { id: "gp2", quien: "Fernando Alonso", texto: "¡Motor de GP2! ¡GP2! ¡Aaagh!", orig: "GP2 engine! GP2! Argh!", donde: "Suzuka 2015" },
+  idiota: { id: "idiota", quien: "Fernando Alonso", texto: "¡Qué idiota! Cerrando la puerta por fuera. Este solo sabe pilotar y salir primero.", orig: "What an idiot, closing the door from the outside. We only know how to drive and start in first.", donde: "Spa 2022" },
+  dejame: { id: "dejame", quien: "Kimi Räikkönen", texto: "Déjame en paz. Sé lo que hago.", orig: "Just leave me alone, I know what I'm doing.", donde: "Abu Dabi 2012" },
+  todoElRato: { id: "todoElRato", quien: "Kimi Räikkönen", texto: "¡Sí, sí, sí, sí! ¡Lo estoy haciendo todo el rato!", orig: "Yes, yes, yes, yes! I'm doing that all the time!", donde: "Abu Dabi 2012" },
+  masRapido: { id: "masRapido", quien: "Felipe Massa", ing: true, texto: "Felipe, Fernando es más rápido que tú. ¿Lo has entendido?", orig: "Fernando is faster than you. Can you confirm you understood that message?", donde: "Hockenheim 2010" },
+  buenChico: { id: "buenChico", quien: "Felipe Massa", ing: true, texto: "Buen chico. Aguanta ahí. Lo siento.", orig: "Good lad. Just stick with it now. Sorry.", donde: "Hockenheim 2010" },
+  bono: { id: "bono", quien: "Lewis Hamilton", texto: "¡Bono, mis neumáticos están acabados!", orig: "Bono, my tyres are gone!", donde: "un clásico de Hamilton" },
+  vamosLewis: { id: "vamosLewis", quien: "Lewis Hamilton", ing: true, texto: "¡Vamos, Lewis! ¡Vamos!", orig: "Get in there, Lewis!", donde: "un clásico de Bono" },
+  manipulado: { id: "manipulado", quien: "Lewis Hamilton", texto: "Esto ha sido manipulado, tío.", orig: "This has been manipulated, man.", donde: "Abu Dabi 2021" },
+  tututu: { id: "tututu", quien: "Max Verstappen", ing: true, texto: "♪ Tu-tu-tu-du, Max Verstappen ♪", orig: "Tu-tu-tu-du, Max Verstappen!", donde: "Gianpiero Lambiase" },
+  precioso: { id: "precioso", quien: "Max Verstappen", texto: "Simplemente precioso.", orig: "Simply lovely.", donde: "un clásico de Verstappen" },
+  estupido: { id: "estupido", quien: "Charles Leclerc", texto: "¡Soy estúpido! ¡Soy estúpido!", orig: "I am stupid. I am stupid.", donde: "Bakú 2019" },
+  porQue: { id: "porQue", quien: "Charles Leclerc", texto: "¿Por qué? ¿¡POR QUÉ!?", orig: "Whyyy?!", donde: "Mónaco 2022" },
+  noNo: { id: "noNo", quien: "Lando Norris", texto: "¡No! ¡No, no, no! ¡Me quedo fuera!", orig: "No! No, no!", donde: "Sochi 2021" },
+  smooth: { id: "smooth", quien: "Carlos Sainz", texto: "♪ Smooth operatoooor... ♪", orig: "Smooth operator", donde: "su canción" },
+  quienCorresponda: { id: "quienCorresponda", quien: "Valtteri Bottas", texto: "A quien corresponda: que os den.", orig: "To whom it may concern: f*** you.", donde: "Australia 2019" },
+  numeroDos: { id: "numeroDos", quien: "Mark Webber", texto: "No está mal para un piloto número dos.", orig: "Not bad for a number two driver.", donde: "Silverstone 2010" },
+};
+
+export interface Linea { carId: number; text: string; important: boolean; mitica?: string; tone: VoiceTone }
+
+const pick = <T>(a: T[]): T => a[Math.floor(Math.random() * a.length)];
+const sur = (c: Car) => c.d.nombre.split(" ").slice(1).join(" ") || c.d.nombre;
+const first = (c: Car) => c.d.nombre.split(" ")[0];
+
+export function createVoces(sess: Session) {
+  const race = isRaceKind(sess.kind), quali = isQualiKind(sess.kind);
+  const lastBy = new Map<number, number>(); // segundos de sesión de la última frase de cada piloto
+  let lastReal = -1e9;
+  const used = new Set<string>(); // radios míticas ya dichas en esta sesión
+  const lapOrder: number[][] = []; // orden (ids) al empezar cada vuelta del líder
+  let lastLap = 0;
+  const behindLaps = new Map<number, number>(); // vueltas seguidas pegado a su compañero
+  const lastPos = new Map<number, number>(); // última posición en pista de tus pilotos (para la parada)
+  const byName = (n: string) => sess.cars.find((c) => c.d.nombre === n);
+  const saidBy = new Set<string>(); // frases ya dichas por cada piloto (para no repetirlas) y situaciones de una vez
+
+  /** Una frase de un piloto: no más de una cada ~40 s de sesión por piloto, ni dos casi a la vez (salvo lo gordo). */
+  function line(c: Car, situ: Situ, vars: Record<string, string | number> = {}, big = false): Linea | null {
+    const now = performance.now();
+    if (!big && (sess.t - (lastBy.get(c.id) ?? -1e9) < 40 || now - lastReal < 2500)) return null;
+    const bank = FRASES[situ];
+    const all = bank[caracterOf(c.d.nombre)] ?? bank._;
+    // sin repetir frase en la sesión mientras haya otras; la vuelta buena en clasificación, una vez
+    if (situ === "vueltaP1" && saidBy.has(`${c.id}|${situ}`)) return null;
+    const fresh = all.filter((t) => !saidBy.has(`${c.id}|${t}`));
+    if (!fresh.length && !big) return null;
+    const raw = pick(fresh.length ? fresh : all);
+    saidBy.add(`${c.id}|${raw}`); saidBy.add(`${c.id}|${situ}`);
+    let text = raw;
+    for (const [k, v] of Object.entries(vars)) text = text.split(`{${k}}`).join(String(v));
+    lastBy.set(c.id, sess.t); lastReal = now;
+    return { carId: c.id, text: `📻 ${c.d.abrev}: "${text}"`, important: big, tone: voiceOf(c.d.nombre) };
+  }
+  /** Una radio mítica, si su piloto está en pista, no se ha dicho ya y toca (prob). */
+  function mitica(id: string, prob: number): Linea | null {
+    const m = M[id];
+    const c = byName(m.quien);
+    if (!c || used.has(id) || Math.random() > prob) return null;
+    used.add(id);
+    lastBy.set(c.id, sess.t); lastReal = performance.now();
+    const who = m.ing ? `Ingeniero de ${first(c)}` : c.d.abrev;
+    return { carId: c.id, text: `⭐ ${who}: "${m.texto}"`, important: true, mitica: `«${m.orig}» · ${m.donde}`, tone: voiceOf(c.d.nombre, m.ing) };
+  }
+  const is = (c: Car | undefined, nombre: string) => !!c && c.d.nombre === nombre;
+  const mine = () => sess.cars.filter((c) => c.player);
+
+  /** Reacciona a un suceso: puede reescribir lo que dice el piloto (replace) y añadir frases. */
+  function onEvent(e: RaceEvent): { replace?: Linea; lines: Linea[] } {
+    const out: Linea[] = [];
+    const push = (l: Linea | null) => { if (l) out.push(l); };
+    if (e.voz || !e.code) {
+      // la bandera a cuadros de la carrera: el ganador, si es un rival, a veces se oye en la tele
+      if (race && e.kind === "control" && /^🏁 Bandera a cuadros$/.test(e.text)) {
+        const w = sess.order()[0];
+        if (w && !w.player) {
+          push(is(w, "Max Verstappen") ? mitica("tututu", 0.6) : is(w, "Lewis Hamilton") ? mitica("vamosLewis", 0.5) : is(w, "Valtteri Bottas") ? mitica("quienCorresponda", 0.6)
+            : is(w, "Mark Webber") ? mitica("numeroDos", 0.8) : is(w, "Carlos Sainz") ? mitica("smooth", 0.7) : null);
+          if (!out.length && Math.random() < 0.35) push(line(w, "rivalGana", {}, true));
+        }
+      }
+      return { lines: out };
+    }
+    const c = e.carId !== undefined ? sess.carById(e.carId) : undefined;
+    const o = e.other !== undefined ? sess.carById(e.other) : undefined;
+    const r = o ? sur(o) : "";
+    let replace: Linea | null = null;
+    switch (e.code) {
+      case "gomas":
+        if (c) replace = (is(c, "Lewis Hamilton") && mitica("bono", 0.6)) || line(c, "gomas", {}, true);
+        break;
+      case "plano":
+        if (c) replace = line(c, "plano", {}, true);
+        break;
+      case "adelanta":
+        if (!c || !o || !race) break;
+        if (is(o, "Fernando Alonso") && o.team.potencia < c.team.potencia) push(mitica("gp2", o.player ? 0.35 : 0.2));
+        if (is(c, "Fernando Alonso") && is(o, "Felipe Massa") && used.has("masRapido")) push(mitica("buenChico", 0.9));
+        if (out.length) break;
+        if (c.player) push(Math.random() < ((e.n ?? 9) <= 3 ? 0.7 : 0.3) ? line(c, "adelanta", { r }) : null);
+        else if (o.player) push(Math.random() < 0.35 ? line(o, "adelantado", { r: sur(c) }) : null);
+        break;
+      case "toque": {
+        if (!c || !o) break;
+        const pair = [c, o];
+        if (pair.some((x) => is(x, "Fernando Alonso")) && pair.some((x) => is(x, "Lewis Hamilton"))) push(mitica("idiota", 0.8));
+        if (out.length) break;
+        const me = c.player ? c : o.player ? o : null;
+        if (me) push(line(me, "toque", { r: sur(me === c ? o : c) }, true));
+        break;
+      }
+      case "trompo": case "salida":
+        if (!c) break;
+        if (quali && is(c, "Charles Leclerc")) push(mitica("estupido", 0.7));
+        if (!out.length && c.player && Math.random() < 0.6) push(line(c, "trompo"));
+        break;
+      case "fondo": case "alerón":
+        if (c?.player && Math.random() < 0.6) push(line(c, "dano"));
+        break;
+      case "trafico":
+        if (c?.player && Math.random() < 0.8) push(line(c, "trafico", { r }));
+        break;
+      case "vuelta":
+        if (c?.player && quali && e.n === 1 && Math.random() < 0.5) push(line(c, "vueltaP1"));
+        break;
+      case "eliminado":
+        if (c?.player && Math.random() < 0.8) push(line(c, "eliminado", {}, true));
+        break;
+      case "pole":
+        if (c?.player) push(line(c, "pole", {}, true));
+        break;
+      case "parada":
+        if (!c?.player || e.n === undefined) break;
+        if (e.n > 4) push((is(c, "Max Verstappen") && mitica("precioso", 0.7)) || line(c, "paradaLenta", { s: e.n.toFixed(1).replace(".", ",") }, true));
+        else if (e.n < 2.3 && Math.random() < 0.35) push(line(c, "paradaBuena"));
+        break;
+      case "sale": {
+        if (!c?.player || e.n === undefined) break;
+        const before = lastPos.get(c.id);
+        if (before === undefined) break;
+        // perder el liderato en la parada (Mónaco 2022) o salir muy por detrás de lo normal
+        if (before === 1 && e.n >= 3 && is(c, "Charles Leclerc")) push(mitica("porQue", 0.7));
+        else if (e.n - before >= 6 && Math.random() < 0.5) push(line(c, "salePeor"));
+        break;
+      }
+      case "estratega":
+        if (!c) break;
+        if (is(c, "Kimi Räikkönen")) push(mitica("dejame", 0.6));
+        if (!out.length && Math.random() < 0.3) push(line(c, "estratega"));
+        break;
+      case "aguaPregunta":
+        if (!c) break;
+        if (is(c, "Lando Norris") && /mojada/.test(e.text)) push(mitica("noNo", 0.7));
+        if (!out.length && Math.random() < 0.6) push(line(c, /mojada/.test(e.text) && Math.random() < 0.7 ? "aguaSi" : "aguaNo"));
+        break;
+      case "abandono":
+        if (c?.player) push(line(c, "abandono", {}, true));
+        break;
+      case "limites":
+        if (!c) break;
+        if (is(c, "Kimi Räikkönen")) push(mitica("todoElRato", 0.6));
+        if (!out.length && Math.random() < 0.25) push(line(c, "limites"));
+        break;
+      case "pinchazo":
+        if (c?.player && Math.random() < 0.8) push(line(c, "pinchazo", {}, true));
+        break;
+      case "meta": {
+        if (!c?.player || !race || e.n === undefined) break;
+        const p = e.n;
+        if (p === 1) {
+          push(is(c, "Max Verstappen") ? mitica("tututu", 0.6) : is(c, "Lewis Hamilton") ? mitica("vamosLewis", 0.5) : is(c, "Valtteri Bottas") ? mitica("quienCorresponda", 0.6)
+            : is(c, "Mark Webber") ? mitica("numeroDos", 0.9) : null);
+        }
+        if (p <= 3 && is(c, "Carlos Sainz")) push(mitica("smooth", p === 1 ? 0.8 : 0.4));
+        // perder la carrera en las últimas vueltas
+        const late = lapOrder[Math.max(0, lapOrder.length - 3)];
+        if (p === 2 && is(c, "Lewis Hamilton") && late?.[0] === c.id) push(mitica("manipulado", 0.9));
+        if (!out.length) push(line(c, p === 1 ? "gana" : p <= 3 ? "podio" : p <= 10 ? "puntos" : "sinPuntos", { p }, true));
+        break;
+      }
+    }
+    return { replace: replace ?? undefined, lines: out };
+  }
+
+  /** Cada fotograma: posiciones para la parada y, una vez por vuelta, el piloto atascado detrás de su compañero. */
+  function tick(): Linea[] {
+    if (!race || sess.finished) return [];
+    const ord = sess.order();
+    for (const c of mine()) if (c.loc === "track") lastPos.set(c.id, ord.indexOf(c) + 1);
+    const lap = sess.leaderLap + 1;
+    if (lap === lastLap) return [];
+    lastLap = lap;
+    lapOrder.push(ord.map((c) => c.id));
+    const out: Linea[] = [];
+    const me = mine();
+    if (me.length < 2 || lap < 4) return out;
+    for (const a of me) {
+      const b = me.find((x) => x !== a && x.id === a.aheadId);
+      const stuck = !!b && a.loc === "track" && b.loc === "track" && a.followGap > 0 && a.followGap < 1.0;
+      const n = stuck ? (behindLaps.get(a.id) ?? 0) + 1 : 0;
+      behindLaps.set(a.id, n);
+      if (!b || n < 3) continue;
+      if (is(a, "Fernando Alonso") && is(b, "Felipe Massa")) { const l = mitica("masRapido", 0.8); if (l) { out.push(l); continue; } }
+      if (n % 6 === 3) { const l = line(a, "companero", { r: sur(b) }); if (l) out.push(l); }
+    }
+    return out;
+  }
+
+  return { onEvent, tick };
+}

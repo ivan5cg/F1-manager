@@ -16,6 +16,7 @@ import { Rng } from "../sim/rng";
 import { snapshotSession, SessionSnapshot } from "../sim/snapshot";
 import { stopOptions, undercut, gapHistory, pitLoss, StopOption } from "../sim/pitwall";
 import { createLobato } from "./lobato";
+import { createVoces, voiceOf } from "./voces";
 import { createAudio, type CarHeard, type PitStopHeard } from "./audio";
 import { saveSession, loadPrefs, savePrefs, setParked, PausePrefs, SPEEDS } from "./store";
 
@@ -79,6 +80,12 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   /** Antonio Lobato comenta la sesión (solo interfaz: no cambia nada de la simulación). */
   const lob = createLobato(sess, def.gp ?? def.nombre);
   const LOB_TAB = "Antonio Lobato";
+  /** La radio de los pilotos, cada uno con su carácter, y las radios míticas (solo interfaz). */
+  const voces = createVoces(sess);
+  /** Pestaña de un mensaje: las frases de los pilotos, con su abreviatura; las míticas, con estrella. */
+  const tabOf = (e: RaceEvent) => (e.voz && e.carId !== undefined ? `${e.mitica ? "Radio mítica" : "Radio"} · ${sess.carById(e.carId).d.abrev}` : TAB[e.kind]);
+  /** El original de una radio mítica, debajo. */
+  const withOrig = (e: RaceEvent) => e.text + (e.mitica ? `<br><span class="dim small">${esc(e.mitica)}</span>` : "");
   let lastCtlReal = -1e9; // cuándo llegó el último aviso de dirección de carrera o meteo (ms reales)
   const rmHtml = (tab: string, text: string, cls = "") => `<div class="rm ${cls}"><span class="tab">${tab}</span><div class="bar">${clean(text)}</div></div>`;
 
@@ -234,6 +241,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   function hideToast() { pend.left = pend.right = null; temp.left = temp.right = null; }
   const isMineEv = (e: RaceEvent) => {
     if (e.carId !== undefined && sess.carById(e.carId).player) return true;
+    if (e.voz && e.mitica) return true; // las radios míticas de los rivales también se ven
     return mine().some((c) => new RegExp(`\\b${c.d.abrev}\\b`).test(e.text));
   };
   const noteHtml = (n: Note, hint: boolean) => `<div class="rm ${n.cls}${hint ? " pend" : ""}"><div class="row" style="gap:0"><span class="tab">${n.tab}</span>${hint ? `<span class="hint">▶ Seguir</span>` : ""}</div><div class="bar">${clean(n.html)}</div></div>`;
@@ -264,7 +272,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     for (const e of evs) {
       if (pend.right && e.text === pend.right.html) continue;
       const age = race ? Math.max(0, sess.leaderLap + 1 - e.lap) : 0;
-      items.push(rmHtml(TAB[e.kind], e.text + (age >= 1 ? ` <span class="dim small">· hace ${age} v</span>` : ""), clsFor(e.text, e.kind)));
+      items.push(rmHtml(tabOf(e), withOrig(e) + (age >= 1 ? ` <span class="dim small">· hace ${age} v</span>` : ""), e.mitica ? "mit" : clsFor(e.text, e.kind)));
     }
     const rh = items.join("") || `<div class="rm"><span class="tab">Tus pilotos</span><div class="bar dim">Sin novedades.</div></div>`;
     tk.classList.toggle("show", !!pend.right);
@@ -415,8 +423,8 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   function tvRadio(e: RaceEvent) {
     if (e.kind !== "radio" || e.carId === undefined) return;
     const c = sess.carById(e.carId);
-    if (!c.player) return;
-    tvShow(`<div class="tvbox radio"><span class="tvtab">Radio · ${esc(c.d.abrev)}</span><div class="tvtxt">${esc(plain(e.text))}</div></div>`, 4500, 2);
+    if (!c.player && !e.mitica) return;
+    tvShow(`<div class="tvbox radio${e.mitica ? " mit" : ""}"><span class="tvtab">${e.mitica ? "Radio mítica" : "Radio"} · ${esc(c.d.abrev)}</span><div class="tvtxt">${esc(plain(e.text))}</div>${e.mitica ? `<div class="tvsub">${esc(e.mitica)}</div>` : ""}</div>`, e.mitica ? 7000 : 4500, e.mitica ? 3 : 2);
   }
 
   // ------------------------------------------------------------- semáforo
@@ -446,6 +454,13 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
 
   sess.onEvent = (e: RaceEvent) => {
     if (skipping) return;
+    // la voz del piloto: puede reescribir lo que dice él mismo y añadir frases (que llegan aquí como mensajes nuevos)
+    const said = e.voz ? null : voces.onEvent(e);
+    if (said?.replace) { e.text = said.replace.text; e.voz = true; if (said.replace.mitica) e.mitica = said.replace.mitica; }
+    onEventShow(e);
+    for (const l of said?.lines ?? []) sess.log({ kind: "radio", carId: l.carId, text: l.text, important: l.important, voz: true, mitica: l.mitica });
+  };
+  function onEventShow(e: RaceEvent) {
     bannerFor(e);
     if (e.kind === "control" || e.kind === "weather") lastCtlReal = performance.now();
     if (prefs.lobato !== false) lob.onEvent(e);
@@ -461,12 +476,12 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     if (e.pause && (always || prefs.pausas[cat]) && e.kind !== "weather" && (mineEv || e.kind === "control")) {
       paused = true;
       leftover = 0;
-      const n: Note = { html: e.text, tab: TAB[e.kind], cls: clsFor(e.text, e.kind), until: Infinity };
+      const n: Note = { html: e.text, tab: tabOf(e), cls: clsFor(e.text, e.kind), until: Infinity };
       if (e.kind === "control") pend.left = n; else pend.right = n;
       updSpeed();
     }
     renderMessages();
-  };
+  }
 
 
   // ------------------------------------------------------------- mapa 3D
@@ -2010,7 +2025,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   function radioSheet() {
     // mensajes y comentarios de Lobato, mezclados por orden (los más nuevos arriba)
     type Row = { t: number; lap: number; text: string; tab: string; cls: string };
-    const rows: Row[] = sess.events.slice(-150).map((e) => ({ t: e.t, lap: e.lap, text: e.text, tab: TAB[e.kind], cls: e.kind === "control" && /ROJA/.test(e.text) ? "red" : e.kind === "control" || e.kind === "weather" ? "ctl" : "" }));
+    const rows: Row[] = sess.events.slice(-150).map((e) => ({ t: e.t, lap: e.lap, text: withOrig(e), tab: tabOf(e), cls: e.mitica ? "mit" : e.kind === "control" && /ROJA/.test(e.text) ? "red" : e.kind === "control" || e.kind === "weather" ? "ctl" : "" }));
     if (prefs.lobato !== false) for (const c of lob.list) rows.push({ t: c.t + 1e-6, lap: c.lap, text: c.text, tab: LOB_TAB, cls: "lob" });
     rows.sort((a, b) => b.t - a.t);
     open(`<span class="tab">Radio y dirección de carrera</span><div style="margin:6px 0;display:flex;flex-direction:column;gap:3px">${rows.slice(0, 200).map((e) => rmHtml(`${race ? "V" + e.lap : fmtClock(e.t)} · ${e.tab}`, e.text, e.cls)).join("") || "<div class='dim'>Sin mensajes.</div>"}</div><button data-close style="width:100%">Cerrar</button>`, () => {});
@@ -2177,7 +2192,12 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   function soundEvent(e: RaceEvent) {
     if (!audio.ready()) return;
     // radio de tus pilotos y del ingeniero: clic y ruido; los importantes, en voz alta si está activado
-    if (e.kind === "radio" && e.carId !== undefined && sess.carById(e.carId).player) audio.radio(plain(e.text), !!(e.important || e.pause));
+    if (e.kind === "radio" && e.carId !== undefined && (sess.carById(e.carId).player || e.mitica)) {
+      // las frases de los pilotos, con la voz de cada uno y sin su nombre delante
+      const c = sess.carById(e.carId);
+      const tone = e.voz ? voiceOf(c.d.nombre, /Ingeniero de/.test(e.text)) : undefined;
+      audio.radio(e.voz ? plain(e.text).replace(/^[^:"]{1,40}:\s*/, "").replace(/"/g, "") : plain(e.text), !!(e.important || e.pause), tone);
+    }
     if (e.kind === "info" && /adelanta a/.test(e.text)) audio.cheer(/P[1-3]\b/.test(e.text) ? 0.75 : 0.5);
     else if (e.kind === "pit" && /entra a boxes/.test(e.text) && !view3d && e.carId !== undefined && sess.carById(e.carId).player) audio.pitIn();
   }
@@ -2348,6 +2368,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
         lastUi = now;
         updateGhosts(); updateRainAlert(); fastestLapCheck();
         if (started && !paused && prefs.lobato !== false) lob.tick();
+        if (started && !paused) for (const l of voces.tick()) sess.log({ kind: "radio", carId: l.carId, text: l.text, important: l.important, voz: true, mitica: l.mitica });
         if (now >= towerAnimUntil) renderTower();
         renderTop(); renderMessages(); renderSel();
         { const rb = $("#repb"), can = view3d && !!m3 && (m3.replaying() || !!m3.lastIncident()); if (rb.hidden === can) rb.hidden = !can; }
