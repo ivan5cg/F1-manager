@@ -144,7 +144,7 @@ export function createAudio(initial: SoundPrefs) {
   }
   synth?.getVoices(); // algunos navegadores las cargan la primera vez que se piden
   /** Lee un texto: «radio» (tus pilotos y el ingeniero, como mucho uno cada 8 s) o «lobato» (otra voz). */
-  function speak(text: string, who: "radio" | "lobato"): boolean {
+  function speak(text: string, who: "radio" | "lobato", tone?: { pitch: number; rate: number }): boolean {
     if (!synth || !prefs.sonido || (who === "radio" ? !prefs.voz : !prefs.vozLobato)) return false;
     const now = performance.now();
     if (synth.speaking || synth.pending || now - lastSpeak < 8000) return false;
@@ -156,6 +156,8 @@ export function createAudio(initial: SoundPrefs) {
     u.lang = u.voice.lang;
     u.rate = who === "lobato" ? 1.12 : 1.05;
     u.pitch = who === "lobato" && !vs[1] ? 0.8 : 1;
+    // cada piloto con su tono (voces.ts)
+    if (tone) { u.pitch = tone.pitch; u.rate = tone.rate; }
     u.volume = Math.max(0.05, prefs.volumen * (who === "radio" ? prefs.radio : prefs.ambiente));
     const end = () => { if (--talking <= 0) { talking = 0; duck(false); } };
     u.onstart = () => { talking++; duck(true); };
@@ -344,7 +346,7 @@ export function createAudio(initial: SoundPrefs) {
      * Mensaje de radio: el clic, el ruido de la radio (bajando lo demás mientras suena) y, si está activada y es
      * importante, la voz. Suena aunque la sesión esté en pausa.
      */
-    radio(text: string, important: boolean) {
+    radio(text: string, important: boolean, voice?: { pitch: number; rate: number }) {
       if (!ctx || !prefs.sonido) return;
       const c = ctx;
       if (c.state === "suspended") { void c.resume().catch(() => {}); setTimeout(() => { if (!want && ctx === c && c.state === "running") void c.suspend().catch(() => {}); }, 900); }
@@ -352,7 +354,7 @@ export function createAudio(initial: SoundPrefs) {
       tone(radioBus, t, 0.03, 1800, 0.25, "square");
       burst(radioBus, t + 0.02, 0.35, 0.12, "bandpass", 1700, 1.2);
       duck(true); setTimeout(() => { if (!talking) duck(false); }, 450);
-      if (important) setTimeout(() => speak(text, "radio"), 380);
+      if (important) setTimeout(() => speak(text, "radio", voice), 380);
     },
     /** Un comentario de Lobato, en voz alta si está activado (con su propia voz). */
     lobato(text: string) { speak(text, "lobato"); },

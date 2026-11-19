@@ -337,7 +337,22 @@ export interface RaceEvent {
   carId?: number;
   pause?: boolean;
   important?: boolean;
+  /** Qué ha pasado, para quien reaccione al mensaje (la radio de los pilotos) sin leer el texto. */
+  code?: EventCode;
+  /** El otro coche del suceso (a quién adelanta, con quién se toca, quién estorba). */
+  other?: number;
+  /** Una cifra del suceso: la posición o los segundos de la parada. */
+  n?: number;
+  /** Lo ha puesto la interfaz (la voz de un piloto), no la simulación. */
+  voz?: boolean;
+  /** Radio mítica: lo que se dijo de verdad y dónde. */
+  mitica?: string;
 }
+
+/** Sucesos con código (ver RaceEvent.code). */
+export type EventCode = "fondo" | "limites" | "abandono" | "pinchazo" | "tarde" | "amarilla" | "meta" | "gomas" | "estratega"
+  | "agua" | "aguaPregunta" | "vuelta" | "eliminado" | "trompo" | "salida" | "plano" | "toque" | "alerón" | "trafico" | "adelanta"
+  | "parada" | "sale" | "pole";
 
 export interface SessionOptions {
   kind: SessionKind;
@@ -980,7 +995,7 @@ export class Session {
   /** Daño en el fondo: menos carga hasta el final (no se arregla en una parada) y algo más de riesgo de avería. */
   private damageFloor(c: Car, x: number, how: string) {
     c.floor = Math.min(0.03, c.floor + x);
-    if (c.player) this.log({ kind: "radio", carId: c.id, text: `📻 Ingeniero: ${c.d.abrev}, daño en el fondo ${how}. Perdemos ~${(c.floor * 100 * this.secPerGrip).toFixed(1)} s por vuelta y no se puede arreglar en boxes.`, important: true });
+    if (c.player) this.log({ kind: "radio", carId: c.id, text: `📻 Ingeniero: ${c.d.abrev}, daño en el fondo ${how}. Perdemos ~${(c.floor * 100 * this.secPerGrip).toFixed(1)} s por vuelta y no se puede arreglar en boxes.`, important: true, code: "fondo" });
   }
 
   /** Lo que cuesta por vuelta el alerón dañado (s). */
@@ -1020,7 +1035,7 @@ export class Session {
     const n = (c.tlStrikes = (c.tlStrikes ?? 0) + 1);
     if (n === 3) this.log({ kind: "control", carId: c.id, text: `🏁 Bandera blanca y negra para ${c.d.abrev}: límites de pista`, important: c.player });
     else if (n >= 4 && (n - 4) % 3 === 0) this.penalize(c, 5, `límites de pista (${n} veces)`);
-    else if (c.player && n < 3) this.log({ kind: "radio", carId: c.id, text: `📻 Ingeniero: ${c.d.abrev}, se ha pasado de los límites de pista en el sector ${m.sector + 1} (${n} de 3 antes de la bandera).` });
+    else if (c.player && n < 3) this.log({ kind: "radio", carId: c.id, text: `📻 Ingeniero: ${c.d.abrev}, se ha pasado de los límites de pista en el sector ${m.sector + 1} (${n} de 3 antes de la bandera).`, code: "limites" });
   }
 
   /**
@@ -1289,7 +1304,7 @@ export class Session {
     c.v = 0;
     c.run = undefined;
     c.queue = [];
-    this.log({ kind: "incident", text: `❌ ${c.d.abrev} ${isRaceKind(this.kind) ? "abandona" : "se queda fuera"}: ${reason}`, carId: c.id, important: true, pause: c.player });
+    this.log({ kind: "incident", text: `❌ ${c.d.abrev} ${isRaceKind(this.kind) ? "abandona" : "se queda fuera"}: ${reason}`, carId: c.id, important: true, pause: c.player, code: "abandono" });
     if (kind !== "garage") this.incident(c, `${c.d.abrev} (${reason})`, severity, kind);
   }
 
@@ -1451,7 +1466,7 @@ export class Session {
       c.tyres!.punctured = true;
       if (isRaceKind(this.kind) && !c.pitRequest) c.pitRequest = this.bestSetFor(c, this.avgWater() > WET.iw ? "W" : this.avgWater() > WET.si ? "I" : "M")?.id ?? null;
       if (c.run) c.run.phase = "in";
-      this.log({ kind: "incident", text: `💥 ¡Pinchazo de ${c.d.abrev}! Vuelve a boxes.`, carId: c.id, important: true, pause: c.player });
+      this.log({ kind: "incident", text: `💥 ¡Pinchazo de ${c.d.abrev}! Vuelve a boxes.`, carId: c.id, important: true, pause: c.player, code: "pinchazo" });
     }
 
     const newK = Math.floor(c.s / L) * this.N + this.msIndexAt(c.s);
@@ -1476,7 +1491,7 @@ export class Session {
           // la parada pedida justo antes de la entrada no llega: el piloto ya no puede meterse
           if (c.player && !this.autoPlayers && this.t - c.pitCallT! < PIT_REACT) {
             c.pitCallT = this.t - PIT_REACT;
-            this.log({ kind: "radio", carId: c.id, text: `📻 ${c.d.abrev}: "¡Demasiado tarde, ya he pasado la entrada! Paro en la siguiente."`, important: true });
+            this.log({ kind: "radio", carId: c.id, text: `📻 ${c.d.abrev}: "¡Demasiado tarde, ya he pasado la entrada! Paro en la siguiente."`, important: true, code: "tarde" });
           } else this.enterPit(c, oldS);
         }
       } else if (c.run?.phase === "in") this.enterLaneIn(c);
@@ -1548,7 +1563,7 @@ export class Session {
       if (y && c.lastImpede !== -2 - ms) {
         c.lastImpede = -2 - ms;
         c.delay += y.double ? this.rng.range(0.8, 2) : this.rng.range(0.15, 0.4);
-        if (c.player) this.log({ kind: "radio", carId: c.id, text: `📻 ${c.d.abrev}: "Amarilla${y.double ? " doble" : ""} en el sector ${m.sector + 1}, he tenido que levantar."`, important: y.double });
+        if (c.player) this.log({ kind: "radio", carId: c.id, text: `📻 ${c.d.abrev}: "Amarilla${y.double ? " doble" : ""} en el sector ${m.sector + 1}, he tenido que levantar."`, important: y.double, code: "amarilla" });
       }
     }
     if (pushing) this.errorCheck(c, m);
@@ -1596,7 +1611,7 @@ export class Session {
     }
     if (this.chequered && lap >= 1) {
       this.finishCar(c, c.cross[k]);
-      if (c.player) this.log({ kind: "info", text: `🏁 ${c.d.abrev} termina P${this.order().indexOf(c) + 1}`, carId: c.id, important: true });
+      if (c.player) this.log({ kind: "info", text: `🏁 ${c.d.abrev} termina P${this.order().indexOf(c) + 1}`, carId: c.id, important: true, code: "meta", n: this.order().indexOf(c) + 1 });
       return;
     }
     this.lapChecks(c, lap);
@@ -1744,7 +1759,7 @@ export class Session {
     // un aviso por juego: si el jugador decide seguir, no se le para la carrera en cada vuelta
     if (wear > sp.cliff - 0.06 && wear < sp.cliff + 0.02 && !c.pitRequest && c.cliffWarned !== t.id) {
       c.cliffWarned = t.id;
-      this.log({ kind: "radio", carId: c.id, text: `📻 ${c.d.abrev}: "Los neumáticos se están acabando, noto cómo caen."`, pause: true, important: true });
+      this.log({ kind: "radio", carId: c.id, text: `📻 ${c.d.abrev}: "Los neumáticos se están acabando, noto cómo caen."`, pause: true, important: true, code: "gomas" });
     }
     const lapsLeft = this.laps - lap;
     const fuelLaps = c.fuel / this.fuelLap(c);
@@ -1762,7 +1777,7 @@ export class Session {
     if (sugg) {
       c.advice = { lap, setId: sugg };
       const set = c.e.sets.find((s) => s.id === sugg)!;
-      this.log({ kind: "radio", carId: c.id, text: `🧠 Estratega: ${c.d.abrev}, recomendaría parar ESTA vuelta y montar ${COMPOUNDS[set.c].name.toLowerCase()} (${set.laps ? `usado, ${set.laps} v` : "nuevo"})${c.adviceWhy ? `: ${c.adviceWhy}` : ""}.`, pause: true, important: true });
+      this.log({ kind: "radio", carId: c.id, text: `🧠 Estratega: ${c.d.abrev}, recomendaría parar ESTA vuelta y montar ${COMPOUNDS[set.c].name.toLowerCase()} (${set.laps ? `usado, ${set.laps} v` : "nuevo"})${c.adviceWhy ? `: ${c.adviceWhy}` : ""}.`, pause: true, important: true, code: "estratega" });
     }
   }
   private carSetCompound(c: Car, id: string) { return c.e.sets.find((s) => s.id === id)?.c; }
@@ -1816,12 +1831,12 @@ export class Session {
     if (run.phase !== "in" && wrongTyresForWater(this, c)) {
       if (c.auto) {
         run.phase = "in";
-        if (c.player) this.log({ kind: "radio", carId: c.id, text: `📻 Ingeniero: ${c.d.abrev}, entra; con ${DRY.includes(c.tyres!.c) ? "esta agua los slicks no sirven" : "la pista seca los de lluvia se destrozan"}.`, important: true });
+        if (c.player) this.log({ kind: "radio", carId: c.id, text: `📻 Ingeniero: ${c.d.abrev}, entra; con ${DRY.includes(c.tyres!.c) ? "esta agua los slicks no sirven" : "la pista seca los de lluvia se destrozan"}.`, important: true, code: "agua" });
         // en clasificación, vuelve a salir en cuanto pueda con el neumático adecuado
         if (this.parts.length && c.qPlan) c.qPlan.deps.unshift(this.remaining() - 20);
       } else if (!c.wetWarned) {
         c.wetWarned = true;
-        this.log({ kind: "radio", carId: c.id, text: `📻 Ingeniero: ${c.d.abrev}, ${DRY.includes(c.tyres!.c) ? "la pista está mojada para slicks" : "la pista se está secando"}. ¿Entramos?`, important: true, pause: true });
+        this.log({ kind: "radio", carId: c.id, text: `📻 Ingeniero: ${c.d.abrev}, ${DRY.includes(c.tyres!.c) ? "la pista está mojada para slicks" : "la pista se está secando"}. ¿Entramos?`, important: true, pause: true, code: "aguaPregunta" });
       }
     }
     // la vuelta lanzada que empieza con el reloj a cero no cuenta
@@ -1847,7 +1862,7 @@ export class Session {
     const p1 = ord[0];
     const pb = p1 === c ? "" : ` (+${(lt - (this.parts.length ? p1.bestByPart[this.part] : p1.best)).toFixed(3)})`;
     const purple = p1 === c && lt === (this.parts.length ? c.bestByPart[this.part] : c.best);
-    if (c.player || pos <= 3) this.log({ kind: "info", text: `⏱️ ${c.d.abrev} ${fmt(lt)} — P${pos}${purple ? " 🟪" : pb}`, carId: c.id, important: c.player });
+    if (c.player || pos <= 3) this.log({ kind: "info", text: `⏱️ ${c.d.abrev} ${fmt(lt)} — P${pos}${purple ? " 🟪" : pb}`, carId: c.id, important: c.player, code: "vuelta", n: pos });
   }
 
   /** Lógica de sesión: salidas de garaje, reloj, partes de la clasificación. */
@@ -1983,7 +1998,7 @@ export class Session {
         if (i >= part.advance!) {
           c.eliminated = true;
           c.elimPart = this.part;
-          if (c.player) this.log({ kind: "info", text: `❌ ${c.d.abrev} eliminado en ${part.name} (P${i + 1})`, carId: c.id, important: true });
+          if (c.player) this.log({ kind: "info", text: `❌ ${c.d.abrev} eliminado en ${part.name} (P${i + 1})`, carId: c.id, important: true, code: "eliminado", n: i + 1 });
         }
       });
       const out = ord.slice(part.advance).map((c) => c.d.abrev).join(", ");
@@ -1996,7 +2011,7 @@ export class Session {
     } else {
       this.finished = true;
       const pole = ord[0];
-      this.log({ kind: "control", text: `🏆 POLE para ${pole.d.nombre} (${pole.team.nombre}) ${fmt(pole.bestByPart[this.part])}`, important: true, pause: true });
+      this.log({ kind: "control", text: `🏆 POLE para ${pole.d.nombre} (${pole.team.nombre}) ${fmt(pole.bestByPart[this.part])}`, important: true, pause: true, code: "pole", carId: pole.id });
     }
   }
 
@@ -2050,7 +2065,7 @@ export class Session {
       // el trompo deja amarilla doble un rato (en clasificación, vuelta estropeada al que pase); la salida, simple
       this.yellows.push({ ms: m.i, until: this.t + this.rng.range(15, 35), double: spin });
       if (!isRaceKind(this.kind)) this.log({ kind: "control", text: `⚠️ Bandera amarilla${spin ? " doble" : ""} en el sector ${m.sector + 1}: ${spin ? "trompo" : "salida de pista"} de ${c.d.abrev}` });
-      this.log({ kind: "incident", text: spin ? `🌀 ${c.d.abrev} hace un trompo en el sector ${m.sector + 1}${dmg} (−${loss.toFixed(1)} s)` : `↩️ ${c.d.abrev} se sale de pista en el sector ${m.sector + 1}${dmg} (−${loss.toFixed(1)} s)`, carId: c.id, important: c.player });
+      this.log({ kind: "incident", text: spin ? `🌀 ${c.d.abrev} hace un trompo en el sector ${m.sector + 1}${dmg} (−${loss.toFixed(1)} s)` : `↩️ ${c.d.abrev} se sale de pista en el sector ${m.sector + 1}${dmg} (−${loss.toFixed(1)} s)`, carId: c.id, important: c.player, code: spin ? "trompo" : "salida" });
     } else if (r < crashP + 0.35) {
       c.fx = { k: "lock", t: this.t };
       c.delay += this.rng.range(0.3, 0.8);
@@ -2060,7 +2075,7 @@ export class Session {
       // la carcasa caliente puede iniciar ampollas) y banda que se va en ese punto
       tyres.F.tSurf += this.rng.range(30, 70);
       tyres.F.wear = Math.min(1, tyres.F.wear + this.rng.range(0.004, 0.012));
-      if (c.player) this.log({ kind: "radio", carId: c.id, text: `📻 ${c.d.abrev}: "He bloqueado, tengo un plano en el delantero."` });
+      if (c.player) this.log({ kind: "radio", carId: c.id, text: `📻 ${c.d.abrev}: "He bloqueado, tengo un plano en el delantero."`, code: "plano" });
     } else {
       c.delay += this.rng.range(0.15, 0.6);
     }
@@ -2203,8 +2218,8 @@ export class Session {
     if (r < 0.4) {
       c.wing += this.rng.range(0.01, 0.035);
       c.delay += this.rng.range(0.5, 2);
-      this.log({ kind: "incident", text: `💢 Toque entre ${c.d.abrev} y ${a.d.abrev}: ${c.d.abrev} daña el alerón delantero`, carId: c.id, important: c.player || a.player, pause: c.player || a.player });
-      if (c.player) this.log({ kind: "radio", carId: c.id, text: `📻 Ingeniero: ${c.d.abrev}, alerón dañado: perdemos ~${this.wingLoss(c).toFixed(1)} s por vuelta. Cambiar el morro suma ${NOSE_TIME} s a la parada.`, important: true });
+      this.log({ kind: "incident", text: `💢 Toque entre ${c.d.abrev} y ${a.d.abrev}: ${c.d.abrev} daña el alerón delantero`, carId: c.id, important: c.player || a.player, pause: c.player || a.player, code: "toque", other: a.id });
+      if (c.player) this.log({ kind: "radio", carId: c.id, text: `📻 Ingeniero: ${c.d.abrev}, alerón dañado: perdemos ~${this.wingLoss(c).toFixed(1)} s por vuelta. Cambiar el morro suma ${NOSE_TIME} s a la parada.`, important: true, code: "alerón" });
       if (this.rng.chance(0.3)) this.incident(c, `restos del alerón de ${c.d.abrev} en la pista`, 0.2, "debris");
       // a veces el golpe ha tocado algo más (suspensión, radiador): llega a boxes y se retira
       if (this.rng.chance(0.18)) this.retire(c, "daños tras el toque", 0, "garage");
@@ -2212,13 +2227,13 @@ export class Session {
       const victim = this.rng.chance(0.5) ? a : c;
       victim.slowPuncture = true;
       victim.pitRequest = victim.pitRequest ?? this.bestSetFor(victim, this.avgWater() > WET.iw ? "W" : this.avgWater() > WET.si ? "I" : "M")?.id ?? null;
-      this.log({ kind: "incident", text: `💥 Toque ${c.d.abrev}–${a.d.abrev}: pinchazo para ${victim.d.abrev}`, carId: victim.id, important: true, pause: victim.player });
+      this.log({ kind: "incident", text: `💥 Toque ${c.d.abrev}–${a.d.abrev}: pinchazo para ${victim.d.abrev}`, carId: victim.id, important: true, pause: victim.player, code: "toque", other: victim === c ? a.id : c.id });
     } else if (r < 0.93) {
       c.delay += this.rng.range(2, 5);
       a.delay += this.rng.range(2, 5);
       c.fx = { k: "off", t: this.t, loss: c.delay }; a.fx = { k: "off", t: this.t, loss: a.delay };
       for (const x of [c, a]) if (this.rng.chance(0.35)) this.damageFloor(x, this.rng.range(0.003, 0.012), "en el toque");
-      this.log({ kind: "incident", text: `💢 ${c.d.abrev} y ${a.d.abrev} se tocan y se van largos`, carId: c.id, important: c.player || a.player });
+      this.log({ kind: "incident", text: `💢 ${c.d.abrev} y ${a.d.abrev} se tocan y se van largos`, carId: c.id, important: c.player || a.player, code: "toque", other: a.id });
     } else {
       const victim = this.rng.chance(0.5) ? a : c;
       victim.fx = { k: "crash", t: this.t };
@@ -2260,7 +2275,7 @@ export class Session {
           b.lastImpede = a.id;
           if (!this.rng.chance(0.1)) { b.delay += this.rng.range(0.02, 0.15); if (gapM < 25) this.grantPass(b, a, 0.15); continue; }
           b.delay += this.rng.range(0.3, 1.2);
-          if (b.player || a.player) this.log({ kind: "incident", text: `🚧 ${a.d.abrev} estorba a ${b.d.abrev} en su vuelta rápida`, carId: b.id, important: b.player });
+          if (b.player || a.player) this.log({ kind: "incident", text: `🚧 ${a.d.abrev} estorba a ${b.d.abrev} en su vuelta rápida`, carId: b.id, important: b.player, code: "trafico", other: a.id });
         }
         if (gapM < 25) this.grantPass(b, a, 0.15);
         continue;
@@ -2297,7 +2312,7 @@ export class Session {
         this.passCount++;
         if (this.leaderLap < 1) this.passLap1++;
         const pos = this.order().indexOf(c) + 1;
-        if (c.player || a.player || pos <= 3) this.log({ kind: "info", text: `⚔️ ${c.d.abrev} adelanta a ${a.d.abrev} por la P${pos}`, carId: c.id });
+        if (c.player || a.player || pos <= 3) this.log({ kind: "info", text: `⚔️ ${c.d.abrev} adelanta a ${a.d.abrev} por la P${pos}`, carId: c.id, code: "adelanta", other: a.id, n: pos });
         c.conf = clamp((c.conf ?? 0) + 0.12, -1, 1);
         a.conf = clamp((a.conf ?? 0) - 0.05, -1, 1);
         c.passLog = undefined;
@@ -2369,7 +2384,7 @@ export class Session {
           c.plan = { stints: [...past, ...planStrategy(this, c, c.e.knowledge, lap, set.c, set.laps, null).stints] };
         }
       }
-      if (c.player || p.stationary > 4) this.log({ kind: "pit", carId: c.id, text: `⏱️ Parada de ${c.d.abrev}: ${p.stationary.toFixed(1)} s${p.noseChange ? " (cambio de morro)" : p.stationary > 4 ? " — ¡problema en la parada!" : ""}` });
+      if (c.player || p.stationary > 4) this.log({ kind: "pit", carId: c.id, text: `⏱️ Parada de ${c.d.abrev}: ${p.stationary.toFixed(1)} s${p.noseChange ? " (cambio de morro)" : p.stationary > 4 ? " — ¡problema en la parada!" : ""}`, code: "parada", n: p.stationary });
     }
     const newK = Math.floor(c.s / this.L) * this.N + this.msIndexAt(c.s);
     for (let k = c.msK + 1; k <= newK; k++) {
@@ -2392,7 +2407,7 @@ export class Session {
       const mode = c.player && !this.autoPlayers ? c.pitMode ?? 1 : 1;
       const near = this.cars.some((o) => o !== c && (o.loc === "track" || o.loc === "pit") && c.s - o.s > 0 && c.s - o.s < 35);
       if (near && this.rng.chance(UNSAFE_P[mode])) this.penalize(c, 5, "salida insegura del box");
-      if (c.player) this.log({ kind: "pit", carId: c.id, text: `↪️ ${c.d.abrev} sale de boxes P${this.order().indexOf(c) + 1}`, important: true });
+      if (c.player) this.log({ kind: "pit", carId: c.id, text: `↪️ ${c.d.abrev} sale de boxes P${this.order().indexOf(c) + 1}`, important: true, code: "sale", n: this.order().indexOf(c) + 1 });
     }
   }
 
