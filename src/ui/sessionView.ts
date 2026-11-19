@@ -17,6 +17,7 @@ import { snapshotSession, SessionSnapshot } from "../sim/snapshot";
 import { stopOptions, undercut, gapHistory, pitLoss, StopOption } from "../sim/pitwall";
 import { createLobato } from "./lobato";
 import { createVoces, voiceOf, Orden } from "./voces";
+import { moralLabel } from "../sim/morale";
 import { createAudio, type CarHeard, type PitStopHeard } from "./audio";
 import { saveSession, loadPrefs, savePrefs, setParked, PausePrefs, SPEEDS } from "./store";
 
@@ -1657,7 +1658,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       const cell = (k: string, v: string, wide = false) => `<div class="${wide ? "w2" : ""}"><i>${k}</i><b class="mono">${v}</b></div>`;
       const sp = t ? COMPOUNDS[t.c] : null;
       return `<div class="pcard">
-        <div class="pc-h"><span class="teamdot" style="background:${c.team.color}"></span><b class="nm">${esc(shortName(c.d.nombre))}</b>${t ? `${tyreHtml(t.c)}<span class="dim">${t.laps} v · ${sp!.opt - sp!.window}–${sp!.opt + sp!.window}°</span>` : `<span class="dim">en el garaje</span>`}${c.wing > 0 ? `<span class="yellow" title="Lo que cuesta por vuelta">alerón −${sess.wingLoss(c).toFixed(1)} s</span>` : ""}${race && c.fault ? `<span class="redt" title="Motor en Ahorro y ritmo bajo para que aguante">⚠️ ${esc(c.fault.what)} ${Math.round(c.fault.lvl * 100)} %</span>` : ""}${c.floor > 0 ? `<span class="redt" title="No se puede arreglar en boxes">fondo −${(c.floor * 100 * sess.secPerGrip).toFixed(1)} s</span>` : ""}${race && c.penS ? `<span class="redt" title="Se cumple en la próxima parada o se suma al final">+${c.penS} s</span>` : ""}${race && (c.tlStrikes ?? 0) >= 3 ? `<span class="dim" title="Bandera blanca y negra: límites de pista">🏁 ${c.tlStrikes}</span>` : ""}${race ? `<button data-let="${idx}" title="Dejar pasar al compañero">Dejar pasar</button>` : ""}</div>
+        <div class="pc-h"><span class="teamdot" style="background:${c.team.color}"></span><b class="nm">${esc(shortName(c.d.nombre))}</b>${c.moral !== undefined ? `<span title="Moral: ${moralLabel(c.moral).text} (${Math.round(c.moral)})">${moralLabel(c.moral).icon}</span>` : ""}${t ? `${tyreHtml(t.c)}<span class="dim">${t.laps} v · ${sp!.opt - sp!.window}–${sp!.opt + sp!.window}°</span>` : `<span class="dim">en el garaje</span>`}${c.wing > 0 ? `<span class="yellow" title="Lo que cuesta por vuelta">alerón −${sess.wingLoss(c).toFixed(1)} s</span>` : ""}${race && c.fault ? `<span class="redt" title="Motor en Ahorro y ritmo bajo para que aguante">⚠️ ${esc(c.fault.what)} ${Math.round(c.fault.lvl * 100)} %</span>` : ""}${c.floor > 0 ? `<span class="redt" title="No se puede arreglar en boxes">fondo −${(c.floor * 100 * sess.secPerGrip).toFixed(1)} s</span>` : ""}${race && c.penS ? `<span class="redt" title="Se cumple en la próxima parada o se suma al final">+${c.penS} s</span>` : ""}${race && (c.tlStrikes ?? 0) >= 3 ? `<span class="dim" title="Bandera blanca y negra: límites de pista">🏁 ${c.tlStrikes}</span>` : ""}${race ? `<button data-let="${idx}" title="Dejar pasar al compañero">Dejar pasar</button>` : ""}</div>
         ${t ? `<div class="pc-t">${axle("Del.", t.F, 0)}${axle("Tras.", t.R, 1)}</div>` : ""}
         <div class="pc-s">${cell("Última", fmtLap(c.lapTimes[c.lapTimes.length - 1]))}${cell("Mejor", fmtLap(c.best))}${t ? cell("Posible", fmtLap(sess.estLap(c))) : ""}${cell("Combust.", `${c.fuel.toFixed(1)} kg${race ? ` <small>${fuelDelta >= 0 ? "+" : ""}${fuelDelta.toFixed(1)} v</small>` : ""}`)}${sess.ersLabel ? cell(sess.ersLabel, `${Math.round((c.soc / SOC_MAX) * 100)} %`) : ""}${c.e.pu ? cell("Motor", `${Math.round(puLife(c.e.pu.km0 + c.puKm) * 100)} % vida`) : ""}${race ? cell("Plan", plan || "—", !c.e.pu) : ""}</div>
         ${race ? `<div class="pc-c">${seg("push", "Ritmo", PUSH_NAMES, c.push)}${seg("engine", "Motor", ENGINE_NAMES, c.engine)}${sess.ersLabel ? seg("ers", sess.ersLabel, ERS_SHORT, c.ers, c.autoErs) : ""}${seg("fight", "Pelea", ["Defender", "No pelear"], c.fight === "yield" ? 1 : 0, (c.fight ?? "auto") === "auto")}${c.wing > 0 ? seg("nose", "Morro", ["Cambiar", "Dejar"], c.nose === "no" ? 1 : 0, (c.nose ?? "auto") === "auto") : ""}</div>` : ""}
@@ -1673,6 +1674,9 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
         if (b.dataset.let !== undefined) {
           const c = mine()[Number(b.dataset.let)];
           sess.letTeammatePass(c);
+          // si se ha negado, lo dice él por radio (el mensaje de la sesión, con su voz)
+          const last = sess.orders[sess.orders.length - 1];
+          if (last?.carId === c.id && !last.obeyed) { showToast(`📻 ${c.d.abrev} se niega a dejar pasar a su compañero`, 2500); return; }
           const l = voces.responde(c, "dejarPasar");
           if (l) sess.log({ kind: "radio", carId: l.carId, text: l.text, important: l.important, voz: true });
           showToast(l ? l.text : `📻 ${c.d.abrev}: "Entendido, dejo pasar a mi compañero."`, 2500);

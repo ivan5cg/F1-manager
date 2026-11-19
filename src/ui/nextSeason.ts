@@ -6,6 +6,7 @@ import type { SeasonState, SeatSwap } from "../sim/season";
 import { driverStandings, teamStandings, pointsFor, RACE_POINTS, SPRINT_POINTS } from "../sim/season";
 import { devLeft } from "../sim/development";
 import { objectiveStatus } from "../sim/objectives";
+import { MORAL0, moralOf, moralLabel, wantsRenew } from "../sim/morale";
 import { offSeason, initialContracts, rating, ageOf, FIRST_YEAR, objectivesBonus, SeasonRecord, CAR_CARRY, OBJ_BONUS, OBJ_MALUS, salaryFor, clauseFor, midSeason, SeatNow } from "../sim/career";
 import { publicDriver, trueTech, NEW_TEAM, PLAYER_TEAM_ID } from "../sim/market";
 import type { DriverDef, TeamDef } from "../sim/session";
@@ -115,6 +116,9 @@ export function buildNextSeason(s: SeasonState, choices: { keep: boolean; sign?:
     // los objetivos suben o bajan el presupuesto; las cláusulas que has pagado salen de él
     devBonus: (rec.objetivos.length ? objectivesBonus(done, rec.objetivos.length) : 0) - out.cost,
     aviso: rec.objetivos.length && done === 0 ? (s.aviso ?? 0) + 1 : 0,
+    // la moral vuelve a medias hacia lo normal en invierno; las rivalidades se enfrían, pero no se olvidan
+    ...(s.moral ? { moral: Object.fromEntries(Object.entries(s.moral).map(([n, m]) => [n, Math.round((MORAL0 + (m - MORAL0) * 0.5) * 10) / 10])) } : {}),
+    ...(s.rivals ? { rivals: s.rivals.map((r) => ({ ...r, k: Math.round(r.k * 0.6 * 100) / 100 })).filter((r) => r.k >= 0.15) } : {}),
   };
   if (s.equipo) {
     next.equipo = { ...s.equipo, pilotos: out.mine.map((d) => d.abrev) };
@@ -150,7 +154,10 @@ export function offSeasonScreen(s: SeasonState, onDone: (next: SeasonState) => v
   const done = rec.objetivos.filter((o) => o.done).length;
   const bonus = rec.objetivos.length ? objectivesBonus(done, rec.objetivos.length) : 0;
   const warn = rec.objetivos.length && done === 0 && (s.aviso ?? 0) >= 1;
+  // con la moral por los suelos, alguno no quiere renovar: hay que buscarle sustituto
+  const refuses = mine.map((d) => (contracts[d.abrev] ?? y) <= y && !wantsRenew(s, d.nombre));
   const choices = mine.map(() => ({ keep: true, sign: undefined as string | undefined }));
+  refuses.forEach((no, i) => { if (no) { choices[i].keep = false; choices[i].sign = options.find((p) => !choices.some((o) => !o.keep && o.sign === p.abrev))?.abrev; } });
   const cost = () => choices.reduce((a, c, i) => a + (c.keep ? 0 : swapCost(s, mine[i], c.sign, contracts, sal, ai)), 0);
   const optLabel = (p: DriverDef) => {
     const t = teamOf.get(p.abrev);
@@ -162,10 +169,12 @@ export function offSeasonScreen(s: SeasonState, onDone: (next: SeasonState) => v
     const ends = until <= y;
     const c = choices[i];
     const out = clauseFor(sal[d.abrev] ?? salaryFor(d), until, y + 1);
+    const ml = moralLabel(moralOf(s, d.nombre));
     return `<div class="list-item" style="display:block">
       <div class="row"><b class="grow">${esc(d.nombre)}</b><span class="small dim">${ageOf(d, y + 1)} años en ${y + 1} · ritmo ${d.ritmo} · ${sal[d.abrev] ?? salaryFor(d)} M/año</span></div>
-      <div class="small ${ends ? "yellow" : "dim"}">${ends ? `Se le acaba el contrato (renovar: pide ${salaryFor(d)} M/año).` : `Con contrato hasta ${until}: romperlo cuesta ${out} M.`}</div>
-      <div class="seg" style="margin-top:4px"><button data-keep="${i}" class="${c.keep ? "on" : ""}">${ends ? "Renovar" : "Seguir"}</button><button data-swap="${i}" class="${c.keep ? "" : "on"}">Cambiar</button></div>
+      <div class="small"><span class="${ml.cls}">${ml.icon} ${ml.text}</span> <span class="dim">(moral ${Math.round(moralOf(s, d.nombre))})</span></div>
+      <div class="small ${refuses[i] ? "redt" : ends ? "yellow" : "dim"}">${refuses[i] ? "Se le acaba el contrato y no quiere renovar: está harto del equipo." : ends ? `Se le acaba el contrato (renovar: pide ${salaryFor(d)} M/año).` : `Con contrato hasta ${until}: romperlo cuesta ${out} M.`}</div>
+      <div class="seg" style="margin-top:4px">${refuses[i] ? "" : `<button data-keep="${i}" class="${c.keep ? "on" : ""}">${ends ? "Renovar" : "Seguir"}</button>`}<button data-swap="${i}" class="${c.keep ? "" : "on"}">Cambiar</button></div>
       ${c.keep ? "" : `<select data-sign="${i}" style="width:100%">${options.filter((p) => !choices.some((o, j) => j !== i && !o.keep && o.sign === p.abrev)).map((p) => `<option value="${p.abrev}" ${c.sign === p.abrev ? "selected" : ""}>${optLabel(p)}</option>`).join("")}</select>
       <div class="small dim">Cuesta ${swapCost(s, d, c.sign, contracts, sal, ai)} M del presupuesto de desarrollo de ${y + 1}.</div>`}
     </div>`;

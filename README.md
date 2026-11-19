@@ -311,6 +311,27 @@ temporada: año de `debut` en los datos) fallan algo más, sobre todo en mojado,
 **rivalidades** conocidas (Verstappen con Norris o Hamilton, los compañeros de McLaren…) hacen que, cuando pelean
 entre ellos, ninguno levante: más toques.
 
+**El vestuario: moral, rivalidades y rueda de prensa** (`src/sim/morale.ts`, `src/ui/vestuario.ts`). Solo en la
+temporada (el gran premio suelto y los escenarios, como siempre).
+- **Moral** de cada uno de tus pilotos (0 a 100, 60 lo normal), que dura toda la temporada y se ve en la pantalla de
+  temporada, en el fin de semana y con una cara en su ficha durante la sesión. Tras cada carrera sube con los buenos
+  resultados (más si superan lo que se espera del coche), con ganar al compañero y cuando el equipo le da paso; baja
+  sin puntos, con un abandono, por detrás del compañero y, sobre todo, cuando le haces **dejar pasar a su compañero**
+  (−7). Con el tiempo vuelve poco a poco a lo normal; en invierno, a medias.
+- Lo que cambia: un poco de **ritmo** (unas 5 centésimas por vuelta en los extremos); si **obedece** (por debajo de
+  45, un piloto de carácter fuerte puede negarse a dejar pasar a su compañero o **retrasar una vuelta la parada** que le
+  pides, si cree que las gomas aguantan; con 25 de moral, un volcánico se niega una de cada tres veces y uno tranquilo,
+  una de cada treinta) y si **quiere renovar** (por debajo de 30, puede que no: hay que buscarle sustituto). Lo dice él
+  por radio, con su voz, y Lobato también.
+- **Rivalidades** que duran de carrera en carrera: nacen de un toque o de adelantarse una y otra vez, y se apagan poco
+  a poco (como mucho 8 vivas). Entre rivales se defiende con todo y se tocan más; Lobato lo recuerda («¡Otra vez estos
+  dos!») y tus pilotos también por radio. Se ven en la pantalla de temporada.
+- **Rueda de prensa** antes de cada carrera: una o dos preguntas según cómo va la temporada (dos carreras sin
+  puntos, favoritismo, una rivalidad, el piloto que no arranca o qué esperáis desde la parrilla). Cada respuesta toca
+  la moral de tus pilotos, la rivalidad o lo que piensa la directiva, que lo comenta en su mensaje tras la carrera.
+- `npx tsx scripts/moral.ts [circuito] [carreras] [equipo]` mide cuánto desobedece cada carácter según su moral, lo
+  que cambia la vuelta y cuántas rivalidades nacen en una serie de carreras.
+
 **Vuelta de formación.** Los neumáticos salen de las mantas a 70 °C y en la vuelta de formación cogen temperatura
 según el compuesto y el asfalto: el blando sale casi en su ventana y el duro, lejos; con frío o con agua, menos.
 

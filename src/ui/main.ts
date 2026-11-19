@@ -19,6 +19,8 @@ import { Session, SessionKind, SESSION_NAMES, isRaceKind } from "../sim/session"
 import { raceSummaryHtml, drawRaceSummary, buildSummary, photosHtml } from "./summary";
 import { takeLastPhotos } from "./photos";
 import { headlines, portadaHtml, boardMessage, boardHtml } from "./prensa";
+import { moraleAfterRace, rivalsAfterRace, expectedPos } from "../sim/morale";
+import { vestuarioHtml } from "./vestuario";
 import { runToEnd } from "./simulate";
 import { esc, setBack } from "./common";
 
@@ -41,6 +43,7 @@ function finishSession(wk: Weekend, kind: SessionKind, sess: Session) {
   wk.finish(sess);
   const gp = CIRCUITS[st.circuitId].gp;
   const sum = isRaceKind(kind) ? buildSummary(sess) : null;
+  const rows0 = sess.results();
   if (sum) st.summaries = { ...st.summaries, [kind]: sum };
   let extra = "", board = "";
   if (kind === "RACE" && s.gp) {
@@ -63,10 +66,16 @@ function finishSession(wk: Weekend, kind: SessionKind, sess: Session) {
     const tp = ts.findIndex((x) => x.team.id === s.playerTeam);
     // (los cambios de pilotos van después del mundial; antes se perdían al pintar el mundial)
     extra = standingsHtml(gp, before, all, s.playerTeam, `<div class="small dim" style="margin-top:6px">Constructores: ${esc(ts[tp].team.nombre)}, ${tp + 1}.º con ${ts[tp].points} pts.</div>`) + extra;
+    // el vestuario: la moral de tus pilotos y las rivalidades, de carrera en carrera
+    const myCars = sess.cars.filter((c) => c.player).map((c) => ({ id: c.id, nombre: c.d.nombre }));
+    const changes = moraleAfterRace(s, rows0, myCars, sess.orders, expectedPos(s.objetivos));
+    const born = rivalsAfterRace(s, Object.entries(sess.duels).map(([k, v]) => { const [a, b] = k.split("-").map(Number); return { a: sess.carById(a).d.nombre, b: sess.carById(b).d.nombre, ...v }; }));
+    extra = vestuarioHtml(changes, born, s) + extra;
     // la directiva escribe según los objetivos (con los pilotos que han corrido esta carrera)
     const myIds = DRIVERS.filter((d) => d.team.id === s.playerTeam).map((d) => d.id);
     const msg = boardMessage(s, TEAMS, myIds, calendarOf(s).length);
     if (msg) { s.rounds[s.rounds.length - 1].board = msg; board = boardHtml(msg, ts[tp].team.nombre); }
+    s.boardMood = 0; // la directiva ya ha dicho lo suyo de la rueda de prensa
     // la parrilla de la siguiente ronda (con lo que ha desarrollado cada equipo)
     useSeason(s);
   }

@@ -31,6 +31,12 @@ export interface WeekendState {
   pu?: Record<number, PuState>; // modo «crear equipo»: unidades de potencia de cada piloto
   setup?: SetupState; // reglajes (carga y altura): óptimo oculto, lo que sabe cada equipo y lo que elige el jugador
   year?: number; // temporada (sin ella, 2026)
+  /** Moral de cada coche (0 a 100) y rivalidades [coche, coche, intensidad], de la temporada (ver morale.ts). */
+  moral?: Record<number, number>;
+  rivals?: [number, number, number][];
+  /** Rueda de prensa antes de la carrera: las preguntas (se fijan al verlas) y la respuesta elegida en cada una. */
+  prensaQs?: { id: string; text: string; answers: { text: string; e: { moral?: Record<string, number>; rival?: { a: string; b: string; k: number }; board?: number } }[] }[];
+  prensa?: Record<string, number>;
 }
 
 /**
@@ -183,6 +189,8 @@ export class Weekend {
       sprintWeekend: this.st.sprint,
       setup: this.sessionSetup(kind),
       year: this.st.year,
+      moral: this.st.moral,
+      rivals: this.st.rivals,
     });
     if (kind === "RACE") {
       for (const [id, n] of Object.entries(this.penalties())) {
@@ -213,6 +221,8 @@ export class Weekend {
       restore: true,
       setup: this.sessionSetup(kind),
       year: this.st.year,
+      moral: this.st.moral,
+      rivals: this.st.rivals,
     });
     applySnapshot(sess, snap);
     return sess;

@@ -155,7 +155,9 @@ export function boardMessage(s: SeasonState, teams: TeamDef[], mine: number[], r
   if (failed.length) lines.push(`Ya no llegamos a «${list(failed)}». Esto pesará en el presupuesto del año que viene.`);
   if (off.length) lines.push(`Cuidado: ahora mismo no llegamos a «${list(off)}».`);
   if ((s.aviso ?? 0) > 0 && bestPos > expect) lines.push("Os recuerdo que vuestro puesto está en juego.");
-  return lines.slice(0, 3).join(" ");
+  // lo que dijiste en la rueda de prensa
+  const said = (s.boardMood ?? 0) > 0 ? pick(["Bien dicho en la rueda de prensa.", "Me gustó lo que dijiste ante la prensa."]) : (s.boardMood ?? 0) < 0 ? pick(["Y lo de la rueda de prensa sobraba.", "Cuidado con lo que se dice ante la prensa."]) : "";
+  return [...lines.slice(0, 3), said].filter(Boolean).join(" ");
 }
 
 /** El mensaje de la directiva, en HTML. */

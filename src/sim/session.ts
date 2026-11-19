@@ -4,6 +4,7 @@
 // instante. Aire sucio, rebufo, modo adelantamiento, tapones y adelantamientos salen de las
 // distancias reales entre coches.
 import { Rng, clamp } from "./rng";
+import { caracterOf, type Caracter } from "./caracter";
 import { Track, Minisector, msTimeAtGrip, MIN_MASS, REF_CAR } from "./track";
 import { type Setup, type SessionSetup, WET_SHIFT, SETUP_Q, SETUP_GRIP } from "./setup";
 import { Compound, COMPOUNDS, DRY, HiddenTyre, TyreSet, setGrip, waterGrip, updateSet, axleGrip, warmBlankets, setWear, bestWaterGrip, WET, treadT, blisterT, grainT, driverRough } from "./tyres";
@@ -96,9 +97,16 @@ const CONF_PACE = 0.0015;
 const FORMATION_GAIN: Partial<Record<Compound, number>> = { S: 17, M: 13, H: 9, I: 12, W: 10 };
 /** Rivalidades: cuando pelean entre ellos, ninguno levanta (más toques). */
 const RIVALS = [["VER", "NOR"], ["VER", "HAM"], ["VER", "RUS"], ["VER", "LEC"], ["NOR", "PIA"], ["ALO", "HAM"], ["LEC", "SAI"], ["GAS", "OCO"], ["STR", "ALO"]];
+const pairKey = (a: number, b: number) => (a < b ? `${a}-${b}` : `${b}-${a}`);
 const rivals = (a: Car, b: Car) => RIVALS.some(([x, y]) => (a.d.abrev === x && b.d.abrev === y) || (a.d.abrev === y && b.d.abrev === x));
 /** Ventaja de más (s/vuelta) que necesita el que ataca si el de delante cierra la puerta. */
 const DEFEND_T = 0.35;
+// Moral (temporada, 0 a 100; 60 es lo normal): un poco de ritmo arriba o abajo, y con ella baja algunos no obedecen.
+const MORAL_PACE = 0.0012; // agarre por cada 40 puntos de moral sobre 60
+// cuánto le cuesta obedecer con la moral por los suelos, según su carácter
+const DISOBEY_K: Record<Caracter, number> = { volcanico: 1, quejica: 0.65, socarron: 0.45, cerebral: 0.25, novato: 0.15, autocritico: 0.1, calmado: 0.08 };
+// rivalidad de temporada (0 a 1): defienden más contra el rival y se tocan más
+const RIVAL_DEF = 0.18, RIVAL_CONTACT = 0.8;
 
 type IncidentKind = "crash" | "failure" | "debris";
 const ERS_POWER = [-3.5, 0, 2.0, 4.5];
@@ -323,6 +331,10 @@ export interface Car {
   pitCallT?: number;
   /** Confianza del piloto en esta sesión (−1 a 1): sube con las vueltas limpias y los adelantamientos, cae tras un error. */
   conf?: number;
+  /** Moral en la temporada (0 a 100); sin ella, la de siempre. */
+  moral?: number;
+  /** Ya se ha negado una vez a parar con la parada que tiene pedida: a la siguiente entra. */
+  pitHold?: boolean;
   /** Avería que se está gestando: qué es, lo cerca que está de romperse (0 a 1) y si es de la unidad de potencia. */
   fault?: { what: string; lvl: number; pu: boolean; warned: number };
 }
@@ -357,7 +369,9 @@ export type EventCode = "fondo" | "limites" | "abandono" | "pinchazo" | "tarde" 
   | "parada" | "sale" | "pole"
   // dirección de carrera y meteo (para Lobato)
   | "vsc" | "sc" | "roja" | "verde" | "cuadros" | "empieza" | "eliminados" | "sancion" | "sinSancion" | "blancaNegra"
-  | "desdoblar" | "liderAcelera" | "salidaParada" | "banderaAmarilla" | "descalificado" | "anulada" | "lluvia" | "seca" | "boxes";
+  | "desdoblar" | "liderAcelera" | "salidaParada" | "banderaAmarilla" | "descalificado" | "anulada" | "lluvia" | "seca" | "boxes"
+  // el piloto no obedece al muro (n: 0 no deja pasar, 1 retrasa la parada)
+  | "desobedece";
 
 export interface SessionOptions {
   kind: SessionKind;
@@ -377,6 +391,10 @@ export interface SessionOptions {
   setup?: SessionSetup; // reglajes (ver setup.ts); sin ellos, todos con el coche de referencia
   year?: number; // temporada (para saber quién es novato); sin ella, 2026
   era?: Era; // reglamento (modo escenario); sin él, el de 2026
+  /** Moral de cada coche en la temporada (0 a 100). Sin ella (fin de semana suelto, pruebas), nada cambia. */
+  moral?: Record<number, number>;
+  /** Rivalidades de la temporada: [coche, coche, intensidad de 0 a 1]. */
+  rivals?: [number, number, number][];
 }
 
 /** Una tanda larga de libres, resumida: ritmo medio sin combustible y caída por vuelta. */
@@ -461,6 +479,14 @@ export class Session {
   passLap1 = 0; // de ellos, los de la primera vuelta
   /** Recuento de lo que ha pasado (solo para medir: scripts/realismo.ts). No cambia nada de la sesión. */
   stats = { sc: 0, vsc: 0, red: 0, contacts: 0, offs: 0, retire: 0, pens: 0 };
+  /** Rivalidades de la temporada por pareja («id-id», el menor primero): intensidad de 0 a 1. */
+  rivalK: Record<string, number> = {};
+  /** Lo que ha pasado entre cada pareja en esta sesión (para las rivalidades de la temporada): toques y adelantamientos. */
+  duels: Record<string, { touch: number; passes: number }> = {};
+  /** Órdenes del jugador en carrera y si las ha cumplido (para la moral de la temporada). */
+  orders: { carId: number; kind: "dejarPasar" | "box"; mate?: number; obeyed: boolean }[] = [];
+  /** Estado del azar de la moral: aparte del de la sesión, para no mover nada cuando no hay órdenes. */
+  moodS = 1;
   /** Ventaja (s/vuelta) con la que se adelanta una de cada dos veces en la mejor frenada del circuito. */
   get passT(): number { return passTOverride ?? this.track.def.adelantamientos?.umbral ?? PASS_T0; }
   /** Lo difícil que es adelantar aquí: la ventaja (s/vuelta) que hace falta en la mejor frenada que tenga el circuito. */
@@ -512,6 +538,8 @@ export class Session {
     this.track = opt.track;
     this.N = this.track.ms.length;
     this.rng = new Rng(opt.seed);
+    this.moodS = ((opt.seed ^ 0x5bd1e995) >>> 0) || 1;
+    for (const [a, b, k] of opt.rivals ?? []) this.rivalK[pairKey(a, b)] = clamp(k, 0, 1);
     this.weather = opt.weather;
     this.water = Float64Array.from(opt.water.length === this.N ? opt.water : new Array(this.N).fill(0));
     this.waterOff = Float64Array.from(opt.waterOff?.length === this.N ? opt.waterOff : this.water);
@@ -585,6 +613,8 @@ export class Session {
       };
       const su = opt.setup?.cars[e.id];
       if (su) car.setup = { a: su.a, r: su.r };
+      const mo = opt.moral?.[e.id];
+      if (mo !== undefined) car.moral = clamp(mo, 0, 100);
       this.cars.push(car);
     }
     if (opt.restore) { /* el estado llega de una instantánea */ }
@@ -1317,7 +1347,7 @@ export class Session {
   msTime(c: Car, m: Minisector, water: number): { t: number; grip: number } {
     const tyres = c.tyres!;
     const wetSkill = water > 0.05 ? 1 + (c.d.lluvia - 80) * 0.0012 * Math.min(1, water / 0.6) : 1;
-    let grip = setGrip(tyres, water) * c.pace * (1 + CONF_PACE * (c.conf ?? 0)) * wetSkill * PUSH_GRIP[c.push] * (1 + 0.018 * this.rubber) * (1 - c.wing - c.floor);
+    let grip = setGrip(tyres, water) * c.pace * (1 + CONF_PACE * (c.conf ?? 0)) * (c.moral === undefined ? 1 : 1 + MORAL_PACE * clamp((c.moral - 60) / 40, -1.5, 1)) * wetSkill * PUSH_GRIP[c.push] * (1 + 0.018 * this.rubber) * (1 - c.wing - c.floor);
     const su = this.setupAt(c, m, water);
     if (su) grip *= 1 + SETUP_GRIP.a * su.ea * m.aero - SETUP_GRIP.r * su.er * (m.aero - this.setupK!.aeroMean);
     // en paralelo (adelantando) ya no va en la estela
@@ -1488,7 +1518,7 @@ export class Session {
     const prevPos = ((oldS % L) + L) % L;
     const newPos = ((c.s % L) + L) % L;
     const passedEntry = prevPos < this.track.pit.entry && (newPos >= this.track.pit.entry || newPos < prevPos);
-    if (!c.pitRequest) c.pitCallT = undefined;
+    if (!c.pitRequest) { c.pitCallT = undefined; c.pitHold = undefined; }
     else if (c.pitCallT === undefined) c.pitCallT = this.t;
     if (passedEntry && oldS > 0) {
       if (isRaceKind(this.kind)) {
@@ -1497,6 +1527,9 @@ export class Session {
           if (c.player && !this.autoPlayers && this.t - c.pitCallT! < PIT_REACT) {
             c.pitCallT = this.t - PIT_REACT;
             this.log({ kind: "radio", carId: c.id, text: `📻 ${c.d.abrev}: "¡Demasiado tarde, ya he pasado la entrada! Paro en la siguiente."`, important: true, code: "tarde" });
+          } else if (this.refusesStop(c)) {
+            c.pitHold = true;
+            this.log({ kind: "radio", carId: c.id, text: `📻 ${c.d.abrev}: "Una vuelta más, las gomas aguantan."`, important: true, code: "desobedece", n: 1 });
           } else this.enterPit(c, oldS);
         }
       } else if (c.run?.phase === "in") this.enterLaneIn(c);
@@ -2143,12 +2176,12 @@ export class Session {
       a.tyres!.F.tSurf += this.rng.range(2, 5);
       a.tyres!.F.wear = Math.min(1, a.tyres!.F.wear + 0.0004);
     }
-    const will = 1 / (1 + Math.exp(-(adv - this.passT - extra - (defend ? DEFEND_T : 0)) / PASS_W));
+    const will = 1 / (1 + Math.exp(-(adv - this.passT - extra - (defend ? DEFEND_T : 0) - (mode === "yield" ? 0 : RIVAL_DEF * this.rivalOf(c, a))) / PASS_W));
     const real = will > 0.1 && this.t - (c.lastTry ?? -99) > 6;
     // se tocan sobre todo cuando el intento es de verdad y los dos son de no levantar
     if (real || will > 0.5) {
-      const contactP = 0.004 * (0.5 + c.d.agresividad / 100) * (0.5 + a.d.agresividad / 120) * (lap1 ? 2.2 : 1) * (1 + Math.min(1, wAtt) * 1.5) * (1.4 - will) * (defend ? 1.4 : 1) * (rivals(c, a) ? 1.7 : 1);
-      if (this.rng.chance(contactP)) { c.lastTry = this.t; return this.contact(c, a); }
+      const contactP = 0.004 * (0.5 + c.d.agresividad / 100) * (0.5 + a.d.agresividad / 120) * (lap1 ? 2.2 : 1) * (1 + Math.min(1, wAtt) * 1.5) * (1.4 - will) * (defend ? 1.4 : 1) * (rivals(c, a) ? 1.7 : 1) * (1 + RIVAL_CONTACT * this.rivalOf(c, a));
+      if (this.rng.chance(contactP)) { c.lastTry = this.t; this.duel(c, a).touch++; return this.contact(c, a); }
     }
     if (!this.rng.chance(Math.min(0.92, near * will))) {
       // intento fallido: el de delante tapa el hueco y los dos pierden algo; a veces el que ataca se pasa de frenada
@@ -2199,7 +2232,7 @@ export class Session {
     put(c, kc); put(a, ka);
     const adv = grip + PASS_KS * straight + (c.d.ataque - a.d.defensa) / 100;
     const mode = this.fightMode(a);
-    const need = this.passT + extra + (mode === "defend" ? DEFEND_T : 0);
+    const need = this.passT + extra + (mode === "defend" ? DEFEND_T : 0) + (mode === "yield" ? 0 : RIVAL_DEF * this.rivalOf(c, a));
     if (mode === "yield" && adv > 0) return { adv, need, p: 1 };
     return { adv, need, p: 1 / (1 + Math.exp(-(adv - need) / PASS_W)) };
   }
@@ -2316,6 +2349,7 @@ export class Session {
       if (a.loc === "track" && ahead > 0 && ahead < 150) {
         this.passCount++;
         if (this.leaderLap < 1) this.passLap1++;
+        this.duel(c, a).passes++;
         const pos = this.order().indexOf(c) + 1;
         if (c.player || a.player || pos <= 3) this.log({ kind: "info", text: `⚔️ ${c.d.abrev} adelanta a ${a.d.abrev} por la P${pos}`, carId: c.id, code: "adelanta", other: a.id, n: pos });
         c.conf = clamp((c.conf ?? 0) + 0.12, -1, 1);
@@ -2328,7 +2362,21 @@ export class Session {
   private isFlying(c: Car) { return c.run?.phase === "push" || c.run?.phase === "long"; }
 
   // ------------------------------------------------------------- boxes
+  /**
+   * Con la moral baja, alguno retrasa una vuelta la parada que le pide el muro, pero solo si cree que las gomas
+   * aguantan (secas, con pista seca, sin pinchazo ni daños y con menos de la mitad gastada). La siguiente, entra.
+   */
+  private refusesStop(c: Car): boolean {
+    if (!c.player || this.autoPlayers || c.pitHold || !c.tyres || c.tyres.punctured || c.wing > 0) return false;
+    const fresh = DRY.includes(c.tyres.c) && this.avgWater() < 0.1 && setWear(c.tyres) < 0.5;
+    if (!fresh) return false;
+    const no = this.disobeys(c);
+    this.orders.push({ carId: c.id, kind: "box", obeyed: !no });
+    return no;
+  }
+
   private enterPit(c: Car, entryS: number) {
+    c.pitHold = undefined;
     const tr = this.track;
     const lapBase = Math.floor(entryS / this.L) * this.L;
     const entryAbs = lapBase + tr.pit.entry;
@@ -2456,7 +2504,34 @@ export class Session {
 
   letTeammatePass(front: Car) {
     const mate = this.cars.find((o) => o !== front && o.team === front.team);
-    if (mate) front.letPass = mate.id;
+    if (!mate) return;
+    // con la moral baja, alguno se niega (más si va más rápido que el compañero)
+    if (front.player && !this.autoPlayers && isRaceKind(this.kind)) {
+      const last = (x: Car) => x.lapTimes[x.lapTimes.length - 1] ?? Infinity;
+      const no = this.disobeys(front, last(front) < last(mate) - 0.1 ? 1.4 : 1);
+      this.orders.push({ carId: front.id, kind: "dejarPasar", mate: mate.id, obeyed: !no });
+      if (no) {
+        this.log({ kind: "radio", carId: front.id, text: `📻 ${front.d.abrev}: "No, no le dejo pasar. Voy más rápido."`, important: true, code: "desobedece", n: 0, other: mate.id });
+        return;
+      }
+    }
+    front.letPass = mate.id;
+  }
+
+  /** Rivalidad de temporada entre dos coches (0 a 1). */
+  rivalOf(a: Car, b: Car): number { return this.rivalK[pairKey(a.id, b.id)] ?? 0; }
+  private duel(a: Car, b: Car) { return (this.duels[pairKey(a.id, b.id)] ??= { touch: 0, passes: 0 }); }
+
+  /**
+   * ¿Se niega a una orden del muro? Solo con moral (temporada) y baja (menos de 45), y según su carácter: los
+   * volcánicos mucho más que los tranquilos. Con su propio azar, para no mover el de la sesión.
+   */
+  private disobeys(c: Car, k = 1): boolean {
+    if (c.moral === undefined || c.moral >= 45) return false;
+    const p = 0.6 * k * clamp((45 - c.moral) / 35, 0, 1) * DISOBEY_K[caracterOf(c.d.nombre)];
+    const u = new Rng(this.moodS).next();
+    this.moodS = ((this.moodS >>> 0 || 1) + 0x6d2b79f5) >>> 0;
+    return u < p;
   }
 
   /**

@@ -8,25 +8,9 @@
 // hablar al piloto (gomas acabadas, plano) se reescriben con su voz; el resto son mensajes nuevos.
 import { Session, Car, RaceEvent, isRaceKind, isQualiKind } from "../sim/session";
 
-export type Caracter = "calmado" | "quejica" | "volcanico" | "cerebral" | "socarron" | "novato" | "autocritico";
-
-/** Carácter de cada piloto (por nombre: hay abreviaturas repetidas entre épocas). Los que no están, según su nombre. */
-const CARACTER: Record<string, Caracter> = {
-  "George Russell": "cerebral", "Kimi Antonelli": "novato", "Charles Leclerc": "volcanico", "Lewis Hamilton": "calmado",
-  "Max Verstappen": "quejica", "Isack Hadjar": "novato", "Lando Norris": "autocritico", "Oscar Piastri": "calmado",
-  "Liam Lawson": "volcanico", "Arvid Lindblad": "novato", "Pierre Gasly": "calmado", "Franco Colapinto": "novato",
-  "Esteban Ocon": "cerebral", "Oliver Bearman": "novato", "Nico Hülkenberg": "calmado", "Gabriel Bortoleto": "novato",
-  "Carlos Sainz": "cerebral", "Alexander Albon": "calmado", "Fernando Alonso": "socarron", "Lance Stroll": "quejica",
-  "Sergio Pérez": "calmado", "Valtteri Bottas": "calmado", "Yuki Tsunoda": "volcanico", "Kevin Magnussen": "volcanico",
-  "Zhou Guanyu": "calmado", "Logan Sargeant": "novato", "Nyck de Vries": "novato", "Mick Schumacher": "novato",
-  "Kimi Räikkönen": "socarron", "Sebastian Vettel": "cerebral", "Mark Webber": "socarron", "Jenson Button": "calmado",
-  "Felipe Massa": "calmado", "Michael Schumacher": "cerebral", "Nico Rosberg": "cerebral", "Robert Kubica": "calmado",
-  "Romain Grosjean": "volcanico", "Pastor Maldonado": "volcanico", "Daniel Ricciardo": "socarron", "Daniil Kvyat": "volcanico",
-  "Kamui Kobayashi": "volcanico", "Nikita Mazepin": "volcanico", "Nicholas Latifi": "calmado", "Antonio Giovinazzi": "calmado",
-  "Marcus Ericsson": "calmado", "Rubens Barrichello": "calmado", "Jaime Alguersuari": "novato", "Pedro de la Rosa": "cerebral",
-};
-const hash = (s: string) => { let h = 7; for (const ch of s) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return h; };
-export const caracterOf = (nombre: string): Caracter => CARACTER[nombre] ?? (["calmado", "cerebral", "novato"] as Caracter[])[hash(nombre) % 3];
+import { Caracter, caracterOf, hash } from "../sim/caracter";
+export { caracterOf };
+export type { Caracter };
 
 /** Cómo suena cada carácter en la voz sintetizada (y un poco distinto cada piloto, para reconocerlo). */
 const VOZ: Record<Caracter, { pitch: number; rate: number }> = {
@@ -42,7 +26,7 @@ export function voiceOf(nombre: string, engineer = false): VoiceTone {
 
 type Situ = "gomas" | "plano" | "adelanta" | "adelantado" | "toque" | "trompo" | "dano" | "trafico" | "vueltaP1" | "eliminado" | "pole"
   | "paradaLenta" | "paradaBuena" | "salePeor" | "estratega" | "aguaSi" | "aguaNo" | "abandono" | "gana" | "podio" | "puntos" | "sinPuntos"
-  | "limites" | "pinchazo" | "companero" | "rivalGana";
+  | "limites" | "pinchazo" | "companero" | "rivalGana" | "noDejo" | "unaMas" | "rivalPasa" | "rivalMePasa";
 
 // {r}: el rival (apellido); {p}: la posición; {s}: los segundos.
 const FRASES: Record<Situ, Partial<Record<Caracter, string[]>> & { _: string[] }> = {
@@ -278,6 +262,48 @@ const FRASES: Record<Situ, Partial<Record<Caracter, string[]>> & { _: string[] }
     volcanico: ["¡SÍIII! ¡VAMOOOS!"],
     calmado: ["Gran trabajo, chicos. Gracias."],
   },
+  // con la moral baja: no obedece al muro (8.2)
+  noDejo: {
+    _: ["No. No le dejo pasar."],
+    volcanico: ["¡NO! ¡Ni hablar! ¡Que me pase en la pista si puede!", "¡No pienso apartarme! ¡Soy más rápido que {r}!"],
+    quejica: ["¿Otra vez yo? No. Esta vez no me aparto.", "Siempre me toca a mí. No le dejo."],
+    socarron: ["Qué gracioso. No, gracias.", "Si {r} quiere pasar, que lo intente. Así nos divertimos."],
+    cerebral: ["No tiene sentido: voy más rápido que {r}. Me quedo delante.", "Negativo. Con los números en la mano, no le dejo."],
+    novato: ["Eh... prefiero no dejarle pasar, voy bien.", "¿Seguro? Es que voy rápido... me quedo delante."],
+    autocritico: ["Lo siento, pero hoy no. Voy mejor que él."],
+    calmado: ["Prefiero seguir así. Lo hablamos después."],
+  },
+  unaMas: {
+    _: ["Una vuelta más, las gomas aguantan."],
+    volcanico: ["¡No entro! ¡Las gomas van perfectas! ¡Una vuelta más!", "¡Que no! ¡Todavía no! ¡Paro la que viene!"],
+    quejica: ["¿Ahora? No, no, las gomas van bien. Una más.", "Siempre me paráis cuando voy bien. Una vuelta más."],
+    socarron: ["Me quedo fuera una vuelta. Tomaos un café.", "Las gomas y yo nos llevamos bien. Una vuelta más."],
+    cerebral: ["Me quedo una vuelta más: tengo goma y aire limpio.", "Alargo una vuelta. Confiad en mí."],
+    novato: ["Eh... ¿puedo una vuelta más? Van bien...", "Me he pasado la entrada... bueno, a propósito. Una más."],
+    autocritico: ["Una vuelta más, por favor. Quiero recuperar lo que perdí."],
+    calmado: ["Una más. Las gomas aguantan, tranquilos."],
+  },
+  // rivalidades (8.3)
+  rivalPasa: {
+    _: ["¡Pasado {r}! ¡Otra vez!"],
+    volcanico: ["¡TOMA, {r}! ¡Que se acuerde de esta!", "¡Fuera {r}! ¡Esto es personal!"],
+    quejica: ["Por fin me quito a {r} de encima. Qué pesado.", "{r} siempre igual. Ya está detrás."],
+    socarron: ["Saludad a {r} de mi parte. Por el retrovisor.", "{r} se ha quedado otra vez mirando."],
+    cerebral: ["{r} detrás. Ahora a abrir hueco antes de que me ataque.", "Pasado {r}. Ojo, que va a volver."],
+    novato: ["¡He pasado a {r}! ¡Esta vez sí!", "¡Toma! ¡{r} detrás!"],
+    autocritico: ["Bien. A {r} había que ganarle hoy.", "Le debía una a {r}. Hecho."],
+    calmado: ["{r} detrás. Seguimos.", "Bien. {r} ya está detrás."],
+  },
+  rivalMePasa: {
+    _: ["{r} otra vez... ¡no!"],
+    volcanico: ["¡Otra vez {r}! ¡Me ha sacado de la pista! ¡Mirad la repetición!", "¡NO! ¡{r} no! ¡Cualquiera menos él!"],
+    quejica: ["{r}, siempre {r}. Me ha cerrado, que lo miren.", "¿Cómo puede ser que siempre me pase {r}?"],
+    socarron: ["{r} vuelve a tener un buen día. Qué suerte la suya.", "Disfruta, {r}. Te veo en la siguiente frenada."],
+    cerebral: ["{r} me pasa. Ritmo, ritmo: lo recupero en la parada.", "Le he dejado hueco a {r}. Error mío."],
+    novato: ["Me ha pasado {r}... ¡lo vuelvo a intentar!"],
+    autocritico: ["Me he dejado pasar por {r} como un novato.", "Qué mal. Justo {r}."],
+    calmado: ["{r} me ha pasado. Ya habrá oportunidades.", "Bien hecho por {r}. Vamos a por él."],
+  },
 };
 
 /** Una radio mítica: quién la dijo (o su ingeniero), en qué situación y lo que dijo (traducido y en el original). */
@@ -491,11 +517,19 @@ export function createVoces(sess: Session) {
       case "plano":
         if (c) replace = line(c, "plano", {}, true);
         break;
+      case "desobedece":
+        if (c) replace = line(c, e.n === 0 ? "noDejo" : "unaMas", { r }, true);
+        break;
       case "adelanta":
         if (!c || !o || !race) break;
         if (is(o, "Fernando Alonso") && o.team.potencia < c.team.potencia) push(mitica("gp2", o.player ? 0.35 : 0.2));
         if (is(c, "Fernando Alonso") && is(o, "Felipe Massa") && used.has("masRapido")) push(mitica("buenChico", 0.9));
         if (out.length) break;
+        if (sess.rivalOf(c, o) >= 0.3 && (c.player || o.player)) {
+          if (c.player) push(line(c, "rivalPasa", { r }, true));
+          else push(line(o, "rivalMePasa", { r: sur(c) }, true));
+          break;
+        }
         if (c.player) push(Math.random() < ((e.n ?? 9) <= 3 ? 0.7 : 0.3) ? line(c, "adelanta", { r }) : null);
         else if (o.player) push(Math.random() < 0.35 ? line(o, "adelantado", { r: sur(c) }) : null);
         break;
