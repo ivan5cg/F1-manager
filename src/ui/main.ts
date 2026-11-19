@@ -2,15 +2,16 @@ import "./style.css";
 
 // tema visual (las fichas de color están en style.css)
 document.documentElement.dataset.tema = "grafito";
-import { TEAMS, CIRCUITS, ROUNDS, DRIVERS, getTrack, useSeason, devContext, CALENDARS } from "./data";
+import { TEAMS, CIRCUITS, ROUNDS, DRIVERS, getTrack, useSeason, devContext, CALENDARS, circuitOf } from "./data";
 import { applyMidSeason } from "./nextSeason";
 import { newDev } from "../sim/development";
 import { builderScreen, PLAYER_TEAM_ID } from "./teamBuilder";
-import { loadSeason, saveSeason, loadSession, clearSession, isParked, setActiveSlot, deleteSlot, initStore, roomyStorage, askPersist, slotList, loadPrefs, getActiveSlot } from "./store";
+import { GP_SLOT, loadSeason, saveSeason, loadSession, clearSession, isParked, setActiveSlot, deleteSlot, initStore, roomyStorage, askPersist, slotList, loadPrefs, getActiveSlot } from "./store";
 import type { SessionSnapshot } from "../sim/snapshot";
 import { startScreen, seasonScreen, weekendScreen, resultsScreen, longRunsPanel, teamPickerScreen, Nav } from "./hubs";
 import { sessionView } from "./sessionView";
 import { scenariosScreen } from "./scenarios";
+import { gpSetupScreen, gpSeason, gpWeekend, gpDoneScreen, gpPickOf, type GpPick } from "./grandPrix";
 import { SeasonState, driverStandings, teamStandings, pointsFor, RACE_POINTS, SPRINT_POINTS } from "../sim/season";
 import { podiumHtml, standingsHtml, animateCounts, shareSheet } from "./podium";
 import { Weekend } from "../sim/weekend";
@@ -41,7 +42,12 @@ function finishSession(wk: Weekend, kind: SessionKind, sess: Session) {
   const sum = isRaceKind(kind) ? buildSummary(sess) : null;
   if (sum) st.summaries = { ...st.summaries, [kind]: sum };
   let extra = "";
-  if (kind === "RACE") {
+  if (kind === "RACE" && s.gp) {
+    // gran premio suelto: sin mundial ni cambios de pilotos
+    s.rounds.push({ round: st.round, circuitId: st.circuitId, q: st.results.Q, sprint: st.results.SPRINT, race: st.results.RACE, raceTable: st.scoring?.RACE, sprintTable: st.scoring?.SPRINT, summary: st.summaries?.RACE, sprintSummary: st.summaries?.SPRINT });
+    s.round++;
+    s.weekend = null;
+  } else if (kind === "RACE") {
     if (st.pu) s.pu = st.pu;
     s.rounds.push({ round: st.round, circuitId: st.circuitId, q: st.results.Q, sprint: st.results.SPRINT, race: st.results.RACE, raceTable: st.scoring?.RACE, sprintTable: st.scoring?.SPRINT, summary: st.summaries?.RACE, sprintSummary: st.summaries?.SPRINT });
     s.round++;
@@ -120,6 +126,16 @@ function chosenCalendar(): { calendar: string[]; formatos?: Record<string, "norm
   return Object.keys(c.formatos).length ? { calendar: [...c.ids], formatos: { ...c.formatos } } : { calendar: [...c.ids] };
 }
 
+/** Gran premio nuevo: sustituye al que hubiera guardado (las partidas no se tocan). */
+function startGp(p: GpPick) {
+  deleteSlot(GP_SLOT);
+  setActiveSlot(GP_SLOT);
+  season = gpSeason(p);
+  useSeason(season);
+  saveSeason(season);
+  nav.season();
+}
+
 /** Temporada nueva en una partida: lo que hubiera en ella se borra. */
 function newSeason(slot: number, s: SeasonState) {
   s.dev = newDev(devContext(s).left); // presupuesto de desarrollo de la temporada
@@ -148,7 +164,27 @@ const nav: Nav = {
     });
     window.scrollTo(0, 0);
   },
-  season() { if (season) seasonScreen(nav, season); else nav.home(); window.scrollTo(0, 0); },
+  season() {
+    const s = season;
+    if (s?.gp) {
+      // gran premio suelto: el fin de semana, o el resultado si ya se corrió
+      if (s.rounds.length) {
+        const pick = gpPickOf(s);
+        gpDoneScreen(nav, s, () => startGp(pick), () => gpSetupScreen(nav, startGp, pick));
+        return;
+      }
+      if (!s.weekend) {
+        s.weekend = gpWeekend(s, circuitOf(s, s.calendar![0]), TEAMS);
+        saveSeason(s);
+      }
+      nav.weekend();
+      return;
+    }
+    if (s) seasonScreen(nav, s); else nav.home();
+    window.scrollTo(0, 0);
+  },
+  gp() { gpSetupScreen(nav, startGp); },
+  openGp() { nav.open(GP_SLOT); },
   nextSeason(next: SeasonState) { newSeason(getActiveSlot(), next); },
   weekend() { if (season?.weekend) weekendScreen(nav, season, pendingSnap()); else nav.season(); window.scrollTo(0, 0); },
   session(kind: SessionKind, snap?: SessionSnapshot) {
