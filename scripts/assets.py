@@ -67,6 +67,30 @@ def recenter(arr: np.ndarray, target_std: float, lo: float, hi: float) -> np.nda
     return np.clip(np.round(np.clip(out, lo, hi) * 255.0), 0, 255).astype(np.uint8)
 
 
+# Texturas que se repiten muy seguido (el asfalto, cada 2,7 m): sin manchas grandes, que al repetirse se ven como
+# baldosas. Lo grande ya lo ponen las otras capas y el ruido del sombreador.
+APLANAR = {"asfalto": 18.0}
+
+
+def highpass(ch: np.ndarray, sigma: float) -> np.ndarray:
+    """Quita a un canal (0..1) lo que varía en más de ~sigma píxeles, sin costuras (con la FFT, que da la vuelta)."""
+    h, w = ch.shape
+    fy, fx = np.fft.fftfreq(h)[:, None], np.fft.fftfreq(w)[None, :]
+    low = np.exp(-2 * (math.pi * sigma) ** 2 * (fx * fx + fy * fy))
+    return ch - np.real(np.fft.ifft2(np.fft.fft2(ch) * low)) + float(ch.mean())
+
+
+def aplanar(dest: Path, sigma: float) -> None:
+    """Aplana un .webp ya empaquetado (R claro/oscuro, GB relieve, A rugosidad): mismas medias y contraste fino."""
+    x = np.asarray(Image.open(dest).convert("RGBA"), dtype=np.float32) / 255.0
+    out = []
+    for i, (lo, hi) in enumerate(((0.06, 0.94), (0.04, 0.96), (0.04, 0.96), (0.05, 0.95))):
+        c = highpass(x[..., i], sigma)
+        out.append(recenter(c, float(np.std(x[..., i])), lo, hi))
+    Image.fromarray(np.stack(out, axis=-1), mode="RGBA").save(dest, format="WEBP", lossless=True, exact=True, method=6)
+    print(f"  tex/{dest.name}: aplanada (sigma {sigma:g} px), {dest.stat().st_size / 1024:.1f} KB")
+
+
 def pack_texture(nombre: str, asset_id: str, dest: Path) -> None:
     files = fetch_json(f"https://api.polyhaven.com/files/{asset_id}")
     u_diff = pick_tex_url(files, "Diffuse", ("jpg", "png"))
@@ -100,6 +124,8 @@ def pack_texture(nombre: str, asset_id: str, dest: Path) -> None:
         dest, format="WEBP", lossless=True, exact=True, method=6
     )
     print(f"  tex/{nombre}.webp ({asset_id}): {dest.stat().st_size / 1024:.1f} KB")
+    if nombre in APLANAR:
+        aplanar(dest, APLANAR[nombre])
 
 
 def decode_hdr(raw: bytes) -> tuple[np.ndarray, int, int]:
@@ -293,4 +319,9 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    import sys
+    if "--aplanar" in sys.argv:  # solo aplanar las que ya están, sin descargar nada
+        for k, sg in APLANAR.items():
+            aplanar(OUT / "tex" / f"{k}.webp", sg)
+    else:
+        main()
