@@ -25,18 +25,57 @@ function hashStr(s: string): number {
   return h >>> 0;
 }
 
+// Colores de las banderas (del más característico al menos), para los cascos.
+const FLAG_COLORS: Record<string, string[]> = {
+  "🇬🇧": ["#012169", "#c8102e", "#ffffff"], "🇮🇹": ["#009246", "#ce2b37", "#ffffff"], "🇲🇨": ["#ce1126", "#ffffff"], "🇳🇱": ["#ff6a13", "#21468b", "#ffffff"],
+  "🇫🇷": ["#0055a4", "#ef4135", "#ffffff"], "🇦🇺": ["#00843d", "#ffcd00", "#012169"], "🇳🇿": ["#111111", "#ffffff", "#c8102e"], "🇦🇷": ["#74acdf", "#ffffff", "#f6b40e"],
+  "🇩🇪": ["#111111", "#dd0000", "#ffce00"], "🇧🇷": ["#ffdf00", "#009c3b", "#002776"], "🇪🇸": ["#c60b1e", "#ffc400"], "🇹🇭": ["#2d2a4a", "#a51931", "#ffffff"],
+  "🇨🇦": ["#d80621", "#ffffff"], "🇲🇽": ["#006847", "#ce1126", "#ffffff"], "🇫🇮": ["#ffffff", "#002f6c"], "🇩🇰": ["#c8102e", "#ffffff"],
+  "🇯🇵": ["#ffffff", "#bc002d"], "🇪🇪": ["#0072ce", "#111111", "#ffffff"], "🇺🇸": ["#3c3b6e", "#b22234", "#ffffff"], "🇨🇳": ["#de2910", "#ffde00"],
+  "🇵🇱": ["#ffffff", "#dc143c"], "🇷🇺": ["#0039a6", "#d52b1e", "#ffffff"], "🇨🇭": ["#d52b1e", "#ffffff"], "🇦🇹": ["#c8102e", "#ffffff"],
+  "🇻🇪": ["#ffcc00", "#00247d", "#cf142b"], "🇧🇪": ["#111111", "#fdda24", "#ef3340"], "🇮🇳": ["#ff9933", "#138808", "#ffffff"], "🇸🇪": ["#006aa7", "#fecc00"],
+  "🇮🇩": ["#ce1126", "#ffffff"], "🇮🇪": ["#169b62", "#ff883e", "#ffffff"], "🇨🇴": ["#fcd116", "#003893", "#ce1126"],
+};
+// Colores para los que no llevan su bandera (o no se sabe de dónde son).
+const HELMET_PALETTE = ["#f2c500", "#e8452c", "#1f6fd1", "#16a37a", "#7a3fd1", "#f07a1a", "#e8e8ea", "#14181f", "#d6246e", "#2ab7d6", "#b8d62a", "#8a1c2b"];
+
+/** Diseño del casco de un piloto: tres colores y un motivo, siempre los mismos para él (sale de su nombre). */
+export interface HelmetDesign { base: string; c2: string; c3: string; pat: number }
+export function helmetDesign(nombre: string): HelmetDesign {
+  const h = hashStr(nombre);
+  const flag = FLAG_COLORS[driverFlag(nombre)];
+  let cols: string[];
+  if (flag && h % 5 < 3) {
+    // con los colores de su bandera: uno de ellos de base y los otros de motivo
+    const k = (h >>> 3) % flag.length;
+    cols = [flag[k], ...flag.slice(k + 1), ...flag.slice(0, k)];
+    if (cols.length < 3) cols.push(luminance(cols[0]) > 0.6 ? "#14181f" : "#ffffff");
+  } else {
+    const P = HELMET_PALETTE, a = (h >>> 3) % P.length;
+    let b = (h >>> 9) % P.length;
+    if (b === a || Math.abs(luminance(P[a]) - luminance(P[b])) < 0.18) b = (a + 6) % P.length;
+    cols = [P[a], P[b], luminance(P[a]) > 0.6 ? "#14181f" : "#ffffff"];
+  }
+  // el motivo, que se vea sobre la base
+  if (Math.abs(luminance(cols[0]) - luminance(cols[1])) < 0.12) [cols[1], cols[2]] = [cols[2], cols[1]];
+  return { base: cols[0], c2: cols[1], c3: cols[2], pat: (h >>> 14) % 9 };
+}
+
 /**
- * Casco visto de lado (mirando a la derecha) con los colores del equipo y el número del piloto.
- * Diseño propio: seis motivos y un segundo tono según el piloto para distinguir bien a los dos compañeros.
+ * Casco visto de lado (mirando a la derecha) con el número del piloto. Con su nombre, el diseño propio del piloto
+ * (`helmetDesign`) y el color del equipo en la franja de abajo; sin él, el color del equipo con un motivo según
+ * la abreviatura (como antes).
  */
-export function helmetSvg(color: string, numero: number | string, abrev = "", size = 32): string {
+export function helmetSvg(color: string, numero: number | string, abrev = "", size = 32, nombre?: string): string {
+  const own = nombre ? helmetDesign(nombre) : null;
   const h = hashStr(abrev || String(numero));
-  const light = luminance(color) > 0.62;
-  const accent = light ? "#14181f" : "#ffffff";
-  const accent2 = light ? shade(color, -0.45) : shade(color, 0.55);
-  const dark = shade(color, -0.38);
-  const pat = h % 6;
-  const id = `h${hashStr(color + numero + abrev).toString(36)}`;
+  const base = own ? own.base : color;
+  const light = luminance(base) > 0.62;
+  const accent = own ? own.c2 : light ? "#14181f" : "#ffffff";
+  const accent2 = own ? own.c3 : light ? shade(color, -0.45) : shade(color, 0.55);
+  const dark = shade(base, -0.38);
+  const pat = own ? own.pat : h % 6;
+  const id = `h${hashStr(base + numero + abrev + (nombre ?? "")).toString(36)}`;
   const stripe = [
     // 0: franja diagonal doble
     `<path d="M5 19.5 L18 6 L23.5 5.6 L9.5 22 Z" fill="${accent}" opacity=".92"/><path d="M8.5 23 L22.5 8.5 L25 8.5 L11 24.4 Z" fill="${accent2}" opacity=".85"/>`,
@@ -50,15 +89,25 @@ export function helmetSvg(color: string, numero: number | string, abrev = "", si
     `<path d="M6.4 14.5 L16 6.5 L20.5 6.5 L13.5 14.5 Z" fill="${accent}" opacity=".88"/><path d="M15 14.5 L22.5 6.5 L26.2 6.8 L19.2 14.5 Z" fill="${accent2}" opacity=".85"/>`,
     // 5: corona y base contrastada
     `<path d="M11 6.8 C16 3.5 24 3.4 29.8 6.5 L28 9.4 C22.5 6.8 16.2 6.8 11.5 9.8 Z" fill="${accent}" opacity=".92"/><path d="M7.2 22.8 L35 22.2 L33.5 26.4 L10 26.4 Z" fill="${dark}" opacity=".75"/>`,
+    // 6: estrella en lo alto con su estela
+    `<path d="M6.5 12.6 L24 9.6 L24.2 11 L7 14.2 Z" fill="${accent2}" opacity=".85"/><path d="M8.2 6.2 L9.4 9 L12.4 9.1 L10 11 L10.9 13.9 L8.2 12.2 L5.6 13.9 L6.4 11 L4 9.1 L7 9 Z" transform="translate(10 -2.6)" fill="${accent}" stroke="#000" stroke-opacity=".3" stroke-width=".4"/>`,
+    // 7: mitad superior de otro color (degradado) con un filo
+    `<path d="M5.2 15 C6 8 12.5 2.8 21.8 2.6 C30 2.4 35.6 6.5 37.2 11.2 L19.8 11.4 C17.5 12.4 15 14 13 15 Z" fill="url(#${id}t)"/><path d="M5.3 15 L13 15 C15 14 17.5 12.4 19.8 11.4 L21 11.4 C18.5 12.8 15.6 14.6 13.4 16.2 L5.4 16.4 Z" fill="${accent2}" opacity=".9"/>`,
+    // 8: flechas hacia delante en lo alto
+    `<path d="M12.6 4.4 L18 7.8 L12.6 11.2 L15 11.2 L20.4 7.8 L15 4.4 Z" fill="${accent}" opacity=".92"/><path d="M18.8 3.6 L24.4 7.6 L19.6 11.2 L22 11.2 L26.8 7.6 L21.2 3.6 Z" fill="${accent2}" opacity=".88"/>`,
   ][pat];
   const rim = light ? "#222832" : "#dce3ef";
+  // con diseño propio, el equipo va en la franja de abajo
+  const teamBand = own ? `<path d="M7.6 25.6 C9 26.6 10.4 26.9 12 26.6 L17.4 25.7 C21.8 25.4 25.2 26.6 27.4 29 L26.2 29.2 C24.2 27.3 21.2 26.6 17.4 26.9 L11.8 27.9 C9.6 28.2 8.2 27.4 7.6 25.6 Z" fill="${color}" stroke="#000" stroke-opacity=".35" stroke-width=".4"/>` : "";
   return `<svg class="helmet" viewBox="0 0 40 32" width="${size}" height="${Math.round(size * 0.8)}" aria-hidden="true">
     <defs>
-      <linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${shade(color, 0.34)}"/><stop offset=".5" stop-color="${color}"/><stop offset="1" stop-color="${dark}"/></linearGradient>
+      <linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${shade(base, 0.34)}"/><stop offset=".5" stop-color="${base}"/><stop offset="1" stop-color="${dark}"/></linearGradient>
       <linearGradient id="${id}v" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4e6990"/><stop offset=".42" stop-color="#0b1018"/><stop offset=".75" stop-color="#1b2b44"/><stop offset="1" stop-color="#2c4466"/></linearGradient>
+      ${pat === 7 ? `<linearGradient id="${id}t" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="${accent}"/><stop offset="1" stop-color="${shade(accent, -0.3)}"/></linearGradient>` : ""}
     </defs>
     <path d="M5 20.5 C4.2 10.6 11.4 2.6 21.8 2.4 C31.4 2.2 38 9.2 38.2 18.2 C38.3 22.6 37 26 33.8 28 L27.4 29 C25.2 26.6 21.8 25.4 17.4 25.7 L9.6 27 C6.8 27.4 5.3 24.6 5 20.5 Z" fill="url(#${id})" stroke="#000" stroke-opacity=".6" stroke-width=".85"/>
     ${stripe}
+    ${teamBand}
     <path d="M13 4.8 C17.5 3.1 24.5 3.2 29.5 5.4" stroke="#fff" stroke-opacity=".38" stroke-width="1.4" stroke-linecap="round" fill="none"/>
     <path d="M20.2 11.4 L35.9 11.4 C37.1 13.3 37.6 15.6 37.6 18.7 L22.5 18.7 C20.6 18.7 19.4 17.2 19.4 15.2 C19.4 13.3 19.7 12.2 20.2 11.4 Z" fill="url(#${id}v)" stroke="#000" stroke-width=".7"/>
     <path d="M20.5 11.5 L35.5 11.5" stroke="${rim}" stroke-opacity=".75" stroke-width="1.1" stroke-linecap="round"/>

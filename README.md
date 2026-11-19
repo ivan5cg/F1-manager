@@ -11,6 +11,7 @@ Es una web para el móvil (se instala como aplicación desde el navegador) y fun
 - mensajes con pestaña blanca en diagonal («RADIO DEL EQUIPO», «DIRECCIÓN DE CARRERA») sobre barra oscura,
 - hora local con icono del cielo, temperaturas, lluvia media y máxima y agua por sector,
 - rótulos de piloto con la posición en caja roja y diferencias en caja amarilla,
+- **cascos con diseño propio:** cada piloto lleva el suyo en todas las pantallas (torre, podio, clasificaciones, gran premio, escenarios) y en el 3D, siempre el mismo: tres colores (a menudo los de su bandera) y uno de nueve motivos (franjas, rayo, estrella, flechas, degradado...), sacados de su nombre. El color del equipo va en la franja de abajo. Diseños inventados, no los de verdad,
 - velocímetro de cada uno de tus pilotos con velocidad, marcha, acelerador, freno, batería y modo adelantamiento,
 - en la tarjeta de cada piloto, su coche visto desde arriba con las cuatro ruedas: el color es la temperatura frente a la ventana del compuesto (azul frío, verde bien, amarillo al borde, rojo caliente) y el relleno, la banda que queda (la simulación lleva cada eje, así que las dos ruedas de un eje van iguales),
 - en la torre de carrera, las posiciones ganadas (▲) o perdidas (▼) desde la parrilla y una raya naranja en el que va a menos de 1 s del de delante.

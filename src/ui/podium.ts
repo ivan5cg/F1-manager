@@ -16,7 +16,7 @@ export function podiumHtml(rows: ResultRow[], title: string, playerTeam: string)
   const col = (r: ResultRow, place: number) => {
     const d = DRIVERS[r.id];
     return `<div class="pcol p${place}${d.team.id === playerTeam ? " mine" : ""}">
-      <div class="phelm">${helmetSvg(d.team.color, d.d.numero, d.d.abrev, place === 1 ? 64 : 52)}</div>
+      <div class="phelm">${helmetSvg(d.team.color, d.d.numero, d.d.abrev, place === 1 ? 64 : 52, d.d.nombre)}</div>
       <b class="pname">${esc(d.d.abrev)}</b><span class="pteam">${esc(d.team.nombre)}</span>
       <div class="pstep" style="--tc:${d.team.color}"><span>${place}</span></div></div>`;
   };
@@ -39,7 +39,7 @@ export function standingsHtml(gp: string, before: Standing[], after: Standing[],
     const was = prevPos.get(x.id) ?? i;
     const mv = was - i;
     const arrow = mv > 0 ? `<span class="green small">▲${mv}</span>` : mv < 0 ? `<span class="redt small">▼${-mv}</span>` : "";
-    return `${k > 0 && i > shown[k - 1].i + 1 ? `<div class="dim small" style="padding-left:6px">···</div>` : ""}<div class="row srow${d.team.id === playerTeam ? " yellow" : ""}"><span class="pos">${i + 1}</span>${helmetSvg(d.team.color, d.d.numero, d.d.abrev, 24)}<span class="grow">${esc(d.d.nombre)} ${arrow}</span>${x.points > from ? `<span class="gain small">+${x.points - from}</span>` : ""}<b class="mono" data-count="${from}:${x.points}">${from}</b></div>`;
+    return `${k > 0 && i > shown[k - 1].i + 1 ? `<div class="dim small" style="padding-left:6px">···</div>` : ""}<div class="row srow${d.team.id === playerTeam ? " yellow" : ""}"><span class="pos">${i + 1}</span>${helmetSvg(d.team.color, d.d.numero, d.d.abrev, 24, d.d.nombre)}<span class="grow">${esc(d.d.nombre)} ${arrow}</span>${x.points > from ? `<span class="gain small">+${x.points - from}</span>` : ""}<b class="mono" data-count="${from}:${x.points}">${from}</b></div>`;
   }).join("")}${foot}</div></div>`;
 }
 
@@ -133,7 +133,7 @@ export async function drawShareCard(info: ShareInfo): Promise<HTMLCanvasElement>
     g.font = F(900, out ? 64 : 110); g.textAlign = "center";
     g.fillText(out ? (r.status === "dsq" ? "DSQ" : "OUT") : `P${i + 1}`, 165, y + (out ? 110 : 128));
     g.textAlign = "left";
-    const hel = await svgImage(helmetSvg(d.team.color, d.d.numero, d.d.abrev, 120));
+    const hel = await svgImage(helmetSvg(d.team.color, d.d.numero, d.d.abrev, 120, d.d.nombre));
     g.drawImage(hel, 290, y + 18, 150, 120);
     g.fillStyle = "#fff"; g.font = F(900, 56);
     g.fillText(d.d.nombre.toUpperCase(), 460, y + 75);

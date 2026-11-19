@@ -14,6 +14,10 @@ Ya hecho de lo que viene ahora (noviembre de 2026):
 - **10.1 Lobato por códigos:** `lobato.ts` solo mira `RaceEvent.code` (19 códigos nuevos de dirección de carrera,
   meteo y boxes, y `motivo` en las sanciones). `npx tsx scripts/lobato.ts [circuito] [equipo] [semilla]` vuelca sus
   comentarios por código, las respuestas a órdenes al azar y los mensajes que siguen sin código.
+- **12.1 Cascos con diseño propio:** `helmetDesign(nombre)` en `visual.ts` (colores de su bandera en `FLAG_COLORS` o de
+  `HELMET_PALETTE`, nueve motivos) y `helmetSvg(..., nombre)` en todas las pantallas, con el equipo en la franja de
+  abajo. En el 3D, el casco se marca en el color de vértice (g = 2 base, g = 3 franja) y cada coche lleva `aHelm` y
+  `aHelm2` (`CAR_INST` en `map3d.ts`); mismas llamadas y triángulos.
 - **Inmersión visual:** monoplaza `.glb` propio con Draco (`public/assets/models`, guía en `docs/GUIA-BLENDER-COCHE.md`),
   entornos HDRI (`public/assets/env`), texturas PBR de Poly Haven (`public/assets/tex`: asfalto, hierba, grava,
   hormigón, fachada), banderas SVG (`public/assets/flags`) y brazos del piloto a bordo (`car3d.ts`).
@@ -23,7 +27,7 @@ Ya hecho de lo que viene ahora (noviembre de 2026):
 Primero lo que se nota en cada carrera; los gráficos se ven una vez y se olvidan antes.
 
 1. ~~8.1 Los pilotos responden a tus órdenes~~ ✅ y ~~10.1 Lobato por códigos~~ ✅.
-2. **11.1 Safety Car `.glb`** y **12.1 Cascos con diseño propio** (P/M): lo que más luce de lo visual.
+2. **11.1 Safety Car `.glb`** (P/M; ~~12.1 Cascos~~ ✅): lo que más luce de lo visual. Falta el modelo: lo consigue el dueño del repo.
 3. **9.2 Titulares** y **9.3 La directiva te escribe** (P): salen casi gratis de `summary.ts` y `objectives.ts`.
 4. **12.2 Planos técnicos en Desarrollo** (M).
 5. **9.1 Rueda de prensa**, **8.2 Moral y desobediencia** y **8.3 Rivalidades** (M/G): lo más profundo, cambia la
@@ -137,7 +141,7 @@ no de crearlos. Respetar el presupuesto de assets.
 
 ## Bloque 12 · Pantallas e identidad 2D
 
-### 12.1 Cascos con diseño propio (P/M)
+### 12.1 Cascos con diseño propio (P/M) · ✅ Hecho
 - `helmetSvg` (`src/ui/visual.ts`) ya pinta un casco de lado con el color del equipo y el número. Darle a cada piloto
   un diseño propio (franjas, estrella, degradado, colores de su bandera) sacado de un hash de su id, para que no haga
   falta dibujar ninguno a mano. Que el casco del 3D (`car3d.ts`) use los mismos colores.

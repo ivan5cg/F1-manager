@@ -14,6 +14,8 @@ const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
 // color de vértice: r = cuánto color del equipo, g = gris fijo, b = luz roja trasera
 // color de vértice: r = cuánto color del equipo, g = gris fijo (−1 = luz roja trasera), b = cuánto del segundo color del equipo
 const TEAM = [1, 0, 0], TEAM2 = [0.5, 0.02, 0], BLACK = [0, 0.04, 0], WHITE = [0, 0.85, 0], RED = [0, -1, 0];
+// casco del piloto: g = 2, su color (aHelm); g = 3, la franja (aHelm2). Los colores salen de helmetDesign, por coche.
+const HELM = [0, 2, 0], HELM2 = [0, 3, 0];
 // segundo color de cada equipo (para la línea del costado y un plano del alerón); el resto usa un gris claro
 export const SECOND = { mercedes: "#16181c", ferrari: "#f4f4f4", redbull: "#f0c020", mclaren: "#16181c", racingbulls: "#f4f4f4", alpine: "#f078b4", haas: "#d8242c", audi: "#c4c8cc", williams: "#f4f4f4", astonmartin: "#cfe22a", cadillac: "#16181c" };
 export function collect() {
@@ -169,7 +171,7 @@ export function carGeometry(hi) {
   part(0.05, 0.11, 0.13, -2.67, 0.36, 0, RED);
   // habitáculo: casco del piloto con su visera, halo y retrovisores
   { const g = new THREE.SphereGeometry(0.135, hi ? 28 : 12, hi ? 20 : 8).toNonIndexed(), p = g.attributes.position, cl = new Float32Array(p.count * 3);
-    for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i), z = p.getZ(i); cl.set(x > 0.035 && y > -0.03 && y < 0.06 ? [0, 0.02, 0] : Math.abs(z) < 0.035 && y > 0 ? ACC : WHITE, i * 3); }
+    for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i), z = p.getZ(i); cl.set(x > 0.035 && y > -0.03 && y < 0.06 ? [0, 0.02, 0] : Math.abs(z) < 0.035 && y > 0 ? HELM2 : HELM, i * 3); }
     g.setAttribute("color", new THREE.BufferAttribute(cl, 3)); c.raw(g.translate(0.5, 0.79, 0)); }
   tube([[-0.46, 0.62, 0.275], [-0.3, 0.77, 0.295], [-0.12, 0.875, 0.305], [0.2, 0.925, 0.305], [0.45, 0.93, 0.3], [0.68, 0.915, 0.265], [0.85, 0.88, 0.2], [0.98, 0.845, 0.1], [1.05, 0.82, 0], [0.98, 0.845, -0.1], [0.85, 0.88, -0.2], [0.68, 0.915, -0.265], [0.45, 0.93, -0.3], [0.2, 0.925, -0.305], [-0.12, 0.875, -0.305], [-0.3, 0.77, -0.295], [-0.46, 0.62, -0.275]], 0.04, TEAM2);
   tube([[1.05, 0.82, 0], [1.14, 0.75, 0], [1.24, 0.64, 0], [1.3, 0.57, 0]], 0.03, TEAM2);
@@ -234,7 +236,7 @@ export function carMinGeometry() {
   skin(c, spine.map((q) => sec(q[0], q[1], q[2], q[3], q[4])), (u) => (u > 0.3 && u < 0.7 ? [0, 0.04, 0] : [1, 0, 0]), 0.6);
   for (const s of [1, -1]) box(2.2, 0.32, 0.36, -0.4, 0.38, 0.55 * s, [1, 0, 0], [0.5, 0.7, -0.1]); // pontones
   box(1.6, 0.34, 0.26, -0.6, 0.88, 0, [1, 0, 0], [0.4, 0.5, -0.12]); // tapa del motor
-  box(0.26, 0.24, 0.24, 0.5, 0.79, 0, [0, 0.85, 0]); // casco del piloto
+  box(0.26, 0.24, 0.24, 0.5, 0.79, 0, HELM); // casco del piloto
   box(4.2, 0.04, 1.5, -0.15, 0.06, 0, [0, 0.04, 0]); // fondo
   box(0.5, 0.26, 1.24, -2.35, 0.9, 0, [0, 0.04, 0]); // alerón trasero
   c.part = 1;
@@ -515,7 +517,7 @@ const uLiv = { value: livTex };
 const CAR_MAT = new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.34, metalness: 0.25, clearcoat: 1, clearcoatRoughness: 0.04, side: THREE.DoubleSide });
 CAR_MAT.onBeforeCompile = (sh) => {
   Object.assign(sh.uniforms, { uFlood: U.uFlood, uLight: U.uLight, uLiv, uDrops: U.uDrops || { value: 0 } });
-  sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\n" + INST_COL_DEF + "uniform float uLight; attribute vec3 aCol2; attribute float aLiv, aPart, aDmg; varying float vPaint, vGlow, vShade, vLiv; varying vec3 vLP, vLN;")
+  sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\n" + INST_COL_DEF + "uniform float uLight; attribute vec3 aCol2, aHelm, aHelm2; attribute float aLiv, aPart, aDmg; varying float vPaint, vGlow, vShade, vLiv, vHelm; varying vec3 vLP, vLN;")
     .replace("#include <begin_vertex>", `#include <begin_vertex>
       // alerón delantero: con daño, el lado derecho se descuelga hasta casi rozar el suelo; sin él (cambio de morro), no se dibuja
       if (aPart > 0.5 && aDmg != 0.0) {
@@ -525,10 +527,11 @@ CAR_MAT.onBeforeCompile = (sh) => {
           transformed.x -= 0.1 * k; }
       }`)
     .replace("#include <color_vertex>", `float kr = pow(color.r, 2.2), kb = pow(color.b, 2.2), red = step(color.g, -0.5);
-      vColor = vec4(INST_COL * kr + aCol2 * kb + vec3(pow(max(color.g, 0.0), 2.2)) + vec3(0.25, 0.0, 0.0) * red, 1.0);
+      float h2 = step(2.5, color.g), h1 = step(1.5, color.g) - h2; vHelm = h1 + h2;
+      vColor = vec4(INST_COL * kr + aCol2 * kb + vec3(pow(clamp(color.g, 0.0, 1.0), 2.2)) * (1.0 - vHelm) + aHelm * h1 + aHelm2 * h2 + vec3(0.25, 0.0, 0.0) * red, 1.0);
       vPaint = step(0.25, color.r + color.b); vGlow = red * uLight; vShade = max(kr, kb); vLiv = aLiv; vLP = position; vLN = normal;`);
-  sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nuniform float uFlood, uDrops; varying float vPaint, vGlow, vShade, vLiv; varying vec3 vLP, vLN;" + LIV_GLSL + DROPS_GLSL + CARBON_GLSL)
-    .replace("#include <color_fragment>", "#include <color_fragment>\nvec3 nL = normalize(vLN);\nif (vPaint > 0.5) diffuseColor.rgb = liveryAt(vLP, nL, floor(vLiv + 0.5)) * vShade;\nisCarb = (1.0 - vPaint) * (1.0 - step(0.06, diffuseColor.r + diffuseColor.g + diffuseColor.b));\nif (isCarb > 0.5) { cw = carbonWeave(vLP, nL); diffuseColor.rgb = mix(vec3(0.005), vec3(0.018), cw); }\ndrop = uDrops > 0.01 ? dropsAt(vLP, nL) * uDrops : vec2(0.0); diffuseColor.rgb *= 1.0 - 0.3 * drop.x;")
+  sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nuniform float uFlood, uDrops; varying float vPaint, vGlow, vShade, vLiv, vHelm; varying vec3 vLP, vLN;" + LIV_GLSL + DROPS_GLSL + CARBON_GLSL)
+    .replace("#include <color_fragment>", "#include <color_fragment>\nvec3 nL = normalize(vLN);\nif (vPaint > 0.5) diffuseColor.rgb = liveryAt(vLP, nL, floor(vLiv + 0.5)) * vShade;\nisCarb = (1.0 - vPaint) * (1.0 - step(0.5, vHelm)) * (1.0 - step(0.06, diffuseColor.r + diffuseColor.g + diffuseColor.b));\nif (isCarb > 0.5) { cw = carbonWeave(vLP, nL); diffuseColor.rgb = mix(vec3(0.005), vec3(0.018), cw); }\ndrop = uDrops > 0.01 ? dropsAt(vLP, nL) * uDrops : vec2(0.0); diffuseColor.rgb *= 1.0 - 0.3 * drop.x;")
     .replace("#include <roughnessmap_fragment>", "float roughnessFactor = mix(mix(mix(0.62, 0.34 + 0.18 * (1.0 - cw), isCarb), roughness, vPaint), 0.04, drop.x);")
     .replace("#include <metalnessmap_fragment>", "float metalnessFactor = metalness * vPaint;")
     .replace("#include <lights_physical_fragment>", "#include <lights_physical_fragment>\nmaterial.clearcoat *= mix(0.32 * isCarb, 1.0, vPaint);")
@@ -645,7 +648,7 @@ function classifyMesh(name) {
   if (/rueda|wheel|tyre|tire|rim|llanta/.test(name)) return { wheel: true };
   if (/aleron_del|front_wing|frontwing|ala_del/.test(name)) return { part: 1, col: TEAM };
   if (/luz|rain_light|taillight|tail_light|brake_light/.test(name)) return { part: 0, col: RED };
-  if (/casco|helmet|driver|piloto/.test(name)) return { part: 0, col: WHITE };
+  if (/casco|helmet|driver|piloto/.test(name)) return { part: 0, col: HELM };
   if (/carbono|carbon|suelo|floor|difusor|diffuser|halo|susp|wishbone|brake|freno|cockpit|seat|escape|exhaust/.test(name)) return { part: 0, col: BLACK };
   if (/acento|accent|secundario|stripe|franja/.test(name)) return { part: 0, col: ACC };
   return { part: 0, col: TEAM };
@@ -693,7 +696,15 @@ export function extractCarFromGltf(root, separateWheel = false) {
       return;
     }
     carC.part = tag.part;
-    carC.keep(ni, tag.col);
+    if (tag.col === HELM) {
+      // el casco con su franja: una banda por arriba, de delante atrás, como en el integrado
+      ni.computeBoundingBox();
+      const bb = ni.boundingBox, p = ni.attributes.position, cl = new Float32Array(p.count * 3);
+      const zc = (bb.min.z + bb.max.z) / 2, yc = (bb.min.y + bb.max.y) / 2, w = (bb.max.z - bb.min.z) * 0.13;
+      for (let i = 0; i < p.count; i++) cl.set(Math.abs(p.getZ(i) - zc) < w && p.getY(i) > yc ? HELM2 : HELM, i * 3);
+      ni.setAttribute("color", new THREE.BufferAttribute(cl, 3));
+      carC.raw(ni);
+    } else carC.keep(ni, tag.col);
     hasCar = true;
   });
   let carBase = null, wheelBase = null;
@@ -814,7 +825,11 @@ export function createCarPreview(canvas, team) {
   geo.setAttribute("aCol2", new THREE.InstancedBufferAttribute(new Float32Array(3), 3));
   geo.setAttribute("aLiv", new THREE.InstancedBufferAttribute(new Float32Array(1), 1));
   geo.setAttribute("aDmg", new THREE.InstancedBufferAttribute(new Float32Array(1), 1));
-  const car = new THREE.InstancedMesh(geo, mat, 1), col = new THREE.Color();
+  // casco de la vista previa: blanco con la franja del color del equipo
+  const col = new THREE.Color();
+  geo.setAttribute("aHelm", new THREE.InstancedBufferAttribute(new Float32Array(col.set("#eceef2").toArray()), 3));
+  geo.setAttribute("aHelm2", new THREE.InstancedBufferAttribute(new Float32Array(col.set(team.color).toArray()), 3));
+  const car = new THREE.InstancedMesh(geo, mat, 1);
   car.setMatrixAt(0, new THREE.Matrix4()); car.setColorAt(0, col.set(team.color));
   const wheels = new THREE.InstancedMesh(wgeo, wmat, 4), m = new THREE.Matrix4();
   [[1.8, 0.83, 0.92], [1.8, -0.83, 0.92], [-1.7, 0.82, 1.18], [-1.7, -0.82, 1.18]].forEach(([x, z, w], i) => { wheels.setMatrixAt(i, m.makeScale(1, 1, w).setPosition(x, 0.36, z)); wheels.setColorAt(i, col.set("#e8452c")); });
@@ -822,7 +837,7 @@ export function createCarPreview(canvas, team) {
     carLoGeo?.dispose(); // la vista previa siempre se ve de cerca: solo usa la fina
     if (!alive) { carGeo?.dispose(); wheelGeo?.dispose(); return; }
     if (carGeo) {
-      for (const a of ["aCol2", "aLiv", "aDmg"]) carGeo.setAttribute(a, geo.attributes[a]);
+      for (const a of ["aCol2", "aLiv", "aDmg", "aHelm", "aHelm2"]) carGeo.setAttribute(a, geo.attributes[a]);
       car.geometry = carGeo; geo.dispose(); geo = carGeo;
     }
     if (wheelGeo) {
@@ -862,6 +877,7 @@ export function createCarPreview(canvas, team) {
     update(t) {
       const old = tex; tex = liveryTexture([t]); mat.userData.uLiv.value = tex; old.dispose();
       car.setColorAt(0, col.set(t.color)); car.instanceColor.needsUpdate = true;
+      const h2 = car.geometry.attributes.aHelm2; h2.array.set(col.toArray()); h2.needsUpdate = true;
     },
     dispose,
   };

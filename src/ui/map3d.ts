@@ -24,6 +24,7 @@ import { HDRLoader } from "three/addons/loaders/HDRLoader.js";
 import { rainAt } from "../sim/weather";
 import { BRANDS, FONT, SECOND, collect, skin, carGeometry, carMinGeometry, wheelGeometry, steerGeometry, liveryTexture, makeCarMaterial, makeWheelMaterial, loadCarAssets } from "./car3d";
 import { gearFor, rpmFor } from "./audio";
+import { helmetDesign } from "./visual";
 
 const ASSET = (p) => `${import.meta.env.BASE_URL}assets/${p}`;
 
@@ -580,6 +581,8 @@ const DECAL_GEO = (() => {
 })();
 const LIV_TEX = liveryTexture(TEAMS);
 const CAR_MAT = makeCarMaterial(LIV_TEX, U), WHEEL_MAT = makeWheelMaterial();
+/** Datos de cada coche que comparten sus mallas (la fina, la ligera y la mínima): segundo color, librea, daños y casco. */
+const CAR_INST = ["aCol2", "aLiv", "aDmg", "aHelm", "aHelm2"];
 const BLOB_GEO = new THREE.PlaneGeometry(6.6, 3.0).rotateX(-Math.PI / 2);
 const BLOB_MAT = new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.3, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6 });
 const RING_GEO = new THREE.RingGeometry(1.0, 1.13, 48).rotateX(-Math.PI / 2);
@@ -1775,14 +1778,19 @@ function buildWorld() {
   // segundo color por coche
   const c2a = new Float32Array(NC * 3);
   sess.cars.forEach((c, i) => { col.set(SECOND[c.team.id] || "#e2e4e8"); c2a.set([col.r, col.g, col.b], i * 3); });
+  // el casco de cada piloto, con los colores de su diseño (los mismos que en las pantallas)
+  const hla = new Float32Array(NC * 3), hlb = new Float32Array(NC * 3);
+  sess.cars.forEach((c, i) => { const d = helmetDesign(c.d.nombre); hla.set(col.set(d.base).toArray(), i * 3); hlb.set(col.set(d.c2).toArray(), i * 3); });
   const livSrc = Float32Array.from(sess.cars, (c) => Math.max(0, TEAMS.indexOf(c.team)));
   for (const g of [CAR_LO, CAR_GEO]) {
     g.setAttribute("aCol2", new THREE.InstancedBufferAttribute(c2a.slice(), 3).setUsage(THREE.DynamicDrawUsage));
     g.setAttribute("aLiv", new THREE.InstancedBufferAttribute(livSrc.slice(), 1).setUsage(THREE.DynamicDrawUsage));
     g.setAttribute("aDmg", new THREE.InstancedBufferAttribute(new Float32Array(NC), 1).setUsage(THREE.DynamicDrawUsage));
+    g.setAttribute("aHelm", new THREE.InstancedBufferAttribute(hla.slice(), 3).setUsage(THREE.DynamicDrawUsage));
+    g.setAttribute("aHelm2", new THREE.InstancedBufferAttribute(hlb.slice(), 3).setUsage(THREE.DynamicDrawUsage));
   }
   // el coche mínimo (vista general) comparte con la ligera los datos de cada coche: se cambia una malla por otra
-  for (const a of ["aCol2", "aLiv", "aDmg"]) CAR_MIN.setAttribute(a, CAR_LO.attributes[a]);
+  for (const a of CAR_INST) CAR_MIN.setAttribute(a, CAR_LO.attributes[a]);
   const loose = inst(WHEEL_GEO.clone(), WHEEL_MAT, NC * 8, 10);
   const brakeH = new THREE.InstancedBufferAttribute(new Float32Array(NC * 4), 1).setUsage(THREE.DynamicDrawUsage);
   WHEEL_GEO.setAttribute("aBrake", brakeH);
@@ -1795,13 +1803,13 @@ function buildWorld() {
     if (cam) camPos = cam;
     if (carLoGeo) {
       // comparte con la integrada los datos de cada coche (segundo color, librea, daños)
-      for (const a of ["aCol2", "aLiv", "aDmg"]) carLoGeo.setAttribute(a, CAR_LO.attributes[a]);
+      for (const a of CAR_INST) carLoGeo.setAttribute(a, CAR_LO.attributes[a]);
       if (cars.geometry !== CAR_MIN) cars.geometry = carLoGeo;
       if (extCarLoGeo) extCarLoGeo.dispose();
       extCarLoGeo = carLoCur = carLoGeo;
     }
     if (carGeo) {
-      for (const a of ["aCol2", "aLiv", "aDmg"]) carGeo.setAttribute(a, CAR_GEO.attributes[a]);
+      for (const a of CAR_INST) carGeo.setAttribute(a, CAR_GEO.attributes[a]);
       carsHi.geometry = carGeo;
       if (extCarGeo) extCarGeo.dispose();
       extCarGeo = carGeo;
@@ -1908,7 +1916,7 @@ function buildWorld() {
     const pts = add(new THREE.Points(g, m)); pts.frustumCulled = false; pts.visible = false; pts.name = "pueblos";
     return pts;
   })();
-  world = { all, props, trees: treeMesh, townLights, sparkMesh, fists, chk, beams, towers, night, lampPos, debris, marsh, crane, blank, gant, glit, markMesh, posts, flags, scCar, scBar, road, cars, wheels, crewS, crewC, jacks, loose, puffs, blobs, spray, discs, rings, lamps, poles, halos, decals, steer, carIdx, c2src: c2a.slice(), carsHi, wheelsHi, col2: CAR_LO.attributes.aCol2, livSrc, liv: CAR_LO.attributes.aLiv, dmg: CAR_LO.attributes.aDmg, col2H: CAR_GEO.attributes.aCol2, livH: CAR_GEO.attributes.aLiv, dmgH: CAR_GEO.attributes.aDmg, brakeH, cell: dg.attributes.aCell };
+  world = { all, props, trees: treeMesh, townLights, sparkMesh, fists, chk, beams, towers, night, lampPos, debris, marsh, crane, blank, gant, glit, markMesh, posts, flags, scCar, scBar, road, cars, wheels, crewS, crewC, jacks, loose, puffs, blobs, spray, discs, rings, lamps, poles, halos, decals, steer, carIdx, c2src: c2a.slice(), hlsA: hla, hlsB: hlb, hlA: CAR_LO.attributes.aHelm, hlB: CAR_LO.attributes.aHelm2, hlAH: CAR_GEO.attributes.aHelm, hlBH: CAR_GEO.attributes.aHelm2, carsHi, wheelsHi, col2: CAR_LO.attributes.aCol2, livSrc, liv: CAR_LO.attributes.aLiv, dmg: CAR_LO.attributes.aDmg, col2H: CAR_GEO.attributes.aCol2, livH: CAR_GEO.attributes.aLiv, dmgH: CAR_GEO.attributes.aDmg, brakeH, cell: dg.attributes.aCell };
   U.uL.value = T.L;
   wetT = cloudT = lightT = -1e9;
   applyQuality();
@@ -3096,7 +3104,8 @@ function draw3d(dt, now) {
     // daños: el alerón tocado se ve descolgado; en un cambio de morro se quita mientras trabajan
     const nose = stop && c.pit?.noseChange && u > 0.18 && u < 0.7;
     world.dmg.array[i] = nose ? -1 : clamp(c.wing / 0.025, 0, 1) * (c.wing > 0.004 ? 1 : 0); world.col2.array[i * 3] = world.c2src[ci * 3]; world.col2.array[i * 3 + 1] = world.c2src[ci * 3 + 1]; world.col2.array[i * 3 + 2] = world.c2src[ci * 3 + 2];
-    if (hi >= 0) { world.livH.array[hi] = world.liv.array[i]; world.dmgH.array[hi] = world.dmg.array[i]; world.col2H.array.set(world.col2.array.subarray(i * 3, i * 3 + 3), hi * 3); }
+    world.hlA.array.set(world.hlsA.subarray(ci * 3, ci * 3 + 3), i * 3); world.hlB.array.set(world.hlsB.subarray(ci * 3, ci * 3 + 3), i * 3);
+    if (hi >= 0) { world.livH.array[hi] = world.liv.array[i]; world.dmgH.array[hi] = world.dmg.array[i]; world.col2H.array.set(world.col2.array.subarray(i * 3, i * 3 + 3), hi * 3); world.hlAH.array.set(world.hlsA.subarray(ci * 3, ci * 3 + 3), hi * 3); world.hlBH.array.set(world.hlsB.subarray(ci * 3, ci * 3 + 3), hi * 3); }
     const bigDash = fcDash && c === fcDash;
     mL.makeRotationX(-steer * 2.4).multiply(mTilt);
     if (bigDash) mL.scale(_ws.set(DASH_K, DASH_K, DASH_K));
@@ -3145,9 +3154,9 @@ function draw3d(dt, now) {
     g.instanceCount = P.n; pa.needsUpdate = aa.needsUpdate = true; SPARK_MAT.uniforms.uNight.value = 1 - dayK; }
   for (const a of Object.values(spray.geometry.attributes)) if (a.isInstancedBufferAttribute) a.needsUpdate = true;
   discs.visible = far > 0.02;
-  world.cell.needsUpdate = world.col2.needsUpdate = world.liv.needsUpdate = world.dmg.needsUpdate = true;
+  world.cell.needsUpdate = world.col2.needsUpdate = world.liv.needsUpdate = world.dmg.needsUpdate = world.hlA.needsUpdate = world.hlB.needsUpdate = true;
   carsHi.count = nH; wheelsHi.count = nH * 4;
-  world.livH.needsUpdate = world.dmgH.needsUpdate = world.col2H.needsUpdate = world.brakeH.needsUpdate = true;
+  world.livH.needsUpdate = world.dmgH.needsUpdate = world.col2H.needsUpdate = world.brakeH.needsUpdate = world.hlAH.needsUpdate = world.hlBH.needsUpdate = true;
   for (const m of [cars, wheels, carsHi, wheelsHi, blobs, discs, world.decals, world.steer]) { m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true; }
   const sel = opt.selId() === null ? null : pose.get(opt.selId());
   const ringFor = [...opt.mine().map((c) => (c.id === opt.selId() ? null : pose.get(c.id))), sel];

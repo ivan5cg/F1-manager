@@ -76,7 +76,7 @@ export function gpSetupScreen(nav: Nav, onStart: (p: GpPick) => void, prev?: Par
       <div class="panel"><div class="hd"><span class="t">1 · Equipo</span>${t ? `<span class="small">${esc(t.nombre)}</span>` : ""}</div><div class="bd" style="padding:0">
         ${BASE_TEAMS.map((x) => `<div class="list-item" data-team="${x.id}" style="cursor:pointer;${team === x.id ? "background:rgba(225,6,0,.22)" : ""}">
           <span class="teamdot" style="background:${x.color};height:34px;width:6px"></span>
-          <span class="hpair">${x.pilotos.map((p) => helmetSvg(x.color, p.numero, p.abrev, 26)).join("")}</span>
+          <span class="hpair">${x.pilotos.map((p) => helmetSvg(x.color, p.numero, p.abrev, 26, p.nombre)).join("")}</span>
           <div class="grow"><b class="up">${esc(x.nombre)}</b><br><span class="small dim">${x.pilotos.map((p) => esc(p.nombre)).join(" · ")}</span></div>
           <span class="small" style="width:14px">${team === x.id ? "✔" : ""}</span></div>`).join("")}
       </div></div>
