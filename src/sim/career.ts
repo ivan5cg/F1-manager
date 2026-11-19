@@ -27,6 +27,10 @@ export interface SeasonRecord {
   mine: { equipo: string; pos: number; puntos: number; pilotos: { nombre: string; pos: number; puntos: number }[] };
   objetivos: { text: string; done: boolean }[];
   carreras: number;
+  /** Tus podios de la temporada (sala de trofeos), quién ganó en cada circuito (previa) y la gala (ver hitos.ts). */
+  trofeos?: { year: number; round: number; circuitId: string; gp: string; nombre: string; pos: number }[];
+  ganadores?: Record<string, { nombre: string; equipo: string }>;
+  gala?: { icon: string; title: string; who: string; detail: string }[];
 }
 
 /** Lo bueno que es un piloto (para renovar y fichar). */

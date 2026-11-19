@@ -4,6 +4,7 @@
 // comenta de vez en cuando cómo va la cosa: el líder, las peleas, tus pilotos, las vueltas que quedan.
 import { Session, Car, RaceEvent, isRaceKind, isQualiKind, fmt } from "../sim/session";
 import { driverFlag } from "./visual";
+import type { WeekendState } from "../sim/weekend";
 
 export interface Comment { t: number; lap: number; text: string }
 
@@ -15,7 +16,7 @@ const spanish = (c: Car) => driverFlag(c.d.nombre) === "🇪🇸";
 /** A los españoles, Lobato los llama a menudo por el nombre de pila. */
 const nm = (c: Car) => (spanish(c) && Math.random() < 0.6 ? first(c) : sur(c));
 
-export function createLobato(sess: Session, gp: string) {
+export function createLobato(sess: Session, gp: string, memo?: WeekendState["memo"]) {
   const race = isRaceKind(sess.kind);
   const quali = isQualiKind(sess.kind);
   const list: Comment[] = [];
@@ -25,6 +26,22 @@ export function createLobato(sess: Session, gp: string) {
   let lastLapTick = 0;
   let saidStart = false, saidHalf = false, saidFive = false, saidLast = false;
   const p1Said = new Map<number, number>(); // el mejor tiempo con el que ya se dijo que cada uno se ponía primero
+
+  const ORD = ["", "primera", "segunda", "tercera", "cuarta", "quinta", "sexta", "séptima", "octava", "novena", "décima"];
+  /** Lo que recuerda de la temporada (memo): primera victoria, rachas de victorias y de poles. Vacío si no hay nada. */
+  function memoWin(c: Car): string {
+    if (!memo) return "";
+    const n = c.d.nombre, season = memo.wins[n] ?? 0, streak = memo.winStreak[n] ?? 0;
+    if (c.player && !memo.myCareerWins[n]) return ` ¡Es su primera victoria con el ${c.team.nombre}! ¡Histórico!`;
+    if (!season) return ` Y es su primera victoria del año.`;
+    if (streak >= 1) return ` ¡${(ORD[streak + 1] ?? `${streak + 1}.ª`).replace(/^./, (x) => x.toUpperCase())} victoria seguida! ¡Imparable!`;
+    if (season >= 2) return ` Ya van ${season + 1} victorias este año.`;
+    return "";
+  }
+  function memoPole(c: Car): string {
+    const k = memo?.poles[c.d.nombre] ?? 0;
+    return k >= 1 ? ` ¡Y es su ${ORD[k + 1] ?? `${k + 1}.ª`} pole seguida!` : "";
+  }
 
   function say(text: string, big = false) {
     const now = performance.now();
@@ -71,9 +88,9 @@ export function createLobato(sess: Session, gp: string) {
       case "pole": {
         if (!c) return null;
         const who = nm(c);
-        return say(spanish(c)
+        return say((spanish(c)
           ? pick([`¡POLE! ¡POLE PARA ${who.toUpperCase()}! ¡Qué vuelta, qué vuelta! ¡Se me ponen los pelos de punta!`, `¡${who} se lleva la pole! ¡Qué barbaridad! ¡Esto es España, señores!`])
-          : pick([`¡Pole position para ${who}! Vuelta perfecta con el ${c.team.nombre}.`, `¡${who}! ¡Qué vuelta! Mañana sale desde la primera posición.`, `${who} se lleva la pole. Una vuelta de esas que no se olvidan.`]), true);
+          : pick([`¡Pole position para ${who}! Vuelta perfecta con el ${c.team.nombre}.`, `¡${who}! ¡Qué vuelta! Mañana sale desde la primera posición.`, `${who} se lleva la pole. Una vuelta de esas que no se olvidan.`])) + (quali && sess.kind === "Q" ? memoPole(c) : ""), true);
       }
       case "eliminados": {
         const outCars = sess.cars.filter((x) => x.eliminated && x.elimPart === sess.part);
@@ -92,9 +109,9 @@ export function createLobato(sess: Session, gp: string) {
         if (!race) return null;
         const w = sess.order()[0];
         if (!w) return null;
-        return say(spanish(w)
+        return say((spanish(w)
           ? pick([`¡¡${nm(w).toUpperCase()} GANA!! ¡¡GANA EN ${gp.replace(/^Gran Premio de /i, "").toUpperCase()}!! ¡No me lo puedo creer, señores!`, `¡Victoria de ${nm(w)}! ¡Qué carrera! ¡Esto es historia!`])
-          : pick([`¡Bandera a cuadros! ¡${sur(w)} gana el ${gp}!`, `¡${sur(w)} cruza la meta y se lleva la victoria! Qué carrera nos ha dado ${gp.replace(/^Gran Premio de /i, "")}.`, `Victoria para ${sur(w)} con el ${w.team.nombre}. Impecable.`]), true);
+          : pick([`¡Bandera a cuadros! ¡${sur(w)} gana el ${gp}!`, `¡${sur(w)} cruza la meta y se lleva la victoria! Qué carrera nos ha dado ${gp.replace(/^Gran Premio de /i, "")}.`, `Victoria para ${sur(w)} con el ${w.team.nombre}. Impecable.`])) + (sess.kind === "RACE" ? memoWin(w) : ""), true);
       }
       case "sancion": {
         if (!c) return null;

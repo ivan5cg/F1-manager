@@ -36,6 +36,11 @@ Ya hecho de lo que viene ahora (noviembre de 2026):
   propio azar `moodS`, `refusesStop`, `rivalOf`, `RIVAL_DEF`, `RIVAL_CONTACT`, `duels`, `orders`; código
   `desobedece`), `WeekendState.moral/rivals/prensaQs/prensa`, `src/ui/vestuario.ts` (paneles y preguntas). Sin moral
   (`finde.ts`, gran premio suelto) los resultados no cambian. Medido con `scripts/moral.ts`.
+- **9.4 Récords e hitos, 9.5 Previa, 9.6 Gala y sala de trofeos y 10.2 Lobato con memoria** (sin tocar la
+  simulación): `src/sim/hitos.ts` (`hitosAfterRace`, `allTrofeos`, `lobatoMemo`, `gala`, `recordExtras`) y
+  `src/ui/ritual.ts` (previa, rótulos, gala, sala de trofeos, `seatAt` con `whoAt` para los cambios de asiento).
+  Se guardan `SeasonState.hitos` y `records` (pasan de año) y, en cada `SeasonRecord`, `trofeos`, `ganadores` y `gala`.
+  Lobato recibe `WeekendState.memo`. Probar con `scripts/hitos.ts`.
 - **Asfalto sin baldosas:** la textura de 2,7 m se repetía y se veía una cuadrícula. `asfalto.webp` aplanada (paso
   alto sin costuras, `python3 scripts/assets.py --aplanar`) y el árido leído dos veces en el sombreador (la segunda
   girada 37° y a otra escala) mezcladas con ruido (`ASF_R` en `map3d.ts`). Una lectura de textura más en la pista.
@@ -52,7 +57,7 @@ Primero lo que se nota en cada carrera; los gráficos se ven una vez y se olvida
 3. ~~9.2 Titulares~~ ✅ y ~~9.3 La directiva te escribe~~ ✅.
 4. **12.2 Planos técnicos en Desarrollo** (M).
 5. ~~9.1 Rueda de prensa, 8.2 Moral y desobediencia y 8.3 Rivalidades~~ ✅.
-6. **9.4 a 9.6 Ritual de la temporada**, **10.2 a 10.4** y **13 Gestión**.
+6. ~~9.4 a 9.6 Ritual de la temporada~~ ✅ y ~~10.2~~ ✅; quedan **10.3 y 10.4** y **13 Gestión**.
 7. **11.2 a 11.4 Árboles, fachadas y mecánicos**: para pulir al final.
 
 ### Presupuesto de assets (vale para los bloques 11 y 12)
@@ -102,15 +107,15 @@ El juego es una PWA (`public/sw.js`) y se juega en el móvil: cada `.glb` y cada
 - Mensajes cortos del jefe tras cada gran premio, a partir de los objetivos (`objectives.ts`: «Esperaba el podio con
   este coche»).
 
-### 9.4 Récords e hitos (P)
+### 9.4 Récords e hitos (P) · ✅ Hecho
 - Primera victoria, primer podio del equipo, cien carreras, récord del circuito. Lobato y un rótulo lo celebran, y
   queda en un historial.
 
-### 9.5 Previa de cada gran premio (P)
+### 9.5 Previa de cada gran premio (P) · ✅ Hecho
 - Una tarjeta con la historia del circuito, la clave estratégica («Mónaco: la clasificación lo es todo») y la
   previsión, como el arranque de una retransmisión. Con la bandera del país (ya están en `public/assets/flags`).
 
-### 9.6 Gala de fin de temporada y sala de trofeos (M)
+### 9.6 Gala de fin de temporada y sala de trofeos (M) · ✅ Hecho
 - Gala: mejor adelantamiento, mejor estrategia, piloto del año, sacados de los datos de las carreras.
 - Sala de trofeos del equipo: las copas de cada victoria y los resultados de los escenarios y grandes premios sueltos.
 
@@ -120,7 +125,7 @@ El juego es una PWA (`public/sw.js`) y se juega en el móvil: cada `.glb` y cada
 - Que reaccione al código de cada suceso (`RaceEvent.code`, como la radio) en vez de leer el texto con expresiones
   regulares. Así se evitan fallos como el de «P15» tomado por «P1». Va antes que 10.2 y 10.3.
 
-### 10.2 Lobato con memoria (P/M)
+### 10.2 Lobato con memoria (P/M) · ✅ Hecho
 - Que recuerde lo que pasó antes («Recordemos que en Mónaco se le escapó por la estrategia», «es su tercera pole
   seguida»). Usa el historial de 9.4.
 
