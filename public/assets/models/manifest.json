@@ -10,5 +10,7 @@
   "cam": [
     -0.45,
     1.38
-  ]
+  ],
+  "safety": "safety.glb",
+  "safetyLo": "safety_lo.glb"
 }

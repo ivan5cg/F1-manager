@@ -632,6 +632,57 @@ const SC_GEO = (() => {
   return c.done();
 })();
 const SC_BAR = new THREE.BoxGeometry(0.2, 0.08, 1.0).translate(-0.35, 1.31, 0);
+// Coche de seguridad del .glb (public/assets/models, scripts/prepara_safety_glb.py): cada malla es un grupo de piezas
+// y aquí lleva su color; las luces del techo («luz») van aparte para que parpadeen. Fina de cerca y ligera de lejos.
+// Mientras carga, o si no está, el de siempre (SC_GEO y SC_BAR).
+const SC_COLORS = {
+  pintura: [0.72, 0.74, 0.78], negro: [0.025, 0.025, 0.03], carbono: [0.05, 0.052, 0.058], metal: [0.55, 0.57, 0.6],
+  llanta: [0.09, 0.095, 0.1], goma: [0.018, 0.018, 0.018], cristal: [0.02, 0.026, 0.034], rojo: [0.45, 0.015, 0.015],
+  ambar: [0.9, 0.35, 0.02], acento: [0.6, 0.03, 0.03],
+};
+let scCache = null;
+function loadSafetyCar() {
+  if (!scCache) scCache = (async () => {
+    try {
+      const base = ASSET("models/");
+      const man = await (await fetch(`${base}manifest.json`)).json();
+      if (!man?.safety) return null;
+      const { GLTFLoader } = await import("three/addons/loaders/GLTFLoader.js");
+      const loader = new GLTFLoader();
+      const build = async (file) => {
+        const gltf = await loader.loadAsync(base + file);
+        const body = collect(), bar = collect();
+        let nBar = 0;
+        gltf.scene.updateWorldMatrix(true, true);
+        gltf.scene.traverse((o) => {
+          if (!o.isMesh) return;
+          // posiciones cuantizadas (int16): a float antes de aplicar la escala del nodo
+          const q = o.geometry.attributes.position, f = new Float32Array(q.count * 3);
+          for (let i = 0; i < q.count; i++) f.set([q.getX(i), q.getY(i), q.getZ(i)], i * 3);
+          let g = new THREE.BufferGeometry();
+          g.setAttribute("position", new THREE.BufferAttribute(f, 3));
+          if (o.geometry.index) g.setIndex(o.geometry.index.clone());
+          g.applyMatrix4(o.matrixWorld);
+          g = toCreasedNormals(g, 0.6);
+          if (o.name === "luz") { bar.keep(g, [1, 1, 1]); nBar++; } else body.keep(g, SC_COLORS[o.name] ?? SC_COLORS.negro);
+        });
+        if (!nBar) return { car: body.done(), bar: null };
+        // la tira de luces de delante es muy fina para verla de lejos: una barra que la envuelve, como las de verdad
+        const lb = bar.done(), p = lb.attributes.position, bb = new THREE.Box3(), v = new THREE.Vector3();
+        for (let i = 0; i < p.count; i++) { v.fromBufferAttribute(p, i); if (v.x > -1.2) bb.expandByPoint(v); }
+        if (!bb.isEmpty()) {
+          const sz = bb.getSize(new THREE.Vector3()), c = bb.getCenter(new THREE.Vector3());
+          bar.keep(new THREE.BoxGeometry(Math.max(0.1, sz.x + 0.04), Math.max(0.05, sz.y + 0.03), sz.z + 0.04).translate(c.x, c.y + 0.01, c.z).toNonIndexed(), [1, 1, 1]);
+        }
+        lb.dispose();
+        return { car: body.done(), bar: bar.done() };
+      };
+      const [hi, lo] = await Promise.all([build(man.safety), man.safetyLo ? build(man.safetyLo) : null]);
+      return { hi, lo: lo ?? hi };
+    } catch (e) { console.warn("coche de seguridad .glb:", e); return null; }
+  })();
+  return scCache;
+}
 // bandera de comisario: mástil (oscuro) y paño que ondea (el color lo pone cada puesto)
 const FLAG_GEO = (() => {
   const g = new THREE.PlaneGeometry(1.1, 0.75, 8, 2).translate(0.55, 2.05, 0);
@@ -1761,6 +1812,7 @@ function buildWorld() {
   const scCar = add(new THREE.Mesh(SC_GEO, new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.35, metalness: 0.5, clearcoat: 1, clearcoatRoughness: 0.06 })));
   const scBar = add(new THREE.Mesh(SC_BAR, new THREE.MeshBasicMaterial({ color: 0xffa000 })));
   scCar.matrixAutoUpdate = scBar.matrixAutoUpdate = false; scCar.visible = scBar.visible = false; scCar.castShadow = true; scCar.frustumCulled = scBar.frustumCulled = false;
+  loadSafetyCar().then((sc) => { if (sc && alive3d && world) world.scGlb = sc; });
 
   // ---- coches, ruedas, spray, sombras de reserva, fichas y aros
   const NC = sess.cars.length;
@@ -2931,6 +2983,9 @@ function drawFlags(now, W, k) {
       const x0 = _sa.x + _sa.rx * la, z0 = _sa.z + _sa.rz * la, x1 = _sb.x + _sb.rx * lb, z1 = _sb.z + _sb.rz * lb;
       let fx = x1 - x0, fy = _sb.y - _sa.y, fz = z1 - z0; const fl2 = Math.hypot(fx, fy, fz) || 1; fx /= fl2; fy /= fl2; fz /= fl2;
       const hl = Math.hypot(fx, fz) || 1, rx = -fz / hl, rz = fx / hl;
+      // el del .glb, fino de cerca y ligero de lejos (si no ha cargado, el de siempre)
+      const g = world.scGlb && (camera.position.distanceToSquared(_ws.set(x0, _sa.y, z0)) < (90 * k) ** 2 ? world.scGlb.hi : world.scGlb.lo);
+      if (g && scCar.geometry !== g.car) { scCar.geometry = g.car; scBar.geometry = g.bar ?? SC_BAR; }
       scCar.matrix.set(fx * k, 0, rx * k, x0, fy * k, k, 0, _sa.y + 0.03 * k, fz * k, 0, rz * k, z0, 0, 0, 0, 1);
       scBar.matrix.copy(scCar.matrix);
       scBar.material.color.setRGB(...(Math.floor(now / 250) % 2 ? [8, 3.5, 0] : [0.3, 0.12, 0]));
