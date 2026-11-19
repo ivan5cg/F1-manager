@@ -347,12 +347,17 @@ export interface RaceEvent {
   voz?: boolean;
   /** Radio mítica: lo que se dijo de verdad y dónde. */
   mitica?: string;
+  /** Por qué es la sanción (code "sancion"). */
+  motivo?: "toque" | "limites" | "pitlane" | "insegura";
 }
 
 /** Sucesos con código (ver RaceEvent.code). */
 export type EventCode = "fondo" | "limites" | "abandono" | "pinchazo" | "tarde" | "amarilla" | "meta" | "gomas" | "estratega"
   | "agua" | "aguaPregunta" | "vuelta" | "eliminado" | "trompo" | "salida" | "plano" | "toque" | "alerón" | "trafico" | "adelanta"
-  | "parada" | "sale" | "pole";
+  | "parada" | "sale" | "pole"
+  // dirección de carrera y meteo (para Lobato)
+  | "vsc" | "sc" | "roja" | "verde" | "cuadros" | "empieza" | "eliminados" | "sancion" | "sinSancion" | "blancaNegra"
+  | "desdoblar" | "liderAcelera" | "salidaParada" | "banderaAmarilla" | "descalificado" | "anulada" | "lluvia" | "seca" | "boxes";
 
 export interface SessionOptions {
   kind: SessionKind;
@@ -631,7 +636,7 @@ export class Session {
       this.flag = "sc";
       this.scLapsLeft = 2;
       this.scWet = true;
-      this.log({ kind: "control", text: `🟨 Salida detrás del coche de seguridad: demasiada agua en pista (${now.toFixed(1)} mm)`, important: true });
+      this.log({ kind: "control", text: `🟨 Salida detrás del coche de seguridad: demasiada agua en pista (${now.toFixed(1)} mm)`, important: true, code: "sc" });
     }
     grid.forEach((id, i) => {
       const c = this.carById(id);
@@ -873,7 +878,7 @@ export class Session {
       this.finished = true;
       for (const id of this.ruleBreakers()) {
         const c = this.carById(id);
-        this.log({ kind: "control", carId: c.id, text: `⛔ ${c.d.abrev} descalificado: no ha usado dos compuestos de seco`, important: true });
+        this.log({ kind: "control", carId: c.id, text: `⛔ ${c.d.abrev} descalificado: no ha usado dos compuestos de seco`, important: true, code: "descalificado" });
       }
       this.log({ kind: "control", text: `🏁 ${SESSION_NAMES[this.kind]} terminada`, important: true, pause: true });
     }
@@ -917,11 +922,11 @@ export class Session {
       const all = wet.length > this.N * 0.8;
       const list = secs.length === 1 ? `el sector ${secs[0]}` : `los sectores ${secs.slice(0, -1).join(", ")} y ${secs[secs.length - 1]}`;
       const txt = all ? `🌧️ Empieza a llover en todo el circuito (${r.toFixed(1)} mm/h)` : secs.length === 3 ? `🌧️ Lluvia en zonas de los tres sectores; hay tramos aún secos` : `🌧️ Lluvia en ${list}; el resto sigue seco`;
-      this.log({ kind: "weather", text: txt, important: true });
+      this.log({ kind: "weather", text: txt, important: true, code: "lluvia" });
     }
     if (!now && this.wasRaining && this.wall - this.lastRainMsg > 120) {
       this.lastRainMsg = this.wall;
-      this.log({ kind: "weather", text: "🌤️ Deja de llover. La pista empezará a secarse por la trazada.", important: true });
+      this.log({ kind: "weather", text: "🌤️ Deja de llover. La pista empezará a secarse por la trazada.", important: true, code: "seca" });
     }
     this.wasRaining = now;
   }
@@ -931,7 +936,7 @@ export class Session {
       this.flagTimer -= dt;
       if (this.flagTimer <= 0) {
         this.flag = "green";
-        this.log({ kind: "control", text: "🟢 Fin del coche de seguridad virtual", important: true });
+        this.log({ kind: "control", text: "🟢 Fin del coche de seguridad virtual", important: true, code: "verde" });
       }
     }
   }
@@ -946,10 +951,10 @@ export class Session {
     this.stats[kind]++;
     if (kind === "vsc") {
       this.flagTimer = this.rng.range(60, 110) + 120 * sev;
-      this.log({ kind: "control", text: `🟡 COCHE DE SEGURIDAD VIRTUAL — ${why}`, pause: true, important: true });
+      this.log({ kind: "control", text: `🟡 COCHE DE SEGURIDAD VIRTUAL — ${why}`, pause: true, important: true, code: "vsc" });
     } else {
       this.scLapsLeft = clamp(2 + Math.round(sev * 2.5) + this.rng.int(0, 1), 2, 6);
-      this.log({ kind: "control", text: `🟨 COCHE DE SEGURIDAD — ${why}`, pause: true, important: true });
+      this.log({ kind: "control", text: `🟨 COCHE DE SEGURIDAD — ${why}`, pause: true, important: true, code: "sc" });
     }
   }
 
@@ -1011,11 +1016,11 @@ export class Session {
   }
 
   /** Sanción de tiempo: se cumple en la próxima parada o se suma al final. */
-  penalize(c: Car, secs: number, why: string) {
+  penalize(c: Car, secs: number, why: string, motivo?: RaceEvent["motivo"]) {
     if (c.loc === "out" || c.loc === "fin") return;
     c.penS = (c.penS ?? 0) + secs;
     this.stats.pens++;
-    this.log({ kind: "control", carId: c.id, text: `⚖️ ${secs} s de sanción para ${c.d.abrev}: ${why}`, important: c.player, pause: c.player });
+    this.log({ kind: "control", carId: c.id, text: `⚖️ ${secs} s de sanción para ${c.d.abrev}: ${why}`, important: c.player, pause: c.player, code: "sancion", n: secs, motivo });
   }
 
   /** Llega a meta: lo que no ha cumplido en una parada se suma al tiempo. */
@@ -1033,8 +1038,8 @@ export class Session {
   /** Límites de pista: a la tercera, bandera blanca y negra; a la cuarta, 5 s; y otros 5 cada tres más. */
   private trackLimits(c: Car, m: Minisector) {
     const n = (c.tlStrikes = (c.tlStrikes ?? 0) + 1);
-    if (n === 3) this.log({ kind: "control", carId: c.id, text: `🏁 Bandera blanca y negra para ${c.d.abrev}: límites de pista`, important: c.player });
-    else if (n >= 4 && (n - 4) % 3 === 0) this.penalize(c, 5, `límites de pista (${n} veces)`);
+    if (n === 3) this.log({ kind: "control", carId: c.id, text: `🏁 Bandera blanca y negra para ${c.d.abrev}: límites de pista`, important: c.player, code: "blancaNegra" });
+    else if (n >= 4 && (n - 4) % 3 === 0) this.penalize(c, 5, `límites de pista (${n} veces)`, "limites");
     else if (c.player && n < 3) this.log({ kind: "radio", carId: c.id, text: `📻 Ingeniero: ${c.d.abrev}, se ha pasado de los límites de pista en el sector ${m.sector + 1} (${n} de 3 antes de la bandera).`, code: "limites" });
   }
 
@@ -1046,13 +1051,13 @@ export class Session {
     for (const p of this.probes.filter((x) => x.at <= this.t)) {
       const c = this.carById(p.c), a = this.carById(p.a);
       if (this.rng.chance(p.lap1 ? 0.6 : 0.35)) {
-        this.log({ kind: "control", carId: c.id, text: `⚖️ Toque entre ${c.d.abrev} y ${a.d.abrev}: sin sanción, incidente de carrera`, important: c.player || a.player });
+        this.log({ kind: "control", carId: c.id, text: `⚖️ Toque entre ${c.d.abrev} y ${a.d.abrev}: sin sanción, incidente de carrera`, important: c.player || a.player, code: "sinSancion", other: a.id });
         continue;
       }
       const blameC = clamp(0.62 + (c.d.agresividad - a.d.agresividad) / 120, 0.3, 0.9);
       const who = this.rng.chance(blameC) ? c : a, other = who === c ? a : c;
       if (who.loc === "out" || who.loc === "fin") continue;
-      this.penalize(who, p.sev >= 0.6 ? 10 : 5, `provocar un toque con ${other.d.abrev}`);
+      this.penalize(who, p.sev >= 0.6 ? 10 : 5, `provocar un toque con ${other.d.abrev}`, "toque");
     }
     this.probes = this.probes.filter((x) => x.at > this.t);
   }
@@ -1069,7 +1074,7 @@ export class Session {
     if (!this.scGo) return;
     this.scGo.t = this.t;
     this.order().filter((c) => c.loc === "track").forEach((c, i) => { c.scGoT = this.t + (i === 0 ? 0 : 0.2 + 0.12 * i + this.rng.range(0, 0.15) + (90 - c.d.salida) * 0.004); });
-    this.log({ kind: "control", text: "🟢 El líder acelera: relanzada", important: false });
+    this.log({ kind: "control", text: "🟢 El líder acelera: relanzada", important: false, code: "liderAcelera" });
   }
 
   /** Amarilla activa en ese minisector (o en el de antes: se avisa antes de llegar). */
@@ -1080,7 +1085,7 @@ export class Session {
 
   private yellow(ms: number, double: boolean, secs: number, why: string) {
     this.yellows.push({ ms, until: this.t + secs, double });
-    this.log({ kind: "control", text: `⚠️ Bandera amarilla${double ? " doble" : ""} en el sector ${this.track.ms[ms].sector + 1}: ${why}` });
+    this.log({ kind: "control", text: `⚠️ Bandera amarilla${double ? " doble" : ""} en el sector ${this.track.ms[ms].sector + 1}: ${why}`, code: "banderaAmarilla" });
   }
 
   /**
@@ -1098,7 +1103,7 @@ export class Session {
     this.restartHold = true;
     this.startHold = 0;
     for (const c of ord) { c.gridS = c.s; c.v = 0; c.delay = 0; this.rollLaunch(c); this.formationLap(c); }
-    this.log({ kind: "control", text: `🚦 La carrera se reanuda con salida parada, en el orden de carrera. Quedan ${this.laps - lap} vueltas.`, important: true, pause: true });
+    this.log({ kind: "control", text: `🚦 La carrera se reanuda con salida parada, en el orden de carrera. Quedan ${this.laps - lap} vueltas.`, important: true, pause: true, code: "salidaParada" });
   }
 
   /** Lleva un coche hacia delante sin recorrer la pista (pit-lane y vuelta de formación tras una bandera roja). */
@@ -1127,12 +1132,12 @@ export class Session {
     this.redLap = this.leaderLap + 1;
     if (!isRaceKind(this.kind)) {
       this.flagTimer = rain ? this.rng.range(300, 600) : this.rng.range(240, 600);
-      this.log({ kind: "control", text: `🟥 BANDERA ROJA — ${why}. Todos a boxes.`, pause: true, important: true });
+      this.log({ kind: "control", text: `🟥 BANDERA ROJA — ${why}. Todos a boxes.`, pause: true, important: true, code: "roja" });
       for (const c of this.cars) if (c.loc === "track" || c.loc === "lane_out" || c.loc === "lane_in") this.toGarage(c);
       return;
     }
     this.flagTimer = rain ? this.rng.range(600, 900) : this.rng.range(900, 1800);
-    this.log({ kind: "control", text: `🟥 BANDERA ROJA — ${why}. Carrera suspendida: todos al pit-lane. Se pueden cambiar neumáticos.`, pause: true, important: true });
+    this.log({ kind: "control", text: `🟥 BANDERA ROJA — ${why}. Carrera suspendida: todos al pit-lane. Se pueden cambiar neumáticos.`, pause: true, important: true, code: "roja" });
     for (const c of this.cars) {
       if (c.loc === "pit" && c.pit) {
         // la parada en curso se completa
@@ -1579,7 +1584,7 @@ export class Session {
     // límites de pista en vuelta lanzada
     if (c.run?.phase === "push" && c.lapValid && m.cornerSens > 0.5 && this.rng.chance(0.001 * PUSH_ERR[c.push])) {
       c.lapValid = false;
-      if (c.player || this.isTop(c)) this.log({ kind: "control", text: `🚩 Vuelta anulada a ${c.d.abrev}: límites de pista en el sector ${m.sector + 1}`, carId: c.id, important: c.player });
+      if (c.player || this.isTop(c)) this.log({ kind: "control", text: `🚩 Vuelta anulada a ${c.d.abrev}: límites de pista en el sector ${m.sector + 1}`, carId: c.id, important: c.player, code: "anulada" });
     }
   }
 
@@ -1630,7 +1635,7 @@ export class Session {
     }
     if (lap >= this.laps && !this.chequered) {
       this.chequered = true;
-      this.log({ kind: "control", text: "🏁 Bandera a cuadros", important: true });
+      this.log({ kind: "control", text: "🏁 Bandera a cuadros", important: true, code: "cuadros" });
       return;
     }
     if (this.flag === "sc" && this.scWet && this.avgWater() > WET_SC_END) {
@@ -1645,7 +1650,7 @@ export class Session {
           this.unlapCalled = true;
           for (const c of lapped) c.unlap = true;
           this.scLapsLeft = 1;
-          this.log({ kind: "control", text: `🟨 Los doblados pueden desdoblarse (${lapped.map((c) => c.d.abrev).join(", ")})`, important: lapped.some((c) => c.player) });
+          this.log({ kind: "control", text: `🟨 Los doblados pueden desdoblarse (${lapped.map((c) => c.d.abrev).join(", ")})`, important: lapped.some((c) => c.player), code: "desdoblar" });
         } else if (this.cars.some((c) => c.unlap) && this.unlapWait < 1) {
           this.unlapWait++;
           this.scLapsLeft = 1;
@@ -1665,7 +1670,7 @@ export class Session {
       this.unlapWait = 0;
       for (const c of this.cars) { c.scGoT = undefined; c.unlap = undefined; }
       this.drsEnabledFromLap = lap + 3;
-      this.log({ kind: "control", text: "🟢 ¡Relanzada! Bandera verde.", important: true, pause: true });
+      this.log({ kind: "control", text: "🟢 ¡Relanzada! Bandera verde.", important: true, pause: true, code: "verde" });
     }
     // mucha agua pero sin llegar a bandera roja: coche de seguridad
     if (this.avgWater() > 1.8 && this.flag === "green") { this.deploy("sc", "demasiada agua en pista", 0.4); this.scWet = true; }
@@ -1893,7 +1898,7 @@ export class Session {
     // fin de la sesión / parte
     if (this.remaining() <= 0 && !this.chequered) {
       this.chequered = true;
-      this.log({ kind: "control", text: `🏁 Bandera a cuadros${this.parts.length ? ` en ${this.parts[this.part].name}` : ""}`, important: true });
+      this.log({ kind: "control", text: `🏁 Bandera a cuadros${this.parts.length ? ` en ${this.parts[this.part].name}` : ""}`, important: true, code: "cuadros" });
       for (const c of this.cars) {
         if (c.loc === "lane_out") this.toGarage(c);
         else if (c.run && c.run.phase !== "push" && c.run.phase !== "long") c.run.phase = "in";
@@ -2002,7 +2007,7 @@ export class Session {
         }
       });
       const out = ord.slice(part.advance).map((c) => c.d.abrev).join(", ");
-      this.log({ kind: "control", text: `Eliminados en ${part.name}: ${out}`, important: true, pause: true });
+      this.log({ kind: "control", text: `Eliminados en ${part.name}: ${out}`, important: true, pause: true, code: "eliminados" });
       this.inBreak = this.breaks[this.part] * 60;
       this.part++;
       this.chequered = false;
@@ -2017,7 +2022,7 @@ export class Session {
 
   private startPart() {
     this.inBreak = 0;
-    this.log({ kind: "control", text: `🟢 Empieza la ${this.parts[this.part].name}`, important: true, pause: true });
+    this.log({ kind: "control", text: `🟢 Empieza la ${this.parts[this.part].name}`, important: true, pause: true, code: "empieza" });
   }
 
   // ------------------------------------------------------------ incidencias
@@ -2064,7 +2069,7 @@ export class Session {
       c.fx = { k: spin ? "spin" : "off", t: this.t, loss };
       // el trompo deja amarilla doble un rato (en clasificación, vuelta estropeada al que pase); la salida, simple
       this.yellows.push({ ms: m.i, until: this.t + this.rng.range(15, 35), double: spin });
-      if (!isRaceKind(this.kind)) this.log({ kind: "control", text: `⚠️ Bandera amarilla${spin ? " doble" : ""} en el sector ${m.sector + 1}: ${spin ? "trompo" : "salida de pista"} de ${c.d.abrev}` });
+      if (!isRaceKind(this.kind)) this.log({ kind: "control", text: `⚠️ Bandera amarilla${spin ? " doble" : ""} en el sector ${m.sector + 1}: ${spin ? "trompo" : "salida de pista"} de ${c.d.abrev}`, code: "banderaAmarilla" });
       this.log({ kind: "incident", text: spin ? `🌀 ${c.d.abrev} hace un trompo en el sector ${m.sector + 1}${dmg} (−${loss.toFixed(1)} s)` : `↩️ ${c.d.abrev} se sale de pista en el sector ${m.sector + 1}${dmg} (−${loss.toFixed(1)} s)`, carId: c.id, important: c.player, code: spin ? "trompo" : "salida" });
     } else if (r < crashP + 0.35) {
       c.fx = { k: "lock", t: this.t };
@@ -2349,11 +2354,11 @@ export class Session {
     if (mate && mate.pit) c.pit.total += Math.max(0, mate.pit.total - mate.pit.t - tr.pit.laneLength / tr.pit.limit / 2) + 0.5;
     c.loc = "pit";
     c.s = entryAbs;
-    if (this.rng.chance(0.004)) this.penalize(c, 5, "exceso de velocidad en el pit-lane");
+    if (this.rng.chance(0.004)) this.penalize(c, 5, "exceso de velocidad en el pit-lane", "pitlane");
     const set = c.e.sets.find((s) => s.id === setId)!;
     if (typeof process !== "undefined" && process.env?.DEPURAR) console.log("   PIT", c.d.abrev, c.pitWhy ?? "?");
     c.pitWhy = undefined;
-    this.log({ kind: "pit", carId: c.id, text: `🔧 ${c.d.abrev} entra a boxes → ${COMPOUNDS[set.c].name}${set.laps ? ` (usado)` : ""}`, important: c.player });
+    this.log({ kind: "pit", carId: c.id, text: `🔧 ${c.d.abrev} entra a boxes → ${COMPOUNDS[set.c].name}${set.laps ? ` (usado)` : ""}`, important: c.player, code: "boxes" });
   }
 
   private pitStep(c: Car, dt: number) {
@@ -2406,7 +2411,7 @@ export class Session {
       // salida insegura: lo sueltan justo cuando llega otro por la calle o por la pista
       const mode = c.player && !this.autoPlayers ? c.pitMode ?? 1 : 1;
       const near = this.cars.some((o) => o !== c && (o.loc === "track" || o.loc === "pit") && c.s - o.s > 0 && c.s - o.s < 35);
-      if (near && this.rng.chance(UNSAFE_P[mode])) this.penalize(c, 5, "salida insegura del box");
+      if (near && this.rng.chance(UNSAFE_P[mode])) this.penalize(c, 5, "salida insegura del box", "insegura");
       if (c.player) this.log({ kind: "pit", carId: c.id, text: `↪️ ${c.d.abrev} sale de boxes P${this.order().indexOf(c) + 1}`, important: true, code: "sale", n: this.order().indexOf(c) + 1 });
     }
   }

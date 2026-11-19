@@ -1,6 +1,7 @@
 // La radio de los pilotos con personalidad: cada piloto tiene un carácter y habla a su manera cuando pasa algo
 // (adelanta, le adelantan, se toca, trompea, la parada sale mal, gana...). Y, de vez en cuando, una radio mítica de
-// verdad, si se da una situación parecida y el que la dijo está en pista. Solo interfaz, como Lobato: usa Math.random,
+// verdad, si se da una situación parecida y el que la dijo está en pista. También contestan a las órdenes del muro
+// (`responde`): parar, apretar, ahorrar, dejar pasar, defender o no pelear. Solo interfaz, como Lobato: usa Math.random,
 // no el generador de la sesión, así que no cambia ningún resultado.
 //
 // Reacciona al código de cada suceso (RaceEvent.code), no al texto. Los mensajes en los que la simulación ya hace
@@ -301,6 +302,121 @@ const M: Record<string, Mitica> = {
   numeroDos: { id: "numeroDos", quien: "Mark Webber", texto: "No está mal para un piloto número dos.", orig: "Not bad for a number two driver.", donde: "Silverstone 2010" },
 };
 
+/** Órdenes del muro a las que contesta el piloto (8.1). Solo texto: siempre obedece. */
+export type Orden = "box" | "anula" | "apretar" | "ahorrar" | "dejarPasar" | "defender" | "noPelear";
+/** Cada orden, con su variante a disgusto (gomas nuevas, rival a tiro, más rápido que el compañero...). */
+type Resp = "box" | "boxPronto" | "anula" | "apretar" | "apretarSinGomas" | "ahorrar" | "ahorrarConRival" | "dejarPasar"
+  | "dejarPasarMasRapido" | "defender" | "noPelear" | "noPelearConRival";
+/** Las variantes a disgusto: si su carácter no tiene frase propia, contesta con la normal. */
+const A_DISGUSTO: Partial<Record<Resp, Resp>> = {
+  boxPronto: "box", apretarSinGomas: "apretar", ahorrarConRival: "ahorrar", dejarPasarMasRapido: "dejarPasar", noPelearConRival: "noPelear",
+};
+// {r}: el rival o el compañero (apellido).
+const RESPUESTAS: Record<Resp, Partial<Record<Caracter, string[]>> & { _?: string[] }> = {
+  box: {
+    _: ["Recibido, box.", "Entendido, entro esta vuelta."],
+    calmado: ["Recibido. Box esta vuelta.", "Ok, entro."],
+    quejica: ["Vale, vale, entro. Que sea rápida, por favor.", "Box. Y que no se cale nadie en el garaje."],
+    volcanico: ["¡Box! ¡Venga, rápido!", "¡Entro! ¡Preparad las ruedas ya!"],
+    cerebral: ["Entendido. ¿Cómo está el tráfico a la salida?", "Recibido. Avisadme del hueco con el de detrás."],
+    socarron: ["Box. Que esté el café preparado.", "Venga, vamos a ver a los chicos."],
+    novato: ["¡Recibido! Box, box.", "Vale, entro. ¿Dónde estaba la línea del pit-lane?"],
+    autocritico: ["Entendido. Esta vez la entrada la hago bien.", "Recibido, box. Perdonad las últimas vueltas."],
+  },
+  boxPronto: {
+    quejica: ["¿Ahora? Las gomas van bien... bueno, vale.", "¿Ya? Si todavía tengo goma. En fin, entro."],
+    volcanico: ["¿¡Ahora!? ¡Si las gomas van perfectas! ...Vale, entro.", "¿Por qué? ¡Estoy rápido! Bueno, box."],
+    cerebral: ["¿Seguro? Las gomas aún aguantan. Si es por el undercut, adelante.", "Las gomas van bien, pero confío en los números. Box."],
+    socarron: ["¿Ya? Si estas gomas están como nuevas. Vosotros sabréis.", "Pues hala, gomas nuevas. Que alguien se las quede de recuerdo."],
+  },
+  anula: {
+    _: ["Recibido, seguimos fuera.", "Entendido, no entro."],
+    quejica: ["¿Ahora no? Decidíos, por favor.", "Vale, me quedo fuera... con estas gomas."],
+    volcanico: ["¿¡En qué quedamos!? ¡Vale, sigo fuera!"],
+    cerebral: ["Entendido, alargamos. Decidme la nueva vuelta objetivo."],
+    socarron: ["Ya decía yo que no hacía falta.", "Perfecto, sigo de paseo."],
+    novato: ["¡Ah, vale! ¿Entonces no entro? Recibido."],
+  },
+  apretar: {
+    _: ["Recibido, aprieto.", "Vale, a por todas."],
+    calmado: ["Recibido. Subo el ritmo.", "Ok, empujo."],
+    quejica: ["Lo intento, pero el coche no da para más.", "Aprieto, pero no esperéis milagros."],
+    volcanico: ["¡Por fin! ¡Vamos, vamos!", "¡Eso quería oír! ¡A tope!"],
+    cerebral: ["Entendido. ¿Cuántas vueltas a este ritmo?", "Recibido. Decidme si las gomas lo aguantan."],
+    socarron: ["Ah, ¿que se podía ir más rápido? Haberlo dicho antes.", "Vale, quito el freno de mano."],
+    novato: ["¡Vale! ¡Voy a por ello!", "¡Recibido! Doy todo lo que tengo."],
+    autocritico: ["Vale. Tengo que ser más limpio en las frenadas, voy.", "Recibido. Puedo hacerlo mejor, voy."],
+  },
+  apretarSinGomas: {
+    _: ["¿Apretar? Las gomas no van a aguantar."],
+    quejica: ["¿Apretar? ¡Si no me quedan gomas!", "¿Con estas ruedas? Imposible, pero vale."],
+    volcanico: ["¡No tengo gomas! ¡Aprieto, pero esto se va a acabar mal!"],
+    cerebral: ["Puedo apretar, pero las gomas caerán rápido. ¿Seguro?", "Si aprieto ahora, en cinco vueltas no queda nada. Vosotros decidís."],
+    socarron: ["Aprieto. Las gomas os mandan saludos.", "Vale, pero luego no me digáis que las he gastado."],
+    novato: ["Eh... vale, pero ya no tengo mucho agarre."],
+  },
+  ahorrar: {
+    _: ["Recibido, levanto.", "Entendido, gestiono."],
+    calmado: ["Recibido. Levanto y freno.", "Ok, bajo el ritmo."],
+    quejica: ["Vale, pero luego no me pidáis que vaya rápido.", "¿Ahorrar otra vez? Bueno."],
+    volcanico: ["¿Otra vez ahorrar? ¡Vale!", "Levanto... pero no me gusta."],
+    cerebral: ["Entendido. ¿Cuánto tiempo puedo perder por vuelta?", "Recibido. Gestiono gomas y combustible."],
+    socarron: ["Modo paseo dominical, recibido.", "Vale, admiro un poco el paisaje."],
+    novato: ["¡Recibido! ¿Levanto antes en todas las curvas?", "Vale, voy más suave."],
+    autocritico: ["Entendido. He forzado demasiado, lo siento.", "Recibido. Llevo vueltas gastando de más."],
+  },
+  ahorrarConRival: {
+    quejica: ["¿Ahora? ¡Si tengo a {r} a tiro!", "¿Levantar con {r} delante? Increíble."],
+    volcanico: ["¿¡Ahorrar!? ¡Tengo a {r} delante, venga ya!", "¿En serio? ¡Lo tengo, lo tengo!"],
+    cerebral: ["Tengo a {r} a menos de un segundo. ¿Seguro que no es el momento?", "Si levanto ahora, {r} se escapa. ¿Confirmado?"],
+    socarron: ["Le aviso a {r} de que ya puede respirar.", "Vale. {r} os lo agradecerá."],
+    novato: ["Pero... ¿y {r}? Vale, levanto."],
+  },
+  dejarPasar: {
+    _: ["Entendido, dejo pasar a mi compañero.", "Recibido, que pase {r}."],
+    calmado: ["Recibido. Dejo pasar a {r} en la recta.", "Entendido. Por el equipo."],
+    quejica: ["Vale... pero que quede claro.", "Lo dejo pasar. Que me lo devuelva si no va más rápido."],
+    volcanico: ["¡Vale! Pero que tire, ¿eh?", "¡Lo dejo pasar! Que no se duerma."],
+    cerebral: ["Entendido. Le dejo pasar a la salida de la curva para no perder tiempo.", "Recibido. ¿Me lo devuelve si no alcanza al de delante?"],
+    socarron: ["Adelante, {r}, que sí, que hay sitio.", "Con mucho gusto. Ahora, que alguien me lo cuente luego."],
+    novato: ["Recibido. ¿Le dejo en la recta?", "Vale, dejo pasar a {r}."],
+    autocritico: ["Es justo, no estoy yendo rápido. Pasa {r}.", "Entendido. Hoy él va mejor."],
+  },
+  dejarPasarMasRapido: {
+    _: ["¿En serio? Voy más rápido que él."],
+    quejica: ["¿En serio? Soy más rápido. Esto es una broma.", "¿Dejar pasar a {r}? ¡Si me estoy acercando yo a él!"],
+    volcanico: ["¿¡En serio!? ¡Soy más rápido! ...Vale, vale.", "¡No me lo puedo creer! ¡Que pase, pero esto lo hablamos!"],
+    cerebral: ["Mis tiempos son mejores que los de {r}. ¿Estáis seguros?", "Lo hago, pero voy más rápido. Lo hablamos después."],
+    socarron: ["Claro, que pase el lento. Tiene lógica.", "Vale. Dadle a {r} un empujoncito, ya que estamos."],
+  },
+  defender: {
+    _: ["Recibido, cierro la puerta.", "Entendido, no paso ni una."],
+    calmado: ["Recibido. Defiendo por dentro.", "Ok, cierro el interior."],
+    quejica: ["Defiendo, pero en la recta me come.", "Lo intento, pero tiene más velocidad."],
+    volcanico: ["¡Por aquí no pasa nadie!", "¡Que lo intente! ¡No pasa!"],
+    cerebral: ["Entendido. Cubro la frenada y guardo batería para la recta.", "Recibido. ¿Cuánta ventaja me sacan en la recta?"],
+    socarron: ["Tranquilos, conozco todos los trucos.", "Defender es lo mío. Ya veréis."],
+    novato: ["¡Vale! Me pongo por dentro, ¿no?", "Recibido. Lo intento sin tocarle."],
+    autocritico: ["Recibido. Esta vez no le dejo hueco.", "Vale, no voy a regalar nada más."],
+  },
+  noPelear: {
+    _: ["Recibido, no peleo.", "Entendido, sin riesgos."],
+    calmado: ["Recibido. Carrera larga.", "Ok, sin riesgos."],
+    quejica: ["Vale, que pasen todos entonces.", "Bueno. Ya veremos dónde acabamos."],
+    volcanico: ["¿No pelear? Bueno... vale.", "Me cuesta, pero vale."],
+    cerebral: ["Entendido. Las gomas valen más que esta posición.", "Recibido. Pensamos en el final de carrera."],
+    socarron: ["Cedo el paso con elegancia.", "Vale, que pase. Ya nos veremos más adelante."],
+    novato: ["Recibido. ¿Le dejo pasar si se acerca?", "Vale, sin tocar a nadie."],
+    autocritico: ["Entendido. No quiero otro error.", "Recibido. Mejor no arriesgar."],
+  },
+  noPelearConRival: {
+    quejica: ["¿Dejar pasar a {r} así? Increíble.", "¿Me quedo mirando mientras me pasa {r}? Vale."],
+    volcanico: ["¿¡Dejar que me pase {r}!? ¡Ni de broma! ...Vale.", "¡Que no peleé con {r}! ¡Increíble!"],
+    socarron: ["{r} me va a dar las gracias. Qué detalle el nuestro.", "Vale. Saludaré a {r} cuando pase."],
+    cerebral: ["Tengo a {r} a menos de un segundo. Le dejo, pero perdemos una posición."],
+  },
+};
+
 export interface Linea { carId: number; text: string; important: boolean; mitica?: string; tone: VoiceTone }
 
 const pick = <T>(a: T[]): T => a[Math.floor(Math.random() * a.length)];
@@ -353,15 +469,14 @@ export function createVoces(sess: Session) {
   function onEvent(e: RaceEvent): { replace?: Linea; lines: Linea[] } {
     const out: Linea[] = [];
     const push = (l: Linea | null) => { if (l) out.push(l); };
-    if (e.voz || !e.code) {
-      // la bandera a cuadros de la carrera: el ganador, si es un rival, a veces se oye en la tele
-      if (race && e.kind === "control" && /^🏁 Bandera a cuadros$/.test(e.text)) {
-        const w = sess.order()[0];
-        if (w && !w.player) {
-          push(is(w, "Max Verstappen") ? mitica("tututu", 0.6) : is(w, "Lewis Hamilton") ? mitica("vamosLewis", 0.5) : is(w, "Valtteri Bottas") ? mitica("quienCorresponda", 0.6)
-            : is(w, "Mark Webber") ? mitica("numeroDos", 0.8) : is(w, "Carlos Sainz") ? mitica("smooth", 0.7) : null);
-          if (!out.length && Math.random() < 0.35) push(line(w, "rivalGana", {}, true));
-        }
+    if (e.voz || !e.code) return { lines: out };
+    // la bandera a cuadros de la carrera: el ganador, si es un rival, a veces se oye en la tele
+    if (e.code === "cuadros") {
+      const w = race ? sess.order()[0] : undefined;
+      if (w && !w.player) {
+        push(is(w, "Max Verstappen") ? mitica("tututu", 0.6) : is(w, "Lewis Hamilton") ? mitica("vamosLewis", 0.5) : is(w, "Valtteri Bottas") ? mitica("quienCorresponda", 0.6)
+          : is(w, "Mark Webber") ? mitica("numeroDos", 0.8) : is(w, "Carlos Sainz") ? mitica("smooth", 0.7) : null);
+        if (!out.length && Math.random() < 0.35) push(line(w, "rivalGana", {}, true));
       }
       return { lines: out };
     }
@@ -490,5 +605,42 @@ export function createVoces(sess: Session) {
     return out;
   }
 
-  return { onEvent, tick };
+  const lastOrder = new Map<number, number>(); // ms reales de la última respuesta a una orden de cada piloto
+
+  /**
+   * El piloto contesta a una orden del muro según su carácter y lo que ve en pista: a disgusto si le mandan parar con
+   * las gomas nuevas, levantar con un rival a tiro o dejar pasar a un compañero más lento. Solo texto: siempre obedece.
+   */
+  function responde(c: Car, orden: Orden): Linea | null {
+    if (!race || c.loc === "out" || c.loc === "fin") return null;
+    const now = performance.now();
+    if (now - (lastOrder.get(c.id) ?? -1e9) < 4000) return null;
+    const t = c.tyres;
+    const wear = t ? Math.max(t.F.wear, t.R.wear) : 0;
+    const ahead = c.aheadId >= 0 && c.followGap > 0 && c.followGap < 1.2 ? sess.carById(c.aheadId) : undefined;
+    const behind = sess.cars.find((x) => x.aheadId === c.id && x.loc === "track" && x.followGap > 0 && x.followGap < 1.2);
+    const mate = sess.cars.find((x) => x !== c && x.team === c.team);
+    const last = (x: Car) => x.lapTimes[x.lapTimes.length - 1] ?? Infinity;
+    let r: Resp = orden;
+    let other: Car | undefined;
+    if (orden === "box" && t && wear < 0.3 && t.laps >= 3) r = "boxPronto";
+    else if (orden === "apretar" && wear > 0.6) r = "apretarSinGomas";
+    else if (orden === "ahorrar" && ahead) { r = "ahorrarConRival"; other = ahead; }
+    else if (orden === "dejarPasar") { other = mate; if (mate && last(c) < last(mate) - 0.15) r = "dejarPasarMasRapido"; }
+    else if (orden === "noPelear" && behind) { r = "noPelearConRival"; other = behind; }
+    const car = caracterOf(c.d.nombre);
+    const base = A_DISGUSTO[r];
+    const bank = RESPUESTAS[r][car] ?? (base ? undefined : RESPUESTAS[r]._) ?? (base && (RESPUESTAS[base][car] ?? RESPUESTAS[base]._));
+    if (!bank?.length) return null;
+    // la variante a disgusto solo si su carácter la tiene: si no, contesta normal y sin el rival
+    const disgusto = !!base && !!RESPUESTAS[r][car];
+    const fresh = bank.filter((x) => !saidBy.has(`${c.id}|${x}`));
+    const raw = pick(fresh.length ? fresh : bank);
+    saidBy.add(`${c.id}|${raw}`);
+    const text = raw.split("{r}").join(other ? sur(other) : mate ? sur(mate) : "");
+    lastOrder.set(c.id, now);
+    return { carId: c.id, text: `📻 ${c.d.abrev}: "${text}"`, important: disgusto, tone: voiceOf(c.d.nombre) };
+  }
+
+  return { onEvent, tick, responde };
 }
