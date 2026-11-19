@@ -6,6 +6,7 @@ import type { WeekendState } from "../sim/weekend";
 import { MoraleChange, Rivalry, moralOf, moralLabel, moodForWeekend, applyPress, type PressEffect } from "../sim/morale";
 import { DRIVERS } from "./data";
 import { esc } from "./common";
+import { syncMemo } from "./ritual";
 
 const sur = (n: string) => n.split(" ").slice(1).join(" ") || n;
 const myDrivers = (s: SeasonState) => DRIVERS.filter((d) => d.team.id === s.playerTeam);
@@ -16,6 +17,7 @@ export function syncMood(s: SeasonState) {
   const m = moodForWeekend(s, DRIVERS.map((d) => ({ id: d.id, nombre: d.d.nombre, mine: d.team.id === s.playerTeam })));
   s.weekend.moral = m.moral;
   s.weekend.rivals = m.rivals;
+  syncMemo(s); // y lo que recuerda Lobato
 }
 
 const bar = (m: number) => `<span class="moralbar"><i style="width:${Math.round(m)}%"></i></span>`;

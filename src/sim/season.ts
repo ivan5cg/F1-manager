@@ -64,6 +64,9 @@ export interface SeasonState {
   rivals?: { a: string; b: string; k: number }[];
   /** Lo que piensa la directiva de lo dicho en la rueda de prensa (−3 a 3); se le pasa al escribir tras la carrera. */
   boardMood?: number;
+  /** Hitos de tu equipo en la partida (todas las temporadas) y el mejor tiempo de cada circuito (ver hitos.ts). */
+  hitos?: { year: number; round: number; circuitId: string; gp: string; icon: string; text: string }[];
+  records?: Record<string, { t: number; nombre: string; year: number }>;
   /** «Crear equipo»: semilla de los valores reales (ocultos) de pilotos, jefes, técnicos y motores: la de la primera
    *  temporada, para que no cambien de un año a otro (sin ella, la de la temporada). */
   trueSeed?: number;

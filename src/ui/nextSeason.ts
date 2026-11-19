@@ -7,6 +7,8 @@ import { driverStandings, teamStandings, pointsFor, RACE_POINTS, SPRINT_POINTS }
 import { devLeft } from "../sim/development";
 import { objectiveStatus } from "../sim/objectives";
 import { MORAL0, moralOf, moralLabel, wantsRenew } from "../sim/morale";
+import { recordExtras } from "../sim/hitos";
+import { seatAt, gpOf, galaOf } from "./ritual";
 import { offSeason, initialContracts, rating, ageOf, FIRST_YEAR, objectivesBonus, SeasonRecord, CAR_CARRY, OBJ_BONUS, OBJ_MALUS, salaryFor, clauseFor, midSeason, SeatNow } from "../sim/career";
 import { publicDriver, trueTech, NEW_TEAM, PLAYER_TEAM_ID } from "../sim/market";
 import type { DriverDef, TeamDef } from "../sim/session";
@@ -36,6 +38,8 @@ export function seasonRecord(s: SeasonState): SeasonRecord {
     },
     objetivos: objectivesDone(s),
     carreras: calendarOf(s).length,
+    ...recordExtras(s, seatAt(s), gpOf),
+    gala: galaOf(s),
   };
 }
 
@@ -118,6 +122,8 @@ export function buildNextSeason(s: SeasonState, choices: { keep: boolean; sign?:
     aviso: rec.objetivos.length && done === 0 ? (s.aviso ?? 0) + 1 : 0,
     // la moral vuelve a medias hacia lo normal en invierno; las rivalidades se enfrían, pero no se olvidan
     ...(s.moral ? { moral: Object.fromEntries(Object.entries(s.moral).map(([n, m]) => [n, Math.round((MORAL0 + (m - MORAL0) * 0.5) * 10) / 10])) } : {}),
+    ...(s.hitos ? { hitos: s.hitos } : {}),
+    ...(s.records ? { records: s.records } : {}),
     ...(s.rivals ? { rivals: s.rivals.map((r) => ({ ...r, k: Math.round(r.k * 0.6 * 100) / 100 })).filter((r) => r.k >= 0.15) } : {}),
   };
   if (s.equipo) {

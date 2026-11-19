@@ -37,6 +37,8 @@ export interface WeekendState {
   /** Rueda de prensa antes de la carrera: las preguntas (se fijan al verlas) y la respuesta elegida en cada una. */
   prensaQs?: { id: string; text: string; answers: { text: string; e: { moral?: Record<string, number>; rival?: { a: string; b: string; k: number }; board?: number } }[] }[];
   prensa?: Record<string, number>;
+  /** Lo que recuerda Lobato de la temporada (victorias, rachas de poles y de victorias), para comentarlo. */
+  memo?: { wins: Record<string, number>; myCareerWins: Record<string, number>; poles: Record<string, number>; winStreak: Record<string, number> };
 }
 
 /**

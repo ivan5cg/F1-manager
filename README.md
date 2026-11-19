@@ -332,6 +332,24 @@ temporada (el gran premio suelto y los escenarios, como siempre).
 - `npx tsx scripts/moral.ts [circuito] [carreras] [equipo]` mide cuánto desobedece cada carácter según su moral, lo
   que cambia la vuelta y cuántas rivalidades nacen en una serie de carreras.
 
+**El ritual de la temporada** (`src/sim/hitos.ts`, `src/ui/ritual.ts`):
+- **Previa** de cada gran premio, al abrir el fin de semana: bandera, la clave del circuito (escrita para los más
+  conocidos y, para el resto, sacada de sus datos: si se adelanta, cuánto desgasta, lo que cuesta parar, si es urbano o
+  sprint), el tiempo esperado para la carrera y la historia en tu partida (quién ganó aquí los años anteriores, tu mejor
+  resultado y el récord de la vuelta).
+- **Hitos** de tu equipo tras cada carrera, con un rótulo dorado: primera victoria (de la partida y del año), primera
+  victoria o primer podio de cada piloto, dobletes, rachas de victorias y de poles, victorias y carreras redondas,
+  primeros puntos y récords del circuito (la mejor vuelta de la partida en cada circuito; la primera visita la fija sin
+  anunciarla). Se guardan en la partida y se vuelven a ver desde el calendario.
+- **Lobato con memoria:** en la bandera a cuadros sabe si es la primera victoria de tu piloto con el equipo, la primera
+  del año de cualquiera o la tercera seguida; en la pole, si es la segunda o la tercera seguida.
+- **Gala de fin de temporada** al acabar el año: piloto del año, remontada del año, golpe de estrategia (ganar puestos
+  con un número de paradas distinto al del resto), más vueltas en cabeza, novato del año y el mejor de tu equipo.
+- **Sala de trofeos** en la pantalla de temporada: una copa por cada podio de tu equipo, por año, los últimos hitos y
+  las galas anteriores.
+- `npx tsx scripts/hitos.ts [equipo] [carreras] [semilla]` corre varias carreras y vuelca los hitos de cada una, lo que
+  sabría Lobato y la gala.
+
 **Vuelta de formación.** Los neumáticos salen de las mantas a 70 °C y en la vuelta de formación cogen temperatura
 según el compuesto y el asfalto: el blando sale casi en su ventana y el duro, lejos; con frío o con agua, menos.
 

@@ -21,6 +21,7 @@ import { GP_SLOT, hasSession, saveSeason, loadSeason, slotList, getActiveSlot, d
 import { raceSummaryHtml, drawRaceSummary, photosHtml } from "./summary";
 import { headlines, portadaHtml, boardHtml } from "./prensa";
 import { moodPanel, syncMood, prensaHtml, wirePrensa } from "./vestuario";
+import { previaHtml, galaHtml, galaOf, trophyRoomHtml, hitosHtml } from "./ritual";
 
 export interface Nav {
   home(): void;
@@ -258,7 +259,8 @@ export function seasonScreen(nav: Nav, s: SeasonState) {
     ${swapsPanel(s)}
     ${!done && s.dev && !(s.weekend && s.weekend.next > 0) ? `<div style="padding:0 10px 8px"><button id="swapbtn" style="width:100%">Cambiar un piloto (libres, F2 u otro equipo)</button></div>` : ""}
     ${objectivesPanel(s, ROUNDS_S.length, done)}
-    ${done ? "" : moodPanel(s)}
+    ${done ? galaHtml(galaOf(s), yearOf(s)) : moodPanel(s)}
+    ${trophyRoomHtml(s)}
     ${devPanel(s, myTeam, ROUNDS_S, done)}
     ${s.equipo && GRID_CHANGES.length ? `<div class="panel"><div class="hd"><span class="t">La parrilla tras tus fichajes</span></div><div class="bd small">${GRID_CHANGES.map((c) => `${esc(c.team)}: ${c.what === "piloto" ? `${esc(c.in)} por ${esc(c.out)}` : `interino por ${esc(c.out)}`}`).join("<br>")}</div></div>` : ""}
     <div class="panel"><div class="hd"><span class="t">Calendario</span></div><div class="bd" style="padding:0">
@@ -302,7 +304,7 @@ export function seasonScreen(nav: Nav, s: SeasonState) {
   if (strip && nextCard) strip.scrollLeft = Math.max(0, nextCard.offsetLeft - 12);
   const cc = document.getElementById("champchart") as HTMLCanvasElement | null;
   if (cc) requestAnimationFrame(() => drawChampChart(cc, s, ROUNDS_S));
-  document.querySelectorAll<HTMLElement>("[data-round]").forEach((el) => (el.onclick = () => { const r = s.rounds.find((x) => x.round === Number(el.dataset.round)); if (r) roundSheet(r, s.playerTeam); }));
+  document.querySelectorAll<HTMLElement>("[data-round]").forEach((el) => (el.onclick = () => { const r = s.rounds.find((x) => x.round === Number(el.dataset.round)); if (r) roundSheet(r, s.playerTeam, (s.hitos ?? []).filter((h) => h.year === yearOf(s))); }));
   if (!done) $("#go").onclick = () => {
     if (!s.weekend || s.weekend.round !== s.round + 1) {
       s.weekend = newWeekend(s.round + 1, circuitOf(s, ROUNDS_S[s.round]), TEAMS, s.seed * 1000 + s.round * 97 + 1);
@@ -445,11 +447,12 @@ function drawChampChart(cv: HTMLCanvasElement, s: SeasonState, cal: string[]) {
 }
 
 /** Un gran premio ya corrido: carrera (con su resumen si se guardó), sprint y clasificación. */
-function roundSheet(r: RoundResult, playerTeam: string) {
+function roundSheet(r: RoundResult, playerTeam: string, hitosOf?: SeasonState["hitos"]) {
   const c = CIRCUITS[r.circuitId];
   const block = (kind: SessionKind, rows: ResultRow[] | undefined, table?: number[], sum?: RaceSummary) => !rows ? "" :
     `<h2 style="margin-top:14px">${SESSION_NAMES[kind]}</h2>${resultsTable(kind, rows, playerTeam, table)}${sum ? `<div class="sumwrap" data-sumwrap="${kind}">${sum.photos?.length ? photosHtml(sum.photos) : ""}${raceSummaryHtml(sum)}</div>` : ""}`;
   const { el } = sheet(`<div class="row"><h1 class="grow" style="font-size:18px">${flagHtml(c.bandera)} ${esc(c.gp)}</h1><button data-close>Cerrar</button></div>
+    ${hitosHtml((hitosOf ?? []).filter((h) => h.round === r.round && h.circuitId === r.circuitId))}
     ${r.summary ? portadaHtml(headlines(r.summary, r.race, c.gp, playerTeam), "Edición del lunes") : ""}${r.board ? boardHtml(r.board, TEAMS.find((t) => t.id === playerTeam)?.nombre ?? "") : ""}
     ${block("RACE", r.race, r.raceTable, r.summary)}${block("SPRINT", r.sprint, r.sprintTable, r.sprintSummary)}${block("Q", r.q)}
     ${!r.summary ? `<div class="small dim" style="margin-top:8px">De esta carrera no se guardaron las gráficas (se corrió con una versión anterior).</div>` : ""}
@@ -572,6 +575,7 @@ export function weekendScreen(nav: Nav, s: SeasonState, pending: SessionSnapshot
         return `<div class="tn${res ? " done" : i === st.next ? " now" : ""}"><i></i><b>${SHORT[k]}</b><span>${wk.dayName(wk.when(k).day).slice(0, 3)}</span>${best ? `<em>P${best}</em>` : ""}</div>`;
       }).join("")}</div>
     </div></div>
+    ${st.next === 0 && !pending ? previaHtml(s, st, outlook.find((o) => o.kind === "RACE")?.rain) : ""}
     ${tips.length ? `<div class="panel"><div class="hd"><span class="t">¿Y ahora qué?</span></div><div class="bd small">${tips.map((t) => `<div class="tip">${t}</div>`).join("")}</div></div>` : ""}
     ${next === "RACE" && !pending && !s.gp ? prensaHtml(s, st) : ""}
     <div class="panel"><div class="hd"><span class="t">Programa y previsión</span></div><div class="bd" style="padding:0">

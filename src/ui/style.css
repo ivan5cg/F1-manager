@@ -1003,3 +1003,16 @@ html[data-tema] .dcard .cl i { color: #aab0ba; }
 .moralbar { display: inline-block; width: 70px; height: 6px; background: #2a313b; border-radius: 3px; overflow: hidden; flex: none; }
 .moralbar i { display: block; height: 100%; background: linear-gradient(90deg, #e3261c, #e8b923 45%, #3cbf6a); background-size: 70px 100%; }
 .col { display: flex; flex-direction: column; }
+
+/* ---------------------------------------------------------------- ritual de la temporada (9.4 a 9.6) */
+.hitos { margin: 10px; display: flex; flex-direction: column; gap: 6px; }
+.hito { display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: linear-gradient(90deg, #b8860b, #f0c040 40%, #b8860b); color: #1a1405; font-weight: 900; text-transform: uppercase; letter-spacing: .03em; font-size: 14px; clip-path: polygon(0 0, 100% 0, 97% 100%, 0 100%); box-shadow: 0 2px 8px rgba(0,0,0,.4); }
+.hito .hi { font-size: 20px; }
+.previa .pflag { font-size: 34px; line-height: 1; }
+.previa .pflag img { width: 44px; height: auto; border-radius: 3px; }
+.galagrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; }
+.award { display: flex; gap: 8px; align-items: flex-start; padding: 8px; background: rgba(255,255,255,.04); border-left: 3px solid #f0c040; }
+.award .ai { font-size: 24px; line-height: 1; }
+.cups { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+.cup { display: inline-flex; flex-direction: column; align-items: center; font-size: 22px; line-height: 1.1; min-width: 46px; }
+.cup small { font-size: 9px; opacity: .75; max-width: 60px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

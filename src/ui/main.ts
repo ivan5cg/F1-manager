@@ -21,6 +21,8 @@ import { takeLastPhotos } from "./photos";
 import { headlines, portadaHtml, boardMessage, boardHtml } from "./prensa";
 import { moraleAfterRace, rivalsAfterRace, expectedPos } from "../sim/morale";
 import { vestuarioHtml } from "./vestuario";
+import { hitosAfterRace } from "../sim/hitos";
+import { hitosHtml, seatAt, gpOf } from "./ritual";
 import { runToEnd } from "./simulate";
 import { esc, setBack } from "./common";
 
@@ -45,7 +47,7 @@ function finishSession(wk: Weekend, kind: SessionKind, sess: Session) {
   const sum = isRaceKind(kind) ? buildSummary(sess) : null;
   const rows0 = sess.results();
   if (sum) st.summaries = { ...st.summaries, [kind]: sum };
-  let extra = "", board = "";
+  let extra = "", board = "", hitos = "";
   if (kind === "RACE" && s.gp) {
     // gran premio suelto: sin mundial ni cambios de pilotos
     s.rounds.push({ round: st.round, circuitId: st.circuitId, q: st.results.Q, sprint: st.results.SPRINT, race: st.results.RACE, raceTable: st.scoring?.RACE, sprintTable: st.scoring?.SPRINT, summary: st.summaries?.RACE, sprintSummary: st.summaries?.SPRINT });
@@ -66,6 +68,10 @@ function finishSession(wk: Weekend, kind: SessionKind, sess: Session) {
     const tp = ts.findIndex((x) => x.team.id === s.playerTeam);
     // (los cambios de pilotos van después del mundial; antes se perdían al pintar el mundial)
     extra = standingsHtml(gp, before, all, s.playerTeam, `<div class="small dim" style="margin-top:6px">Constructores: ${esc(ts[tp].team.nombre)}, ${tp + 1}.º con ${ts[tp].points} pts.</div>`) + extra;
+    // hitos de tu equipo (primeras victorias, rachas, récords...): como rótulo, arriba del todo
+    const hs = hitosAfterRace(s, seatAt(s), gpOf);
+    if (hs.length) s.hitos = [...(s.hitos ?? []), ...hs].slice(-200);
+    hitos = hitosHtml(hs);
     // el vestuario: la moral de tus pilotos y las rivalidades, de carrera en carrera
     const myCars = sess.cars.filter((c) => c.player).map((c) => ({ id: c.id, nombre: c.d.nombre }));
     const changes = moraleAfterRace(s, rows0, myCars, sess.orders, expectedPos(s.objetivos));
@@ -99,6 +105,7 @@ function finishSession(wk: Weekend, kind: SessionKind, sess: Session) {
   let top = "";
   if (kind === "RACE" || kind === "SPRINT") {
     top = podiumHtml(rows, kind === "SPRINT" ? `Podio · Sprint de ${gp.replace("Gran Premio de ", "")}` : `Podio · ${gp}`, s.playerTeam)
+      + hitos // los hitos de tu equipo, como rótulo justo bajo el podio
       + `<div style="padding:0 10px"><button class="big-cta" id="sharebtn">Compartir resultado</button></div>`;
   }
   resultsScreen(kind, rows, s, gp, extra, () => (kind === "RACE" ? nav.season() : nav.weekend()), top);

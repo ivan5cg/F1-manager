@@ -79,7 +79,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   const audio = createAudio(prefs.sonido);
   const unlockAudio = () => audio.unlock();
   /** Antonio Lobato comenta la sesión (solo interfaz: no cambia nada de la simulación). */
-  const lob = createLobato(sess, def.gp ?? def.nombre);
+  const lob = createLobato(sess, def.gp ?? def.nombre, scn ? undefined : wk.st.memo);
   const LOB_TAB = "Antonio Lobato";
   /** La radio de los pilotos, cada uno con su carácter, y las radios míticas (solo interfaz). */
   const voces = createVoces(sess);
