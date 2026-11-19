@@ -127,6 +127,9 @@ export function createLobato(sess: Session, gp: string, memo?: WeekendState["mem
         return say(e.n === 0
           ? pick([`¡Ojo a esto! ¡${sur(c)} no deja pasar a su compañero! ¡Desobedece al muro!`, `¡${sur(c)} se niega a cumplir la orden de equipo! Esto va a traer cola en el box.`])
           : pick([`¡${sur(c)} no entra! Le pedían parar y se queda fuera. ¡Eso es tener carácter... o desobedecer!`, `El equipo le llama a boxes y ${sur(c)} pasa de largo. ¡Una vuelta más, dice!`]), true);
+      case "azules":
+        if (!c || !o) return null;
+        return say(pick([`¡${sur(c)} no se aparta! Lleva las banderas azules delante y ni caso: ${sur(o)} se desespera. Eso son cinco segundos.`, `¡Banderas azules para ${sur(c)} y ni las mira! ${sur(o)} pierde tiempo detrás de un doblado.`]), true);
       case "sinSancion": return say(pick(["Incidente de carrera, dicen los comisarios. Para mí también, sinceramente.", "Sin sanción. Son cosas de las carreras."]));
       case "blancaNegra": return c ? say(`Bandera blanca y negra para ${sur(c)}. Una más y le cae sanción.`) : null;
       case "desdoblar": return say("Los doblados pueden desdoblarse. Eso quiere decir que el coche de seguridad está a punto de irse.");

@@ -79,6 +79,7 @@ function chooseSlot(what: string, onPick: (slot: number) => void) {
 /** Por dónde va una temporada guardada. */
 function slotWhere(s: SeasonState): string {
   const cal = calendarOf(s);
+  if (s.despedido) return `Despedido al acabar ${s.despedido}`;
   if (s.round >= cal.length) return `Temporada ${yearOf(s)} terminada`;
   const c = CIRCUITS[cal[s.round]];
   return `${yearOf(s)} · Ronda ${s.round + 1}/${cal.length} · ${flagHtml(c.bandera)} ${esc(c.gp.replace("Gran Premio de ", "GP de "))}`;
@@ -295,7 +296,8 @@ export function seasonScreen(nav: Nav, s: SeasonState) {
       ${ts.map((x, i) => `<div class="cbar${x.team.id === s.playerTeam ? " me" : ""}"><span class="pos">${i + 1}</span><span class="cn">${esc(x.team.nombre)}</span><span class="cb"><i style="--w:${ts[0].points ? Math.max(1.5, (100 * x.points) / ts[0].points) : 1.5}%;background:${x.team.color};animation-delay:${i * 45}ms"></i></span><b class="mono">${x.points}</b></div>`).join("")}
     </div></div>
     ${historyPanel(s)}
-    ${done ? `<div style="padding:0 10px;display:grid;gap:8px"><button class="red big-cta" id="nextyear">Empezar la temporada ${yearOf(s) + 1}</button><button id="again">Otra partida</button></div>` : ""}
+    ${done ? (s.despedido ? `<div class="panel"><div class="bd"><b>🚪 La directiva te despidió al acabar ${s.despedido}.</b> La partida se queda aquí, con todo lo que ganaste.</div></div><div style="padding:0 10px"><button class="red big-cta" id="again" style="width:100%">Otra partida</button></div>`
+      : `<div style="padding:0 10px;display:grid;gap:8px"><button class="red big-cta" id="nextyear">Empezar la temporada ${yearOf(s) + 1}</button><button id="again">Otra partida</button></div>`) : ""}
   </div>`;
   setBack(() => nav.home());
   $("#home").onclick = () => nav.home();
@@ -311,6 +313,13 @@ export function seasonScreen(nav: Nav, s: SeasonState) {
       s.weekend = newWeekend(s.round + 1, circuitOf(s, ROUNDS_S[s.round]), TEAMS, s.seed * 1000 + s.round * 97 + 1);
       s.weekend.year = yearOf(s);
       syncMood(s);
+      // sanciones sin cumplir de la carrera anterior: puestos en esta parrilla (por nombre: el asiento puede cambiar)
+      if (s.gridPens?.length) {
+        const gp: Record<number, { places: number; why: string }> = {};
+        for (const x of s.gridPens) { const d = DRIVERS.find((dd) => dd.d.nombre === x.nombre); if (d) gp[d.id] = { places: x.places, why: x.why }; }
+        s.weekend.gridPens = gp;
+        s.gridPens = [];
+      }
       if (s.equipo) preparePu(s.weekend, s.pu, DRIVERS.length, quotaFor(ROUNDS_S.length));
       saveSeason(s);
     }
@@ -318,7 +327,8 @@ export function seasonScreen(nav: Nav, s: SeasonState) {
   };
   else {
     $("#again").onclick = () => nav.home();
-    $("#nextyear").onclick = () => offSeasonScreen(s, (next) => nav.nextSeason(next), () => nav.season());
+    const ny = document.getElementById("nextyear");
+    if (ny) ny.onclick = () => offSeasonScreen(s, (next) => nav.nextSeason(next), () => nav.season());
   }
   wireDev(s, () => { const y = window.scrollY; seasonScreen(nav, s); window.scrollTo(0, y); });
   const sb = document.getElementById("swapbtn");
@@ -515,6 +525,8 @@ function nextSteps(wk: Weekend, team: TeamDef, mine: { id: number; d: DriverDef;
     const p = st.pu[e.id];
     if (p && puPenalty(p)) out.push(`<b>${esc(e.d.abrev)}</b> estrena una unidad de potencia fuera del cupo: <span class="redt">${puPenalty(p)} puestos de sanción</span> en la carrera. Puedes cambiarla abajo, en «Unidades de potencia», hasta Libres 1.`);
   }
+  // sanción de la carrera anterior sin cumplir: puestos en la parrilla de esta
+  for (const e of mine) { const g = st.gridPens?.[e.id]; if (g) out.push(`<b>${esc(e.d.abrev)}</b> arrastra <span class="redt">${g.places} puestos de sanción</span> en la parrilla de la carrera: ${esc(g.why)} en la carrera anterior.`); }
   const ol = outlook.find((o) => o.kind === next);
   if (ol && ol.rain >= 0.4) {
     const pct = Math.round(ol.rain * 100);

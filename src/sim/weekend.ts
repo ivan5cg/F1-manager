@@ -39,6 +39,8 @@ export interface WeekendState {
   prensa?: Record<string, number>;
   /** Lo que recuerda Lobato de la temporada (victorias, rachas de poles y de victorias), para comentarlo. */
   memo?: { wins: Record<string, number>; myCareerWins: Record<string, number>; poles: Record<string, number>; winStreak: Record<string, number> };
+  /** Puestos de sanción en la parrilla de la carrera que vienen de la anterior (una sanción sin cumplir). */
+  gridPens?: Record<number, { places: number; why: string }>;
 }
 
 /**
@@ -165,10 +167,11 @@ export class Weekend {
     return ids.map((id, i) => ({ id, k: i + (pen[id] ?? 0) + (pen[id] ? 0.5 : 0) })).sort((a, b) => a.k - b.k).map((x) => x.id);
   }
 
-  /** Puestos de sanción en la parrilla de la carrera por unidades de potencia fuera del cupo. */
+  /** Puestos de sanción en la parrilla de la carrera: unidades de potencia fuera del cupo y sanciones de la carrera anterior. */
   penalties(): Record<number, number> {
     const out: Record<number, number> = {};
     for (const [id, p] of Object.entries(this.st.pu ?? {})) { const n = puPenalty(p); if (n) out[Number(id)] = n; }
+    for (const [id, g] of Object.entries(this.st.gridPens ?? {})) out[Number(id)] = (out[Number(id)] ?? 0) + g.places;
     return out;
   }
 
@@ -195,9 +198,15 @@ export class Weekend {
       rivals: this.st.rivals,
     });
     if (kind === "RACE") {
-      for (const [id, n] of Object.entries(this.penalties())) {
+      for (const [id, p] of Object.entries(this.st.pu ?? {})) {
+        const n = puPenalty(p);
+        if (!n) continue;
         const c = sess.carById(Number(id));
         sess.log({ kind: "control", carId: c.id, important: c.player, text: `🔧 ${c.d.abrev} sale ${n} puestos atrás: unidad de potencia fuera del cupo` });
+      }
+      for (const [id, g] of Object.entries(this.st.gridPens ?? {})) {
+        const c = sess.carById(Number(id));
+        sess.log({ kind: "control", carId: c.id, important: c.player, text: `⚖️ ${c.d.abrev} sale ${g.places} puestos atrás: ${g.why} en la carrera anterior` });
       }
     }
     return sess;

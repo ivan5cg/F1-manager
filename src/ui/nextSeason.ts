@@ -10,7 +10,8 @@ import { MORAL0, moralOf, moralLabel, wantsRenew } from "../sim/morale";
 import { recordExtras } from "../sim/hitos";
 import { seatAt, gpOf, galaOf } from "./ritual";
 import { offSeason, initialContracts, rating, ageOf, FIRST_YEAR, objectivesBonus, SeasonRecord, CAR_CARRY, OBJ_BONUS, OBJ_MALUS, salaryFor, clauseFor, midSeason, SeatNow } from "../sim/career";
-import { publicDriver, trueTech, NEW_TEAM, PLAYER_TEAM_ID } from "../sim/market";
+import { publicDriver, trueTech, NEW_TEAM, PLAYER_TEAM_ID, clauseOf } from "../sim/market";
+import { saveSeason } from "./store";
 import type { DriverDef, TeamDef } from "../sim/session";
 
 export const yearOf = (s: SeasonState) => s.year ?? FIRST_YEAR;
@@ -90,7 +91,30 @@ function swapCost(s: SeasonState, out: DriverDef, inAbrev: string | undefined, c
 }
 
 /** La temporada siguiente, con tus decisiones sobre tus pilotos. */
-export function buildNextSeason(s: SeasonState, choices: { keep: boolean; sign?: string }[]): SeasonState {
+/** Cambios de personal entre temporadas en «crear equipo»: jefe de equipo, director técnico y motor. */
+export interface StaffChoice { jefe: string; tecnico: string; motor: string }
+/** Lo que cuesta del presupuesto de desarrollo: la cláusula del jefe y del técnico nuevos si vienen de otro equipo. */
+export function staffCost(s: SeasonState, st: StaffChoice): number {
+  const e = s.equipo;
+  if (!e) return 0;
+  let c = 0;
+  if (st.jefe !== e.jefe) { const j = MARKET.jefes.find((x) => x.nombre === st.jefe); if (j) c += clauseOf(j); }
+  if (st.tecnico !== e.tecnico) { const t = MARKET.tecnicos.find((x) => x.nombre === st.tecnico); if (t) c += clauseOf(t); }
+  return Math.round(c * 10) / 10;
+}
+
+/** ¿Te despide la directiva? Tres temporadas seguidas sin cumplir ningún objetivo (tras el aviso de la segunda). */
+export function firedNow(s: SeasonState): boolean {
+  const rec = objectivesDone(s);
+  return rec.length > 0 && rec.every((o) => !o.done) && (s.aviso ?? 0) >= 2;
+}
+
+/** Las ofertas tras un despido (con equipo real): los dos equipos peor clasificados del mundial, sin el tuyo. */
+export function firingOffers(s: SeasonState): TeamDef[] {
+  return teamStandings(s, TEAMS).map((x) => x.team).filter((t) => t.id !== s.playerTeam).slice(-2).reverse();
+}
+
+export function buildNextSeason(s: SeasonState, choices: { keep: boolean; sign?: string }[], opts: { staff?: StaffChoice; newTeam?: string } = {}): SeasonState {
   const y = yearOf(s) + 1;
   const { ai, mine, fin } = rosters(s);
   const taken = new Set([...ai.flatMap((t) => t.pilotos.map((d) => d.abrev)), ...mine.map((d) => d.abrev)]);
@@ -126,8 +150,16 @@ export function buildNextSeason(s: SeasonState, choices: { keep: boolean; sign?:
     ...(s.records ? { records: s.records } : {}),
     ...(s.rivals ? { rivals: s.rivals.map((r) => ({ ...r, k: Math.round(r.k * 0.6 * 100) / 100 })).filter((r) => r.k >= 0.15) } : {}),
   };
+  // despedido y con una oferta aceptada: a otro equipo, de cero (sin aviso ni premio ni castigo de la directiva)
+  if (opts.newTeam && !s.equipo) {
+    next.playerTeam = opts.newTeam;
+    next.aviso = 0;
+    next.devBonus = 0;
+  }
   if (s.equipo) {
-    next.equipo = { ...s.equipo, pilotos: out.mine.map((d) => d.abrev) };
+    next.equipo = { ...s.equipo, pilotos: out.mine.map((d) => d.abrev), ...(opts.staff ?? {}) };
+    // un jefe o un técnico de otro equipo se paga con su cláusula, del presupuesto de desarrollo
+    if (opts.staff) next.devBonus = (next.devBonus ?? 0) - staffCost(s, opts.staff);
     next.grid = out.base;
     next.misPilotos = out.mine;
     // lo que conserva tu coche frente al que haría tu director técnico de cero; ya no es un equipo nuevo
@@ -185,6 +217,42 @@ export function offSeasonScreen(s: SeasonState, onDone: (next: SeasonState) => v
       <div class="small dim">Cuesta ${swapCost(s, d, c.sign, contracts, sal, ai)} M del presupuesto de desarrollo de ${y + 1}.</div>`}
     </div>`;
   };
+  // despedido: la directiva prescinde de ti; con un equipo real, dos ofertas de los de abajo
+  if (firedNow(s)) {
+    const offers = s.equipo ? [] : firingOffers(s);
+    app().innerHTML = `<div style="padding-bottom:16px">
+      <div class="panel"><div class="hd"><span class="t">🚪 Despedido</span><button id="back">Temporada</button></div><div class="bd">
+        <div><b>${esc(rec.mine.equipo)}</b> acaba ${rec.mine.pos}.º de constructores y, por tercera temporada seguida, sin cumplir ningún objetivo. ${s.equipo ? "Los inversores toman el control del equipo y prescinden de ti." : "La directiva ha decidido prescindir de ti."}</div>
+        <div class="small dim" style="margin-top:6px">${rec.objetivos.map((o) => `❌ ${esc(o.text)}`).join(" · ")}</div>
+      </div></div>
+      ${offers.length ? `<div class="panel"><div class="hd"><span class="t">Ofertas para ${y + 1}</span></div><div class="bd">
+        <div class="small" style="margin-bottom:6px">Hay quien todavía confía en ti, aunque sea para empezar desde abajo. Llegas sin aviso de la directiva y con objetivos nuevos.</div>
+        ${offers.map((t) => `<button class="big-cta" data-offer="${t.id}" style="width:100%;margin:4px 0;border-left:6px solid ${t.color}">Aceptar la oferta de ${esc(t.nombre)}</button>`).join("")}
+      </div></div>` : ""}
+      <div style="padding:0 10px"><button id="end" style="width:100%">Dejar la Fórmula 1 (termina la partida)</button></div>
+    </div>`;
+    setBack(onBack);
+    $("#back").onclick = onBack;
+    document.querySelectorAll<HTMLElement>("[data-offer]").forEach((b) => (b.onclick = () => onDone(buildNextSeason(s, mine.map(() => ({ keep: true })), { newTeam: b.dataset.offer }))));
+    $("#end").onclick = () => { if (!confirm("¿Dejar la partida aquí? Se queda guardada como terminada.")) return; s.despedido = y; saveSeason(s); onBack(); };
+    window.scrollTo(0, 0);
+    return;
+  }
+  // «crear equipo»: el equipo técnico para el año que viene (jefe, director técnico y motor)
+  const staff: StaffChoice | null = s.equipo ? { jefe: s.equipo.jefe, tecnico: s.equipo.tecnico, motor: s.equipo.motor } : null;
+  const teamName = (id: string | null) => (id ? BASE_TEAMS.find((t) => t.id === id)?.nombre ?? id : "");
+  const staffPanel = () => {
+    if (!staff) return "";
+    const opt = (sel: string, val: string, label: string) => `<option value="${esc(val)}"${sel === val ? " selected" : ""}>${esc(label)}</option>`;
+    const who = (x: { nombre: string; equipo: string | null; salario: number }, extra: string) => `${x.nombre} · ${x.equipo ? `${teamName(x.equipo)}, cláusula ${clauseOf(x)} M` : "libre"} · ${x.salario} M/año · ${extra}`;
+    const sc = staffCost(s, staff);
+    return `<div class="panel"><div class="hd"><span class="t">Tu equipo técnico para ${y + 1}</span></div><div class="bd small">
+      <div style="margin:2px 0">Jefe de equipo <select data-staff="jefe" style="width:100%">${MARKET.jefes.map((j) => opt(staff.jefe, j.nombre, who(j, `estrategia ${j.estrategia}, meteo ${j.meteo}`))).join("")}</select></div>
+      <div style="margin:2px 0">Director técnico <select data-staff="tecnico" style="width:100%">${MARKET.tecnicos.map((t) => opt(staff.tecnico, t.nombre, who(t, `diseño ${t.diseno > 0 ? "+" : ""}${t.diseno}, desarrollo ${t.desarrollo}`))).join("")}</select></div>
+      <div style="margin:2px 0">Motor <select data-staff="motor" style="width:100%">${MARKET.motores.map((e) => opt(staff.motor, e.id, `${e.nombre} · potencia ${e.potencia > 0 ? "+" : ""}${e.potencia} · fiabilidad ${e.fiabilidad} · ${e.precio} M/año`)).join("")}</select></div>
+      <div class="dim" style="margin-top:4px">Fichar a un jefe o un técnico de otro equipo cuesta su cláusula${sc ? `: <b class="redt">−${sc} M</b> del presupuesto de desarrollo de ${y + 1}` : ""}; su equipo se queda con un interino. Los salarios y el motor cuentan en el techo de gasto del año que viene (lo que quede, para desarrollar). Lo que valen de verdad no se sabe hasta verlos trabajar.</div>
+    </div></div>`;
+  };
   const render = () => {
     app().innerHTML = `<div style="padding-bottom:16px">
       <div class="panel"><div class="hd"><span class="t">Fin de la temporada ${y}</span><button id="back">Temporada</button></div><div class="bd">
@@ -194,11 +262,12 @@ export function offSeasonScreen(s: SeasonState, onDone: (next: SeasonState) => v
       ${rec.objetivos.length ? `<div class="panel"><div class="hd"><span class="t">La directiva</span><span class="small">${done} de ${rec.objetivos.length} objetivos</span></div><div class="bd small">
         ${rec.objetivos.map((o) => `<div>${o.done ? "✅" : "❌"} ${esc(o.text)}</div>`).join("")}
         <div style="margin-top:6px">Presupuesto de desarrollo para ${y + 1}: <b class="${bonus >= 0 ? "green" : "redt"}">${bonus >= 0 ? "+" : "−"}${Math.abs(bonus)} M</b> (${OBJ_BONUS} M más por cada objetivo cumplido y ${OBJ_MALUS} M menos por cada uno fallado)${cost() ? `, y <b class="redt">−${Math.round(cost() * 10) / 10} M</b> en cláusulas` : ""}.</div>
-        ${warn ? `<div class="redt" style="margin-top:6px">⚠️ Segunda temporada seguida sin cumplir ningún objetivo: la directiva avisa de que el jefe de equipo peligra.</div>` : done === 0 && rec.objetivos.length ? `<div class="yellow" style="margin-top:6px">La directiva no está nada contenta.</div>` : ""}
+        ${warn ? `<div class="redt" style="margin-top:6px">⚠️ Segunda temporada seguida sin cumplir ningún objetivo: la directiva avisa de que, si el año que viene tampoco cumples ninguno, te despide.</div>` : done === 0 && rec.objetivos.length ? `<div class="yellow" style="margin-top:6px">La directiva no está nada contenta.</div>` : ""}
       </div></div>` : ""}
       <div class="panel"><div class="hd"><span class="t">Tus pilotos para ${y + 1}</span></div><div class="bd" style="padding:0">${mine.map(card).join("")}
         <div class="small dim" style="padding:6px 10px">Se puede fichar a cualquiera: a los libres y los de la F2, o a uno de otro equipo pagando su cláusula (la mitad de lo que le queda por cobrar); romper el contrato de uno tuyo también se paga. Las cláusulas salen del presupuesto de desarrollo. Con los años, los jóvenes ganan ritmo y oficio y los mayores pierden algo de ritmo; alguno se retira. Los demás equipos renuevan o fichan por su cuenta, y suben novatos de la F2.</div>
       </div></div>
+      ${staffPanel()}
       <div class="sticky-cta"><button class="red big-cta" id="go">Empezar la temporada ${y + 1}</button></div>
     </div>`;
     setBack(onBack);
@@ -211,7 +280,8 @@ export function offSeasonScreen(s: SeasonState, onDone: (next: SeasonState) => v
       render();
     }));
     document.querySelectorAll<HTMLSelectElement>("[data-sign]").forEach((el) => (el.onchange = () => { choices[Number(el.dataset.sign)].sign = el.value; render(); }));
-    $("#go").onclick = () => onDone(buildNextSeason(s, choices));
+    document.querySelectorAll<HTMLSelectElement>("[data-staff]").forEach((el) => (el.onchange = () => { if (staff) { staff[el.dataset.staff as keyof StaffChoice] = el.value; render(); } }));
+    $("#go").onclick = () => onDone(buildNextSeason(s, choices, staff ? { staff } : {}));
     window.scrollTo(0, 0);
   };
   render();

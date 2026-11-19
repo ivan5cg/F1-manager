@@ -67,6 +67,8 @@ export interface SeasonState {
   /** Hitos de tu equipo en la partida (todas las temporadas) y el mejor tiempo de cada circuito (ver hitos.ts). */
   hitos?: { year: number; round: number; circuitId: string; gp: string; icon: string; text: string }[];
   records?: Record<string, { t: number; nombre: string; year: number }>;
+  /** Sanciones sin cumplir de la última carrera (el sancionado abandonó): puestos en la parrilla de la siguiente. */
+  gridPens?: { nombre: string; places: number; why: string }[];
   /** «Crear equipo»: semilla de los valores reales (ocultos) de pilotos, jefes, técnicos y motores: la de la primera
    *  temporada, para que no cambien de un año a otro (sin ella, la de la temporada). */
   trueSeed?: number;
@@ -85,7 +87,9 @@ export interface SeasonState {
   history?: SeasonRecord[];
   news?: string[];
   devBonus?: number;
-  /** Temporadas seguidas sin cumplir ningún objetivo (con dos, la directiva avisa de que el jefe peligra). */
+  /** La directiva te despidió al acabar este año y dejaste la partida ahí (13: despido). */
+  despedido?: number;
+  /** Temporadas seguidas sin cumplir ningún objetivo (con dos, la directiva avisa de que el jefe peligra; con tres, despide). */
   aviso?: number;
   /** Cambios de piloto a mitad de temporada (lesiones, destituciones, tus fichajes), en orden. */
   swaps?: SeatSwap[];
