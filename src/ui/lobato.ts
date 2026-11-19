@@ -105,6 +105,11 @@ export function createLobato(sess: Session, gp: string) {
           : e.motivo === "insegura" ? `¡${s} segundos a ${sur(c)} por salida insegura! Le han soltado encima de otro coche.`
           : `Sanción para ${sur(c)}: ${s} segundos. Eso le cuesta caro.`, true);
       }
+      case "desobedece":
+        if (!c) return null;
+        return say(e.n === 0
+          ? pick([`¡Ojo a esto! ¡${sur(c)} no deja pasar a su compañero! ¡Desobedece al muro!`, `¡${sur(c)} se niega a cumplir la orden de equipo! Esto va a traer cola en el box.`])
+          : pick([`¡${sur(c)} no entra! Le pedían parar y se queda fuera. ¡Eso es tener carácter... o desobedecer!`, `El equipo le llama a boxes y ${sur(c)} pasa de largo. ¡Una vuelta más, dice!`]), true);
       case "sinSancion": return say(pick(["Incidente de carrera, dicen los comisarios. Para mí también, sinceramente.", "Sin sanción. Son cosas de las carreras."]));
       case "blancaNegra": return c ? say(`Bandera blanca y negra para ${sur(c)}. Una más y le cae sanción.`) : null;
       case "desdoblar": return say("Los doblados pueden desdoblarse. Eso quiere decir que el coche de seguridad está a punto de irse.");
@@ -122,6 +127,12 @@ export function createLobato(sess: Session, gp: string) {
       case "adelanta": {
         const a = c, b = o, pos = e.n;
         if (!a || !b || pos === undefined) return null;
+        // rivalidad de la temporada: cuentas pendientes
+        if (sess.rivalOf(a, b) >= 0.3 && pos !== 1) return say(pick([
+          `¡Otra vez estos dos! ${sur(a)} le pasa a ${sur(b)}. Aquí hay cuentas pendientes, amigos.`,
+          `¡${sur(a)} y ${sur(b)}, el duelo de la temporada! Esta vez gana ${sur(a)}: ${pos}º.`,
+          `Entre ${sur(a)} y ${sur(b)} no hay amistad ninguna... ¡y ${sur(a)} se lleva la posición!`,
+        ]), true);
         if (pos === 1 && race) return say(spanish(a)
           ? pick([`¡¡${nm(a).toUpperCase()} AL FRENTE!! ¡Pasa a ${sur(b)} y es el nuevo líder! ¡Vamos, vamos!`, `¡Lo ha hecho! ¡${nm(a)} adelanta a ${sur(b)} y lidera el Gran Premio!`])
           : pick([`¡Cambio de líder! ¡${sur(a)} pasa a ${sur(b)} y se pone primero!`, `¡Atención, atención! ¡${sur(a)} es el nuevo líder de la carrera!`, `¡Adelantamiento por el liderato! ${sur(a)} se va por delante de ${sur(b)}.`]), true);
@@ -142,6 +153,10 @@ export function createLobato(sess: Session, gp: string) {
           : pick([`¡Abandono de ${sur(c)}! Se acaba su carrera.`, `Fin de la carrera para ${sur(c)}. Hoy no era su día.`, `${sur(c)} para el coche. Malas noticias para el ${c.team.nombre}.`]), true);
       case "toque":
         if (!c || !o) return null;
+        if (sess.rivalOf(c, o) >= 0.3) return say(pick([
+          `¡Otra vez estos dos! ¡${sur(c)} y ${sur(o)} se tocan de nuevo! Esto ya es personal.`,
+          `¡No me lo puedo creer! ¡${sur(c)} y ${sur(o)}, otra vez juntos y otra vez contacto!`,
+        ]), true);
         return say(pick([`¡Contacto entre ${sur(c)} y ${sur(o)}! ¡Uy, uy, uy!`, `¡Se tocan ${sur(c)} y ${sur(o)}! A ver qué dicen los comisarios.`, `¡Toque! ${sur(c)} y ${sur(o)} se han rozado. Esto ha dolido.`]), true);
       case "pinchazo": return c ? say(`¡Pinchazo para ${sur(c)}! Vuelta entera con la goma destrozada. ¡Qué drama!`, true) : null;
       case "trompo":

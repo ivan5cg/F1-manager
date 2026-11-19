@@ -998,3 +998,8 @@ html[data-tema] .dcard .cl i { color: #aab0ba; }
 .paper-b li::before { content: "■"; position: absolute; left: 0; font-size: 8px; top: 6px; color: #8c2a1c; }
 .paper-f { margin-top: 6px; font-size: 10px; color: #8a8474; text-align: right; font-style: italic; }
 .board .board-m { font-style: italic; line-height: 1.4; }
+
+/* ---------------------------------------------------------------- vestuario: moral (8.2) */
+.moralbar { display: inline-block; width: 70px; height: 6px; background: #2a313b; border-radius: 3px; overflow: hidden; flex: none; }
+.moralbar i { display: block; height: 100%; background: linear-gradient(90deg, #e3261c, #e8b923 45%, #3cbf6a); background-size: 70px 100%; }
+.col { display: flex; flex-direction: column; }

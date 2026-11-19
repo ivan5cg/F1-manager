@@ -30,6 +30,12 @@ Ya hecho de lo que viene ahora (noviembre de 2026):
   la ligera de lejos; las luces del techo (más una barra que las envuelve) parpadean con `scBar`. `SC_GEO` de
   respaldo. Página de prueba: `sc=1`. Se podría mejorar con un simplificador de verdad (meshoptimizer) si se
   permite instalarlo.
+- **8.2 Moral y desobediencia, 8.3 Rivalidades y 9.1 Rueda de prensa** (cambian la simulación, solo en temporada):
+  `src/sim/morale.ts` (moral por nombre en `SeasonState.moral`, rivalidades en `rivals`, `boardMood`),
+  `src/sim/caracter.ts` (el carácter, que ahora usa también la sesión), `session.ts` (`MORAL_PACE`, `disobeys` con su
+  propio azar `moodS`, `refusesStop`, `rivalOf`, `RIVAL_DEF`, `RIVAL_CONTACT`, `duels`, `orders`; código
+  `desobedece`), `WeekendState.moral/rivals/prensaQs/prensa`, `src/ui/vestuario.ts` (paneles y preguntas). Sin moral
+  (`finde.ts`, gran premio suelto) los resultados no cambian. Medido con `scripts/moral.ts`.
 - **Asfalto sin baldosas:** la textura de 2,7 m se repetía y se veía una cuadrícula. `asfalto.webp` aplanada (paso
   alto sin costuras, `python3 scripts/assets.py --aplanar`) y el árido leído dos veces en el sombreador (la segunda
   girada 37° y a otra escala) mezcladas con ruido (`ASF_R` en `map3d.ts`). Una lectura de textura más en la pista.
@@ -45,8 +51,7 @@ Primero lo que se nota en cada carrera; los gráficos se ven una vez y se olvida
 2. ~~11.1 Safety Car `.glb`~~ ✅ y ~~12.1 Cascos~~ ✅.
 3. ~~9.2 Titulares~~ ✅ y ~~9.3 La directiva te escribe~~ ✅.
 4. **12.2 Planos técnicos en Desarrollo** (M).
-5. **9.1 Rueda de prensa**, **8.2 Moral y desobediencia** y **8.3 Rivalidades** (M/G): lo más profundo, cambia la
-   simulación; medirlo con un script antes de darlo por bueno.
+5. ~~9.1 Rueda de prensa, 8.2 Moral y desobediencia y 8.3 Rivalidades~~ ✅.
 6. **9.4 a 9.6 Ritual de la temporada**, **10.2 a 10.4** y **13 Gestión**.
 7. **11.2 a 11.4 Árboles, fachadas y mecánicos**: para pulir al final.
 
@@ -71,21 +76,21 @@ El juego es una PWA (`public/sw.js`) y se juega en el móvil: cada `.glb` y cada
 - Solo texto: siempre obedece. Se engancha a las acciones del muro de `sessionView.ts`, igual que la fase 1 a los
   sucesos con código.
 
-### 8.2 Moral y desobediencia (M/G) · cambia la simulación
+### 8.2 Moral y desobediencia (M/G) · cambia la simulación · ✅ Hecho
 - **Moral** por piloto que dura toda la temporada: sube con buenos resultados y estrategias que le favorecen, y baja
   con órdenes en contra o paradas que le hunden.
 - Con la moral baja y un carácter volcánico, **a veces no obedece**: no deja pasar o retrasa la parada una vuelta.
 - Afecta un poco a su ritmo y a si quiere renovar en el mercado.
 - Medir con un script (como `scripts/radio.ts`) cuántas veces desobedecen en muchas carreras. Azar con su propio `Rng`.
 
-### 8.3 Rivalidades que se recuerden (M) · cambia la simulación
+### 8.3 Rivalidades que se recuerden (M) · cambia la simulación · ✅ Hecho
 - Si dos se tocan o se adelantan mucho, nace una rivalidad que se arrastra de carrera a carrera (hoy `RIVALS` en
   `session.ts` solo vive en una carrera). Se nota en lo agresivos que defienden.
 - Lobato la menciona («¡Otra vez estos dos!») y la radio también.
 
 ## Bloque 9 · El fin de semana fuera de la pista
 
-### 9.1 Rueda de prensa (M)
+### 9.1 Rueda de prensa (M) · ✅ Hecho
 - Entre sesiones, una o dos preguntas con respuestas a elegir («¿Hay favoritismo hacia tu primer piloto?»). Cada
   respuesta toca la moral de los pilotos (8.2) o la paciencia de la directiva. Mejor después de 8.2.
 

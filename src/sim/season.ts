@@ -59,6 +59,11 @@ export interface SeasonState {
   // ---- varias temporadas (career.ts): las de la primera temporada no tienen nada de esto (es 2026)
   /** Año de la temporada (sin él, 2026). */
   year?: number;
+  /** Moral de tus pilotos (por nombre, 0 a 100) y rivalidades entre pilotos (ver morale.ts). */
+  moral?: Record<string, number>;
+  rivals?: { a: string; b: string; k: number }[];
+  /** Lo que piensa la directiva de lo dicho en la rueda de prensa (−3 a 3); se le pasa al escribir tras la carrera. */
+  boardMood?: number;
   /** «Crear equipo»: semilla de los valores reales (ocultos) de pilotos, jefes, técnicos y motores: la de la primera
    *  temporada, para que no cambien de un año a otro (sin ella, la de la temporada). */
   trueSeed?: number;

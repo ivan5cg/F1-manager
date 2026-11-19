@@ -20,6 +20,7 @@ import { gpWhere } from "./grandPrix";
 import { GP_SLOT, hasSession, saveSeason, loadSeason, slotList, getActiveSlot, deleteSlot, exportSlot, checkImport, importInto, SLOTS, storageUse, installed, isSafariLike, markExported, exportDue, loadPrefs, savePrefs } from "./store";
 import { raceSummaryHtml, drawRaceSummary, photosHtml } from "./summary";
 import { headlines, portadaHtml, boardHtml } from "./prensa";
+import { moodPanel, syncMood, prensaHtml, wirePrensa } from "./vestuario";
 
 export interface Nav {
   home(): void;
@@ -257,6 +258,7 @@ export function seasonScreen(nav: Nav, s: SeasonState) {
     ${swapsPanel(s)}
     ${!done && s.dev && !(s.weekend && s.weekend.next > 0) ? `<div style="padding:0 10px 8px"><button id="swapbtn" style="width:100%">Cambiar un piloto (libres, F2 u otro equipo)</button></div>` : ""}
     ${objectivesPanel(s, ROUNDS_S.length, done)}
+    ${done ? "" : moodPanel(s)}
     ${devPanel(s, myTeam, ROUNDS_S, done)}
     ${s.equipo && GRID_CHANGES.length ? `<div class="panel"><div class="hd"><span class="t">La parrilla tras tus fichajes</span></div><div class="bd small">${GRID_CHANGES.map((c) => `${esc(c.team)}: ${c.what === "piloto" ? `${esc(c.in)} por ${esc(c.out)}` : `interino por ${esc(c.out)}`}`).join("<br>")}</div></div>` : ""}
     <div class="panel"><div class="hd"><span class="t">Calendario</span></div><div class="bd" style="padding:0">
@@ -305,6 +307,7 @@ export function seasonScreen(nav: Nav, s: SeasonState) {
     if (!s.weekend || s.weekend.round !== s.round + 1) {
       s.weekend = newWeekend(s.round + 1, circuitOf(s, ROUNDS_S[s.round]), TEAMS, s.seed * 1000 + s.round * 97 + 1);
       s.weekend.year = yearOf(s);
+      syncMood(s);
       if (s.equipo) preparePu(s.weekend, s.pu, DRIVERS.length, quotaFor(ROUNDS_S.length));
       saveSeason(s);
     }
@@ -539,6 +542,8 @@ function nextSteps(wk: Weekend, team: TeamDef, mine: { id: number; d: DriverDef;
 
 export function weekendScreen(nav: Nav, s: SeasonState, pending: SessionSnapshot | null = null) {
   const st = s.weekend!;
+  // la moral y las rivalidades de la temporada, al día para las sesiones (también en fines de semana de antes)
+  if (!s.gp && !st.moral) { syncMood(s); saveSeason(s); }
   const def = CIRCUITS[st.circuitId];
   const track = getTrack(st.circuitId);
   const wk = new Weekend(st, track, TEAMS, s.playerTeam);
@@ -568,6 +573,7 @@ export function weekendScreen(nav: Nav, s: SeasonState, pending: SessionSnapshot
       }).join("")}</div>
     </div></div>
     ${tips.length ? `<div class="panel"><div class="hd"><span class="t">¿Y ahora qué?</span></div><div class="bd small">${tips.map((t) => `<div class="tip">${t}</div>`).join("")}</div></div>` : ""}
+    ${next === "RACE" && !pending && !s.gp ? prensaHtml(s, st) : ""}
     <div class="panel"><div class="hd"><span class="t">Programa y previsión</span></div><div class="bd" style="padding:0">
       ${sessions.map((kind, i) => {
         const w = wk.when(kind);
@@ -598,6 +604,7 @@ export function weekendScreen(nav: Nav, s: SeasonState, pending: SessionSnapshot
   drawMini($<HTMLCanvasElement>("#mini"), track, true, lightAt(heroClock) === "noche");
   const redraw = () => { saveSeason(s); const y = window.scrollY; weekendScreen(nav, s, pending); window.scrollTo(0, y); };
   wirePu(st, redraw);
+  wirePrensa(s, st, redraw);
   wireSetup(wk, team, redraw);
   setBack(() => nav.season());
   $("#back").onclick = () => (s.gp ? nav.home() : nav.season());
