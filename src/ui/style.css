@@ -77,7 +77,7 @@ table.tv tr.me td { color: var(--gold1); }
 .pill.yellow { background: linear-gradient(var(--gold1), var(--gold2)); color: #000; border: 0; }
 
 /* ---------------- pantalla de sesión ---------------- */
-#sess { display: flex; flex-direction: column; height: 100dvh; overflow: hidden; background: #08090b; }
+#sess { display: flex; flex-direction: column; height: 100dvh; width: 100%; max-width: 100vw; overflow: hidden; background: #08090b; }
 .ctrl { display: flex; align-items: center; gap: 6px; padding: 3px 4px; background: #000; }
 .ctrl .gp { font-size: 12px; color: var(--dim); text-transform: uppercase; letter-spacing: .04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .speed { display: flex; gap: 2px; margin-left: auto; }
@@ -783,7 +783,7 @@ canvas.champchart { display: block; width: 100%; height: 200px; margin: 6px 0 2p
 .speed { gap: 2px; }
 .speed .sv { min-width: 0; width: 30px; padding: 0; font-size: 11.5px; font-weight: 900; letter-spacing: -.02em; }
 .speed .sv.on { background: var(--gl-gold); color: #000; border-color: transparent; }
-@media (max-width: 380px) { .speed .sv { width: 26px; font-size: 10.5px; } .speed button { min-width: 34px; } .ctrl .menu { min-width: 36px; } }
+@media (max-width: 410px) { .ctrl { gap: 4px; } .ctrl .gp { gap: 4px; } .ctrl .gp b { font-size: 13px; } .speed .sv { width: 27px; font-size: 10.5px; } .speed button { min-width: 33px; } .ctrl .menu { min-width: 34px; } }
 /* 3D y ampliar, debajo de la cámara: abajo queda libre para el rótulo de la vuelta lanzada */
 .m3b, .bigb { left: auto; right: 4px; bottom: auto; }
 .m3b { top: 42px; }
@@ -968,3 +968,21 @@ html[data-tema] .dcard .cl i { color: #aab0ba; }
 .rm.mit .bar { font-style: italic; }
 .tvbox.radio.mit .tvtab { background: linear-gradient(180deg, #fff1a8, #e3a812); color: #1b1400; }
 .tvbox.radio.mit .tvsub { font-size: 11px; opacity: .8; font-style: italic; padding: 0 8px 4px; }
+
+/* banderas SVG y ajuste compacto de las tarjetas de piloto en móvil */
+.main { grid-template-columns: minmax(0, 46%) minmax(0, 1fr); }
+.drivers { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.fl { display: inline-block; width: 1.3em; height: .9em; object-fit: cover; border-radius: 1.5px; box-shadow: 0 0 0 1px rgba(255, 255, 255, .18); vertical-align: -1px; flex: none; }
+.nfl { display: inline-flex; align-items: center; margin-left: 4px; }
+.dcard .h .nm { gap: 3px; }
+.dcard .h .dn { min-width: 0; flex: 1 1 auto; display: flex; align-items: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dcard .h .ti { flex: none; margin-left: auto; }
+@media (max-width: 420px) {
+  .dcard .h .posbox { min-width: 24px; font-size: 13px; }
+  .dcard .h .hm { padding: 0 2px; }
+  .dcard .h .nm { font-size: 11px; padding-left: 4px; padding-right: calc(3px + var(--sl, 8px)); }
+  .dcard .h .ti { gap: 2px; }
+  .dcard .h .ti .tyre { width: 15px; height: 15px; font-size: 8px; border-width: 2.5px; }
+  .dcard .h .ti .small { font-size: 10px; letter-spacing: -.02em; }
+  .nfl { margin-left: 3px; }
+}

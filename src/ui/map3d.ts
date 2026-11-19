@@ -20,8 +20,12 @@ import { GTAOPass } from "three/addons/postprocessing/GTAOPass.js";
 import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { toCreasedNormals } from "three/addons/utils/BufferGeometryUtils.js";
+import { HDRLoader } from "three/addons/loaders/HDRLoader.js";
 import { rainAt } from "../sim/weather";
-import { BRANDS, FONT, SECOND, collect, skin, carGeometry, carMinGeometry, wheelGeometry, liveryTexture, makeCarMaterial, makeWheelMaterial } from "./car3d";
+import { BRANDS, FONT, SECOND, collect, skin, carGeometry, carMinGeometry, wheelGeometry, steerGeometry, liveryTexture, makeCarMaterial, makeWheelMaterial, loadCarAssets } from "./car3d";
+import { gearFor, rpmFor } from "./audio";
+
+const ASSET = (p) => `${import.meta.env.BASE_URL}assets/${p}`;
 
 // las cuatro del botón (se van rotando) y las de «Más cámaras» (manteniendo pulsado el botón)
 const CAMS = ["circuito", "seguir", "tele", "abordo"];
@@ -190,11 +194,29 @@ const envCam = new THREE.CubeCamera(0.1, 10, envCube);
 const pmrem = new THREE.PMREMGenerator(renderer);
 let envRT = null, envT = -1e9, envSig = "";
 function updateEnv(now, sig) {
-  if (sig === envSig || now - envT < 2500) return;
+  if (hdriEnv || sig === envSig || now - envT < 2500) return;
   envSig = sig; envT = now;
   envCam.update(renderer, envScene);
   envRT = pmrem.fromCubemap(envCube.texture, envRT);
-  scene.environment = envRT.texture;
+  if (!hdriEnv) scene.environment = envRT.texture;
+}
+const hdriCache = new Map();
+const hdrLoader = new HDRLoader();
+let alive3d = true, hdriPreset = "", hdriEnv = null;
+function needHdri(preset) {
+  if (preset === hdriPreset && hdriEnv) return;
+  hdriPreset = preset;
+  const hit = hdriCache.get(preset);
+  if (hit) { hdriEnv = hit; scene.environment = hit.texture; return; }
+  if (hit === null) return;
+  hdriCache.set(preset, null);
+  hdrLoader.load(ASSET(`env/${preset}.hdr`), (hdr) => {
+    if (!alive3d) { hdr.dispose(); return; }
+    const rt = pmrem.fromEquirectangular(hdr);
+    hdr.dispose();
+    hdriCache.set(preset, rt);
+    if (hdriPreset === preset) { hdriEnv = rt; scene.environment = rt.texture; }
+  }, undefined, () => { hdriCache.delete(preset); });
 }
 
 // ------------------------------------------------------------------ texturas de detalle (asfalto, hierba, grava)
@@ -237,6 +259,32 @@ function detailTex(kind) {
 }
 function hash2(x, y) { const s = Math.sin(x * 127.1 + y * 311.7) * 43758.5453; return s - Math.floor(s); }
 const DET = { asfalto: detailTex("asfalto"), hierba: detailTex("hierba"), grava: detailTex("grava") };
+const DET_U = {
+  asfalto: { value: DET.asfalto },
+  hierba: { value: DET.hierba },
+  grava: { value: DET.grava },
+  hormigon: { value: DET.asfalto },
+  fachada: { value: DET.asfalto },
+};
+const loadedTexs = [];
+{
+  const loader = new THREE.TextureLoader();
+  const aniso = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+  for (const k of ["asfalto", "hierba", "grava", "hormigon", "fachada"]) {
+    loader.load(ASSET(`tex/${k}.webp`), (tex) => {
+      if (!alive3d) { tex.dispose(); return; }
+      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+      tex.magFilter = THREE.LinearFilter;
+      tex.minFilter = THREE.LinearMipmapLinearFilter;
+      tex.generateMipmaps = true;
+      tex.anisotropy = aniso;
+      tex.colorSpace = THREE.NoColorSpace;
+      tex.needsUpdate = true;
+      DET_U[k].value = tex;
+      loadedTexs.push(tex);
+    }, undefined, () => { /* respaldo procedural */ });
+  }
+}
 
 // uniformes que comparten la pista, los coches y la lluvia
 const U = {
@@ -245,6 +293,8 @@ const U = {
   uDrops: { value: -1 }, // gotas en los coches: 0 secos … 1 empapados (−1: aún sin calcular)
   uYel: { value: new THREE.Vector3(0, 0, 0) }, // zona en amarillo: centro (s), media longitud y cuánto se ve
   uLamps: { value: Array.from({ length: 16 }, () => new THREE.Vector4()) }, uNL: { value: 0 }, // focos que se reflejan en el agua
+  uTails: { value: Array.from({ length: 6 }, () => new THREE.Vector4()) }, uNT: { value: 0 }, // luz trasera en mojado
+  uLampK: { value: 0 }, // brillo de farolas y focos en mojado
 };
 const CN = 48, cloudData = new Uint8Array(CN * CN * 4);
 const cloudTex = new THREE.DataTexture(cloudData, CN, CN, THREE.RGBAFormat);
@@ -302,7 +352,7 @@ transformed.y += aY * (aY > 0.0 ? uW / 6.5 : 1.0);
 vU = aU; vV = aV; vWet = aWet; vWetOff = aWetOff; vKerb = aKerb; vDash = aDash; vLine = aLine; vEdge = aEdge; vXZ = transformed.xz; vWY = transformed.y;
 `;
 const RIB_FH = `` + GLSL_NOISE + `
-uniform float uW, uDetail, uL, uFlood, uTexR, uTime, uNL; uniform vec3 uYel; uniform vec4 uLamps[16]; uniform sampler2D uCloud, uAds, uDet;
+uniform float uW, uDetail, uL, uFlood, uTexR, uTime, uNL, uNT, uLampK; uniform vec3 uYel; uniform vec4 uLamps[16], uTails[6]; uniform sampler2D uCloud, uAds, uDet;
 varying float vU, vV, vWet, vWetOff, vKerb, vDash, vLine, vWY; varying vec3 vEdge; varying vec2 vXZ;
 `;
 // Cada cinta compila solo su rama (RMODE): 0 muro liso, 1 pista, 2 calle de boxes, 3 hierba, 4 grava, 5 barrera, 6 valla, 7 publicidad.
@@ -348,7 +398,7 @@ float cloudS = texture2D(uCloud, vXZ / (2.0 * uTexR) + 0.5).g;
       float dist = length(o), ring = dist - ph * 0.3;
       dn += normalize(o + 1e-4) * sin(ring * 70.0) * exp(-ring * ring * 500.0) * (1.0 - ph) * rainK * step(0.45, hh) * 0.8;
     }
-    // de noche, cada foco se refleja en el agua como una estela alargada hacia quien mira (más fina en los charcos)
+    // de noche o con lluvia en urbanos, cada foco se refleja en el agua como una estela alargada hacia quien mira
     if (uNL > 0.5 && film > 0.02) {
       vec3 F = vec3(vXZ.x, vWY, vXZ.y), d1 = normalize(F - cameraPosition);
       float sgm = mix(0.03, 0.006, pud), acc = 0.0;
@@ -359,7 +409,20 @@ float cloudS = texture2D(uCloud, vXZ / (2.0 * uTexR) + 0.5).g;
         float h = dot(dd, hx), v = length(dd - hx * h);
         acc += Lp.w * exp(-(h * h) / (sgm * sgm * 0.25) - (v * v) / (sgm * sgm * 14.0));
       }
-      refC = vec3(1.0, 0.9, 0.74) * acc * max(film * 0.5, pud) * uFlood * 2.5;
+      refC = vec3(1.0, 0.88, 0.68) * acc * max(film * 0.5, pud) * uLampK * 2.5;
+    }
+    // pilotos traseros rojos reflejados en el asfalto mojado detrás de cada coche cercano
+    if (uNT > 0.5 && film > 0.02) {
+      vec3 F = vec3(vXZ.x, vWY, vXZ.y), d1 = normalize(F - cameraPosition);
+      float sgm = mix(0.026, 0.009, pud), accT = 0.0;
+      for (int i = 0; i < 6; i++) {
+        if (float(i) >= uNT) break;
+        vec4 Tp = uTails[i];
+        vec3 d2 = normalize(vec3(Tp.x, 2.0 * vWY - Tp.y, Tp.z) - cameraPosition), dd = d1 - d2, hx = normalize(cross(d2, vec3(0.0, 1.0, 0.0)));
+        float h = dot(dd, hx), v = length(dd - hx * h);
+        accT += Tp.w * exp(-(h * h) / (sgm * sgm * 0.35) - (v * v) / (sgm * sgm * 10.0));
+      }
+      refC += vec3(1.5, 0.10, 0.05) * accT * max(film * 0.65, pud) * 1.4;
     }
     col = mix(col, SR(vec3(0.27, 0.59, 0.94)), vWet * (1.0 - uDetail) * 0.85);
     float dash = vDash > 0.5 ? step(0.45, fract(vV / (uW * 4.0))) : 1.0;
@@ -422,17 +485,20 @@ float cloudS = texture2D(uCloud, vXZ / (2.0 * uTexR) + 0.5).g;
   col *= 1.0 - 0.5 * step(f, 0.012);
   rough = 0.45; glow = 0.22; // los paneles se leen también a contraluz
 #else
-  rough = 0.8;
+  vec4 d1 = texture2D(uDet, vec2(vV, vWY) / 3.2);
+  col *= 0.72 + 0.56 * d1.r;
+  dn = (d1.gb - 0.5) * 1.6;
+  rough = 0.84 + (d1.a - 0.5) * 0.2;
 #endif
 col *= 1.0 - 0.4 * cloudS;
 vec4 diffuseColor = vec4(col, opacity);
 `;
-const RIB_DET = [null, DET.asfalto, DET.asfalto, DET.hierba, DET.grava, null, null, null];
+const RIB_DET = [DET_U.hormigon, DET_U.asfalto, DET_U.asfalto, DET_U.hierba, DET_U.grava, null, null, null];
 function ribbonMat(color, mode, po) {
   // flatShading: la normal sale de la propia superficie ya deformada (las cintas se ensanchan en el sombreador)
   const m = new THREE.MeshStandardMaterial({ color, roughness: 0.9, metalness: 0, flatShading: true, side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: po, polygonOffsetUnits: po });
   m.defines = { ...m.defines, RMODE: mode };
-  const uDet = { value: RIB_DET[mode] };
+  const uDet = RIB_DET[mode] || { value: null };
   m.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, U, { uDet });
     sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\n" + RIB_VH).replace("#include <begin_vertex>", RIB_VB);
@@ -449,15 +515,56 @@ function ribbonMat(color, mode, po) {
 
 // dos mallas: la fina para verlo de cerca y una ligera para la vista de circuito y los dispositivos justos
 const CAR_GEO = carGeometry(true), WHEEL_GEO = wheelGeometry(true), CAR_LO = carGeometry(false), WHEEL_LO = wheelGeometry(false), CAR_MIN = carMinGeometry();
-// volante con las manos del piloto (gira con la dirección)
-const STEER_GEO = (() => {
-  const c = collect();
-  c.add(new THREE.BoxGeometry(0.035, 0.15, 0.27), [0.07, 0.07, 0.08]);
-  c.add(new THREE.BoxGeometry(0.02, 0.07, 0.11).translate(-0.02, 0.01, 0), [0.1, 0.5, 0.75]);
-  for (const s of [1, -1]) { c.add(new THREE.BoxGeometry(0.07, 0.085, 0.07).translate(-0.01, 0, 0.125 * s), [0.82, 0.82, 0.84]); c.add(new THREE.BoxGeometry(0.2, 0.07, 0.07).translate(-0.12, -0.03, 0.15 * s), [0.82, 0.82, 0.84]); }
-  return c.done();
-})();
-const STEER_MAT = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.7 });
+// volante con las manos del piloto (gira con la dirección) y pantalla LED viva a bordo
+const STEER_GEO = steerGeometry();
+const STEER_MAT = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55, metalness: 0.15 });
+const srgb = (t) => { t.colorSpace = THREE.SRGBColorSpace; return t; };
+const dashCv = document.createElement("canvas"); dashCv.width = 256; dashCv.height = 144;
+const dashCtx = dashCv.getContext("2d"), dashTex = srgb(new THREE.CanvasTexture(dashCv));
+const dashMesh = new THREE.Mesh(
+  new THREE.PlaneGeometry(0.118, 0.068).rotateY(-Math.PI / 2).translate(-0.022, 0.014, 0),
+  new THREE.MeshBasicMaterial({ map: dashTex, toneMapped: false })
+);
+dashMesh.matrixAutoUpdate = false; dashMesh.visible = false; dashMesh.renderOrder = 11;
+scene.add(dashMesh);
+let dashT = -1e9, dashGear = 1, extCarGeo = null, extWheelGeo = null, steerPos = [0.92, 0.76, 0], camPos = [-0.10, 1.44];
+// malla ligera en uso (la integrada o la del .glb) y la del .glb, para liberarla al cerrar
+let carLoCur = CAR_LO, extCarLoGeo = null;
+// a bordo, el volante del coche seguido algo más grande que el real: en móvil la pantalla se lee mejor
+const DASH_K = 1.25;
+const mTilt = new THREE.Matrix4().makeRotationZ(-0.24);
+function drawDash(c) {
+  const g = dashCtx, W = 256, H = 144;
+  dashGear = c.v < 1 ? 1 : gearFor(c.v, dashGear);
+  const rpm = c.v < 1 ? 4200 : rpmFor(c.v, dashGear);
+  const leds = Math.round(clamp((rpm - 7600) / 4600, 0, 1) * 15);
+  g.fillStyle = "#090b0f"; g.fillRect(0, 0, W, H);
+  for (let j = 0; j < 15; j++) {
+    g.fillStyle = j < leds ? (j < 5 ? "#33e05f" : j < 10 ? "#ff3b30" : "#56a0ff") : "#1b2029";
+    g.fillRect(10 + j * 16, 8, 12, 14);
+  }
+  g.fillStyle = "#ffffff"; g.font = `900 72px ${FONT}`; g.textAlign = "center"; g.textBaseline = "middle";
+  g.fillText(c.v < 1 ? "N" : String(dashGear), W * 0.5, 68);
+  g.textAlign = "left"; g.font = `700 20px ${FONT}`; g.fillStyle = "#9da3ad";
+  g.fillText("KM/H", 14, 101);
+  g.fillStyle = "#ffffff"; g.font = `900 34px ${FONT}`;
+  g.fillText(String(Math.round((c.v || 0) * 3.6)), 12, 126);
+  const soc = Math.round(clamp((c.soc ?? 0) / 4, 0, 1) * 100);
+  g.textAlign = "right"; g.font = `900 26px ${FONT}`; g.fillStyle = "#33e05f";
+  g.fillText(`${soc}%`, W - 14, 106);
+  g.fillStyle = "#1c232e"; g.fillRect(W - 92, 124, 78, 10);
+  g.fillStyle = soc < 20 ? "#ffd84a" : "#33e05f"; g.fillRect(W - 92, 124, Math.round((78 * soc) / 100), 10);
+  const badge = sess.flag === "red" ? ["ROJA", "#e3261c", "#fff"]
+    : sess.flag === "sc" || sess.flag === "sc_in" || sess.flag === "vsc" ? ["SC", "#ffd84a", "#000"]
+    : c.loc === "pit" || c.loc === "lane_in" || c.loc === "lane_out" ? ["PIT", "#eef0f2", "#000"]
+    : c.drs ? [sess.aidShort || "MO", "#33e05f", "#000"] : null;
+  if (badge) {
+    g.fillStyle = badge[1]; g.fillRect(W - 68, 34, 54, 24);
+    g.fillStyle = badge[2]; g.font = `900 16px ${FONT}`; g.textAlign = "center";
+    g.fillText(badge[0], W - 41, 47);
+  }
+  dashTex.needsUpdate = true;
+}
 // dorsales: una lámina con todos los números y tres pegatinas por coche (morro y los dos lados de la aleta)
 const NUM_COLS = 8, NUM_ROWS = 4;
 const DECAL_GEO = (() => {
@@ -841,7 +948,7 @@ U.uS = { value: 1 };
 const PROP_VH = `attribute vec3 aAnc, aSd; attribute float aLw; attribute vec4 aPat; uniform float uW, uS, uTime; varying vec4 vPat; varying vec2 vWXZ;`;
 const PROP_VB = `vec3 transformed = aAnc + aSd * (uW * aLw) + position * uS; vPat = aPat; vWXZ = transformed.xz;
   if (abs(aPat.x - 11.0) < 0.5) transformed += aSd * sin(uTime * 7.0 - aPat.z * 4.0 + aPat.y) * 0.22 * aPat.z * uS; // banderas del público`;
-const PROP_FH = GLSL_NOISE + `uniform float uFlood, uTexR; uniform sampler2D uCloud, uSigns; varying vec4 vPat; varying vec2 vWXZ;
+const PROP_FH = GLSL_NOISE + `uniform float uFlood, uTexR; uniform sampler2D uCloud, uSigns, uFacDet, uWallDet; varying vec4 vPat; varying vec2 vWXZ;
 // al anochecer las ventanas se encienden poco a poco: cada una a partir de su propio umbral
 float winOn(vec2 c){ return smoothstep(0.0, 0.06, uFlood * 1.3 - 0.05 - h21(c + 7.31) * 0.9) * 0.8; }
 // lo mismo de media, para cuando las ventanas no se distinguen
@@ -888,27 +995,31 @@ if (P > 0.5 && P < 1.5) {
 } else if (P < 4.5) {
   col = signAt(sd, uv); rough = 0.5; glowC = col * (0.12 + 1.1 * uFlood);
 } else if (P < 5.5) {
-  // fachada de ciudad: planta baja de tiendas y pisos de 3,1 m con ventanas, contraventanas y balcones
-  col *= 0.86 + 0.14 * vn(uv * 0.35 + sd);
+  // fachada de ciudad: planta baja de tiendas y pisos de 3,1 m con estuco PBR, ventanas, contraventanas y balcones
+  vec4 fd = texture2D(uFacDet, uv / 5.5);
+  col *= (0.76 + 0.48 * fd.r) * (0.9 + 0.1 * vn(uv * 0.35 + sd));
+  rough = clamp(0.65 + (fd.a - 0.5) * 0.35, 0.35, 0.95);
   if (uv.y < 4.0) {
     float sh = step(0.12, fract(uv.x / 5.0)) * step(0.4, uv.y) * step(uv.y, 3.3);
-    col = mix(col, SR(vec3(0.07, 0.08, 0.09)), sh); rough = mix(0.8, 0.1, sh);
+    col = mix(col, SR(vec3(0.06, 0.07, 0.09)), sh); rough = mix(rough, 0.08, sh);
     float aw = step(3.3, uv.y) * step(uv.y, 3.8);
-    col = mix(col, SR(hsv(h21(vec2(floor(uv.x / 5.0), sd)), 0.6, 0.6)), aw);
-    glowC = SR(vec3(1.0, 0.85, 0.6)) * sh * (0.15 + uFlood * 1.5);
+    col = mix(col, SR(hsv(h21(vec2(floor(uv.x / 5.0), sd)), 0.55, 0.55)), aw);
+    glowC = SR(vec3(1.0, 0.85, 0.6)) * sh * (0.18 + uFlood * 1.5);
   } else if (px < 3.0) {
     vec2 g = vec2(uv.x / 2.7, (uv.y - 4.0) / 3.1), c = floor(g), f = fract(g);
     float win = step(0.3, f.x) * step(f.x, 0.7) * step(0.2, f.y) * step(f.y, 0.85);
     float shut = (step(0.17, f.x) * step(f.x, 0.3) + step(0.7, f.x) * step(f.x, 0.83)) * step(0.2, f.y) * step(f.y, 0.85) * step(0.4, h21(vec2(sd, 3.0)));
     float balc = step(0.12, f.y) * step(f.y, 0.22) * step(0.2, f.x) * step(f.x, 0.8) * step(0.5, h21(vec2(c.y, sd)));
+    float ledge = step(0.92, f.y);
     float k = step(px, 0.9);
-    col = mix(col, SR(vec3(0.3, 0.38, 0.28)) * (0.8 + 0.4 * h21(vec2(sd, 9.0))), shut * k);
-    col = mix(col, SR(vec3(0.08, 0.09, 0.11)), win * k);
-    col = mix(col, SR(vec3(0.15)), balc * k);
-    rough = mix(rough, 0.12, win * k);
+    col *= 1.0 - 0.16 * ledge * k;
+    col = mix(col, SR(vec3(0.28, 0.36, 0.27)) * (0.8 + 0.4 * h21(vec2(sd, 9.0))), shut * k);
+    col = mix(col, SR(vec3(0.07, 0.09, 0.12)), win * k);
+    col = mix(col, SR(vec3(0.16)), balc * k);
+    rough = mix(rough, 0.07, win * k); metal = mix(metal, 0.18, win * k);
     // cuando cada ventana ocupa menos de medio píxel, poco a poco un brillo uniforme: sin parpadeos al moverse. Es un
     // tercio del medio de verdad: puntos de luz sueltos se ven más oscuros que la misma luz repartida
-    glowC = SR(vec3(1.0, 0.82, 0.55)) * mix(win * step(0.55, h21(c + sd)) * winOn(c + sd), 0.04 * winAvg(), smoothstep(2.0, 3.0, px)) * 1.4;
+    glowC = SR(vec3(1.0, 0.82, 0.55)) * mix(win * step(0.55, h21(c + sd)) * (0.12 + winOn(c + sd)), 0.04 * winAvg(), smoothstep(2.0, 3.0, px)) * 1.4;
   } else {
     glowC = SR(vec3(1.0, 0.82, 0.55)) * 0.04 * winAvg() * 1.4;
   }
@@ -928,7 +1039,9 @@ if (P > 0.5 && P < 1.5) {
 } else if (P < 8.5) {
   col *= 0.82 + 0.18 * step(0.5, fract(uv.x / 0.45)); rough = 0.5; metal = 0.4;
 } else if (P < 9.5) {
-  col *= (0.9 + 0.1 * vn(uv * 1.7 + sd)) * (1.0 - 0.3 * step(fract(uv.x / 4.0), 0.015));
+  vec4 wd = texture2D(uWallDet, uv / 4.2);
+  col *= (0.7 + 0.6 * wd.r) * (1.0 - 0.3 * step(fract(uv.x / 4.0), 0.015));
+  rough = clamp(0.72 + (wd.a - 0.5) * 0.3, 0.4, 0.95);
 } else if (P < 10.5) {
   col = vec3(1.0); glowC = vec3(1.0, 0.96, 0.88) * (0.6 + 6.0 * uFlood);
 } else if (P < 11.5) {
@@ -943,7 +1056,7 @@ vec4 diffuseColor = vec4(col, opacity);
 function propMat() {
   const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, metalness: 0, flatShading: true, side: THREE.DoubleSide });
   m.onBeforeCompile = (sh) => {
-    Object.assign(sh.uniforms, { uW: U.uW, uS: U.uS, uTime: U.uTime, uFlood: U.uFlood, uCloud: U.uCloud, uTexR: U.uTexR, uSigns: { value: signTex } });
+    Object.assign(sh.uniforms, { uW: U.uW, uS: U.uS, uTime: U.uTime, uFlood: U.uFlood, uCloud: U.uCloud, uTexR: U.uTexR, uSigns: { value: signTex }, uFacDet: DET_U.fachada, uWallDet: DET_U.hormigon });
     sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\n" + PROP_VH).replace("#include <begin_vertex>", PROP_VB);
     sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\n" + PROP_FH)
       .replace("vec4 diffuseColor = vec4( diffuse, opacity );", PROP_FB)
@@ -1093,7 +1206,7 @@ function trackDist(x, z) {
 function cityMat(style) {
   const m = new THREE.MeshStandardMaterial({ roughness: 0.8, metalness: 0 });
   m.onBeforeCompile = (sh) => {
-    Object.assign(sh.uniforms, { uFlood: U.uFlood, uCloud: U.uCloud, uTexR: U.uTexR, uSigns: { value: signTex } });
+    Object.assign(sh.uniforms, { uFlood: U.uFlood, uCloud: U.uCloud, uTexR: U.uTexR, uSigns: { value: signTex }, uFacDet: DET_U.fachada, uWallDet: DET_U.hormigon });
     sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nvarying vec4 vPat; varying vec2 vWXZ;")
       .replace("#include <begin_vertex>", `#include <begin_vertex>
         vec4 wq = instanceMatrix * vec4(position, 1.0); vec3 lq = wq.xyz - instanceMatrix[3].xyz; vWXZ = wq.xz;
@@ -1114,7 +1227,6 @@ function cityMat(style) {
 
 let world = null, gaV = new Map(), gSlot = 20, startL = null;
 let standS = []; // gradas para el sonido del público: [s del centro, lado, largo]
-const srgb = (t) => { t.colorSpace = THREE.SRGBColorSpace; return t; };
 function buildWorld() {
   standS = [];
   if (world) for (const o of world.all) { scene.remove(o); o.geometry && o.geometry.dispose(); if (o.userData.far) { o.userData.near.dispose(); o.userData.far.dispose(); } }
@@ -1244,7 +1356,7 @@ function buildWorld() {
   tg.setIndex(ti);
   tg.computeVertexNormals(); // normales suaves: las colinas ya no se ven a facetas
   const terrMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.94, metalness: 0 });
-  const uDetT = { value: street ? DET.asfalto : DET.hierba };
+  const uDetT = street ? DET_U.asfalto : DET_U.hierba;
   terrMat.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, { uDet: uDetT, uCloud: U.uCloud, uTexR: U.uTexR, uFlood: U.uFlood });
     sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nvarying vec2 vTX;").replace("#include <begin_vertex>", "#include <begin_vertex>\nvTX = position.xz;");
@@ -1576,6 +1688,8 @@ function buildWorld() {
             B.at(sc, sg);
             B.box(-len / 2, len / 2, -4, h, 0, dd, lw, lm, c, { front: [tower ? 6 : 5, seed], top: [8, 0] });
             if (roof) B.box(-len / 2 - 0.3, len / 2 + 0.3, h, h + 0.7, -0.4, dd + 0.4, lw, lm, 0xa65a3a, { front: [9, 0], top: [8, 0] });
+            else if (!tower) B.near(() => B.box(-len / 2 - 0.25, len / 2 + 0.25, h - 0.5, h + 0.35, -0.35, dd + 0.2, lw, lm, 0x8f887d, { front: [9, 0], top: [8, 0] }));
+            if (!tower) B.near(() => B.box(-len / 2 - 0.1, len / 2 + 0.1, 3.85, 4.15, -0.22, dd + 0.1, lw, lm, 0xa59d8e, { front: [9, 0] }));
             if (!tower && rnd2() < 0.25) B.near(() => B.panel(-len / 2 + 1, Math.min(len / 2 - 1, -len / 2 + 9), 4.2, 5.8, -0.05, lw, lm, Math.floor(rnd2() * 16), 0, 1));
           }, 1)) break;
         }
@@ -1669,9 +1783,38 @@ function buildWorld() {
   }
   // el coche mínimo (vista general) comparte con la ligera los datos de cada coche: se cambia una malla por otra
   for (const a of ["aCol2", "aLiv", "aDmg"]) CAR_MIN.setAttribute(a, CAR_LO.attributes[a]);
+  const loose = inst(WHEEL_GEO.clone(), WHEEL_MAT, NC * 8, 10);
+  const brakeH = new THREE.InstancedBufferAttribute(new Float32Array(NC * 4), 1).setUsage(THREE.DynamicDrawUsage);
+  WHEEL_GEO.setAttribute("aBrake", brakeH);
   const steer = inst(STEER_GEO, STEER_MAT, NC, 10);
   const crewS = inst(CREW_STAND, CREW_MAT, NC * 12, 10), crewC = inst(CREW_CROUCH, CREW_MAT, NC * 4, 10), jacks = inst(JACK_GEO, JACK_MAT, NC * 2, 10);
-  const loose = inst(WHEEL_GEO, WHEEL_MAT, NC * 8, 10);
+  carLoCur = CAR_LO; // hasta que llegue la del .glb (con los datos de este circuito), la integrada
+  loadCarAssets(({ carGeo, wheelGeo, carLoGeo, steer, cam }) => {
+    if (!alive3d || !world) { carGeo?.dispose(); wheelGeo?.dispose(); carLoGeo?.dispose(); return; }
+    if (steer) steerPos = steer;
+    if (cam) camPos = cam;
+    if (carLoGeo) {
+      // comparte con la integrada los datos de cada coche (segundo color, librea, daños)
+      for (const a of ["aCol2", "aLiv", "aDmg"]) carLoGeo.setAttribute(a, CAR_LO.attributes[a]);
+      if (cars.geometry !== CAR_MIN) cars.geometry = carLoGeo;
+      if (extCarLoGeo) extCarLoGeo.dispose();
+      extCarLoGeo = carLoCur = carLoGeo;
+    }
+    if (carGeo) {
+      for (const a of ["aCol2", "aLiv", "aDmg"]) carGeo.setAttribute(a, CAR_GEO.attributes[a]);
+      carsHi.geometry = carGeo;
+      if (extCarGeo) extCarGeo.dispose();
+      extCarGeo = carGeo;
+    }
+    if (wheelGeo) {
+      const looseGeo = wheelGeo.clone();
+      loose.geometry.dispose(); loose.geometry = looseGeo;
+      wheelGeo.setAttribute("aBrake", brakeH);
+      wheelsHi.geometry = wheelGeo;
+      if (extWheelGeo) extWheelGeo.dispose();
+      extWheelGeo = wheelGeo;
+    }
+  });
   // tras un accidente: restos, comisarios y la grúa
   const debris = inst(new THREE.BoxGeometry(0.5, 0.08, 0.3), new THREE.MeshStandardMaterial({ roughness: 0.6 }), NC * 7, 9);
   // pluma (amarilla) y cable (negro): cajas de 1 m estiradas entre dos puntos
@@ -1765,7 +1908,7 @@ function buildWorld() {
     const pts = add(new THREE.Points(g, m)); pts.frustumCulled = false; pts.visible = false; pts.name = "pueblos";
     return pts;
   })();
-  world = { all, props, trees: treeMesh, townLights, sparkMesh, fists, chk, beams, towers, night, lampPos, debris, marsh, crane, blank, gant, glit, markMesh, posts, flags, scCar, scBar, road, cars, wheels, crewS, crewC, jacks, loose, puffs, blobs, spray, discs, rings, lamps, poles, halos, decals, steer, carIdx, c2src: c2a.slice(), carsHi, wheelsHi, col2: CAR_LO.attributes.aCol2, livSrc, liv: CAR_LO.attributes.aLiv, dmg: CAR_LO.attributes.aDmg, col2H: CAR_GEO.attributes.aCol2, livH: CAR_GEO.attributes.aLiv, dmgH: CAR_GEO.attributes.aDmg, cell: dg.attributes.aCell };
+  world = { all, props, trees: treeMesh, townLights, sparkMesh, fists, chk, beams, towers, night, lampPos, debris, marsh, crane, blank, gant, glit, markMesh, posts, flags, scCar, scBar, road, cars, wheels, crewS, crewC, jacks, loose, puffs, blobs, spray, discs, rings, lamps, poles, halos, decals, steer, carIdx, c2src: c2a.slice(), carsHi, wheelsHi, col2: CAR_LO.attributes.aCol2, livSrc, liv: CAR_LO.attributes.aLiv, dmg: CAR_LO.attributes.aDmg, col2H: CAR_GEO.attributes.aCol2, livH: CAR_GEO.attributes.aLiv, dmgH: CAR_GEO.attributes.aDmg, brakeH, cell: dg.attributes.aCell };
   U.uL.value = T.L;
   wetT = cloudT = lightT = -1e9;
   applyQuality();
@@ -1912,7 +2055,9 @@ function updateLight(now) {
   SPRAY_MAT.uniforms.uCol.value.setRGB(0.8, 0.84, 0.88).lerp(hor, 0.35).multiplyScalar(0.2 + 0.7 * day);
   renderer.setClearColor(hor, 1);
   // al atardecer y de noche el cielo apenas alumbra: sube un poco lo que aporta el entorno para que se siga viendo
-  scene.environmentIntensity = (1 + 0.6 * (1 - day) + 0.6 * warm) * (1 + 2.5 * flashK(now));
+  const preset = day < 0.2 ? "noche" : warm > 0.35 ? "tarde" : (cloud > 0.55 || rainHere > 0.15) ? "nublado" : "dia";
+  needHdri(preset);
+  scene.environmentIntensity = (hdriEnv ? (0.85 + 0.35 * (1 - day) + 0.45 * warm) : (1 + 0.6 * (1 - day) + 0.6 * warm)) * (1 + 2.5 * flashK(now));
   skyU.uFlash.value = flashK(now) * (0.6 + 0.6 * (1 - day));
   updateEnv(now, [sunDir.x, sunDir.y, sunDir.z, zen.r, zen.g, zen.b, hor.r, hor.g, hor.b, cloud, wxMean, Math.min(rainHere, 3) / 2].map((v) => v.toFixed(2)).join());
   U.uFlood.value = (1 - day) * 0.8;
@@ -2038,12 +2183,15 @@ const rain = (() => {
   g.setAttribute("position", new THREE.BufferAttribute(seed, 3));
   g.setAttribute("aEnd", new THREE.BufferAttribute(end, 1));
   const m = new THREE.ShaderMaterial({
-    uniforms: { uCenter: { value: new THREE.Vector3() }, uSize: { value: new THREE.Vector3(100, 100, 100) }, uTime: { value: 0 }, uWind: { value: new THREE.Vector2() }, uTex: U.uCloud, uTexR: U.uTexR },
-    vertexShader: `attribute float aEnd; uniform vec3 uCenter, uSize; uniform float uTime, uTexR; uniform vec2 uWind; uniform sampler2D uTex; varying float vA;
+    uniforms: { uCenter: { value: new THREE.Vector3() }, uSize: { value: new THREE.Vector3(100, 100, 100) }, uTime: { value: 0 }, uLum: { value: 1 }, uWind: { value: new THREE.Vector2() }, uTex: U.uCloud, uTexR: U.uTexR },
+    vertexShader: `attribute float aEnd; uniform vec3 uCenter, uSize; uniform float uTime, uTexR; uniform vec2 uWind; uniform sampler2D uTex; varying float vA, vEnd, vDist;
       void main(){ vec3 q = fract(position + vec3(uWind.x * uTime * 0.25, -uTime * (0.9 + position.x * 0.5), uWind.y * uTime * 0.25)) - 0.5;
-        vec3 p = uCenter + q * uSize; p.y += uSize.y * 0.45; p += aEnd * vec3(uWind.x * 0.4, -1.0, uWind.y * 0.4) * uSize.y * 0.035;
-        vA = texture2D(uTex, p.xz / (2.0 * uTexR) + 0.5).r; gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0); }`,
-    fragmentShader: `varying float vA; void main(){ gl_FragColor = vec4(0.62, 0.72, 1.0, min(0.4, vA * 1.1));
+        vec3 p = uCenter + q * uSize; p.y += uSize.y * 0.45; p += aEnd * vec3(uWind.x * 0.4, -1.0, uWind.y * 0.4) * uSize.y * 0.016;
+        vA = texture2D(uTex, p.xz / (2.0 * uTexR) + 0.5).r; vEnd = aEnd; vDist = length((modelViewMatrix * vec4(p, 1.0)).xyz);
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0); }`,
+    fragmentShader: `uniform float uLum; varying float vA, vEnd, vDist;
+      void main(){ float fade = sin(vEnd * 3.14159) * smoothstep(3.0, 14.0, vDist) * (1.0 - smoothstep(140.0, 420.0, vDist));
+        gl_FragColor = vec4(vec3(0.78, 0.82, 0.88) * uLum, min(0.22, vA * 0.55) * fade);
       #include <tonemapping_fragment>
       #include <colorspace_fragment>
     }`,
@@ -2084,7 +2232,7 @@ const LENS_MAT = new THREE.ShaderMaterial({
       float e = smoothstep(0.15, 0.55, length(p * vec2(0.8, 1.2)));
       vec2 du = vUv * vec2(110.0 * uAsp, 110.0);
       float dt = step(1.0 - 0.07 * uDirt * (0.3 + e), h21(floor(du))) * (1.0 - smoothstep(0.2, 0.5, length(fract(du) - 0.5))) * (0.5 + 0.5 * vn(vUv * 9.0));
-      col = mix(col, vec3(0.16, 0.12, 0.08), dt * (1.0 - a)); a = max(a, dt * 0.85);
+      col = mix(col, vec3(0.16, 0.12, 0.08), dt * (1.0 - a)); a = max(a, dt * 0.32);
       gl_FragColor = vec4(col * uLum, a);
       #include <colorspace_fragment>
     }`,
@@ -2409,8 +2557,8 @@ function setCam(m) {
   camMode = m; teleIdx = -1;
   camFrom = { pos: cur.pos.clone(), look: cur.look.clone(), fov: cur.fov }; camT = 0;
 }
-const _tp = mkS(), _tq = mkS(), _hv = new THREE.Vector3(), heliPos = new THREE.Vector3();
-let heliOn = false;
+const _tp = mkS(), _tq = mkS(), _hv = new THREE.Vector3(), heliPos = new THREE.Vector3(), segPos = new THREE.Vector3();
+let heliOn = false, segOn = false;
 const _up = new THREE.Vector3(0, 1, 0), _sr = new THREE.Vector3(), _su = new THREE.Vector3(), _sc = new THREE.Vector3();
 /** Distancia (m, de cerca) del eje a la torre de la cámara de tele: en los urbanos, en la acera entre la valla y las casas. */
 const tvLat = (i) => (T.street ? (T.SH - 0.08) * W_REAL + T.rO[i] + 2.3 : 1.7 * W_REAL + T.rO[i] + 0.9);
@@ -2431,12 +2579,25 @@ function updateCamera(dt, now) {
   const inPits = p && (p.pf >= 0 || p.gar > 0 || p.lane2 || p.c.loc === "lane_out" || p.c.loc === "lane_in");
   if (mode === "boxes" && !inPits) mode = "seguir";
   if (mode !== "heli") heliOn = false;
+  if (mode !== "seguir") segOn = false;
   let cut = false, onboard = false;
   const fast = Math.sqrt(Math.max(1, opt.speed() / 4));
   if (mode === "circuito") {
     if (!opt.paused()) swayT += dt; // en pausa la vista se queda quieta
     const sway = reduced ? 0 : 0.11 * Math.sin(swayT * 2 * Math.PI / 48);
     ovPose(ov.az + sway, ov.dist * 1.03, ov.shift, want); want.fov = 36;
+  } else if (mode === "seguir" && T.street) {
+    // en urbanos, la cámara sigue el corredor abierto de la calzada para que ningún edificio tape al coche
+    sample(p.s - 26 * fast, _tq);
+    sample(p.s + 18, _tp);
+    const lat = clamp(p.l0, -W_REAL * 0.6, W_REAL * 0.6) * 0.4;
+    _hv.set(_tq.x + _tq.rx * lat, _tq.y + 13.5 * fast, _tq.z + _tq.rz * lat);
+    if (!segOn || camSnap || (camT < 0.02 && camFrom)) { segPos.copy(_hv); segOn = true; }
+    else segPos.lerp(_hv, 1 - Math.exp(-dt / 0.35));
+    const h = Math.hypot(_tp.x - p.px, _tp.z - p.pz) || 1;
+    want.pos.copy(segPos);
+    want.look.set(p.px + ((_tp.x - p.px) / h) * 8, p.py + 0.9, p.pz + ((_tp.z - p.pz) / h) * 8);
+    want.fov = 40;
   } else if (mode === "seguir") {
     sample(p.s + 28, _tp);
     const yt = Math.atan2(_tp.tz, _tp.tx);
@@ -2452,11 +2613,12 @@ function updateCamera(dt, now) {
     const ux = -p.sz * p.fy, uy = p.sz * p.fx - p.sx * p.fz, uz = p.sx * p.fy;
     const th = clamp(p.acc / 55, -1, 0.4) * 0.05, ph = p.roll * 0.04;
     const hx = ux - p.fx * th + p.sx * ph, hy = uy - p.fy * th, hz = uz - p.fz * th + p.sz * ph;
-    want.pos.set(p.px - p.fx * 0.25 * k + hx * 1.32 * k, p.py + hy * 1.32 * k - p.fy * 0.25 * k, p.pz - p.fz * 0.25 * k + hz * 1.32 * k);
-    sample(p.s + 26, _tp);
-    const la = latAt(p, p.s + 26, curW, 0) * curW * arrAt(T.wr, p.s + 26);
-    want.look.set(_tp.x + _tp.rx * la, _tp.y + 0.6, _tp.z + _tp.rz * la);
-    want.fov = 62;
+    want.pos.set(p.px + p.fx * camPos[0] * k + hx * camPos[1] * k, p.py + hy * camPos[1] * k + p.fy * camPos[0] * k, p.pz + p.fz * camPos[0] * k + hz * camPos[1] * k);
+    sample(p.s + 16, _tp);
+    const la = latAt(p, p.s + 16, curW, 0) * curW * arrAt(T.wr, p.s + 16);
+    const lx = p.px + p.fx * 14 * k + hx * 0.45 * k, ly = p.py + p.fy * 14 * k + hy * 0.45 * k, lz = p.pz + p.fz * 14 * k + hz * 0.45 * k;
+    want.look.set(lx + (_tp.x + _tp.rx * la - lx) * 0.15, ly + (_tp.y + 0.5 - ly) * 0.15, lz + (_tp.z + _tp.rz * la - lz) * 0.15);
+    want.fov = 72;
     onboard = true;
   } else if (mode === "heli") {
     // helicóptero: alto, detrás y a un lado, que deriva despacio alrededor del coche y se acerca con suavidad
@@ -2686,12 +2848,14 @@ function updateMarks(now, W, k) {
   g.instanceCount = j; DBG.marks = j;
   g.attributes.aA.needsUpdate = g.attributes.aB.needsUpdate = g.attributes.aC.needsUpdate = true;
 }
-/** Los 16 focos más cerca de lo que se mira, para sus reflejos en el asfalto mojado (solo de noche y con agua). */
+/** Los 16 focos más cerca de lo que se mira, para sus reflejos en el asfalto mojado (de noche o con lluvia en urbanos). */
 const _lp = mkS(), _lv = new THREE.Vector3();
 function updateLampRefl(W) {
   const u = U.uLamps.value;
   let wetMax = 0; for (let j = 0; j < sess.water.length; j += 3) wetMax = Math.max(wetMax, sess.water[j], sess.waterOff[j]);
-  if (q < 2 || U.uFlood.value < 0.05 || wetMax < 0.03) { U.uNL.value = 0; return; } // en calidad baja, sin reflejos de los focos
+  const lampK = T.street && wetMax > 0.03 ? clamp((1 - dayK) * 0.9 + clamp(rainHere / 4, 0, 0.35), 0, 0.45) : 0;
+  U.uLampK.value = Math.max(U.uFlood.value, lampK);
+  if (q < 2 || U.uLampK.value < 0.05 || wetMax < 0.03) { U.uNL.value = 0; return wetMax; } // en calidad baja, sin reflejos de los focos
   const us = Math.max(1, W / W_REAL), list = [];
   if (world.night) for (const t of world.towers) {
     sample(t.s, _lp);
@@ -2703,6 +2867,22 @@ function updateLampRefl(W) {
   const nL = Math.min(16, list.length);
   for (let j = 0; j < nL; j++) u[j].set(list[j][0], list[j][1], list[j][2], 1);
   U.uNL.value = nL;
+  return wetMax;
+}
+/** Los 6 pilotos traseros más cercanos, para su reflejo rojo en el asfalto mojado. */
+function updateTailRefl(list, k, wetMax) {
+  const u = U.uTails.value;
+  if (q < 2 || wetMax < 0.03 || U.uLight.value < 0.15) { U.uNT.value = 0; return; }
+  const c = cur.look, near = [];
+  for (const p of list) {
+    if (p.c.loc !== "track") continue;
+    const x = p.px - p.fx * 2.65 * k, z = p.pz - p.fz * 2.65 * k;
+    near.push([(x - c.x) ** 2 + (z - c.z) ** 2, x, p.py + 0.45 * k, z]);
+  }
+  near.sort((a, b) => a[0] - b[0]);
+  const nT = Math.min(6, near.length);
+  for (let j = 0; j < nT; j++) u[j].set(near[j][1], near[j][2], near[j][3], U.uLight.value);
+  U.uNT.value = nT;
 }
 /** Coche de seguridad, banderas de los comisarios y la zona en amarillo sobre la pista. */
 const _sa = mkS(), _sb = mkS();
@@ -2811,7 +2991,7 @@ function draw3d(dt, now) {
   // malla fina solo de cerca y con calidad alta; de muy lejos (vista general), la mínima con las ruedas dentro
   const tiny = far > (cars.geometry === CAR_MIN ? 0.6 : 0.7);
   if ((cars.geometry === CAR_MIN) !== tiny) {
-    cars.geometry = tiny ? CAR_MIN : CAR_LO; wheels.visible = !tiny;
+    cars.geometry = tiny ? CAR_MIN : carLoCur; wheels.visible = !tiny;
     const tr = world.trees; if (tr) tr.geometry = tiny ? tr.userData.far : tr.userData.near; // los árboles, igual
   }
   const fine = q >= 2 && far < 0.5, { carsHi, wheelsHi } = world, _zero = mS.clone().makeScale(0, 0, 0);
@@ -2821,6 +3001,8 @@ function draw3d(dt, now) {
   const { fists } = world, podium = sess.chequered ? sess.cars.filter((o) => o.loc === "fin" && isFinite(o.finishT)).sort((a, b) => a.finishT - b.finishT).slice(0, 3).map((o) => o.id) : [];
   cs.d = cs.m = cs.c = cs.b = 0;
   const { crewS, crewC, jacks, loose, gant, glit, blank } = world;
+  const fcDash = camMode === "abordo" && !replay ? followCar() : null;
+  dashMesh.visible = false;
   for (const p of list) {
     const c = p.c;
     // base del coche: delante, lado y arriba, con cabeceo al frenar o acelerar y balanceo en curva
@@ -2846,12 +3028,17 @@ function draw3d(dt, now) {
     cars.setMatrixAt(i, hi >= 0 ? _zero : m4); cars.setColorAt(i, _col.set(c.team.color));
     if (hi >= 0) { carsHi.setMatrixAt(hi, m4); carsHi.setColorAt(hi, _col); }
     const steer = clamp(Math.atan(3.5 * p.kap) * 1.6, -0.5, 0.5);
+    const brkT = c.loc === "track" ? clamp((-p.acc - 10) / 26, 0, 1) : 0;
+    p.brk = p.brk === undefined ? brkT : p.brk + (brkT - p.brk) * (1 - Math.exp(-dt / 0.18));
     _col.set(COMPOUND[c.tyres?.c] || "#888888");
     for (let w = 0; w < 4; w++) {
       const wd = WHEELS[w];
       mL.makeRotationY(wd[2] ? steer : 0).multiply(mS.makeRotationZ(-p.spin)).scale(_ws.set(1, 1, wd[3])).setPosition(wd[0], 0.36, wd[1]);
       if (off) mW.makeScale(0, 0, 0); else mW.multiplyMatrices(m4, mL);
-      if (hi >= 0) { wheelsHi.setMatrixAt(hi * 4 + w, mW); wheelsHi.setColorAt(hi * 4 + w, _col); wheels.setMatrixAt(i * 4 + w, _zero); }
+      if (hi >= 0) {
+        wheelsHi.setMatrixAt(hi * 4 + w, mW); wheelsHi.setColorAt(hi * 4 + w, _col); wheels.setMatrixAt(i * 4 + w, _zero);
+        world.brakeH.array[hi * 4 + w] = w < 2 ? p.brk : p.brk * 0.55;
+      }
       else wheels.setMatrixAt(i * 4 + w, mW);
       wheels.setColorAt(i * 4 + w, _col);
       if (p.gar >= 0.999) { blank.setMatrixAt(nB, mW); blank.setColorAt(nB++, _c3.set(c.team.color)); } // en el garaje, con las mantas puestas
@@ -2910,7 +3097,14 @@ function draw3d(dt, now) {
     const nose = stop && c.pit?.noseChange && u > 0.18 && u < 0.7;
     world.dmg.array[i] = nose ? -1 : clamp(c.wing / 0.025, 0, 1) * (c.wing > 0.004 ? 1 : 0); world.col2.array[i * 3] = world.c2src[ci * 3]; world.col2.array[i * 3 + 1] = world.c2src[ci * 3 + 1]; world.col2.array[i * 3 + 2] = world.c2src[ci * 3 + 2];
     if (hi >= 0) { world.livH.array[hi] = world.liv.array[i]; world.dmgH.array[hi] = world.dmg.array[i]; world.col2H.array.set(world.col2.array.subarray(i * 3, i * 3 + 3), hi * 3); }
-    mL.makeRotationX(-steer * 2.4).setPosition(0.88, 0.66, 0); mW.multiplyMatrices(m4, mL); world.steer.setMatrixAt(i, mW);
+    const bigDash = fcDash && c === fcDash;
+    mL.makeRotationX(-steer * 2.4).multiply(mTilt);
+    if (bigDash) mL.scale(_ws.set(DASH_K, DASH_K, DASH_K));
+    mL.setPosition(steerPos[0], steerPos[1], steerPos[2]); mW.multiplyMatrices(m4, mL); world.steer.setMatrixAt(i, mW);
+    if (bigDash) {
+      dashMesh.matrix.copy(mW); dashMesh.visible = true;
+      if (now - dashT > 65) { dashT = now; drawDash(c); }
+    }
     mL.makeScale(dr, dr, dr).setPosition(p.px, p.py + 0.3, p.pz); discs.setMatrixAt(i, mL); discs.setColorAt(i, _col.set(c.team.color));
     // spray: estela de agua detrás de cada coche sobre asfalto mojado
     const mi = track.msOfPoint[Math.min(T.n - 1, Math.floor(mod(p.s, T.L) / T.ds))], offLine = Math.min(1, Math.abs(p.lat) / 0.3);
@@ -2953,7 +3147,7 @@ function draw3d(dt, now) {
   discs.visible = far > 0.02;
   world.cell.needsUpdate = world.col2.needsUpdate = world.liv.needsUpdate = world.dmg.needsUpdate = true;
   carsHi.count = nH; wheelsHi.count = nH * 4;
-  world.livH.needsUpdate = world.dmgH.needsUpdate = world.col2H.needsUpdate = true;
+  world.livH.needsUpdate = world.dmgH.needsUpdate = world.col2H.needsUpdate = world.brakeH.needsUpdate = true;
   for (const m of [cars, wheels, carsHi, wheelsHi, blobs, discs, world.decals, world.steer]) { m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true; }
   const sel = opt.selId() === null ? null : pose.get(opt.selId());
   const ringFor = [...opt.mine().map((c) => (c.id === opt.selId() ? null : pose.get(c.id))), sel];
@@ -2962,7 +3156,7 @@ function draw3d(dt, now) {
     r.visible = !!p && far > 0.25;
     if (p) { r.position.set(p.px, p.py + 0.4, p.pz); r.scale.setScalar(k * 3.9); }
   });
-  drawFlags(now, W, k); updateStartLights(); updateLampRefl(W);
+  drawFlags(now, W, k); updateStartLights(); updateTailRefl(list, k, updateLampRefl(W));
   // a bordo: gotas y suciedad del coche que se sigue
   { const fc2 = followCar(), on = camMode === "abordo" && !!fc2;
     let dirt = 0;
@@ -2985,7 +3179,7 @@ function draw3d(dt, now) {
   if (rain.visible) {
     if (!isPaused()) rainClock += dt * 1.6 * (replay ? REPLAY_SPEED : 1);
     const u = rain.material.uniforms, sz = clamp(halfH * 3.2, 60, 4000);
-    u.uTime.value = rainClock; u.uCenter.value.copy(cur.look); u.uSize.value.set(sz, sz * 0.75, sz);
+    u.uTime.value = rainClock; u.uLum.value = 0.28 + 0.65 * dayK + 0.25 * U.uFlood.value; u.uCenter.value.copy(cur.look); u.uSize.value.set(sz, sz * 0.75, sz);
     u.uWind.value.set(Math.cos(sess.weather.windDir), -Math.sin(sess.weather.windDir));
   }
   render();
@@ -3138,11 +3332,16 @@ return {
     return best;
   },
   /** Ha cambiado el coche seguido: la cámara va hacia el nuevo con suavidad. */
-  selChanged() { busyUntil = performance.now() + 1300; if (camMode !== "circuito") { camFrom = { pos: cur.pos.clone(), look: cur.look.clone(), fov: cur.fov }; camT = 0; teleIdx = -1; } },
+  selChanged() { busyUntil = performance.now() + 1300; segOn = false; if (camMode !== "circuito") { camFrom = { pos: cur.pos.clone(), look: cur.look.clone(), fov: cur.fov }; camT = 0; teleIdx = -1; } },
   dispose() {
+    alive3d = false;
     scene.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => m.dispose()); });
-    cloudTex.dispose(); wxTex.dispose(); if (sun.shadow.map) sun.shadow.map.dispose();
+    cloudTex.dispose(); wxTex.dispose(); dashTex.dispose(); if (sun.shadow.map) sun.shadow.map.dispose();
+    for (const g of [CAR_GEO, WHEEL_GEO, CAR_LO, WHEEL_LO, CAR_MIN, STEER_GEO, extCarLoGeo]) g?.dispose();
     for (const t of Object.values(DET)) t.dispose();
+    for (const t of loadedTexs) t.dispose();
+    for (const rt of hdriCache.values()) if (rt) rt.dispose();
+    hdriCache.clear();
     envScene.children[0].material.dispose(); envCube.dispose(); if (envRT) envRT.dispose(); pmrem.dispose();
     if (post) { post.rt.dispose(); post.composer.dispose(); post.ao.dispose(); post.bloom.dispose(); }
     renderer.dispose(); renderer.forceContextLoss();

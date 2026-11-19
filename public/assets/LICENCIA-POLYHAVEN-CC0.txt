@@ -1,0 +1,16 @@
+Assets de Poly Haven (texturas PBR y entornos HDRI) bajo licencia CC0 1.0 Universal
+https://polyhaven.com/license
+
+Texturas (public/assets/tex/*.webp):
+  - asfalto.webp <- https://polyhaven.com/a/asphalt_track
+  - hierba.webp <- https://polyhaven.com/a/grass_ground
+  - grava.webp <- https://polyhaven.com/a/gravel_floor_02
+  - hormigon.webp <- https://polyhaven.com/a/concrete_wall_008
+  - fachada.webp <- https://polyhaven.com/a/plaster_grey_04
+
+Entornos HDRI (public/assets/env/*.hdr):
+  - dia.hdr <- https://polyhaven.com/a/kloofendal_43d_clear_puresky
+  - tarde.hdr <- https://polyhaven.com/a/belfast_sunset_puresky
+  - nublado.hdr <- https://polyhaven.com/a/kloofendal_overcast_puresky
+  - noche.hdr <- https://polyhaven.com/a/shanghai_bund
+  - estudio.hdr <- https://polyhaven.com/a/studio_small_09

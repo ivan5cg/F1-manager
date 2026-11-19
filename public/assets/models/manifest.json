@@ -1,0 +1,14 @@
+{
+  "car": "f1.glb",
+  "carLo": "f1_lo.glb",
+  "wheel": null,
+  "steer": [
+    0.7,
+    0.7,
+    0
+  ],
+  "cam": [
+    -0.45,
+    1.38
+  ]
+}

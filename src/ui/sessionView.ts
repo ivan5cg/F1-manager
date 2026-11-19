@@ -1326,7 +1326,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     $("#wx").innerHTML = `<span class="tab">Hora</span><span class="bar mono"><span class="sky">${fmtHour(w.clock)}${skyIcon(w.cloud, rAvg, w.clock)}</span><span class="grow"></span><span class="sky" title="Viento">${arrow}${Math.round(wn.speed)}<span class="small" style="text-transform:none">&nbsp;km/h</span></span></span>
       <span class="tab">Aire</span><span class="bar mono">${w.airT.toFixed(0)}° <span class="dim">pista</span> ${w.trackT.toFixed(0)}°</span>
       <span class="tab">Cielo</span><span class="bar" style="white-space:nowrap;overflow:hidden">${rMax > 0.15
-        ? rainAlert.kind === "stop" ? `Lluvia ${f1(rAvg)}<span class="small" style="text-transform:none">&nbsp;mm/h</span>&nbsp;<span class="yellow" title="Previsión de tu meteorólogo">· ${rainAlert.text}</span>` : `Lluvia ${f1(rAvg)}<span class="small dim">&nbsp;máx</span>&nbsp;${f1(rMax)}<span class="small" style="text-transform:none">&nbsp;mm/h</span>`
+        ? rainAlert.kind === "stop" ? `Lluvia ${f1(rAvg)}<span class="small" style="text-transform:none">&nbsp;mm/h</span>&nbsp;<span class="yellow" title="Previsión de tu meteorólogo">· ${rainAlert.text}</span>` : `<span title="Lluvia media ${f1(rAvg)} mm/h · máxima ${f1(rMax)} mm/h">Lluvia ${f1(rAvg)}–${f1(rMax)}<span class="small" style="text-transform:none">&nbsp;mm/h</span></span>`
         : rainAlert.kind === "start" ? `<span class="yellow" title="Previsión de tu meteorólogo">${rainAlert.text}</span>` : w.cloud > 0.6 ? "Cubierto" : w.cloud > 0.3 ? "Nubes" : "Sol"}</span>
       <span class="tab">Agua</span><span class="bar"><span class="wxsec grow">${sw.map((x) => `<div title="${x.toFixed(2)} mm" style="background:${x > 0.05 ? `rgba(58,139,232,${Math.min(1, 0.35 + x)})` : "#26282d"}"></div>`).join("")}</span><span class="mono small">${Math.max(...sw).toFixed(2)}</span></span>`;
     // última vuelta de tu piloto (libres/clasificación): [P][NOMBRE][TIEMPO][+DIF]
@@ -1388,10 +1388,10 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   function tyreCar(t: TyreSet) {
     const wheel = (x: number, y: number, w: number, a: TyreSet["F"]) => {
       const col = tyreTempCol(t.c, a.tBulk), left = Math.max(0, Math.min(1, 1 - a.wear));
-      return `<rect x="${x}" y="${y}" width="${w}" height="5" rx="1" fill="#111" stroke="${col}" stroke-width="1"/><rect x="${x + 1}" y="${y + 1}" width="${((w - 2) * left).toFixed(1)}" height="3" fill="${col}"/>`;
+      return `<rect x="${x}" y="${y}" width="${w}" height="4.8" rx="1.2" fill="#0d0f13" stroke="${col}" stroke-width="1"/><rect x="${x + 1}" y="${y + 1}" width="${((w - 2) * left).toFixed(1)}" height="2.8" rx=".4" fill="${col}"/>`;
     };
     const tip = `Delanteros ${t.F.tBulk.toFixed(0)}° · ${Math.round((1 - t.F.wear) * 100)} % de banda — Traseros ${t.R.tBulk.toFixed(0)}° · ${Math.round((1 - t.R.wear) * 100)} %`;
-    return `<svg class="tcar" viewBox="0 0 42 16" role="img" aria-label="${tip}"><title>${tip}</title><path d="M8 6.2h20l10 1.3v1l-10 1.3H8z" fill="#5b6070"/><rect x="2" y="5" width="4" height="6" rx="1" fill="#5b6070"/>${wheel(5, 0, 9, t.R)}${wheel(5, 11, 9, t.R)}${wheel(27, 0, 8, t.F)}${wheel(27, 11, 8, t.F)}</svg>`;
+    return `<svg class="tcar" viewBox="0 0 44 16" role="img" aria-label="${tip}"><title>${tip}</title><path d="M9 5.3h9.5l2.5 1.1h6.5l11 1v1.2l-11 1H21l-2.5 1.1H9l-1-1.3V6.6z" fill="#687082"/><path d="M17.5 6.8h6.2c.8 0 .8 2.4 0 2.4h-6.2z" fill="#171a21"/><path d="M35.5 2.4h2.8l.9 5.6-.9 5.6h-2.8l.4-5.6z" fill="#525868"/><rect x="2" y="4.2" width="3.8" height="7.6" rx="1" fill="#525868"/><path d="M7.5 7.4h12" stroke="#8992a6" stroke-width=".6" opacity=".55"/>${wheel(5.5, .4, 9.2, t.R)}${wheel(5.5, 10.8, 9.2, t.R)}${wheel(27, .4, 8.2, t.F)}${wheel(27, 10.8, 8.2, t.F)}</svg>`;
   }
   function statsHtml(c: Car) {
     const t = c.tyres;
@@ -1437,7 +1437,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       const wear = t ? setWear(t) : 0;
       const col = t ? wearColor(t) : "#444";
       const tyreInfo = t ? `${tyreHtml(t.c)}<span class="small mono">${t.laps}v ${lifeLeft(t)}%</span>` : `<span class="small dim">${phaseName(c)}</span>`;
-      card.querySelector(".h")!.innerHTML = `<span class="posbox mono">${pos}</span><span class="hm">${helmetSvg(c.team.color, c.d.numero, c.d.abrev, 21)}</span><span class="nm">${nameFlag(c)}<span class="ti">${tyreInfo}</span></span>`;
+      card.querySelector(".h")!.innerHTML = `<span class="posbox mono">${pos}</span><span class="hm">${helmetSvg(c.team.color, c.d.numero, c.d.abrev, 21)}</span><span class="nm"><span class="dn">${nameFlag(c)}</span><span class="ti">${tyreInfo}</span></span>`;
       const wi = card.querySelector<HTMLElement>(".wear i")!;
       wi.style.width = `${(1 - wear) * 100}%`; wi.style.background = col;
       const pl = card.querySelector<HTMLElement>(".planl");

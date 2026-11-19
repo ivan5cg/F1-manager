@@ -27,31 +27,45 @@ function hashStr(s: string): number {
 
 /**
  * Casco visto de lado (mirando a la derecha) con los colores del equipo y el número del piloto.
- * Diseño propio: el dibujo de la franja sale del nombre, así los dos compañeros no van iguales.
+ * Diseño propio: seis motivos y un segundo tono según el piloto para distinguir bien a los dos compañeros.
  */
 export function helmetSvg(color: string, numero: number | string, abrev = "", size = 32): string {
+  const h = hashStr(abrev || String(numero));
   const light = luminance(color) > 0.62;
   const accent = light ? "#14181f" : "#ffffff";
-  const dark = shade(color, -0.35);
-  const pat = hashStr(abrev || String(numero)) % 3;
+  const accent2 = light ? shade(color, -0.45) : shade(color, 0.55);
+  const dark = shade(color, -0.38);
+  const pat = h % 6;
   const id = `h${hashStr(color + numero + abrev).toString(36)}`;
   const stripe = [
-    // franja diagonal desde la nuca
-    `<path d="M5 19 L18 6.5 L23 6 L9.5 22 Z" fill="${accent}" opacity=".9"/>`,
-    // banda por arriba
-    `<path d="M9 9 C13 4.6 19 3.4 25 3.8 L25.6 6.6 C19.4 6.4 14 7.6 10.6 11 Z" fill="${accent}" opacity=".9"/>`,
-    // destello lateral bajo la visera
-    `<path d="M8 20.6 L31 20.6 L34.6 23.6 L10 23.6 Z" fill="${accent}" opacity=".85"/>`,
+    // 0: franja diagonal doble
+    `<path d="M5 19.5 L18 6 L23.5 5.6 L9.5 22 Z" fill="${accent}" opacity=".92"/><path d="M8.5 23 L22.5 8.5 L25 8.5 L11 24.4 Z" fill="${accent2}" opacity=".85"/>`,
+    // 1: banda superior aerodinámica
+    `<path d="M8.8 9.2 C13 4.4 19.5 3.1 26 3.7 L26.5 6.8 C19.8 6.4 14.2 7.6 10.6 11.2 Z" fill="${accent}" opacity=".92"/><path d="M11.4 11.8 C15 8.4 20 7.4 26.8 7.8 L27 9.5 C20.4 9.2 15.6 10.2 12.6 13.2 Z" fill="${accent2}" opacity=".8"/>`,
+    // 2: rayo lateral bajo la visera
+    `<path d="M7.5 20.4 L31.5 20.4 L34.8 23.2 L10 23.2 Z" fill="${accent}" opacity=".9"/><path d="M8.6 23.5 L34.4 23.5 L33.2 25.4 L10.2 25.4 Z" fill="${accent2}" opacity=".8"/>`,
+    // 3: doble línea racing desde el frontal hasta la nuca
+    `<path d="M12.5 5.6 L29.5 6.2 L30.8 8.3 L10.8 8 Z" fill="${accent}" opacity=".92"/><path d="M9.6 9.4 L31.6 9.6 L32.2 11.1 L8.5 11 Z" fill="${accent2}" opacity=".85"/>`,
+    // 4: bloques geométricos en ángulo
+    `<path d="M6.4 14.5 L16 6.5 L20.5 6.5 L13.5 14.5 Z" fill="${accent}" opacity=".88"/><path d="M15 14.5 L22.5 6.5 L26.2 6.8 L19.2 14.5 Z" fill="${accent2}" opacity=".85"/>`,
+    // 5: corona y base contrastada
+    `<path d="M11 6.8 C16 3.5 24 3.4 29.8 6.5 L28 9.4 C22.5 6.8 16.2 6.8 11.5 9.8 Z" fill="${accent}" opacity=".92"/><path d="M7.2 22.8 L35 22.2 L33.5 26.4 L10 26.4 Z" fill="${dark}" opacity=".75"/>`,
   ][pat];
+  const rim = light ? "#222832" : "#dce3ef";
   return `<svg class="helmet" viewBox="0 0 40 32" width="${size}" height="${Math.round(size * 0.8)}" aria-hidden="true">
-    <defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${shade(color, 0.28)}"/><stop offset=".55" stop-color="${color}"/><stop offset="1" stop-color="${dark}"/></linearGradient>
-    <linearGradient id="${id}v" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3b4a63"/><stop offset=".45" stop-color="#0d1118"/><stop offset="1" stop-color="#1b2433"/></linearGradient></defs>
-    <path d="M5 20.5 C4.2 10.6 11.4 2.6 21.8 2.4 C31.4 2.2 38 9.2 38.2 18.2 C38.3 22.6 37 26 33.8 28 L27.4 29 C25.2 26.6 21.8 25.4 17.4 25.7 L9.6 27 C6.8 27.4 5.3 24.6 5 20.5 Z" fill="url(#${id})" stroke="#000" stroke-opacity=".55" stroke-width=".8"/>
+    <defs>
+      <linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${shade(color, 0.34)}"/><stop offset=".5" stop-color="${color}"/><stop offset="1" stop-color="${dark}"/></linearGradient>
+      <linearGradient id="${id}v" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4e6990"/><stop offset=".42" stop-color="#0b1018"/><stop offset=".75" stop-color="#1b2b44"/><stop offset="1" stop-color="#2c4466"/></linearGradient>
+    </defs>
+    <path d="M5 20.5 C4.2 10.6 11.4 2.6 21.8 2.4 C31.4 2.2 38 9.2 38.2 18.2 C38.3 22.6 37 26 33.8 28 L27.4 29 C25.2 26.6 21.8 25.4 17.4 25.7 L9.6 27 C6.8 27.4 5.3 24.6 5 20.5 Z" fill="url(#${id})" stroke="#000" stroke-opacity=".6" stroke-width=".85"/>
     ${stripe}
-    <path d="M20.5 11.6 L35.8 11.6 C37 13.4 37.5 15.6 37.5 18.6 L22.6 18.6 C20.8 18.6 19.6 17.2 19.6 15.2 C19.6 13.4 19.9 12.3 20.5 11.6 Z" fill="url(#${id}v)" stroke="#000" stroke-width=".6"/>
-    <path d="M22 12.8 L33 12.8" stroke="#9fb6d8" stroke-opacity=".55" stroke-width=".9" stroke-linecap="round"/>
-    <path d="M27.4 29 C25.2 26.6 21.8 25.4 17.4 25.7" stroke="#000" stroke-opacity=".5" stroke-width="1.2" fill="none"/>
-    <circle cx="11.5" cy="16.5" r="5" fill="${light ? "#14181f" : "#fff"}" opacity=".92"/>
+    <path d="M13 4.8 C17.5 3.1 24.5 3.2 29.5 5.4" stroke="#fff" stroke-opacity=".38" stroke-width="1.4" stroke-linecap="round" fill="none"/>
+    <path d="M20.2 11.4 L35.9 11.4 C37.1 13.3 37.6 15.6 37.6 18.7 L22.5 18.7 C20.6 18.7 19.4 17.2 19.4 15.2 C19.4 13.3 19.7 12.2 20.2 11.4 Z" fill="url(#${id}v)" stroke="#000" stroke-width=".7"/>
+    <path d="M20.5 11.5 L35.5 11.5" stroke="${rim}" stroke-opacity=".75" stroke-width="1.1" stroke-linecap="round"/>
+    <path d="M22.2 13.2 L33.5 13.2" stroke="#b6cef2" stroke-opacity=".5" stroke-width=".8" stroke-linecap="round"/>
+    <path d="M31 23.2 h4.5 M31.6 24.8 h3.4" stroke="#000" stroke-opacity=".45" stroke-width=".9" stroke-linecap="round"/>
+    <path d="M27.4 29 C25.2 26.6 21.8 25.4 17.4 25.7" stroke="#000" stroke-opacity=".55" stroke-width="1.2" fill="none"/>
+    <circle cx="11.5" cy="16.5" r="5.1" fill="${light ? "#14181f" : "#fff"}" opacity=".94" stroke="#000" stroke-opacity=".25" stroke-width=".5"/>
     <text x="11.5" y="18.6" text-anchor="middle" font-family="'Titillium Web', sans-serif" font-weight="900" font-size="${String(numero).length > 1 ? 5.6 : 6.4}" fill="${light ? "#fff" : "#14181f"}">${numero}</text>
   </svg>`;
 }

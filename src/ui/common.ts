@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 import { COMPOUNDS, Compound, TyreSet, setWear } from "../sim/tyres";
 import { fmtMinSec } from "../sim/session";
 
@@ -33,12 +34,19 @@ export function groupSets(sets: TyreSet[]): { sets: TyreSet[]; c: Compound }[] {
 }
 
 // ------------------------------------------------------------------ banderas
-// Windows no dibuja las banderas emoji (salen dos letras sueltas): ahí se pinta el código en una
-// etiqueta, que al menos parece hecho a propósito.
+// Banderas SVG 4×3 (flag-icons, MIT) para que se vean iguales en todos los dispositivos; si falta
+// alguna, en Windows sale el código en etiqueta y en el resto el emoji.
+const FLAG_CODES = new Set([
+  "ae", "ar", "at", "au", "az", "be", "bh", "br", "ca", "ch", "cn", "co", "de",
+  "dk", "ee", "es", "fi", "fr", "gb", "hu", "id", "ie", "in", "it", "jp", "mc",
+  "mx", "my", "nl", "nz", "pl", "qa", "ru", "se", "sg", "th", "us", "ve",
+]);
 const NO_FLAG_EMOJI = typeof navigator !== "undefined" && /Windows/.test(navigator.userAgent);
 export function flagHtml(flag: string): string {
-  if (!NO_FLAG_EMOJI) return flag;
   const code = [...flag].map((ch) => { const cp = ch.codePointAt(0)!; return cp >= 0x1f1e6 && cp <= 0x1f1ff ? String.fromCharCode(65 + cp - 0x1f1e6) : ""; }).join("");
+  const lc = code.toLowerCase();
+  if (FLAG_CODES.has(lc)) return `<img class="fl" src="${import.meta.env.BASE_URL}assets/flags/${lc}.svg" alt="${code}" width="18" height="12" decoding="async">`;
+  if (!NO_FLAG_EMOJI) return flag;
   return code ? `<span class="cc">${code}</span>` : flag;
 }
 

@@ -3,6 +3,7 @@
 // materiales. Lo usan el mapa 3D de la sesión (map3d.ts) y la vista previa del creador de equipo.
 import * as THREE from "three";
 import { toCreasedNormals } from "three/addons/utils/BufferGeometryUtils.js";
+import { HDRLoader } from "three/addons/loaders/HDRLoader.js";
 import { BRANDS, FONT, LIV_STYLES } from "./livery";
 export { BRANDS, FONT, LIV_STYLES, LIV_NAMES } from "./livery";
 
@@ -242,22 +243,30 @@ export function carMinGeometry() {
   for (const [x, z] of [[1.8, 0.83], [1.8, -0.83], [-1.7, 0.82], [-1.7, -0.82]]) c.add(new THREE.CylinderGeometry(0.36, 0.36, 0.34, 8).rotateX(Math.PI / 2).translate(x, 0.36, z), [0, 0.05, 0]);
   return c.done();
 }
-/** Rueda: neumático de flanco abombado, tapacubos ligeramente cónico con el aro metálico y la banda del compuesto. */
+/** Rueda: neumático de flanco abombado, llanta de radios (de cerca) con disco de freno y banda del compuesto. */
 export function wheelGeometry(hi) {
-  const c = collect(), SEG = hi ? 48 : 16; // r = color del compuesto, g = gris fijo, b = metal
+  const c = collect(), SEG = hi ? 48 : 16; // r = color del compuesto, g = gris fijo (−1 = disco de freno), b = metal
   const prof = (hi ? [[0.205, -0.165], [0.24, -0.172], [0.285, -0.176], [0.315, -0.172], [0.337, -0.16], [0.351, -0.14], [0.358, -0.115], [0.36, -0.07], [0.36, 0.07], [0.358, 0.115], [0.351, 0.14], [0.337, 0.16], [0.315, 0.172], [0.285, 0.176], [0.24, 0.172], [0.205, 0.165]]
     : [[0.2, -0.168], [0.295, -0.172], [0.34, -0.155], [0.36, -0.1], [0.36, 0.1], [0.34, 0.155], [0.295, 0.172], [0.2, 0.168]]).map(([r, a]) => new THREE.Vector2(r, a));
   c.keep(new THREE.LatheGeometry(prof, SEG).rotateX(Math.PI / 2), [0, 0.05, 0]);
   for (const sz of [1, -1]) {
     const face = (g) => (sz < 0 ? g.rotateY(Math.PI) : g);
     c.keep(face(new THREE.RingGeometry(0.248, 0.286, SEG)).translate(0, 0, sz * 0.1765), [1, 0, 0]);   // banda del compuesto
-    c.keep(face(new THREE.RingGeometry(0.196, 0.226, SEG)).translate(0, 0, sz * 0.17), [0, 0.55, 1]);  // aro de la llanta
-    // tapacubos: un cono muy tendido, con la tuerca en el centro
-    c.keep(face(new THREE.ConeGeometry(0.2, 0.022, SEG, 1, true).rotateX(Math.PI / 2)).translate(0, 0, sz * 0.166), [0, 0.085, 0]);
+    c.keep(face(new THREE.RingGeometry(0.194, 0.226, SEG)).translate(0, 0, sz * 0.17), [0, 0.55, 1]);  // aro de la llanta
+    if (hi) {
+      // disco de freno detrás de los radios (al frenar fuerte se pone al rojo) y buje con tuerca central
+      c.keep(face(new THREE.RingGeometry(0.095, 0.176, SEG)).translate(0, 0, sz * 0.146), [0, -1, 0]);
+      c.keep(face(new THREE.ConeGeometry(0.088, 0.02, SEG, 1, true).rotateX(Math.PI / 2)).translate(0, 0, sz * 0.168), [0, 0.085, 0]);
+      for (let k = 0; k < 8; k++) c.add(new THREE.BoxGeometry(0.125, 0.015, 0.008).translate(0.135, 0, sz * 0.164).rotateZ((k * Math.PI) / 4), [0, 0.14, 0.45]);
+    } else {
+      c.keep(face(new THREE.ConeGeometry(0.2, 0.022, SEG, 1, true).rotateX(Math.PI / 2)).translate(0, 0, sz * 0.166), [0, 0.085, 0]);
+    }
     c.keep(face(new THREE.CylinderGeometry(0.045, 0.055, 0.03, hi ? 12 : 6).rotateX(Math.PI / 2)).translate(0, 0, sz * 0.178), [0, 0.45, 1]);
     for (let k = 0; k < 2; k++) c.add(new THREE.BoxGeometry(0.09, 0.022, 0.006).translate(0.31, 0, sz * 0.172).rotateZ(k * Math.PI + 0.4), [1, 0, 0]);
   }
-  return c.done();
+  const g = c.done();
+  g.setAttribute("aBrake", new THREE.BufferAttribute(new Float32Array(g.attributes.position.count), 1));
+  return g;
 }
 // ------------------------------------------------------------------ libreas
 // Cada equipo tiene su dibujo (sale de sus colores) y tres patrocinadores inventados, pintados en una lámina de 4 × 4
@@ -278,7 +287,8 @@ export function liveryTexture(teams) {
     let h = 0; for (const ch of String(tm.id)) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
     const lv = tm.librea || {};
     const st = lv.estilo || LIV_STYLE[tm.id] || LIV_STYLES[h % LIV_STYLES.length];
-    const sp = lv.marcas?.length === 3 ? lv.marcas.map((m) => BRANDS[m % BRANDS.length]) : [0, 7, 11].map((d) => BRANDS[(ti * 5 + d) % BRANDS.length]);
+    const spIdx = lv.marcas?.length === 3 ? lv.marcas.map((m) => m % BRANDS.length) : [0, 7, 11].map((d) => (ti * 5 + d) % BRANDS.length);
+    const sp = spIdx.map((idx) => [idx, BRANDS[idx]]);
     for (let reg = 0; reg < 3; reg++) {
       const [ry, rh] = REG[reg], top = reg === 2, SY = top ? rh / (2 * LIV_Z) : rh / LIV_Y1;
       g.save();
@@ -287,20 +297,24 @@ export function liveryTexture(teams) {
       if (top) g.setTransform(SX, 0, 0, SY, ox - LIV_X0 * SX, oy + ry + rh / 2);
       else g.setTransform(SX, 0, 0, -SY, ox - LIV_X0 * SX, oy + ry + rh);
       paintDesign(g, st, top, c1, c2, c3);
+      paintCarDetails(g, top);
       g.restore();
       // patrocinadores: [marca, x, v, ancho, alto, estilo] (estilo 0: letras del color que contrasta; 1: en su recuadro)
       const fg = lum(c1) > 0.55 ? "#121418" : "#ffffff";
-      const put = (b, x, v, w, hh, boxed) => {
+      const put = ([bi, b], x, v, w, hh, boxed) => {
         const px = ox + (x - LIV_X0) * SX, py = top ? oy + ry + rh / 2 + v * SY : oy + ry + rh - v * SY;
         g.save(); g.translate(px, py); g.scale((reg === 1 ? -1 : 1) * SX / 100, SY / 100);
         if (top && v < -0.1) g.rotate(Math.PI); // el de la izquierda se lee desde la izquierda
-        const W = w * 100, H = hh * 100;
+        const W = w * 100, H = hh * 100, ic = boxed ? b[2] : fg, ms = H * 0.66;
         if (boxed) { g.fillStyle = b[1]; g.beginPath(); g.roundRect(-W / 2, -H / 2, W, H, H * 0.2); g.fill(); }
-        g.font = `${boxed ? "" : "italic "}900 ${H * 0.82}px ${FONT}`; g.textAlign = "center"; g.textBaseline = "middle";
-        const tw = g.measureText(b[0]).width, k = Math.min(1, (W * 0.9) / tw);
-        g.scale(k, 1);
-        if (!boxed) { g.lineWidth = H * 0.12; g.strokeStyle = fg === "#ffffff" ? "rgba(0,0,0,.45)" : "rgba(255,255,255,.4)"; g.strokeText(b[0], 0, H * 0.04); }
-        g.fillStyle = boxed ? b[2] : fg; g.fillText(b[0], 0, H * 0.04);
+        g.font = `${boxed ? "" : "italic "}900 ${H * 0.8}px ${FONT}`; g.textAlign = "left"; g.textBaseline = "middle";
+        const tw = g.measureText(b[0]).width, gap = H * 0.16, k = Math.min(1, Math.max(0.35, (W * 0.9 - ms - gap) / Math.max(1, tw)));
+        const tot = ms + gap + tw * k, x0 = -tot / 2;
+        g.save(); g.translate(x0 + ms * 0.5, 0); drawBrandMark(g, bi, ms, ic, boxed ? b[1] : c1); g.restore();
+        g.save(); g.translate(x0 + ms + gap, H * 0.04); g.scale(k, 1);
+        if (!boxed) { g.lineWidth = H * 0.12; g.strokeStyle = fg === "#ffffff" ? "rgba(0,0,0,.45)" : "rgba(255,255,255,.4)"; g.strokeText(b[0], 0, 0); }
+        g.fillStyle = ic; g.fillText(b[0], 0, 0);
+        g.restore();
         g.restore();
       };
       if (!top) {
@@ -317,6 +331,59 @@ export function liveryTexture(teams) {
   });
   const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8;
   return t;
+}
+/** Juntas de carrocería y branquias de refrigeración sobre la librea. */
+function paintCarDetails(g, top) {
+  g.save();
+  const line = (pts, w = 0.012, col = "rgba(0,0,0,.32)") => {
+    g.strokeStyle = col; g.lineWidth = w; g.lineCap = "round"; g.lineJoin = "round";
+    g.beginPath(); pts.forEach(([x, v], i) => (i ? g.lineTo(x, v) : g.moveTo(x, v))); g.stroke();
+  };
+  if (!top) {
+    // corte del morro, división de la tapa del motor y branquias laterales en el pontón
+    line([[2.18, 0.14], [2.14, 0.36]]);
+    line([[0.32, 0.34], [0.2, 0.68], [-0.45, 0.72], [-1.5, 0.56]]);
+    line([[-0.4, 0.72], [-0.4, 1.06]]);
+    for (let k = 0; k < 8; k++) {
+      const x = 0.28 - k * 0.11;
+      line([[x, 0.58], [x - 0.05, 0.64]], 0.015, "rgba(10,12,16,.5)");
+      line([[x + 0.01, 0.58], [x - 0.04, 0.64]], 0.005, "rgba(255,255,255,.1)");
+    }
+  } else {
+    for (const s of [1, -1]) {
+      line([[2.18, 0.02 * s], [2.14, 0.14 * s]]);
+      line([[0.45, 0.3 * s], [-0.25, 0.42 * s], [-1.45, 0.26 * s]]);
+      for (let k = 0; k < 8; k++) {
+        const x = 0.24 - k * 0.1;
+        line([[x, 0.48 * s], [x - 0.05, 0.61 * s]], 0.016, "rgba(10,12,16,.48)");
+      }
+    }
+  }
+  g.restore();
+}
+/** Isotipo geométrico de cada una de las 16 marcas ficticias. */
+function drawBrandMark(g, idx, s, fg, bg) {
+  const r = s * 0.44;
+  g.fillStyle = fg; g.strokeStyle = fg; g.lineWidth = Math.max(1.5, s * 0.14);
+  g.lineJoin = "round"; g.lineCap = "round";
+  switch (idx % 16) {
+    case 0: g.beginPath(); g.moveTo(-r, -r * 0.7); g.lineTo(0, r * 0.8); g.lineTo(r, -r * 0.7); g.lineTo(r * 0.45, -r * 0.7); g.lineTo(0, r * 0.15); g.lineTo(-r * 0.45, -r * 0.7); g.closePath(); g.fill(); break;
+    case 1: g.beginPath(); g.arc(0, 0, r * 0.85, 0, Math.PI * 2); g.stroke(); g.beginPath(); g.moveTo(-r * 0.35, -r * 0.7); g.lineTo(-r * 0.35, r * 0.7); g.moveTo(-r * 0.3, 0); g.lineTo(r * 0.55, -r * 0.6); g.moveTo(-r * 0.3, 0); g.lineTo(r * 0.55, r * 0.6); g.stroke(); break;
+    case 2: g.beginPath(); g.moveTo(0, -r); g.lineTo(r, 0); g.lineTo(0, r); g.lineTo(-r, 0); g.closePath(); g.fill(); g.fillStyle = bg; g.beginPath(); g.arc(0, 0, r * 0.32, 0, Math.PI * 2); g.fill(); break;
+    case 3: g.beginPath(); g.moveTo(-r, r * 0.75); g.lineTo(0, -r * 0.85); g.lineTo(r, r * 0.75); g.lineTo(r * 0.35, r * 0.75); g.lineTo(0, 0); g.lineTo(-r * 0.35, r * 0.75); g.closePath(); g.fill(); break;
+    case 4: g.beginPath(); g.arc(0, 0, r * 0.82, 0, Math.PI * 2); g.stroke(); g.beginPath(); g.ellipse(0, 0, r, r * 0.36, -0.45, 0, Math.PI * 2); g.stroke(); break;
+    case 5: g.beginPath(); g.moveTo(r * 0.3, -r); g.lineTo(-r * 0.7, r * 0.1); g.lineTo(r * 0.05, r * 0.1); g.lineTo(-r * 0.3, r); g.lineTo(r * 0.7, -r * 0.1); g.lineTo(-r * 0.05, -r * 0.1); g.closePath(); g.fill(); break;
+    case 6: for (const dx of [-r * 0.42, r * 0.18]) { g.beginPath(); g.moveTo(dx - r * 0.45, -r * 0.7); g.lineTo(dx + r * 0.35, 0); g.lineTo(dx - r * 0.45, r * 0.7); g.stroke(); } break;
+    case 7: g.beginPath(); g.moveTo(-r, -r * 0.6); g.lineTo(r, -r * 0.6); g.lineTo(-r, r * 0.6); g.lineTo(r, r * 0.6); g.stroke(); break;
+    case 8: g.beginPath(); for (let k = 0; k < 6; k++) { const a = (k * Math.PI) / 3; k ? g.lineTo(Math.cos(a) * r, Math.sin(a) * r) : g.moveTo(Math.cos(a) * r, Math.sin(a) * r); } g.closePath(); g.stroke(); g.beginPath(); g.arc(0, 0, r * 0.32, 0, Math.PI * 2); g.fill(); break;
+    case 9: g.fillRect(-r, -r * 0.7, r * 2, r * 0.36); g.fillRect(-r * 0.7, -r * 0.18, r * 1.7, r * 0.36); g.fillRect(-r * 0.4, r * 0.34, r * 1.4, r * 0.36); break;
+    case 10: g.beginPath(); g.arc(0, r * 0.25, r * 0.8, Math.PI, 0); g.stroke(); g.beginPath(); g.moveTo(0, r * 0.25); g.lineTo(r * 0.55, -r * 0.55); g.stroke(); g.beginPath(); g.arc(0, r * 0.25, r * 0.24, 0, Math.PI * 2); g.fill(); break;
+    case 11: g.beginPath(); g.moveTo(-r, 0); g.quadraticCurveTo(-r * 0.4, -r, 0, 0); g.quadraticCurveTo(r * 0.4, r, r, 0); g.stroke(); break;
+    case 12: g.beginPath(); g.moveTo(-r, -r * 0.6); g.lineTo(r, -r * 0.6); g.moveTo(0, -r * 0.6); g.lineTo(0, r * 0.85); g.stroke(); break;
+    case 13: g.beginPath(); g.moveTo(-r, r * 0.6); g.lineTo(0, -r * 0.85); g.lineTo(r, r * 0.6); g.closePath(); g.stroke(); g.fillRect(-r * 0.45, r * 0.15, r * 0.9, r * 0.25); break;
+    case 14: g.beginPath(); g.moveTo(-r * 0.8, -r * 0.8); g.lineTo(r * 0.8, r * 0.8); g.moveTo(r * 0.8, -r * 0.8); g.lineTo(-r * 0.8, r * 0.8); g.stroke(); break;
+    default: g.beginPath(); g.arc(0, 0, r * 0.85, 0, Math.PI * 2); g.stroke(); g.beginPath(); g.moveTo(0, 0); g.lineTo(r * 0.85, r * 0.85); g.stroke(); break;
+  }
 }
 /** Dibujo de la librea en coordenadas del coche (x, v). En la vista de arriba v es el lado (simétrico). */
 export function paintDesign(g, st, top, c1, c2, c3) {
@@ -432,9 +499,20 @@ vec2 dropsAt(vec3 p, vec3 n){
   // el reflejo, solo si la gota ocupa varios píxeles (si no, parece ruido); la gota, un poco más lejos
   return vec2(drop * (1.0 - smoothstep(0.35, 0.8, px)), hl * (1.0 - smoothstep(0.08, 0.18, px)));
 }`;
+const CARBON_GLSL = `
+float carbonWeave(vec3 p, vec3 n){
+  vec3 a = abs(n);
+  vec2 uv = a.y > max(a.x, a.z) ? p.xz : (a.z > a.x ? p.xy : p.zy);
+  uv /= 0.008;
+  float px = length(fwidth(uv));
+  if (px > 0.7) return 0.5;
+  vec2 c = floor(uv);
+  float w = step(2.0, mod(c.x + c.y, 4.0));
+  return mix(0.5, w, 1.0 - smoothstep(0.25, 0.7, px));
+}`;
 export function makeCarMaterial(livTex, U) {
 const uLiv = { value: livTex };
-const CAR_MAT = new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.45, metalness: 0.15, clearcoat: 1, clearcoatRoughness: 0.05, side: THREE.DoubleSide });
+const CAR_MAT = new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.34, metalness: 0.25, clearcoat: 1, clearcoatRoughness: 0.04, side: THREE.DoubleSide });
 CAR_MAT.onBeforeCompile = (sh) => {
   Object.assign(sh.uniforms, { uFlood: U.uFlood, uLight: U.uLight, uLiv, uDrops: U.uDrops || { value: 0 } });
   sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\n" + INST_COL_DEF + "uniform float uLight; attribute vec3 aCol2; attribute float aLiv, aPart, aDmg; varying float vPaint, vGlow, vShade, vLiv; varying vec3 vLP, vLN;")
@@ -449,12 +527,12 @@ CAR_MAT.onBeforeCompile = (sh) => {
     .replace("#include <color_vertex>", `float kr = pow(color.r, 2.2), kb = pow(color.b, 2.2), red = step(color.g, -0.5);
       vColor = vec4(INST_COL * kr + aCol2 * kb + vec3(pow(max(color.g, 0.0), 2.2)) + vec3(0.25, 0.0, 0.0) * red, 1.0);
       vPaint = step(0.25, color.r + color.b); vGlow = red * uLight; vShade = max(kr, kb); vLiv = aLiv; vLP = position; vLN = normal;`);
-  sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nuniform float uFlood, uDrops; varying float vPaint, vGlow, vShade, vLiv; varying vec3 vLP, vLN;" + LIV_GLSL + DROPS_GLSL)
-    .replace("#include <color_fragment>", "#include <color_fragment>\nif (vPaint > 0.5) diffuseColor.rgb = liveryAt(vLP, normalize(vLN), floor(vLiv + 0.5)) * vShade;\ndrop = uDrops > 0.01 ? dropsAt(vLP, normalize(vLN)) * uDrops : vec2(0.0); diffuseColor.rgb *= 1.0 - 0.3 * drop.x;")
-    .replace("#include <roughnessmap_fragment>", "float roughnessFactor = mix(mix(0.62, roughness, vPaint), 0.04, drop.x);")
+  sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nuniform float uFlood, uDrops; varying float vPaint, vGlow, vShade, vLiv; varying vec3 vLP, vLN;" + LIV_GLSL + DROPS_GLSL + CARBON_GLSL)
+    .replace("#include <color_fragment>", "#include <color_fragment>\nvec3 nL = normalize(vLN);\nif (vPaint > 0.5) diffuseColor.rgb = liveryAt(vLP, nL, floor(vLiv + 0.5)) * vShade;\nisCarb = (1.0 - vPaint) * (1.0 - step(0.06, diffuseColor.r + diffuseColor.g + diffuseColor.b));\nif (isCarb > 0.5) { cw = carbonWeave(vLP, nL); diffuseColor.rgb = mix(vec3(0.005), vec3(0.018), cw); }\ndrop = uDrops > 0.01 ? dropsAt(vLP, nL) * uDrops : vec2(0.0); diffuseColor.rgb *= 1.0 - 0.3 * drop.x;")
+    .replace("#include <roughnessmap_fragment>", "float roughnessFactor = mix(mix(mix(0.62, 0.34 + 0.18 * (1.0 - cw), isCarb), roughness, vPaint), 0.04, drop.x);")
     .replace("#include <metalnessmap_fragment>", "float metalnessFactor = metalness * vPaint;")
-    .replace("#include <lights_physical_fragment>", "#include <lights_physical_fragment>\nmaterial.clearcoat *= vPaint;")
-    .replace("vec3 totalEmissiveRadiance = emissive;", "vec2 drop = vec2(0.0);\nvec3 totalEmissiveRadiance = emissive + vColor.rgb * uFlood * 0.6 + vec3(7.0, 0.25, 0.1) * vGlow;")
+    .replace("#include <lights_physical_fragment>", "#include <lights_physical_fragment>\nmaterial.clearcoat *= mix(0.32 * isCarb, 1.0, vPaint);")
+    .replace("vec3 totalEmissiveRadiance = emissive;", "vec2 drop = vec2(0.0); float isCarb = 0.0, cw = 0.5;\nvec3 totalEmissiveRadiance = emissive + vColor.rgb * uFlood * 0.6 + vec3(7.0, 0.25, 0.1) * vGlow;")
     .replace("#include <emissivemap_fragment>", "#include <emissivemap_fragment>\ntotalEmissiveRadiance += vec3(0.9, 0.95, 1.0) * drop.y * (0.15 + 0.6 * uFlood);");
 };
 CAR_MAT.userData.uLiv = uLiv; // para cambiar la librea sin rehacer el material
@@ -463,13 +541,206 @@ return CAR_MAT;
 export function makeWheelMaterial() {
 const WHEEL_MAT = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.82 });
 WHEEL_MAT.onBeforeCompile = (sh) => {
-  sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\n" + INST_COL_DEF + "varying float vMetal;")
-    .replace("#include <color_vertex>", "vColor = vec4(INST_COL * color.r + vec3(pow(color.g, 2.2)), 1.0); vMetal = color.b;");
-  sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nvarying float vMetal;")
-    .replace("#include <roughnessmap_fragment>", "float roughnessFactor = mix(roughness, 0.3, vMetal);")
-    .replace("#include <metalnessmap_fragment>", "float metalnessFactor = vMetal;");
+  sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\n" + INST_COL_DEF + "attribute float aBrake; varying vec3 vLP; varying float vMetal, vDisc, vBrake, vWetTyre;")
+    .replace("#include <color_vertex>", `float disc = step(color.g, -0.5);
+      vColor = vec4(INST_COL * color.r + vec3(pow(max(color.g, 0.0), 2.2)) + vec3(0.05) * disc, 1.0);
+      vMetal = color.b; vDisc = disc; vBrake = aBrake; vLP = position;
+      vWetTyre = max(step(0.55, INST_COL.g) * (1.0 - step(0.65, INST_COL.r)), step(0.6, INST_COL.b));`);
+  sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nvarying vec3 vLP; varying float vMetal, vDisc, vBrake, vWetTyre;")
+    .replace("vec3 totalEmissiveRadiance = emissive;", "float groove = 0.0;\nvec3 totalEmissiveRadiance = emissive;")
+    .replace("#include <color_fragment>", `#include <color_fragment>
+      float rad = length(vLP.xy), ang = atan(vLP.y, vLP.x);
+      float isSide = step(0.145, abs(vLP.z)) * step(0.22, rad) * (1.0 - vDisc);
+      float isTread = (1.0 - step(0.145, abs(vLP.z))) * step(0.32, rad);
+      if (isSide > 0.5 && rad > 0.24 && rad < 0.295) {
+        float arc = smoothstep(0.22, 0.34, abs(sin(ang * 2.0)));
+        diffuseColor.rgb = mix(vec3(0.015), diffuseColor.rgb, arc);
+      }
+      if (isTread > 0.5) {
+        float gr = fract(sin(floor(ang * 48.0) * 12.989 + floor(vLP.z * 90.0) * 78.233) * 43758.545);
+        diffuseColor.rgb *= 0.85 + 0.3 * gr;
+        if (vWetTyre > 0.5) {
+          float vpat = abs(fract((ang / 6.28318) * 18.0 + abs(vLP.z) * 4.5) - 0.5);
+          float ch = smoothstep(0.06, 0.14, abs(abs(vLP.z) - 0.045));
+          groove = 1.0 - min(smoothstep(0.08, 0.18, vpat), ch);
+          diffuseColor.rgb *= 1.0 - 0.45 * groove;
+        }
+      }`)
+    .replace("#include <roughnessmap_fragment>", "float roughnessFactor = mix(mix(roughness + 0.1 * groove, 0.3, vMetal), 0.45, vDisc);")
+    .replace("#include <metalnessmap_fragment>", "float metalnessFactor = mix(vMetal, 0.7, vDisc);")
+    .replace("#include <emissivemap_fragment>", "#include <emissivemap_fragment>\ntotalEmissiveRadiance += vec3(5.2, 0.95, 0.08) * vDisc * vBrake * vBrake;");
 };
 return WHEEL_MAT;
+}
+
+/** Volante de F1 detallado en carbono con ruletas de colores, levas y manos enguantadas. */
+export function steerGeometry() {
+  const c = collect();
+  const s = new THREE.Shape();
+  s.moveTo(-0.14, -0.055); s.lineTo(-0.13, 0.055); s.lineTo(-0.075, 0.078);
+  s.lineTo(0.075, 0.078); s.lineTo(0.13, 0.055); s.lineTo(0.14, -0.055);
+  s.lineTo(0.08, -0.078); s.lineTo(0.045, -0.045); s.lineTo(-0.045, -0.045); s.lineTo(-0.08, -0.078);
+  s.closePath();
+  const body = new THREE.ExtrudeGeometry(s, { depth: 0.022, bevelEnabled: true, bevelThickness: 0.004, bevelSize: 0.004, bevelSegments: 1 });
+  body.rotateY(Math.PI / 2).translate(-0.011, 0, 0);
+  c.add(body, [0.07, 0.075, 0.085]);
+  // marco de pantalla, botones/ruletas de colores y levas traseras
+  c.add(new THREE.BoxGeometry(0.014, 0.076, 0.126).translate(-0.014, 0.014, 0), [0.02, 0.022, 0.028]);
+  for (const [y, z, col] of [[0.036, 0.082, [0.9, 0.15, 0.1]], [0.008, 0.085, [0.95, 0.78, 0.1]], [-0.022, 0.08, [0.15, 0.78, 0.35]], [0.036, -0.082, [0.15, 0.55, 0.95]], [0.008, -0.085, [0.95, 0.78, 0.1]], [-0.022, -0.08, [0.9, 0.15, 0.1]]]) {
+    c.keep(new THREE.CylinderGeometry(0.009, 0.009, 0.012, 8).rotateZ(Math.PI / 2).translate(-0.018, y, z), col);
+  }
+  for (const sg of [1, -1]) {
+    c.add(new THREE.BoxGeometry(0.006, 0.04, 0.048).translate(0.02, 0.01, 0.075 * sg), [0.14, 0.145, 0.16]);
+    c.add(new THREE.BoxGeometry(0.055, 0.092, 0.056).translate(-0.01, -0.005, 0.132 * sg), [0.16, 0.18, 0.21]);
+    c.add(new THREE.BoxGeometry(0.19, 0.045, 0.052).translate(-0.11, -0.025, 0.145 * sg), [0.12, 0.13, 0.16]);
+  }
+  return c.done();
+}
+
+// ------------------------------------------------------------------ modelos externos (.glb + Draco)
+let glbCache = null; // Promise<{ carBase, wheelBase } | null>
+
+function normName(s) {
+  return String(s || "").toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
+}
+
+function classifyMesh(name) {
+  if (/rueda|wheel|tyre|tire|rim|llanta/.test(name)) return { wheel: true };
+  if (/aleron_del|front_wing|frontwing|ala_del/.test(name)) return { part: 1, col: TEAM };
+  if (/luz|rain_light|taillight|tail_light|brake_light/.test(name)) return { part: 0, col: RED };
+  if (/casco|helmet|driver|piloto/.test(name)) return { part: 0, col: WHITE };
+  if (/carbono|carbon|suelo|floor|difusor|diffuser|halo|susp|wishbone|brake|freno|cockpit|seat|escape|exhaust/.test(name)) return { part: 0, col: BLACK };
+  if (/acento|accent|secundario|stripe|franja/.test(name)) return { part: 0, col: ACC };
+  return { part: 0, col: TEAM };
+}
+
+function normalizeCarBounds(g) {
+  g.computeBoundingBox();
+  const b = g.boundingBox;
+  if (!b || b.isEmpty()) return;
+  const sz = new THREE.Vector3(), ctr = new THREE.Vector3();
+  b.getSize(sz); b.getCenter(ctr);
+  const s = sz.x < 4.5 || sz.x > 6.5 ? 5.6 / Math.max(0.01, sz.x) : 1;
+  const dx = sz.x < 4.5 || sz.x > 6.5 ? 0.25 - ctr.x * s : 0;
+  const dy = b.min.y * s < -0.08 || b.min.y * s > 0.25 ? 0.04 - b.min.y * s : 0;
+  const dz = Math.abs(ctr.z * s) > 0.15 ? -ctr.z * s : 0;
+  if (s !== 1 || dx || dy || dz) g.applyMatrix4(new THREE.Matrix4().makeScale(s, s, s).setPosition(dx, dy, dz));
+}
+
+function normalizeWheelBounds(g) {
+  g.computeBoundingBox();
+  const b = g.boundingBox;
+  if (!b || b.isEmpty()) return;
+  const sz = new THREE.Vector3(), ctr = new THREE.Vector3();
+  b.getSize(sz); b.getCenter(ctr);
+  const rad = Math.max(sz.x, sz.y) * 0.5;
+  const s = rad > 0.01 ? 0.36 / rad : 1;
+  g.applyMatrix4(new THREE.Matrix4().makeTranslation(-ctr.x, -ctr.y, -ctr.z));
+  if (s !== 1) g.scale(s, s, s);
+}
+
+/** Convierte una escena glTF al formato de atributos y colores de vértice de CAR_MAT y WHEEL_MAT. */
+export function extractCarFromGltf(root, separateWheel = false) {
+  const carC = collect(), whlC = collect();
+  let hasCar = false, hasWhl = false;
+  root.updateWorldMatrix(true, true);
+  root.traverse((o) => {
+    if (!o.isMesh || !o.geometry) return;
+    const tag = classifyMesh(normName(`${o.name} ${o.material?.name || ""}`));
+    const g = o.geometry.clone();
+    g.applyMatrix4(o.matrixWorld);
+    const ni = g.index ? g.toNonIndexed() : g;
+    if (!ni.attributes.normal) ni.computeVertexNormals();
+    if (tag.wheel) {
+      if (separateWheel && !hasWhl) { whlC.keep(ni, [0, 0.05, 0]); hasWhl = true; }
+      return;
+    }
+    carC.part = tag.part;
+    carC.keep(ni, tag.col);
+    hasCar = true;
+  });
+  let carBase = null, wheelBase = null;
+  if (hasCar) {
+    carBase = carC.done();
+    normalizeCarBounds(carBase);
+  }
+  if (hasWhl) {
+    wheelBase = whlC.done();
+    normalizeWheelBounds(wheelBase);
+    wheelBase.setAttribute("aBrake", new THREE.BufferAttribute(new Float32Array(wheelBase.attributes.position.count), 1));
+  }
+  return { carBase, wheelBase };
+}
+
+/** Carga de forma asíncrona el monoplaza .glb (con Draco) si existe en assets/models/manifest.json. */
+export function loadCarAssets(onReady) {
+  if (!glbCache) {
+    glbCache = (async () => {
+      try {
+        const base = `${import.meta.env.BASE_URL}assets/models/`;
+        const res = await fetch(`${base}manifest.json`);
+        if (!res.ok) return null;
+        const man = await res.json();
+        if (!man?.car && !man?.wheel) return null;
+        const [{ GLTFLoader }, { DRACOLoader }] = await Promise.all([
+          import("three/addons/loaders/GLTFLoader.js"),
+          import("three/addons/loaders/DRACOLoader.js"),
+        ]);
+        const draco = new DRACOLoader();
+        draco.setDecoderPath(`${import.meta.env.BASE_URL}draco/`);
+        const loader = new GLTFLoader();
+        loader.setDRACOLoader(draco);
+        const resolveUrl = (p) => (/^(https?:)?\//.test(p) ? p : p.startsWith("assets/") ? `${import.meta.env.BASE_URL}${p}` : `${base}${p}`);
+        let carBase = null, wheelBase = null;
+        if (man.car) {
+          const gltf = await loader.loadAsync(resolveUrl(man.car));
+          ({ carBase, wheelBase } = extractCarFromGltf(gltf.scene, !man.wheel));
+        }
+        if (man.wheel) {
+          const gltf = await loader.loadAsync(resolveUrl(man.wheel));
+          const wC = collect();
+          let ok = false;
+          gltf.scene.updateWorldMatrix(true, true);
+          gltf.scene.traverse((o) => {
+            if (!o.isMesh || !o.geometry) return;
+            const g = o.geometry.clone(); g.applyMatrix4(o.matrixWorld);
+            const ni = g.index ? g.toNonIndexed() : g;
+            if (!ni.attributes.normal) ni.computeVertexNormals();
+            wC.keep(ni, [0, 0.05, 0]); ok = true;
+          });
+          if (ok) {
+            wheelBase = wC.done();
+            normalizeWheelBounds(wheelBase);
+            wheelBase.setAttribute("aBrake", new THREE.BufferAttribute(new Float32Array(wheelBase.attributes.position.count), 1));
+          }
+        }
+        const steer = Array.isArray(man.steer) && man.steer.length === 3 ? man.steer.map(Number) : null;
+        const cam = Array.isArray(man.cam) && man.cam.length === 2 ? man.cam.map(Number) : null;
+        // versión ligera opcional (resto de la parrilla y calidad baja): si falla, se queda la integrada
+        let carLoBase = null;
+        if (man.carLo) {
+          try {
+            const gltf = await loader.loadAsync(resolveUrl(man.carLo));
+            carLoBase = extractCarFromGltf(gltf.scene, false).carBase;
+          } catch { carLoBase = null; }
+        }
+        draco.dispose();
+        return carBase || wheelBase || carLoBase ? { carBase, wheelBase, carLoBase, steer, cam } : null;
+      } catch {
+        return null;
+      }
+    })();
+  }
+  glbCache.then((res) => {
+    if (!res) return;
+    onReady({
+      carGeo: res.carBase ? res.carBase.clone() : null,
+      wheelGeo: res.wheelBase ? res.wheelBase.clone() : null,
+      carLoGeo: res.carLoBase ? res.carLoBase.clone() : null,
+      steer: res.steer,
+      cam: res.cam,
+    });
+  });
 }
 
 
@@ -488,19 +759,39 @@ export function createCarPreview(canvas, team) {
   envS.add(new THREE.Mesh(new THREE.SphereGeometry(10, 24, 12), new THREE.ShaderMaterial({ side: THREE.BackSide,
     vertexShader: "varying vec3 vP; void main(){ vP = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }",
     fragmentShader: "varying vec3 vP; void main(){ float y = normalize(vP).y; gl_FragColor = vec4(mix(vec3(0.06), vec3(1.2, 1.18, 1.15), smoothstep(-0.2, 0.6, y)) + vec3(2.5) * smoothstep(0.9, 0.97, y), 1.0); }" })));
-  const envRT = pm.fromScene(envS, 0.02); scene.environment = envRT.texture;
+  let envRT = pm.fromScene(envS, 0.02); scene.environment = envRT.texture;
+  new HDRLoader().load(`${import.meta.env.BASE_URL}assets/env/estudio.hdr`, (hdr) => {
+    if (!alive) { hdr.dispose(); return; }
+    const rt = pm.fromEquirectangular(hdr);
+    hdr.dispose();
+    const old = envRT; envRT = rt;
+    scene.environment = envRT.texture;
+    scene.environmentIntensity = 1.15;
+    old.dispose();
+  }, undefined, () => { /* respaldo procedural */ });
   const sun = new THREE.DirectionalLight(0xffffff, 2.2); sun.position.set(3, 6, 4); scene.add(sun);
   const U = { uFlood: { value: 0 }, uLight: { value: 0 } };
   let tex = liveryTexture([team]);
   const mat = makeCarMaterial(tex, U), wmat = makeWheelMaterial();
-  const geo = carGeometry(true);
+  let geo = carGeometry(true), wgeo = wheelGeometry(true);
   geo.setAttribute("aCol2", new THREE.InstancedBufferAttribute(new Float32Array(3), 3));
   geo.setAttribute("aLiv", new THREE.InstancedBufferAttribute(new Float32Array(1), 1));
   geo.setAttribute("aDmg", new THREE.InstancedBufferAttribute(new Float32Array(1), 1));
   const car = new THREE.InstancedMesh(geo, mat, 1), col = new THREE.Color();
   car.setMatrixAt(0, new THREE.Matrix4()); car.setColorAt(0, col.set(team.color));
-  const wheels = new THREE.InstancedMesh(wheelGeometry(true), wmat, 4), m = new THREE.Matrix4();
+  const wheels = new THREE.InstancedMesh(wgeo, wmat, 4), m = new THREE.Matrix4();
   [[1.8, 0.83, 0.92], [1.8, -0.83, 0.92], [-1.7, 0.82, 1.18], [-1.7, -0.82, 1.18]].forEach(([x, z, w], i) => { wheels.setMatrixAt(i, m.makeScale(1, 1, w).setPosition(x, 0.36, z)); wheels.setColorAt(i, col.set("#e8452c")); });
+  loadCarAssets(({ carGeo, wheelGeo, carLoGeo }) => {
+    carLoGeo?.dispose(); // la vista previa siempre se ve de cerca: solo usa la fina
+    if (!alive) { carGeo?.dispose(); wheelGeo?.dispose(); return; }
+    if (carGeo) {
+      for (const a of ["aCol2", "aLiv", "aDmg"]) carGeo.setAttribute(a, geo.attributes[a]);
+      car.geometry = carGeo; geo.dispose(); geo = carGeo;
+    }
+    if (wheelGeo) {
+      wheels.geometry = wheelGeo; wgeo.dispose(); wgeo = wheelGeo;
+    }
+  });
   const shadow = new THREE.Mesh(new THREE.CircleGeometry(3.4, 40).rotateX(-Math.PI / 2).scale(1.1, 1, 0.5), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.35, depthWrite: false }));
   shadow.position.y = 0.005;
   const group = new THREE.Group(); group.add(car, wheels, shadow); scene.add(group);
@@ -526,7 +817,7 @@ export function createCarPreview(canvas, team) {
   requestAnimationFrame(loop);
   function dispose() {
     alive = false;
-    tex.dispose(); geo.dispose(); mat.dispose(); wmat.dispose(); wheels.geometry.dispose(); envRT.dispose(); pm.dispose();
+    tex.dispose(); geo.dispose(); wgeo.dispose(); mat.dispose(); wmat.dispose(); envRT.dispose(); pm.dispose();
     renderer.dispose();
   }
   return {

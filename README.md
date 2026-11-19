@@ -369,10 +369,11 @@ sobre la clasificación. Manteniendo pulsado el de la cámara (o con clic derech
 muro frente a su garaje mientras está en boxes; si no, le sigue de cerca), *Alerón trasero* (a bordo mirando hacia
 atrás) y *Grúa de meta* (de lado y en alto sobre la recta de meta, barriendo al pasar el coche).
 
-La luz es física (three.js, materiales PBR): el sol da la luz directa y las sombras, y el propio
-cielo de cada momento (hora, nubes) se fotografía en un cubo y da la luz ambiente y los reflejos
-de la carrocería y del asfalto mojado. Las texturas de asfalto, hierba y grava se calculan al
-arrancar, sin descargar nada. Hay cuatro escalones de calidad y, si el dispositivo no llega a
+La luz es física (three.js, materiales PBR): el sol da la luz directa y las sombras, y los reflejos
+y la luz ambiente parten del cielo de cada momento con mapas de entorno HDRI (soleado, atardecer,
+nublado y noche; más un estudio en el creador de equipo) y un cubo de cielo de respaldo al instante.
+El asfalto, la hierba, la grava, el hormigón y las fachadas usan texturas PBR en WebP (cargadas al abrir
+el 3D sobre las procedurales de arranque). Hay cuatro escalones de calidad y, si el dispositivo no llega a
 40 fps, baja solo: primero quita la oclusión ambiental y el desenfoque de la cámara de tele,
 luego resolución, luego el resplandor y el búfer HDR, y al final las sombras. Solo los coches cercanos (hasta 8) usan
 la malla fina; los reflejos de los focos en mojado necesitan calidad 2 y las sombras de los árboles, la máxima.
@@ -393,8 +394,13 @@ Singapur son ciudades: filas de edificios pegadas a la acera y manzanas detrás 
 torres de cristal en Singapur, con las ventanas encendidas de noche). Todo lo que va junto a la pista se ensancha con
 ella al alejar la cámara y se comprueba que no la pise a ninguna escala.
 
-Cada equipo lleva su librea pintada en una textura: un dibujo propio a partir de sus colores y tres patrocinadores
-inventados (en los pontones, el alerón trasero, el morro y la tapa del motor). En las paradas el coche se para delante
+Cada equipo lleva su librea pintada en una textura: un dibujo propio a partir de sus colores, juntas y
+branquias de refrigeración y tres patrocinadores inventados con su isotipo (en los pontones, el alerón
+trasero, el morro y la tapa del motor). De cerca, las ruedas muestran radios con discos de freno que
+se iluminan al rojo en las frenadas fuertes, surcos de agua en intermedios y lluvia, y a bordo se ve el
+volante con la pantalla LED viva (marcha, velocidad, batería y LEDs de RPM). Además se puede sustituir
+el monoplaza por un `.glb` propio comprimido con Draco (`public/assets/models/`, ver
+`docs/GUIA-BLENDER-COCHE.md`). En las paradas el coche se para delante
 de su garaje, sube en los gatos y los mecánicos (del color del equipo) quitan las ruedas viejas y ponen las nuevas, del
 compuesto que toca. Los percances de la simulación se ven: el trompo gira el coche con humo de goma, la salida de pista
 lo lleva a la escapatoria levantando polvo de la grava o de la hierba, el bloqueo echa humo de la rueda delantera y el
@@ -525,3 +531,6 @@ clasificación.
 - Mojado: [Pirelli: cuándo cambiar de slicks a neumáticos de lluvia](https://www.pirelli.com/global/en-ww/race/when-it-s-time-to-change-from-slick-to-wet-tyres-in-formula-1), [FIA: pole en mojado de Interlagos 2024](https://fia.com/node/54403), [FIA: clasificación sprint de Interlagos 2024](https://fia.com/node/54364).
 - Clima: [24 Horas de Spa (julio)](https://www.crowdstrike24hoursofspa.com/news/1919/what-an-autumn-edition-means-for-the-total-24-hours-of-spa-weather-forecast), [weatherapi.com: Spa](https://www.weatherapi.com/history/july/q/spa-205712), [weatherapi.com: Monza](https://www.weatherapi.com/history/september/q/monza-1281402), [weatheronthisday.com: São Paulo](https://weatheronthisday.com/intl/sao-paulo/november), [weathermonth.com: São Paulo](https://weathermonth.com/en/sao-paulo-weather-in-november). Silverstone en julio es aproximado (no se encontró una normal climática fiable).
 - Altitud de los circuitos y del terreno de Mónaco y Singapur (mar, puertos, ladera, altura de las torres): Mapzen/AWS Terrain Tiles (teselas «terrarium»), con el trazado situado sobre el mapa mediante bacinger/f1-circuits.
+- Texturas PBR de superficie (asfalto, hierba, grava, hormigón, fachada) y entornos HDRI: [Poly Haven](https://polyhaven.com/) (licencia CC0, detalle en `public/assets/LICENCIA-POLYHAVEN-CC0.txt`).
+- Banderas de los países en SVG: [flag-icons](https://github.com/lipis/flag-icons) (licencia MIT, copia en `public/assets/LICENCIA-FLAG-ICONS-MIT.txt`).
+- Modelo 3D del monoplaza (`public/assets/models/f1.glb` y su versión ligera `f1_lo.glb`): [F1 2026 concept (polygon model)](https://sketchfab.com/3d-models/f1-2026-concept-polygon-model-ea3bde709b1e4dc9b0ec8557d106ed42) de [Qvist_designs](https://sketchfab.com/Qvist_Designs), licencia [CC-BY-4.0](https://creativecommons.org/licenses/by/4.0/) (adaptado: retiradas las ruedas estáticas para usar las ruedas animadas del juego, simplificado a ≤ 14.000 triángulos (≤ 3.800 en la versión ligera) y comprimido con Draco mediante `scripts/prepara_coche_glb.py`).

@@ -1,2 +1,9 @@
 node_modules
 dist
+
+# modelos 3D descargados (pesan decenas de MB): el juego solo usa los .glb optimizados de public/assets/models/
+/coche.glb
+/descargas/
+*.blend
+*.blend1
+public/assets/models/_tmp_*.glb
