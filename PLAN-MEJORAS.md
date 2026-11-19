@@ -23,6 +23,13 @@ Ya hecho de lo que viene ahora (noviembre de 2026):
   después de la carrera, y se guarda en `RoundResult.board`. Se ven en los resultados, en el calendario y en el gran
   premio suelto (sin directiva). `npx tsx scripts/prensa.ts [equipo] [carreras] [semilla]` vuelca las dos cosas.
   De paso: el panel «Cambios de pilotos» tras una carrera se perdía al pintar el mundial (`main.ts`).
+- **11.1 Safety Car `.glb`:** modelo CC-BY de Sketchfab (101 MB, 1,4 M de triángulos) preparado con
+  `scripts/prepara_safety_glb.py` (solo numpy: clasifica por nombre de nodo, quita interior, matrículas e insignias,
+  simplifica agrupando vértices y cuantiza; sin Draco) en `safety.glb` (30 000 tri., 315 KB) y `safety_lo.glb` (6000,
+  71 KB). En `map3d.ts`, `loadSafetyCar` y `SC_COLORS`: una malla con color por vértice, el fino de cerca (< 90 m) y
+  la ligera de lejos; las luces del techo (más una barra que las envuelve) parpadean con `scBar`. `SC_GEO` de
+  respaldo. Página de prueba: `sc=1`. Se podría mejorar con un simplificador de verdad (meshoptimizer) si se
+  permite instalarlo.
 - **Inmersión visual:** monoplaza `.glb` propio con Draco (`public/assets/models`, guía en `docs/GUIA-BLENDER-COCHE.md`),
   entornos HDRI (`public/assets/env`), texturas PBR de Poly Haven (`public/assets/tex`: asfalto, hierba, grava,
   hormigón, fachada), banderas SVG (`public/assets/flags`) y brazos del piloto a bordo (`car3d.ts`).
@@ -32,7 +39,7 @@ Ya hecho de lo que viene ahora (noviembre de 2026):
 Primero lo que se nota en cada carrera; los gráficos se ven una vez y se olvidan antes.
 
 1. ~~8.1 Los pilotos responden a tus órdenes~~ ✅ y ~~10.1 Lobato por códigos~~ ✅.
-2. **11.1 Safety Car `.glb`** (P/M; ~~12.1 Cascos~~ ✅): lo que más luce de lo visual. Falta el modelo: lo consigue el dueño del repo.
+2. ~~11.1 Safety Car `.glb`~~ ✅ y ~~12.1 Cascos~~ ✅.
 3. ~~9.2 Titulares~~ ✅ y ~~9.3 La directiva te escribe~~ ✅.
 4. **12.2 Planos técnicos en Desarrollo** (M).
 5. **9.1 Rueda de prensa**, **8.2 Moral y desobediencia** y **8.3 Rivalidades** (M/G): lo más profundo, cambia la
@@ -123,7 +130,7 @@ Ojo: el Safety Car (`SC_GEO`, `scCar` en `map3d.ts`), los árboles (con LOD de 1
 (`fachada.webp`) y los mecánicos con gatos y pistolas ya existen hechos por código. Aquí se trata de mejorarlos,
 no de crearlos. Respetar el presupuesto de assets.
 
-### 11.1 Safety Car `.glb` (P/M) · lo primero del bloque
+### 11.1 Safety Car `.glb` (P/M) · ✅ Hecho
 - Sale en la mitad de las carreras y la cámara lo sigue: ahora es lo que más desentona al lado del monoplaza nuevo.
 - Mismo camino que el coche: `.glb` con Draco en `public/assets/models` (en `manifest.json`), una versión ligera, y
   `SC_GEO` de respaldo. Luces del techo que parpadeen (material emisivo) y el `scBar` de siempre. Coche genérico, sin
