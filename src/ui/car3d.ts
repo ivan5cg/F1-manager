@@ -589,10 +589,47 @@ export function steerGeometry() {
   for (const [y, z, col] of [[0.036, 0.082, [0.9, 0.15, 0.1]], [0.008, 0.085, [0.95, 0.78, 0.1]], [-0.022, 0.08, [0.15, 0.78, 0.35]], [0.036, -0.082, [0.15, 0.55, 0.95]], [0.008, -0.085, [0.95, 0.78, 0.1]], [-0.022, -0.08, [0.9, 0.15, 0.1]]]) {
     c.keep(new THREE.CylinderGeometry(0.009, 0.009, 0.012, 8).rotateZ(Math.PI / 2).translate(-0.018, y, z), col);
   }
+  // brazos: manga ignífuga que se afina hacia la muñeca, puño con franja, guante redondeado con dedos y pulgar
+  const blob = (r, x, y, z, col) => c.keep(new THREE.SphereGeometry(1, 14, 10).scale(r[0], r[1], r[2]).translate(x, y, z), col);
+  /** Tubo de sección elíptica a lo largo de una curva suave; rad = [radio, achatamiento] en cada punto dado. */
+  const loft = (pts, rad, col, n = 10, sides = 12) => {
+    const cur = new THREE.CatmullRomCurve3(pts.map((p) => new THREE.Vector3(...p)), false, "catmullrom", 0.5);
+    const P = cur.getPoints(n), rings = [], m = rad.length - 1;
+    for (let i = 0; i <= n; i++) {
+      const t = cur.getTangentAt(i / n), ref = Math.abs(t.y) > 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
+      const u = new THREE.Vector3().crossVectors(t, ref).normalize(), v = new THREE.Vector3().crossVectors(t, u);
+      const f = (i / n) * m, k = Math.min(m - 1, Math.floor(f)), w = f - k;
+      const r = rad[k][0] + (rad[k + 1][0] - rad[k][0]) * w, fl = rad[k][1] + (rad[k + 1][1] - rad[k][1]) * w;
+      const ring = [];
+      for (let j = 0; j < sides; j++) {
+        const a = (j / sides) * Math.PI * 2;
+        ring.push([P[i].x + u.x * Math.cos(a) * r + v.x * Math.sin(a) * r * fl, P[i].y + u.y * Math.cos(a) * r + v.y * Math.sin(a) * r * fl, P[i].z + u.z * Math.cos(a) * r + v.z * Math.sin(a) * r * fl]);
+      }
+      rings.push(ring);
+    }
+    skin(c, rings, () => col, 0.8);
+  };
+  const SUIT = [0.09, 0.1, 0.13], SUIT2 = [0.13, 0.14, 0.18], CUFF = [0.82, 0.82, 0.85], GLOVE = [0.055, 0.06, 0.07], GRIP = [0.2, 0.21, 0.25], SEAM = [0.75, 0.1, 0.08];
   for (const sg of [1, -1]) {
-    c.add(new THREE.BoxGeometry(0.006, 0.04, 0.048).translate(0.02, 0.01, 0.075 * sg), [0.14, 0.145, 0.16]);
-    c.add(new THREE.BoxGeometry(0.055, 0.092, 0.056).translate(-0.01, -0.005, 0.132 * sg), [0.16, 0.18, 0.21]);
-    c.add(new THREE.BoxGeometry(0.19, 0.045, 0.052).translate(-0.11, -0.025, 0.145 * sg), [0.12, 0.13, 0.16]);
+    const hz = 0.135 * sg;
+    // brazo entero: del hombro al codo y del codo a la muñeca, con el músculo del antebrazo y la muñeca fina
+    loft([[-0.62, 0.05, 0.24 * sg], [-0.5, 0, 0.255 * sg], [-0.37, -0.1, 0.245 * sg]], [[0.058, 0.95], [0.052, 0.95], [0.045, 1]], SUIT, 6);
+    blob([0.052, 0.05, 0.05], -0.37, -0.1, 0.245 * sg, SUIT2); // codo
+    loft([[-0.37, -0.1, 0.245 * sg], [-0.27, -0.09, 0.225 * sg], [-0.16, -0.055, 0.185 * sg], [-0.075, -0.02, 0.148 * sg]], [[0.044, 1], [0.047, 0.92], [0.038, 0.9], [0.027, 0.92]], SUIT, 12);
+    loft([[-0.31, -0.095, 0.235 * sg], [-0.30, -0.094, 0.233 * sg]], [[0.05, 0.9], [0.05, 0.9]], SEAM, 1); // banda reflectante del antebrazo
+    loft([[-0.085, -0.025, 0.152 * sg], [-0.05, -0.008, 0.14 * sg]], [[0.03, 0.9], [0.031, 0.9]], CUFF, 3); // puño del mono
+    loft([[-0.058, -0.012, 0.142 * sg], [-0.02, 0.0, hz]], [[0.031, 0.9], [0.034, 0.92]], GLOVE, 3); // puño del guante
+    // dorso de la mano con nudillos y palma sobre el agarre
+    blob([0.04, 0.044, 0.034], -0.02, 0.004, hz, GLOVE);
+    blob([0.014, 0.035, 0.026], 0.0, 0.0, hz + 0.014 * sg, GRIP);
+    for (let i = 0; i < 4; i++) {
+      const y = 0.036 - i * 0.021, rr = 0.0105 - i * 0.0004;
+      blob([0.013, 0.012, 0.012], -0.028, y, hz + 0.004 * sg, GLOVE); // nudillo
+      // dedo que rodea el agarre: por detrás, por fuera y por delante, con la punta hacia el centro
+      loft([[-0.032, y, 0.12 * sg], [-0.03, y, 0.152 * sg], [-0.002, y, 0.162 * sg], [0.026, y, 0.152 * sg], [0.032, y, 0.126 * sg]], [[rr, 1], [rr, 1], [rr * 0.9, 1], [rr * 0.82, 1]], GLOVE, 8, 8);
+    }
+    // pulgar en dos falanges, apoyado en la cara trasera del volante
+    loft([[-0.04, 0.055, 0.13 * sg], [-0.03, 0.062, 0.108 * sg], [-0.016, 0.07, 0.092 * sg]], [[0.013, 1], [0.0115, 1], [0.0095, 1]], GLOVE, 5, 8);
   }
   return c.done();
 }
