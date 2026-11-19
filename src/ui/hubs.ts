@@ -19,6 +19,7 @@ import { SCENARIO_NAMES } from "../sim/weather";
 import { gpWhere } from "./grandPrix";
 import { GP_SLOT, hasSession, saveSeason, loadSeason, slotList, getActiveSlot, deleteSlot, exportSlot, checkImport, importInto, SLOTS, storageUse, installed, isSafariLike, markExported, exportDue, loadPrefs, savePrefs } from "./store";
 import { raceSummaryHtml, drawRaceSummary, photosHtml } from "./summary";
+import { headlines, portadaHtml, boardHtml } from "./prensa";
 
 export interface Nav {
   home(): void;
@@ -446,6 +447,7 @@ function roundSheet(r: RoundResult, playerTeam: string) {
   const block = (kind: SessionKind, rows: ResultRow[] | undefined, table?: number[], sum?: RaceSummary) => !rows ? "" :
     `<h2 style="margin-top:14px">${SESSION_NAMES[kind]}</h2>${resultsTable(kind, rows, playerTeam, table)}${sum ? `<div class="sumwrap" data-sumwrap="${kind}">${sum.photos?.length ? photosHtml(sum.photos) : ""}${raceSummaryHtml(sum)}</div>` : ""}`;
   const { el } = sheet(`<div class="row"><h1 class="grow" style="font-size:18px">${flagHtml(c.bandera)} ${esc(c.gp)}</h1><button data-close>Cerrar</button></div>
+    ${r.summary ? portadaHtml(headlines(r.summary, r.race, c.gp, playerTeam), "Edición del lunes") : ""}${r.board ? boardHtml(r.board, TEAMS.find((t) => t.id === playerTeam)?.nombre ?? "") : ""}
     ${block("RACE", r.race, r.raceTable, r.summary)}${block("SPRINT", r.sprint, r.sprintTable, r.sprintSummary)}${block("Q", r.q)}
     ${!r.summary ? `<div class="small dim" style="margin-top:8px">De esta carrera no se guardaron las gráficas (se corrió con una versión anterior).</div>` : ""}
     <button data-close style="width:100%;margin-top:10px">Cerrar</button>`);

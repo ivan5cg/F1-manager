@@ -18,6 +18,11 @@ Ya hecho de lo que viene ahora (noviembre de 2026):
   `HELMET_PALETTE`, nueve motivos) y `helmetSvg(..., nombre)` en todas las pantallas, con el equipo en la franja de
   abajo. En el 3D, el casco se marca en el color de vértice (g = 2 base, g = 3 franja) y cada coche lleva `aHelm` y
   `aHelm2` (`CAR_INST` en `map3d.ts`); mismas llamadas y triángulos.
+- **9.2 Titulares y 9.3 La directiva te escribe** (`src/ui/prensa.ts`): `headlines` saca la portada del `RaceSummary` y
+  del resultado (la misma cada vez que se abre: el azar sale de un hash); `boardMessage`, de los objetivos antes y
+  después de la carrera, y se guarda en `RoundResult.board`. Se ven en los resultados, en el calendario y en el gran
+  premio suelto (sin directiva). `npx tsx scripts/prensa.ts [equipo] [carreras] [semilla]` vuelca las dos cosas.
+  De paso: el panel «Cambios de pilotos» tras una carrera se perdía al pintar el mundial (`main.ts`).
 - **Inmersión visual:** monoplaza `.glb` propio con Draco (`public/assets/models`, guía en `docs/GUIA-BLENDER-COCHE.md`),
   entornos HDRI (`public/assets/env`), texturas PBR de Poly Haven (`public/assets/tex`: asfalto, hierba, grava,
   hormigón, fachada), banderas SVG (`public/assets/flags`) y brazos del piloto a bordo (`car3d.ts`).
@@ -28,7 +33,7 @@ Primero lo que se nota en cada carrera; los gráficos se ven una vez y se olvida
 
 1. ~~8.1 Los pilotos responden a tus órdenes~~ ✅ y ~~10.1 Lobato por códigos~~ ✅.
 2. **11.1 Safety Car `.glb`** (P/M; ~~12.1 Cascos~~ ✅): lo que más luce de lo visual. Falta el modelo: lo consigue el dueño del repo.
-3. **9.2 Titulares** y **9.3 La directiva te escribe** (P): salen casi gratis de `summary.ts` y `objectives.ts`.
+3. ~~9.2 Titulares~~ ✅ y ~~9.3 La directiva te escribe~~ ✅.
 4. **12.2 Planos técnicos en Desarrollo** (M).
 5. **9.1 Rueda de prensa**, **8.2 Moral y desobediencia** y **8.3 Rivalidades** (M/G): lo más profundo, cambia la
    simulación; medirlo con un script antes de darlo por bueno.
@@ -74,11 +79,11 @@ El juego es una PWA (`public/sw.js`) y se juega en el móvil: cada `.glb` y cada
 - Entre sesiones, una o dos preguntas con respuestas a elegir («¿Hay favoritismo hacia tu primer piloto?»). Cada
   respuesta toca la moral de los pilotos (8.2) o la paciencia de la directiva. Mejor después de 8.2.
 
-### 9.2 Titulares tras la carrera (P)
+### 9.2 Titulares tras la carrera (P) · ✅ Hecho
 - Una portada de prensa ficticia («Golpe de estrategia en Silverstone», «El muro, otra vez en entredicho»), generada
   desde el resumen de carrera que ya existe (`summary.ts`). Periódico inventado, sin cabeceras reales.
 
-### 9.3 La directiva te escribe (P)
+### 9.3 La directiva te escribe (P) · ✅ Hecho
 - Mensajes cortos del jefe tras cada gran premio, a partir de los objetivos (`objectives.ts`: «Esperaba el podio con
   este coche»).
 

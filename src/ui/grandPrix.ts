@@ -6,6 +6,7 @@ import { helmetSvg, circuitSvg } from "./visual";
 import { resultsTable, mineHeadline, type Nav } from "./hubs";
 import { podiumHtml } from "./podium";
 import { raceSummaryHtml, drawRaceSummary, photosHtml } from "./summary";
+import { headlines, portadaHtml } from "./prensa";
 import { newWeekend, type WeekendState } from "../sim/weekend";
 import type { SeasonState, GpWeather } from "../sim/season";
 import type { Scenario } from "../sim/weather";
@@ -135,6 +136,7 @@ export function gpDoneScreen(nav: Nav, s: SeasonState, again: () => void, other:
     ${rows.length ? podiumHtml(rows, `Podio · ${short(c.gp)}`, s.playerTeam) : ""}
     ${rows.length ? mineHeadline("RACE", rows, s.playerTeam, r.raceTable) : ""}
     ${rows.length ? `<div class="panel"><div class="hd"><span class="t">🏁 Carrera</span></div><div class="bd" style="padding:0">${resultsTable("RACE", rows, s.playerTeam, r.raceTable)}</div></div>` : ""}
+    ${r.summary ? portadaHtml(headlines(r.summary, rows, c.gp, s.playerTeam), "Edición del lunes") : ""}
     ${r.summary ? `<div class="sumwrap" id="gpsum">${r.summary.photos?.length ? photosHtml(r.summary.photos) : ""}${raceSummaryHtml(r.summary)}</div>` : ""}
     ${r.sprint ? `<details class="fold panel"><summary>Sprint</summary>${resultsTable("SPRINT", r.sprint, s.playerTeam, r.sprintTable)}</details>` : ""}
     ${r.q ? `<details class="fold panel"><summary>Clasificación</summary>${resultsTable("Q", r.q, s.playerTeam)}</details>` : ""}
