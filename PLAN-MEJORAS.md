@@ -43,6 +43,10 @@ Ya hecho de lo que viene ahora (noviembre de 2026):
   Lobato recibe `WeekendState.memo`. Probar con `scripts/hitos.ts`.
   De paso: en carrera, una vuelta cortada por una bandera roja o una salida parada (de unos segundos) contaba como
   la mejor (`raceLine`, ahora con un mínimo del 85 % de `lapRefRace`); salía en la vuelta rápida del resumen.
+- **10.3 Segundo comentarista, 10.4 Público y sonido según el circuito y 12.2 Planos técnicos** (sin tocar la
+  simulación): `src/ui/experta.ts` (Begoña Arrieta, `Prefs.experta`, voz «experta» en `audio.ts`), el público de casa
+  (`isLocal` y el himno en `sessionView.ts`, `audio.anthem`, `FAN_U`/`loadFanFlag` en `map3d.ts`) y
+  `src/ui/planos.ts` (`devPlanoHtml`, `setupPlanoHtml`).
 - **Asfalto sin baldosas:** la textura de 2,7 m se repetía y se veía una cuadrícula. `asfalto.webp` aplanada (paso
   alto sin costuras, `python3 scripts/assets.py --aplanar`) y el árido leído dos veces en el sombreador (la segunda
   girada 37° y a otra escala) mezcladas con ruido (`ASF_R` en `map3d.ts`). Una lectura de textura más en la pista.
@@ -57,9 +61,9 @@ Primero lo que se nota en cada carrera; los gráficos se ven una vez y se olvida
 1. ~~8.1 Los pilotos responden a tus órdenes~~ ✅ y ~~10.1 Lobato por códigos~~ ✅.
 2. ~~11.1 Safety Car `.glb`~~ ✅ y ~~12.1 Cascos~~ ✅.
 3. ~~9.2 Titulares~~ ✅ y ~~9.3 La directiva te escribe~~ ✅.
-4. **12.2 Planos técnicos en Desarrollo** (M).
+4. ~~12.2 Planos técnicos en Desarrollo~~ ✅.
 5. ~~9.1 Rueda de prensa, 8.2 Moral y desobediencia y 8.3 Rivalidades~~ ✅.
-6. ~~9.4 a 9.6 Ritual de la temporada~~ ✅ y ~~10.2~~ ✅; quedan **10.3 y 10.4** y **13 Gestión**.
+6. ~~9.4 a 9.6 Ritual de la temporada~~ ✅, ~~10.2 a 10.4~~ ✅; queda **13 Gestión**.
 7. **11.2 a 11.4 Árboles, fachadas y mecánicos**: para pulir al final.
 
 ### Presupuesto de assets (vale para los bloques 11 y 12)
@@ -131,11 +135,11 @@ El juego es una PWA (`public/sw.js`) y se juega en el móvil: cada `.glb` y cada
 - Que recuerde lo que pasó antes («Recordemos que en Mónaco se le escapó por la estrategia», «es su tercera pole
   seguida»). Usa el historial de 9.4.
 
-### 10.3 Un segundo comentarista (M)
+### 10.3 Un segundo comentarista (M) · ✅ Hecho
 - Un experto técnico en el box que explique la estrategia («Están pensando en el undercut»). Personaje inventado, no
   una persona real.
 
-### 10.4 Público y sonido según el circuito (P/M)
+### 10.4 Público y sonido según el circuito (P/M) · ✅ Hecho
 - Más ruido cuando adelanta el piloto local, banderas en las gradas del 3D (texturas de `public/assets/flags`) y un
   himno inventado en el podio (`audio.ts`, sin archivos).
 
@@ -174,7 +178,7 @@ no de crearlos. Respetar el presupuesto de assets.
   falta dibujar ninguno a mano. Que el casco del 3D (`car3d.ts`) use los mismos colores.
 - Sale en muchas pantallas (`hubs.ts`, `podium.ts`, `sessionView.ts`, `grandPrix.ts`, `scenarios.ts`).
 
-### 12.2 Planos técnicos en Desarrollo y Reglajes (M)
+### 12.2 Planos técnicos en Desarrollo y Reglajes (M) · ✅ Hecho
 - Un SVG del coche visto desde arriba y de lado, como un plano, en el panel «Desarrollo del coche» (`hubs.ts`): se
   ilumina la pieza que mejoras (alerón, suelo, motor, fiabilidad) y cuándo llega.
 - En «Reglajes», el mismo plano de lado con la altura y el ángulo del alerón que cambian con los valores.

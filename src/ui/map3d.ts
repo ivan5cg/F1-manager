@@ -1008,7 +1008,7 @@ U.uS = { value: 1 };
 const PROP_VH = `attribute vec3 aAnc, aSd; attribute float aLw; attribute vec4 aPat; uniform float uW, uS, uTime; varying vec4 vPat; varying vec2 vWXZ;`;
 const PROP_VB = `vec3 transformed = aAnc + aSd * (uW * aLw) + position * uS; vPat = aPat; vWXZ = transformed.xz;
   if (abs(aPat.x - 11.0) < 0.5) transformed += aSd * sin(uTime * 7.0 - aPat.z * 4.0 + aPat.y) * 0.22 * aPat.z * uS; // banderas del público`;
-const PROP_FH = GLSL_NOISE + `uniform float uFlood, uTexR; uniform sampler2D uCloud, uSigns, uFacDet, uWallDet; varying vec4 vPat; varying vec2 vWXZ;
+const PROP_FH = GLSL_NOISE + `uniform float uFlood, uTexR, uFanK; uniform sampler2D uCloud, uSigns, uFacDet, uWallDet, uFanFlag; varying vec4 vPat; varying vec2 vWXZ;
 // al anochecer las ventanas se encienden poco a poco: cada una a partir de su propio umbral
 float winOn(vec2 c){ return smoothstep(0.0, 0.06, uFlood * 1.3 - 0.05 - h21(c + 7.31) * 0.9) * 0.8; }
 // lo mismo de media, para cuando las ventanas no se distinguen
@@ -1105,18 +1105,37 @@ if (P > 0.5 && P < 1.5) {
 } else if (P < 10.5) {
   col = vec3(1.0); glowC = vec3(1.0, 0.96, 0.88) * (0.6 + 6.0 * uFlood);
 } else if (P < 11.5) {
-  // bandera de aficionado: tres franjas de colores al azar
+  // bandera de aficionado: la del país del circuito (más o menos la mitad) o tres franjas de colores al azar
   float band = floor(clamp(uv.x, 0.0, 0.999) * 3.0);
   col = SR(hsv(h21(vec2(sd, band)), 0.75, 0.9)); if (h21(vec2(band, sd + 3.0)) > 0.7) col = SR(vec3(0.95));
+  if (h21(vec2(sd, 9.1)) < 0.55 * uFanK) col = SR(texture2D(uFanFlag, vec2(clamp(uv.x, 0.0, 1.0), 1.0 - clamp(uv.y, 0.0, 1.0))).rgb);
   rough = 0.9;
 }
 col *= 1.0 - 0.35 * texture2D(uCloud, vWXZ / (2.0 * uTexR) + 0.5).g;
 vec4 diffuseColor = vec4(col, opacity);
 `;
+// bandera del país del circuito para el público de las gradas (public/assets/flags, por el emoji de su bandera)
+const FAN_U = { tex: { value: new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1) }, k: { value: 0 } };
+FAN_U.tex.value.needsUpdate = true;
+function loadFanFlag(emoji) {
+  FAN_U.k.value = 0;
+  const code = [...(emoji ?? "")].map((ch) => ch.codePointAt(0) - 0x1f1e6).filter((x) => x >= 0 && x < 26).map((x) => String.fromCharCode(97 + x)).join("");
+  if (code.length !== 2) return;
+  const img = new Image();
+  img.onload = () => {
+    if (!alive3d) return;
+    const cv = document.createElement("canvas"); cv.width = 128; cv.height = 96;
+    cv.getContext("2d").drawImage(img, 0, 0, 128, 96);
+    const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.minFilter = THREE.LinearMipmapLinearFilter;
+    const old = FAN_U.tex.value; FAN_U.tex.value = t; old.dispose(); FAN_U.k.value = 1;
+  };
+  img.src = ASSET(`flags/${code}.svg`);
+}
+loadFanFlag(track.def.bandera);
 function propMat() {
   const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, metalness: 0, flatShading: true, side: THREE.DoubleSide });
   m.onBeforeCompile = (sh) => {
-    Object.assign(sh.uniforms, { uW: U.uW, uS: U.uS, uTime: U.uTime, uFlood: U.uFlood, uCloud: U.uCloud, uTexR: U.uTexR, uSigns: { value: signTex }, uFacDet: DET_U.fachada, uWallDet: DET_U.hormigon });
+    Object.assign(sh.uniforms, { uW: U.uW, uS: U.uS, uTime: U.uTime, uFlood: U.uFlood, uCloud: U.uCloud, uTexR: U.uTexR, uSigns: { value: signTex }, uFacDet: DET_U.fachada, uWallDet: DET_U.hormigon, uFanFlag: FAN_U.tex, uFanK: FAN_U.k });
     sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\n" + PROP_VH).replace("#include <begin_vertex>", PROP_VB);
     sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\n" + PROP_FH)
       .replace("vec4 diffuseColor = vec4( diffuse, opacity );", PROP_FB)

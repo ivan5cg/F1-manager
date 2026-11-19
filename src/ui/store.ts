@@ -234,6 +234,8 @@ export interface Prefs {
   mapa3d?: boolean;
   /** Comentarios de Antonio Lobato en la sesión (por defecto, sí). */
   lobato?: boolean;
+  /** Comentarios de la experta técnica (Begoña Arrieta) en la sesión (por defecto, sí). */
+  experta?: boolean;
   /** Rótulos de tele sobre el mapa 3D: sectores, récords, batallas, neumáticos y radio (por defecto, sí). */
   rotulos?: boolean;
   /** Medidor de rendimiento del mapa 3D (fps, calidad, triángulos). */
@@ -270,6 +272,7 @@ export function loadPrefs(): Prefs {
       if (SPEEDS.includes(o.velSesion as number)) p.velSesion = o.velSesion as number;
       if (o.mapa3d === true) p.mapa3d = true;
       if (o.lobato === false) p.lobato = false;
+      if (o.experta === false) p.experta = false;
       if (o.rendimiento3d === true) p.rendimiento3d = true;
       if (o.rotulos === false) p.rotulos = false;
       if ([0, 1, 2, 3].includes(o.calidad3d as number)) p.calidad3d = o.calidad3d;

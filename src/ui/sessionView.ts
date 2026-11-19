@@ -16,6 +16,7 @@ import { Rng } from "../sim/rng";
 import { snapshotSession, SessionSnapshot } from "../sim/snapshot";
 import { stopOptions, undercut, gapHistory, pitLoss, StopOption } from "../sim/pitwall";
 import { createLobato } from "./lobato";
+import { createExperta, EXPERTA } from "./experta";
 import { createVoces, voiceOf, Orden } from "./voces";
 import { moralLabel } from "../sim/morale";
 import { createAudio, type CarHeard, type PitStopHeard } from "./audio";
@@ -81,6 +82,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   /** Antonio Lobato comenta la sesión (solo interfaz: no cambia nada de la simulación). */
   const lob = createLobato(sess, def.gp ?? def.nombre, scn ? undefined : wk.st.memo);
   const LOB_TAB = "Antonio Lobato";
+  const exp = createExperta(sess), EXP_TAB = EXPERTA;
   /** La radio de los pilotos, cada uno con su carácter, y las radios míticas (solo interfaz). */
   const voces = createVoces(sess);
   /** La respuesta del piloto a una orden del muro: sale en la radio como cualquier otro mensaje suyo. */
@@ -276,9 +278,12 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     else if (temp.left) lh = noteHtml(temp.left, false);
     else {
       const e = [...sess.events].reverse().find((x) => x.kind === "control" || x.kind === "weather");
-      const com = prefs.lobato !== false ? lob.list[lob.list.length - 1] : undefined;
+      const cl = prefs.lobato !== false ? lob.list[lob.list.length - 1] : undefined;
+      const ce = prefs.experta !== false ? exp.list[exp.list.length - 1] : undefined;
+      // el comentario más nuevo de los dos (Lobato o la experta)
+      const com = cl && ce ? (ce.t > cl.t ? ce : cl) : cl ?? ce;
       // el comentario tapa el aviso solo si es más nuevo y el aviso ya lleva unos segundos a la vista
-      if (com && (!e || (com.t >= e.t && now - lastCtlReal > 5000))) lh = rmHtml(`🎙️ ${LOB_TAB}`, com.text, "lob");
+      if (com && (!e || (com.t >= e.t && now - lastCtlReal > 5000))) lh = com === ce ? rmHtml(`🔧 ${EXP_TAB}`, com.text, "exp") : rmHtml(`🎙️ ${LOB_TAB}`, com.text, "lob");
       else if (e) lh = rmHtml(TAB[e.kind], e.text, clsFor(e.text, e.kind));
     }
     L.classList.toggle("show", !!pend.left);
@@ -484,6 +489,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     bannerFor(e);
     if (e.kind === "control" || e.kind === "weather") lastCtlReal = performance.now();
     if (prefs.lobato !== false) lob.onEvent(e);
+    if (prefs.experta !== false) exp.onEvent(e);
     soundEvent(e);
     tvRadio(e);
     const mineEv = isMineEv(e) && e.kind !== "control" && e.kind !== "weather";
@@ -2058,6 +2064,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     type Row = { t: number; lap: number; text: string; tab: string; cls: string };
     const rows: Row[] = sess.events.slice(-150).map((e) => ({ t: e.t, lap: e.lap, text: withOrig(e), tab: tabOf(e), cls: e.mitica ? "mit" : e.kind === "control" && /ROJA/.test(e.text) ? "red" : e.kind === "control" || e.kind === "weather" ? "ctl" : "" }));
     if (prefs.lobato !== false) for (const c of lob.list) rows.push({ t: c.t + 1e-6, lap: c.lap, text: c.text, tab: LOB_TAB, cls: "lob" });
+    if (prefs.experta !== false) for (const c of exp.list) rows.push({ t: c.t + 2e-6, lap: c.lap, text: c.text, tab: EXP_TAB, cls: "exp" });
     rows.sort((a, b) => b.t - a.t);
     open(`<span class="tab">Radio y dirección de carrera</span><div style="margin:6px 0;display:flex;flex-direction:column;gap:3px">${rows.slice(0, 200).map((e) => rmHtml(`${race ? "V" + e.lap : fmtClock(e.t)} · ${e.tab}`, e.text, e.cls)).join("") || "<div class='dim'>Sin mensajes.</div>"}</div><button data-close style="width:100%">Cerrar</button>`, () => {});
   }
@@ -2096,6 +2103,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       <h2>Sonido</h2>
       <label class="optrow"><input type="checkbox" id="psnd" ${prefs.sonido.sonido ? "checked" : ""}><span><b>Sonido</b><br><span class="small dim">Motores, público, lluvia, viento, paradas, semáforos y choques. Empieza al tocar la velocidad, el 3D o la salida.</span></span></label>
       <label class="optrow"><input type="checkbox" id="pvoz" ${prefs.sonido.voz ? "checked" : ""}><span><b>Voz en la radio</b><br><span class="small dim">Los mensajes importantes de tus pilotos y del ingeniero, en voz alta (uno cada 8 s como mucho), con la voz en español del dispositivo.${audio.hasVoice() ? "" : " <span class=\"yellow\">Este dispositivo no tiene voz en español: sin voz.</span>"}</span></span></label>
+      <label class="optrow"><input type="checkbox" id="pexp" ${prefs.experta !== false ? "checked" : ""}><span><b>Comentarios de la experta técnica</b><br><span class="small dim">${EXPERTA}, ingeniera de pista retirada (personaje inventado), explica la estrategia: undercuts, paradas con coche de seguridad, gomas y lluvia. Habla menos que Lobato y con su propia voz.</span></span></label>
       <label class="optrow"><input type="checkbox" id="pvozl" ${prefs.sonido.vozLobato ? "checked" : ""}><span><b>Voz de Lobato</b><br><span class="small dim">Sus comentarios en voz alta, con otra voz.</span></span></label>
       ${([["volumen", "Volumen general"], ["motores", "Motores"], ["ambiente", "Ambiente"], ["radio", "Radio"]] as const).map(([k, n]) => `<label class="optrow volrow"><span class="grow">${n}</span><input type="range" min="0" max="100" step="5" data-vol="${k}" value="${Math.round(prefs.sonido[k] * 100)}" aria-label="${n}"></label>`).join("")}
       <h2>Mapa 3D</h2>
@@ -2111,6 +2119,8 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       el.querySelector<HTMLButtonElement>("#pnone")!.onclick = () => all(false);
       const lb = el.querySelector<HTMLInputElement>("#plob")!;
       lb.onchange = () => { prefs.lobato = lb.checked; savePrefs(prefs); lastLeft = ""; renderMessages(); };
+      const pe = el.querySelector<HTMLInputElement>("#pexp")!;
+      pe.onchange = () => { prefs.experta = pe.checked; savePrefs(prefs); lastLeft = ""; renderMessages(); };
       const pr = el.querySelector<HTMLInputElement>("#prot")!;
       pr.onchange = () => { prefs.rotulos = pr.checked; savePrefs(prefs); };
       const ps = el.querySelector<HTMLInputElement>("#psnd")!;
@@ -2216,7 +2226,10 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   // tenga cerca en la pista. Los avisos de la sesión (adelantamientos, paradas, choques, semáforos) suenan aparte.
   const QUIET_FRAME = { running: false, speed: 1, simDt: 0, cars: [], crowd: 0, rain: 0, wind: 0, stops: [] };
   const hush = () => { audio.frame(QUIET_FRAME, performance.now()); audio.stopVoice(); };
-  let lobSeen = lob.list.length;
+  let lobSeen = lob.list.length, expSeen = exp.list.length, anthemDone = false;
+  // el público: el piloto de casa es el que tiene la bandera del circuito
+  const isLocal = (c: Car) => !!def.bandera && driverFlag(c.d.nombre) === def.bandera;
+  const flagCode = (emoji: string) => [...emoji].map((ch) => ch.codePointAt(0)! - 0x1f1e6).filter((x) => x >= 0 && x < 26).map((x) => String.fromCharCode(97 + x)).join("");
   let lastLights = 0, wasChequered = sess.chequered;
   const fxSeen = new Map<number, unknown>(sess.cars.map((c) => [c.id, c.fx]));
   let heardNow: CarHeard[] = [];
@@ -2229,7 +2242,12 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       const tone = e.voz ? voiceOf(c.d.nombre, /Ingeniero de/.test(e.text)) : undefined;
       audio.radio(e.voz ? plain(e.text).replace(/^[^:"]{1,40}:\s*/, "").replace(/"/g, "") : plain(e.text), !!(e.important || e.pause), tone);
     }
-    if (e.kind === "info" && /adelanta a/.test(e.text)) audio.cheer(/P[1-3]\b/.test(e.text) ? 0.75 : 0.5);
+    if (e.kind === "info" && /adelanta a/.test(e.text)) {
+      // el piloto de casa, con el público en pie (10.4)
+      const c = e.carId !== undefined ? sess.carById(e.carId) : undefined;
+      if (c && isLocal(c)) audio.cheer(1, 4);
+      else audio.cheer(/P[1-3]\b/.test(e.text) ? 0.75 : 0.5);
+    }
     else if (e.kind === "pit" && /entra a boxes/.test(e.text) && !view3d && e.carId !== undefined && sess.carById(e.carId).player) audio.pitIn();
   }
   function soundFrame(now: number, simDt: number) {
@@ -2261,6 +2279,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     heardNow = cars;
     // Lobato en voz alta (si está activado): su último comentario
     if (lob.list.length > lobSeen) { lobSeen = lob.list.length; if (prefs.lobato !== false) audio.lobato(plain(lob.list[lob.list.length - 1].text)); }
+    if (exp.list.length > expSeen) { expSeen = exp.list.length; if (prefs.experta !== false) audio.experta(plain(exp.list[exp.list.length - 1].text)); }
     audio.frame({ running, speed: ff ? FF_SPEED : speed, simDt, cars, crowd, rain, wind, stops }, now);
     if (!running) return;
     // semáforos: un pitido por cada luz que se enciende; al apagarse, silencio y rugido
@@ -2268,7 +2287,16 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     if (lights > lastLights) audio.light();
     else if (lastLights > 0 && lights === 0 && sess.t > 0) audio.lightsOut();
     lastLights = lights;
-    if (sess.chequered && !wasChequered) audio.cheer(1, 5);
+    if (sess.chequered && !wasChequered) {
+      const w = race ? sess.order()[0] : undefined;
+      audio.cheer(1, w && isLocal(w) ? 10 : 5); // si gana el de casa, el circuito se viene abajo
+    }
+    // al acabar la carrera, el himno (inventado) del país del ganador
+    if (race && sess.finished && !anthemDone) {
+      anthemDone = true;
+      const code = flagCode(driverFlag(sess.order()[0]?.d.nombre ?? ""));
+      if (code) setTimeout(() => audio.anthem(code), 1200);
+    }
     wasChequered = sess.chequered;
     // choques: golpe seco y crujido, según lo lejos que pille
     for (const c of sess.cars) {
@@ -2399,6 +2427,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
         lastUi = now;
         updateGhosts(); updateRainAlert(); fastestLapCheck();
         if (started && !paused && prefs.lobato !== false) lob.tick();
+        if (started && !paused && prefs.experta !== false) exp.tick();
         if (started && !paused) for (const l of voces.tick()) sess.log({ kind: "radio", carId: l.carId, text: l.text, important: l.important, voz: true, mitica: l.mitica });
         if (now >= towerAnimUntil) renderTower();
         renderTop(); renderMessages(); renderSel();

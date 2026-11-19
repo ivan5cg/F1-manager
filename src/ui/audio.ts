@@ -144,18 +144,19 @@ export function createAudio(initial: SoundPrefs) {
   }
   synth?.getVoices(); // algunos navegadores las cargan la primera vez que se piden
   /** Lee un texto: «radio» (tus pilotos y el ingeniero, como mucho uno cada 8 s) o «lobato» (otra voz). */
-  function speak(text: string, who: "radio" | "lobato", tone?: { pitch: number; rate: number }): boolean {
-    if (!synth || !prefs.sonido || (who === "radio" ? !prefs.voz : !prefs.vozLobato)) return false;
+  function speak(text: string, who: "radio" | "lobato" | "experta", tone?: { pitch: number; rate: number }): boolean {
+    if (!synth || !prefs.sonido || (who === "radio" ? !prefs.voz : !prefs.vozLobato)) return false; // la experta, con la voz de los comentaristas
     const now = performance.now();
     if (synth.speaking || synth.pending || now - lastSpeak < 8000) return false;
     const vs = spanishVoices();
     if (!vs.length) return false;
     const u = new SpeechSynthesisUtterance(text);
     // Lobato, con otra voz si la hay (y si no, más grave y más deprisa)
-    u.voice = who === "lobato" ? vs[1] ?? vs[0] : vs[0];
+    // la experta, con una tercera voz si la hay (y si no, más aguda y más pausada)
+    u.voice = who === "lobato" ? vs[1] ?? vs[0] : who === "experta" ? vs[2] ?? vs[0] : vs[0];
     u.lang = u.voice.lang;
-    u.rate = who === "lobato" ? 1.12 : 1.05;
-    u.pitch = who === "lobato" && !vs[1] ? 0.8 : 1;
+    u.rate = who === "lobato" ? 1.12 : who === "experta" ? 0.98 : 1.05;
+    u.pitch = who === "lobato" && !vs[1] ? 0.8 : who === "experta" && !vs[2] ? 1.2 : 1;
     // cada piloto con su tono (voces.ts)
     if (tone) { u.pitch = tone.pitch; u.rate = tone.rate; }
     u.volume = Math.max(0.05, prefs.volumen * (who === "radio" ? prefs.radio : prefs.ambiente));
@@ -198,6 +199,49 @@ export function createAudio(initial: SoundPrefs) {
     g.gain.setValueAtTime(0, when); g.gain.linearRampToValueAtTime(gain, when + 0.008); g.gain.exponentialRampToValueAtTime(0.0008, when + dur);
     o.connect(g).connect(bus); o.start(when); o.stop(when + dur + 0.05);
   }
+
+  /**
+   * Himno inventado (10.4): una fanfarria de metales de unos 7 s, distinta para cada país (sale de su código: tono,
+   * compás y frases). No imita ningún himno de verdad: frases de tónica, subdominante y dominante de una escala mayor.
+   */
+  function anthem(code: string) {
+    if (!ctx) return;
+    let h = 7; for (const ch of code) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+    const rnd = () => ((h = (h * 1103515245 + 12345) >>> 0) / 4294967296);
+    const root = 196 * Math.pow(2, Math.floor(rnd() * 7) / 12); // de sol a re
+    const beat = 60 / (72 + Math.floor(rnd() * 24));
+    const MAJ = [0, 2, 4, 5, 7, 9, 11, 12, 14, 16];
+    const f = (deg: number, oct = 0) => root * Math.pow(2, (MAJ[((deg % 7) + 7) % 7] + 12 * (Math.floor(deg / 7) + oct)) / 12);
+    // cuatro frases de dos compases: I, IV, V, I; la melodía camina por los grados del acorde con algún paso
+    const chords = [0, 3, 4, 0];
+    const bus = c2(0.8);
+    let t = ctx.currentTime + 0.15;
+    // redoble de timbal al empezar
+    for (let i = 0; i < 6; i++) tone(bus, t + i * 0.06, 0.2, 98, 0.35 - i * 0.03, "sine", 70);
+    t += 0.45;
+    for (const ch of chords) {
+      // acorde de metales y bajo
+      for (const d of [0, 2, 4]) brass(bus, t, beat * 4, f(ch + d, -1), 0.06);
+      tone(bus, t, beat * 4, f(ch, -2), 0.18, "triangle");
+      // melodía: cuatro notas por frase, con un ritmo de la casa (largas y cortas)
+      const rhythm = [[1, 1, 1, 1], [1.5, 0.5, 1, 1], [2, 1, 0.5, 0.5], [1, 0.5, 0.5, 2]][Math.floor(rnd() * 4)];
+      let tt = t;
+      for (const len of rhythm) { brass(bus, tt, beat * len * 0.95, f(ch + [0, 2, 4, 7, 5][Math.floor(rnd() * 5)]), 0.11); tt += beat * len; }
+      t += beat * 4;
+    }
+    brass(bus, t, beat * 3, f(7), 0.12); for (const d of [0, 2, 4]) brass(bus, t, beat * 3, f(d, -1), 0.06);
+    tone(bus, t, beat * 3, f(0, -2), 0.2, "triangle");
+  }
+  /** Una nota de metal: diente de sierra por un paso bajo que se abre al atacar. */
+  function brass(bus: GainNode, when: number, dur: number, fq: number, gain: number) {
+    const c = ctx!, o = c.createOscillator(), lp = c.createBiquadFilter(), g = c.createGain();
+    o.type = "sawtooth"; o.frequency.setValueAtTime(fq, when);
+    lp.type = "lowpass"; lp.Q.value = 0.7; lp.frequency.setValueAtTime(400, when); lp.frequency.linearRampToValueAtTime(2200, when + 0.08); lp.frequency.exponentialRampToValueAtTime(1100, when + dur);
+    g.gain.setValueAtTime(0, when); g.gain.linearRampToValueAtTime(gain, when + 0.05); g.gain.setValueAtTime(gain * 0.85, when + Math.max(0.06, dur - 0.08)); g.gain.linearRampToValueAtTime(0, when + dur);
+    o.connect(lp).connect(g).connect(bus); o.start(when); o.stop(when + dur + 0.05);
+  }
+  /** Un bus aparte para el himno (por el de efectos), con su volumen. */
+  function c2(gain: number) { const g = ctx!.createGain(); g.gain.value = gain; g.connect(sfxBus); return g; }
 
   /** Pistola neumática: un «brrrt» corto (0,15 s) con su chasquido. */
   function gun(when: number, gain: number, pan: number) {
@@ -310,6 +354,8 @@ export function createAudio(initial: SoundPrefs) {
       if (t < cheerUntil && cheerK >= k) { cheerUntil = Math.max(cheerUntil, t + dur); return; }
       cheerK = k; cheerUntil = t + dur;
     },
+    /** Himno inventado del país (código de dos letras) en el podio. */
+    anthem(code: string) { if (ctx && want) anthem(code); },
     /** Un semáforo que se enciende. */
     light() { if (ctx && want) tone(sfxBus, ctx.currentTime, 0.22, 1046, 0.22, "sine"); },
     /** Se apagan los semáforos: medio segundo de silencio y el rugido de la salida. */
@@ -358,6 +404,7 @@ export function createAudio(initial: SoundPrefs) {
     },
     /** Un comentario de Lobato, en voz alta si está activado (con su propia voz). */
     lobato(text: string) { speak(text, "lobato"); },
+    experta(text: string) { speak(text, "experta"); },
     /** Corta la voz (al ocultar la app). */
     stopVoice() { if (synth && (synth.speaking || synth.pending)) synth.cancel(); },
     /** ¿Hay voces en español en este dispositivo? */
