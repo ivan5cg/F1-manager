@@ -1,8 +1,8 @@
 // Comentarios de la retransmisión al estilo de Antonio Lobato. Solo interfaz: no toca la
 // simulación (usa Math.random, no el generador de la sesión), así que no cambia ningún resultado.
-// Reacciona a los mensajes de la sesión (adelantamientos, banderas, paradas, pole...) y, en carrera,
+// Reacciona al código de los mensajes de la sesión (adelantamientos, banderas, paradas, pole...) y, en carrera,
 // comenta de vez en cuando cómo va la cosa: el líder, las peleas, tus pilotos, las vueltas que quedan.
-import { Session, Car, RaceEvent, isRaceKind, isQualiKind } from "../sim/session";
+import { Session, Car, RaceEvent, isRaceKind, isQualiKind, fmt } from "../sim/session";
 import { driverFlag } from "./visual";
 
 export interface Comment { t: number; lap: number; text: string }
@@ -24,7 +24,7 @@ export function createLobato(sess: Session, gp: string) {
   let lastText = "";
   let lastLapTick = 0;
   let saidStart = false, saidHalf = false, saidFive = false, saidLast = false;
-  const byAbrev = (a: string) => sess.cars.find((c) => c.d.abrev === a);
+  const p1Said = new Map<number, number>(); // el mejor tiempo con el que ya se dijo que cada uno se ponía primero
 
   function say(text: string, big = false) {
     const now = performance.now();
@@ -39,134 +39,140 @@ export function createLobato(sess: Session, gp: string) {
     return c;
   }
 
-  /** Reacciona a un mensaje de la sesión. Devuelve el comentario si lo hay. */
+  /**
+   * Reacciona a un mensaje de la sesión por su código (RaceEvent.code), sin leer el texto: así un «P15» no se toma
+   * por un «P1» ni un cambio de redacción en la simulación le deja mudo. Devuelve el comentario si lo hay.
+   */
   function onEvent(e: RaceEvent): Comment | null {
-    const t = e.text;
-    let m: RegExpMatchArray | null;
-    if (e.kind === "control") {
-      if (/COCHE DE SEGURIDAD VIRTUAL/.test(t)) return say(pick([
+    if (e.voz || !e.code) return null;
+    const c = e.carId !== undefined ? sess.carById(e.carId) : undefined;
+    const o = e.other !== undefined ? sess.carById(e.other) : undefined;
+    const partName = sess.parts[sess.part]?.name ?? "";
+    switch (e.code) {
+      case "vsc": return say(pick([
         "¡Coche de seguridad virtual! Todos a levantar el pie... y en el muro, a echar cuentas: ¿paramos o no paramos?",
         "Virtual safety car. Atención, que esto es media parada gratis para el que esté atento.",
         "¡VSC! Se congela la carrera, los huecos se mantienen. Ojo a los boxes ahora.",
       ]), true);
-      if (/COCHE DE SEGURIDAD —|Salida detrás del coche de seguridad/.test(t)) return say(pick([
+      case "sc": return say(pick([
         "¡Sale el coche de seguridad! Se agrupa todo el pelotón, ¡se acabaron las ventajas!",
         "¡Safety car! Madre mía, esto le da la vuelta a la carrera. ¡A boxes, a boxes, el que pueda!",
         "Coche de seguridad en pista. El que tenía la carrera controlada ya no la tiene, amigos.",
       ]), true);
-      if (/BANDERA ROJA/.test(t)) return say(pick([
+      case "roja": return say(pick([
         "¡Bandera roja! ¡Se para la carrera! Todos al pit-lane, esto es muy serio.",
         "¡Roja, roja! Carrera suspendida. Ahora a esperar y a cambiar neumáticos gratis.",
       ]), true);
-      if (/Relanzada|Fin del coche de seguridad virtual/.test(t)) return say(pick([
+      case "verde": return say(pick([
         "¡Bandera verde! ¡Vamos! ¡A pelear otra vez!",
         "¡Se relanza la carrera! El líder marca el ritmo... ¡y ya están todos con el cuchillo entre los dientes!",
         "¡Verde! Ojo a la primera curva, que aquí se pierde y se gana mucho.",
       ]), true);
-      if ((m = t.match(/POLE para (.+?) \((.+?)\)/))) {
-        const c = sess.cars.find((x) => x.d.nombre === m![1]);
-        const who = c ? nm(c) : m[1];
-        return say(c && spanish(c)
+      case "pole": {
+        if (!c) return null;
+        const who = nm(c);
+        return say(spanish(c)
           ? pick([`¡POLE! ¡POLE PARA ${who.toUpperCase()}! ¡Qué vuelta, qué vuelta! ¡Se me ponen los pelos de punta!`, `¡${who} se lleva la pole! ¡Qué barbaridad! ¡Esto es España, señores!`])
-          : pick([`¡Pole position para ${who}! Vuelta perfecta con el ${m[2]}.`, `¡${who}! ¡Qué vuelta! Mañana sale desde la primera posición.`, `${who} se lleva la pole. Una vuelta de esas que no se olvidan.`]), true);
+          : pick([`¡Pole position para ${who}! Vuelta perfecta con el ${c.team.nombre}.`, `¡${who}! ¡Qué vuelta! Mañana sale desde la primera posición.`, `${who} se lleva la pole. Una vuelta de esas que no se olvidan.`]), true);
       }
-      if ((m = t.match(/Eliminados en (\S+): (.*)/))) {
-        const out = m[2].split(/[,\s]+/).filter(Boolean).map((x) => { const c = byAbrev(x); return c ? sur(c) : x; });
+      case "eliminados": {
+        const outCars = sess.cars.filter((x) => x.eliminated && x.elimPart === sess.part);
+        const out = outCars.map(sur);
         const txt = out.length > 1 ? `${out.slice(0, -1).join(", ")} y ${out[out.length - 1]}` : out.join("");
-        const sp = out.length ? sess.cars.filter((c) => spanish(c) && out.includes(sur(c))) : [];
-        if (sp.length) return say(`Se acaba la ${m[1]}... y ${sp.map(nm).join(" y ")} se queda${sp.length > 1 ? "n" : ""} fuera. Qué pena, de verdad. Eliminados: ${txt}.`);
-        return say(pick([`Se acaba la ${m[1]} y se quedan fuera ${txt}. Duro, muy duro.`, `Final de la ${m[1]}. Fuera: ${txt}. Así de cruel es la clasificación.`]));
+        const sp = outCars.filter(spanish);
+        if (sp.length) return say(`Se acaba la ${partName}... y ${sp.map(nm).join(" y ")} se queda${sp.length > 1 ? "n" : ""} fuera. Qué pena, de verdad. Eliminados: ${txt}.`);
+        if (!out.length) return null;
+        return say(pick([`Se acaba la ${partName} y se quedan fuera ${txt}. Duro, muy duro.`, `Final de la ${partName}. Fuera: ${txt}. Así de cruel es la clasificación.`]));
       }
-      if ((m = t.match(/Empieza la (\S+)/))) return say(pick([
-        `¡Arranca la ${m[1]}! Semáforo verde al final del pit-lane.`,
-        `Empieza la ${m[1]}. Ahora sí, aquí no hay margen para el error.`,
+      case "empieza": return say(pick([
+        `¡Arranca la ${partName}! Semáforo verde al final del pit-lane.`,
+        `Empieza la ${partName}. Ahora sí, aquí no hay margen para el error.`,
       ]));
-      if (/^🏁 Bandera a cuadros/.test(t) && race) {
+      case "cuadros": {
+        if (!race) return null;
         const w = sess.order()[0];
         if (!w) return null;
         return say(spanish(w)
           ? pick([`¡¡${nm(w).toUpperCase()} GANA!! ¡¡GANA EN ${gp.replace(/^Gran Premio de /i, "").toUpperCase()}!! ¡No me lo puedo creer, señores!`, `¡Victoria de ${nm(w)}! ¡Qué carrera! ¡Esto es historia!`])
           : pick([`¡Bandera a cuadros! ¡${sur(w)} gana el ${gp}!`, `¡${sur(w)} cruza la meta y se lleva la victoria! Qué carrera nos ha dado ${gp.replace(/^Gran Premio de /i, "")}.`, `Victoria para ${sur(w)} con el ${w.team.nombre}. Impecable.`]), true);
       }
-      if ((m = t.match(/(\d+) s de sanción para (\w+): (.*)/))) {
-        const c = byAbrev(m[2]);
-        if (c) return say(/toque/.test(m[3])
-          ? pick([`¡Sanción para ${sur(c)}! ${m[1]} segundos por el toque. Los comisarios no perdonan.`, `${m[1]} segundos a ${sur(c)}. Lo han visto culpable, y con razón.`])
-          : /límites/.test(m[3]) ? pick([`¡${m[1]} segundos a ${sur(c)} por los límites de pista! Ya se lo habían avisado con la blanca y negra.`, `Sanción para ${sur(c)}: los límites de pista. Se veía venir.`])
-          : `Sanción para ${sur(c)}: ${m[1]} segundos. Eso le cuesta caro.`, true);
+      case "sancion": {
+        if (!c) return null;
+        const s = e.n ?? 5;
+        return say(e.motivo === "toque"
+          ? pick([`¡Sanción para ${sur(c)}! ${s} segundos por el toque. Los comisarios no perdonan.`, `${s} segundos a ${sur(c)}. Lo han visto culpable, y con razón.`])
+          : e.motivo === "limites" ? pick([`¡${s} segundos a ${sur(c)} por los límites de pista! Ya se lo habían avisado con la blanca y negra.`, `Sanción para ${sur(c)}: los límites de pista. Se veía venir.`])
+          : e.motivo === "insegura" ? `¡${s} segundos a ${sur(c)} por salida insegura! Le han soltado encima de otro coche.`
+          : `Sanción para ${sur(c)}: ${s} segundos. Eso le cuesta caro.`, true);
       }
-      if (/sin sanción, incidente de carrera/.test(t)) return say(pick(["Incidente de carrera, dicen los comisarios. Para mí también, sinceramente.", "Sin sanción. Son cosas de las carreras."]));
-      if ((m = t.match(/Bandera blanca y negra para (\w+)/))) { const c = byAbrev(m[1]); if (c) return say(`Bandera blanca y negra para ${sur(c)}. Una más y le cae sanción.`); }
-      if (/Los doblados pueden desdoblarse/.test(t)) return say("Los doblados pueden desdoblarse. Eso quiere decir que el coche de seguridad está a punto de irse.");
-      if (/El líder acelera: relanzada/.test(t)) return say(pick(["¡Acelera el líder! ¡Relanzada! ¡Agárrense!", "¡Y ahí va! ¡Ha elegido el momento! ¡Relanzada!"]), true);
-      if (/salida parada/.test(t)) return say("Se reanuda con salida parada desde la parrilla. ¡Otra salida! Esto es como empezar de cero.", true);
-      if (/Bandera amarilla/.test(t)) return say(pick(["Bandera amarilla. Algo ha pasado ahí, cuidado.", "Amarilla en ese sector. A levantar, que no se juegan la sanción."]));
-      if ((m = t.match(/(\w+) descalificado/))) { const c = byAbrev(m[1]); return say(`¡Descalificado ${c ? sur(c) : m[1]}! Error de libro: no ha usado los dos compuestos.`, true); }
-      if (/Vuelta anulada/.test(t) && (m = t.match(/a (\w+):/))) { const c = byAbrev(m[1]); if (c) return say(pick([`Le borran la vuelta a ${sur(c)}. Los límites de pista, ¡siempre los límites de pista!`, `¡Ay! Vuelta anulada a ${sur(c)}. Se ha pasado de la línea blanca.`])); }
-      return null;
-    }
-    if (e.kind === "weather") {
-      if (/Deja de llover/.test(t)) return say("Deja de llover. Ahora la gran pregunta: ¿cuándo se pasa a slicks? El que acierte, gana.");
-      if (/lluv|Lluv|llov|llueve/.test(t)) return say(pick([
+      case "sinSancion": return say(pick(["Incidente de carrera, dicen los comisarios. Para mí también, sinceramente.", "Sin sanción. Son cosas de las carreras."]));
+      case "blancaNegra": return c ? say(`Bandera blanca y negra para ${sur(c)}. Una más y le cae sanción.`) : null;
+      case "desdoblar": return say("Los doblados pueden desdoblarse. Eso quiere decir que el coche de seguridad está a punto de irse.");
+      case "liderAcelera": return say(pick(["¡Acelera el líder! ¡Relanzada! ¡Agárrense!", "¡Y ahí va! ¡Ha elegido el momento! ¡Relanzada!"]), true);
+      case "salidaParada": return say("Se reanuda con salida parada desde la parrilla. ¡Otra salida! Esto es como empezar de cero.", true);
+      case "banderaAmarilla": return say(pick(["Bandera amarilla. Algo ha pasado ahí, cuidado.", "Amarilla en ese sector. A levantar, que no se juegan la sanción."]));
+      case "descalificado": return c ? say(`¡Descalificado ${sur(c)}! Error de libro: no ha usado los dos compuestos.`, true) : null;
+      case "anulada": return c ? say(pick([`Le borran la vuelta a ${sur(c)}. Los límites de pista, ¡siempre los límites de pista!`, `¡Ay! Vuelta anulada a ${sur(c)}. Se ha pasado de la línea blanca.`])) : null;
+      case "seca": return say("Deja de llover. Ahora la gran pregunta: ¿cuándo se pasa a slicks? El que acierte, gana.");
+      case "lluvia": return say(pick([
         "¡Atención, que llega la lluvia! Esto puede ser una lotería, amigos.",
         "Lluvia en el radar. Aquí los grandes pilotos marcan la diferencia.",
         "¡Llueve! Y cuando llueve en la Fórmula 1, cualquier cosa puede pasar.",
       ]));
-      return null;
-    }
-    if (e.kind === "info" && (m = t.match(/(\w+) adelanta a (\w+) por la P(\d+)/))) {
-      const a = byAbrev(m[1]), b = byAbrev(m[2]), pos = Number(m[3]);
-      if (!a || !b) return null;
-      if (pos === 1 && race) return say(spanish(a)
-        ? pick([`¡¡${nm(a).toUpperCase()} AL FRENTE!! ¡Pasa a ${sur(b)} y es el nuevo líder! ¡Vamos, vamos!`, `¡Lo ha hecho! ¡${nm(a)} adelanta a ${sur(b)} y lidera el Gran Premio!`])
-        : pick([`¡Cambio de líder! ¡${sur(a)} pasa a ${sur(b)} y se pone primero!`, `¡Atención, atención! ¡${sur(a)} es el nuevo líder de la carrera!`, `¡Adelantamiento por el liderato! ${sur(a)} se va por delante de ${sur(b)}.`]), true);
-      if (spanish(a)) return say(pick([`¡Vamos, ${nm(a)}! ¡Se merienda a ${sur(b)}! Ya es ${pos}º.`, `¡Qué maniobra de ${nm(a)}! Pasa a ${sur(b)} y sube a la ${pos}ª posición.`]));
-      if (spanish(b)) return say(pick([`¡Ay, no! ${sur(a)} le pasa a ${nm(b)}. Pierde la ${pos}ª posición.`, `${nm(b)} no ha podido defenderse de ${sur(a)}. Qué pena.`]));
-      if (pos <= 3 || a.player || b.player) return say(pick([
-        `¡Adelantamiento! ${sur(a)} se mete por dentro y pasa a ${sur(b)}. Ya es ${pos}º.`,
-        `¡Qué valiente ${sur(a)}! Frena tardísimo y le quita la posición a ${sur(b)}.`,
-        `${sur(a)} se lleva por delante... ¡la posición, eh!, a ${sur(b)}. ${pos}º ahora.`,
-        sess.aidShort ? `¡Lo pasa! ${sur(a)} supera a ${sur(b)} con ${sess.aidShort === "DRS" ? "el DRS abierto" : "el modo adelantamiento"}.` : `¡Lo pasa! ${sur(a)} se tira por dentro y supera a ${sur(b)}.`,
-      ]));
-      return null;
-    }
-    if (e.kind === "incident") {
-      if ((m = t.match(/(\w+) (abandona|se queda fuera)/))) {
-        const c = byAbrev(m[1]);
+      case "adelanta": {
+        const a = c, b = o, pos = e.n;
+        if (!a || !b || pos === undefined) return null;
+        if (pos === 1 && race) return say(spanish(a)
+          ? pick([`¡¡${nm(a).toUpperCase()} AL FRENTE!! ¡Pasa a ${sur(b)} y es el nuevo líder! ¡Vamos, vamos!`, `¡Lo ha hecho! ¡${nm(a)} adelanta a ${sur(b)} y lidera el Gran Premio!`])
+          : pick([`¡Cambio de líder! ¡${sur(a)} pasa a ${sur(b)} y se pone primero!`, `¡Atención, atención! ¡${sur(a)} es el nuevo líder de la carrera!`, `¡Adelantamiento por el liderato! ${sur(a)} se va por delante de ${sur(b)}.`]), true);
+        if (spanish(a)) return say(pick([`¡Vamos, ${nm(a)}! ¡Se merienda a ${sur(b)}! Ya es ${pos}º.`, `¡Qué maniobra de ${nm(a)}! Pasa a ${sur(b)} y sube a la ${pos}ª posición.`]));
+        if (spanish(b)) return say(pick([`¡Ay, no! ${sur(a)} le pasa a ${nm(b)}. Pierde la ${pos}ª posición.`, `${nm(b)} no ha podido defenderse de ${sur(a)}. Qué pena.`]));
+        if (pos <= 3 || a.player || b.player) return say(pick([
+          `¡Adelantamiento! ${sur(a)} se mete por dentro y pasa a ${sur(b)}. Ya es ${pos}º.`,
+          `¡Qué valiente ${sur(a)}! Frena tardísimo y le quita la posición a ${sur(b)}.`,
+          `${sur(a)} se lleva por delante... ¡la posición, eh!, a ${sur(b)}. ${pos}º ahora.`,
+          sess.aidShort ? `¡Lo pasa! ${sur(a)} supera a ${sur(b)} con ${sess.aidShort === "DRS" ? "el DRS abierto" : "el modo adelantamiento"}.` : `¡Lo pasa! ${sur(a)} se tira por dentro y supera a ${sur(b)}.`,
+        ]));
+        return null;
+      }
+      case "abandono":
         if (!c) return null;
         return say(spanish(c)
           ? pick([`¡No, no, no! ¡${nm(c)} se retira! Qué mala suerte, de verdad.`, `Mal día para ${nm(c)}. Se acabó su carrera. Qué rabia.`])
           : pick([`¡Abandono de ${sur(c)}! Se acaba su carrera.`, `Fin de la carrera para ${sur(c)}. Hoy no era su día.`, `${sur(c)} para el coche. Malas noticias para el ${c.team.nombre}.`]), true);
-      }
-      if ((m = t.match(/Toque (?:entre )?(\w+)(?: y |–)(\w+)/))) {
-        const a = byAbrev(m[1]), b = byAbrev(m[2]);
-        if (a && b) return say(pick([`¡Contacto entre ${sur(a)} y ${sur(b)}! ¡Uy, uy, uy!`, `¡Se tocan ${sur(a)} y ${sur(b)}! A ver qué dicen los comisarios.`, `¡Toque! ${sur(a)} y ${sur(b)} se han rozado. Esto ha dolido.`]), true);
-      }
-      if ((m = t.match(/(\w+) y (\w+) se tocan/))) {
-        const a = byAbrev(m[1]), b = byAbrev(m[2]);
-        if (a && b) return say(`¡${sur(a)} y ${sur(b)} se tocan y se van largos! Por poco no acaban los dos fuera.`, true);
-      }
-      if ((m = t.match(/Pinchazo de (\w+)/))) { const c = byAbrev(m[1]); if (c) return say(`¡Pinchazo para ${sur(c)}! Vuelta entera con la goma destrozada. ¡Qué drama!`, true); }
-      if ((m = t.match(/(\w+) hace un trompo/))) { const c = byAbrev(m[1]); if (c && (c.player || spanish(c) || Math.random() < 0.4)) return say(pick([`¡Trompo de ${sur(c)}! Ha hecho un trescientos sesenta... y sigue, pero cuánto tiempo ha perdido.`, `¡Se le ha ido el coche a ${sur(c)}! Vuelta completa, ¡qué susto!`])); }
-      if ((m = t.match(/(\w+) se sale de pista/))) { const c = byAbrev(m[1]); if (c && (c.player || spanish(c) || Math.random() < 0.4)) return say(pick([`¡Se va largo ${sur(c)}! Por la escapatoria... ha perdido mucho tiempo.`, `¡Uy! ¡${sur(c)} fuera de pista! Ese error le cuesta caro.`])); }
-      return null;
-    }
-    if (e.kind === "pit" && race && e.carId !== undefined) {
-      const c = sess.carById(e.carId);
-      if ((m = t.match(/Parada de \w+: ([\d.]+) s/)) && Number(m[1]) > 5) return say(`¡Problemas en la parada de ${sur(c)}! ${m[1].replace(".", ",")} segundos parado... ¡eso es una eternidad!`, true);
-      if (/entra a boxes/.test(t)) {
+      case "toque":
+        if (!c || !o) return null;
+        return say(pick([`¡Contacto entre ${sur(c)} y ${sur(o)}! ¡Uy, uy, uy!`, `¡Se tocan ${sur(c)} y ${sur(o)}! A ver qué dicen los comisarios.`, `¡Toque! ${sur(c)} y ${sur(o)} se han rozado. Esto ha dolido.`]), true);
+      case "pinchazo": return c ? say(`¡Pinchazo para ${sur(c)}! Vuelta entera con la goma destrozada. ¡Qué drama!`, true) : null;
+      case "trompo":
+        if (c && (c.player || spanish(c) || Math.random() < 0.4)) return say(pick([`¡Trompo de ${sur(c)}! Ha hecho un trescientos sesenta... y sigue, pero cuánto tiempo ha perdido.`, `¡Se le ha ido el coche a ${sur(c)}! Vuelta completa, ¡qué susto!`]));
+        return null;
+      case "salida":
+        if (c && (c.player || spanish(c) || Math.random() < 0.4)) return say(pick([`¡Se va largo ${sur(c)}! Por la escapatoria... ha perdido mucho tiempo.`, `¡Uy! ¡${sur(c)} fuera de pista! Ese error le cuesta caro.`]));
+        return null;
+      case "parada":
+        if (race && c && e.n !== undefined && e.n > 5) return say(`¡Problemas en la parada de ${sur(c)}! ${e.n.toFixed(1).replace(".", ",")} segundos parado... ¡eso es una eternidad!`, true);
+        return null;
+      case "boxes": {
+        if (!race || !c) return null;
         const pos = sess.order().indexOf(c) + 1;
         if (pos <= 3 || spanish(c) || (c.player && Math.random() < 0.5)) return say(pick([
           `Entra a boxes ${sur(c)}, que iba ${pos}º. ¿Undercut? Atentos a cómo sale.`,
           `¡Para ${sur(c)}! Movimiento de estrategia, a ver si le sale bien al ${c.team.nombre}.`,
           `${sur(c)} al pit-lane. Ahora hay que hacer una vuelta de salida perfecta.`,
         ]));
+        return null;
       }
-      return null;
-    }
-    if (e.kind === "info" && quali && (m = t.match(/(\w+) ([\d:.]+) — P1(?!\d)/)) && e.carId !== undefined) {
-      const c = sess.carById(e.carId);
-      return say(spanish(c) ? `¡${nm(c)} se pone primero! ¡Vamos! ${m[2]}.` : pick([`${sur(c)} se pone primero con un ${m[2]}.`, `¡Mejor tiempo para ${sur(c)}! ${m[2]}, la referencia.`]));
+      case "vuelta": {
+        // mejor tiempo de verdad: P1 exacto (n === 1, no «P15») y solo en clasificación
+        if (!quali || !c || e.n !== 1) return null;
+        const best = sess.parts.length ? c.bestByPart[sess.part] : c.best;
+        // solo con un tiempo nuevo: el que ya iba primero y da otra vuelta sin mejorar no «se pone» primero
+        if (best === undefined || !Number.isFinite(best) || p1Said.get(c.id) === best) return null;
+        p1Said.set(c.id, best);
+        const t = fmt(best);
+        return say(spanish(c) ? `¡${nm(c)} se pone primero! ¡Vamos! ${t}.` : pick([`${sur(c)} se pone primero con un ${t}.`, `¡Mejor tiempo para ${sur(c)}! ${t}, la referencia.`]));
+      }
     }
     return null;
   }

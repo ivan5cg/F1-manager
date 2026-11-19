@@ -16,7 +16,7 @@ import { Rng } from "../sim/rng";
 import { snapshotSession, SessionSnapshot } from "../sim/snapshot";
 import { stopOptions, undercut, gapHistory, pitLoss, StopOption } from "../sim/pitwall";
 import { createLobato } from "./lobato";
-import { createVoces, voiceOf } from "./voces";
+import { createVoces, voiceOf, Orden } from "./voces";
 import { createAudio, type CarHeard, type PitStopHeard } from "./audio";
 import { saveSession, loadPrefs, savePrefs, setParked, PausePrefs, SPEEDS } from "./store";
 
@@ -82,6 +82,25 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   const LOB_TAB = "Antonio Lobato";
   /** La radio de los pilotos, cada uno con su carácter, y las radios míticas (solo interfaz). */
   const voces = createVoces(sess);
+  /** La respuesta del piloto a una orden del muro: sale en la radio como cualquier otro mensaje suyo. */
+  const ordenRadio = (c: Car, o: Orden) => {
+    const l = voces.responde(c, o);
+    if (l) sess.log({ kind: "radio", carId: l.carId, text: l.text, important: l.important, voz: true });
+  };
+  /** Ritmo y motor: espera a que se dejen de tocar los botones y contesta al cambio que queda (apretar o ahorrar). */
+  const ritmoAntes = new Map<number, { push: number; engine: number; timer: number }>();
+  const ritmoOrden = (c: Car, change: () => void) => {
+    const p = ritmoAntes.get(c.id) ?? { push: c.push, engine: c.engine, timer: 0 };
+    clearTimeout(p.timer);
+    change();
+    if (!race) return;
+    p.timer = window.setTimeout(() => {
+      ritmoAntes.delete(c.id);
+      const d = c.push - p.push + (c.engine - p.engine);
+      if (d) ordenRadio(c, d > 0 ? "apretar" : "ahorrar");
+    }, 1000);
+    ritmoAntes.set(c.id, p);
+  };
   /** Pestaña de un mensaje: las frases de los pilotos, con su abreviatura; las míticas, con estrella. */
   const tabOf = (e: RaceEvent) => (e.voz && e.carId !== undefined ? `${e.mitica ? "Radio mítica" : "Radio"} · ${sess.carById(e.carId).d.abrev}` : TAB[e.kind]);
   /** El original de una radio mítica, debajo. */
@@ -1462,8 +1481,8 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     if (!b || b.disabled) return;
     const c = mine()[Number(b.dataset.i)];
     const a = b.dataset.a;
-    if (a === "minus") c.push = Math.max(0, c.push - 1);
-    if (a === "plus") c.push = Math.min(4, c.push + 1);
+    if (a === "minus") ritmoOrden(c, () => (c.push = Math.max(0, c.push - 1)));
+    if (a === "plus") ritmoOrden(c, () => (c.push = Math.min(4, c.push + 1)));
     if (a === "box") boxSheet(c);
     if (a === "red") redSheet(c);
     if (a === "go") quali ? qualiSheet(c) : practiceSheet(c);
@@ -1517,10 +1536,11 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
         c.pitRequest = b.dataset.set!;
         const set = c.e.sets.find((s) => s.id === c.pitRequest)!;
         showToast(`📻 "${c.d.abrev}, box, box. ${COMPOUNDS[set.c].name}${set.laps ? " usados" : ""}."`, 3000);
+        ordenRadio(c, "box");
         close();
       }));
       const cb = el.querySelector<HTMLButtonElement>("#cancel");
-      if (cb) cb.onclick = () => { c.pitRequest = null; close(); };
+      if (cb) cb.onclick = () => { c.pitRequest = null; ordenRadio(c, "anula"); close(); };
       el.querySelectorAll<HTMLButtonElement>("[data-pm]").forEach((b) => (b.onclick = () => { c.pitMode = Number(b.dataset.pm); el.querySelectorAll<HTMLElement>("[data-pm]").forEach((x) => x.classList.toggle("on", x === b)); }));
     });
   }
@@ -1653,17 +1673,23 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
         if (b.dataset.let !== undefined) {
           const c = mine()[Number(b.dataset.let)];
           sess.letTeammatePass(c);
-          showToast(`📻 ${c.d.abrev}: "Entendido, dejo pasar a mi compañero."`, 2500);
+          const l = voces.responde(c, "dejarPasar");
+          if (l) sess.log({ kind: "radio", carId: l.carId, text: l.text, important: l.important, voz: true });
+          showToast(l ? l.text : `📻 ${c.d.abrev}: "Entendido, dejo pasar a mi compañero."`, 2500);
           return;
         }
         const sg = b.closest<HTMLElement>(".seg");
         if (!sg) return;
         const c = mine()[Number(sg.dataset.i)];
         const k = sg.dataset.k;
-        if (k === "push") c.push = Number(b.dataset.v);
-        if (k === "engine") c.engine = Number(b.dataset.v);
+        if (k === "push") ritmoOrden(c, () => (c.push = Number(b.dataset.v)));
+        if (k === "engine") ritmoOrden(c, () => (c.engine = Number(b.dataset.v)));
         if (k === "ers") { if (b.dataset.v === "auto") c.autoErs = true; else { c.autoErs = false; c.ers = Number(b.dataset.v); } }
-        if (k === "fight") c.fight = b.dataset.v === "auto" ? "auto" : b.dataset.v === "0" ? "defend" : "yield";
+        if (k === "fight") {
+          const was = c.fight ?? "auto";
+          c.fight = b.dataset.v === "auto" ? "auto" : b.dataset.v === "0" ? "defend" : "yield";
+          if (c.fight !== was && c.fight !== "auto") ordenRadio(c, c.fight === "defend" ? "defender" : "noPelear");
+        }
         if (k === "nose") c.nose = b.dataset.v === "auto" ? "auto" : b.dataset.v === "0" ? "yes" : "no";
         pb.innerHTML = body();
       };
@@ -1904,9 +1930,10 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
           c.pitRequest = b.dataset.stop!;
           const set = c.e.sets.find((x) => x.id === c.pitRequest)!;
           showToast(`📻 "${c.d.abrev}, box, box. ${COMPOUNDS[set.c].name}${set.laps ? " usados" : ""}."`, 3000);
+          ordenRadio(c, "box");
           close();
         }));
-        el.querySelectorAll<HTMLButtonElement>("[data-cancel]").forEach((b) => (b.onclick = () => { mine()[Number(b.dataset.cancel)].pitRequest = null; draw(); }));
+        el.querySelectorAll<HTMLButtonElement>("[data-cancel]").forEach((b) => (b.onclick = () => { const c = mine()[Number(b.dataset.cancel)]; c.pitRequest = null; ordenRadio(c, "anula"); draw(); }));
         el.querySelectorAll<HTMLElement>("[data-close]").forEach((b) => (b.onclick = () => close()));
       };
       draw();

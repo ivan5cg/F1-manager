@@ -8,6 +8,12 @@ Tamaño: **P** pequeño (un PR corto), **M** medio, **G** grande (varios PR).
 
 Ya hecho de lo que viene ahora (noviembre de 2026):
 - **Radio con personalidad y radios míticas** (fase 1 de la radio, `src/ui/voces.ts`).
+- **8.1 Los pilotos responden a tus órdenes** (`responde` en `voces.ts`, `ordenRadio`/`ritmoOrden` en `sessionView.ts`):
+  box, anular, apretar/ahorrar (ritmo y motor, contesta al cambio que queda 1 s después de tocar), dejar pasar,
+  defender y no pelear; a disgusto según las gomas, el rival a tiro o los tiempos del compañero.
+- **10.1 Lobato por códigos:** `lobato.ts` solo mira `RaceEvent.code` (19 códigos nuevos de dirección de carrera,
+  meteo y boxes, y `motivo` en las sanciones). `npx tsx scripts/lobato.ts [circuito] [equipo] [semilla]` vuelca sus
+  comentarios por código, las respuestas a órdenes al azar y los mensajes que siguen sin código.
 - **Inmersión visual:** monoplaza `.glb` propio con Draco (`public/assets/models`, guía en `docs/GUIA-BLENDER-COCHE.md`),
   entornos HDRI (`public/assets/env`), texturas PBR de Poly Haven (`public/assets/tex`: asfalto, hierba, grava,
   hormigón, fachada), banderas SVG (`public/assets/flags`) y brazos del piloto a bordo (`car3d.ts`).
@@ -16,15 +22,14 @@ Ya hecho de lo que viene ahora (noviembre de 2026):
 
 Primero lo que se nota en cada carrera; los gráficos se ven una vez y se olvidan antes.
 
-1. **8.1 Los pilotos responden a tus órdenes** (P): poco trabajo sobre `voces.ts`, ya hecho.
+1. ~~8.1 Los pilotos responden a tus órdenes~~ ✅ y ~~10.1 Lobato por códigos~~ ✅.
 2. **11.1 Safety Car `.glb`** y **12.1 Cascos con diseño propio** (P/M): lo que más luce de lo visual.
 3. **9.2 Titulares** y **9.3 La directiva te escribe** (P): salen casi gratis de `summary.ts` y `objectives.ts`.
-4. **10.1 Lobato por códigos** (P): quita fallos como el de «P15» tomado por «P1» y prepara 10.2.
-5. **12.2 Planos técnicos en Desarrollo** (M).
-6. **9.1 Rueda de prensa**, **8.2 Moral y desobediencia** y **8.3 Rivalidades** (M/G): lo más profundo, cambia la
+4. **12.2 Planos técnicos en Desarrollo** (M).
+5. **9.1 Rueda de prensa**, **8.2 Moral y desobediencia** y **8.3 Rivalidades** (M/G): lo más profundo, cambia la
    simulación; medirlo con un script antes de darlo por bueno.
-7. **9.4 a 9.6 Ritual de la temporada**, **10.2 a 10.4** y **13 Gestión**.
-8. **11.2 a 11.4 Árboles, fachadas y mecánicos**: para pulir al final.
+6. **9.4 a 9.6 Ritual de la temporada**, **10.2 a 10.4** y **13 Gestión**.
+7. **11.2 a 11.4 Árboles, fachadas y mecánicos**: para pulir al final.
 
 ### Presupuesto de assets (vale para los bloques 11 y 12)
 
@@ -41,7 +46,7 @@ El juego es una PWA (`public/sw.js`) y se juega en el móvil: cada `.glb` y cada
 
 ## Bloque 8 · Radio y vestuario
 
-### 8.1 Los pilotos responden a tus órdenes (P)
+### 8.1 Los pilotos responden a tus órdenes (P) · ✅ Hecho
 - Al pedir que pare, que apriete, que ahorre o que deje pasar al compañero, contesta según su carácter: «Recibido»,
   «¿Ahora? Las gomas van bien...», «¿En serio? Soy más rápido».
 - Solo texto: siempre obedece. Se engancha a las acciones del muro de `sessionView.ts`, igual que la fase 1 a los
@@ -87,7 +92,7 @@ El juego es una PWA (`public/sw.js`) y se juega en el móvil: cada `.glb` y cada
 
 ## Bloque 10 · Lobato y el ambiente
 
-### 10.1 Lobato por códigos (P)
+### 10.1 Lobato por códigos (P) · ✅ Hecho
 - Que reaccione al código de cada suceso (`RaceEvent.code`, como la radio) en vez de leer el texto con expresiones
   regulares. Así se evitan fallos como el de «P15» tomado por «P1». Va antes que 10.2 y 10.3.
 
