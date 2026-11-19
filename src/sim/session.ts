@@ -1628,8 +1628,10 @@ export class Session {
     if (lap >= 1) {
       const lt = c.cross[k] - c.lapStart;
       c.lapTimes.push(lt);
-      if (lap > 1 && lt < c.best) { c.best = lt; c.bestTyre = c.tyres!.c; }
-      if (lap > 1 && lt < this.bestLap) this.bestLap = lt;
+      // una vuelta imposible (cortada por una bandera roja o una salida parada) no cuenta como la mejor
+      const real = lt > 0.85 * this.lapRefRace;
+      if (lap > 1 && real && lt < c.best) { c.best = lt; c.bestTyre = c.tyres!.c; }
+      if (lap > 1 && real && lt < this.bestLap) this.bestLap = lt;
       c.tyres!.laps++;
       c.lapStart = c.cross[k];
       // en carrera la pista también se engoma (si llovió por la mañana, sale verde y mejora vuelta a vuelta)

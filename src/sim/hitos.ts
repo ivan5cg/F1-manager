@@ -86,10 +86,11 @@ export function hitosAfterRace(s: SeasonState, at: SeatAt, gpOf: (id: string) =>
   const recs = (s.records ??= {});
   const old: CircuitRecord | undefined = recs[r.circuitId];
   let best: { t: number; nombre: string; mine: boolean } | null = null;
+  // fuera las vueltas raras (una interrumpida, por ejemplo): menos del 90 % de la mediana de la clasificación (o de
+  // la carrera, si no la hay); en carrera puede haber muchas a la vez, así que su propia mediana no vale
+  const median = (rows: RoundResult["race"]) => { const ts = (rows ?? []).map((x) => x.best).filter((t) => Number.isFinite(t) && t > 0).sort((a, b) => a - b); return ts[Math.floor(ts.length / 2)] ?? 0; };
+  const med = r.q?.length ? median(r.q) : median(r.race);
   for (const rows of [r.q ?? [], r.race]) {
-    // fuera las vueltas raras (una interrumpida, por ejemplo): menos del 90 % de la mediana de la sesión
-    const ts = rows.map((x) => x.best).filter((t) => Number.isFinite(t) && t > 0).sort((a, b) => a - b);
-    const med = ts[Math.floor(ts.length / 2)] ?? 0;
     for (const row of rows) {
       if (Number.isFinite(row.best) && row.best > 0.9 * med && (!best || row.best < best.t)) { const w = at(ri, row.id); best = { t: row.best, nombre: w.nombre, mine: w.mine }; }
     }

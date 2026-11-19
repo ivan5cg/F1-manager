@@ -41,6 +41,8 @@ Ya hecho de lo que viene ahora (noviembre de 2026):
   `src/ui/ritual.ts` (previa, rótulos, gala, sala de trofeos, `seatAt` con `whoAt` para los cambios de asiento).
   Se guardan `SeasonState.hitos` y `records` (pasan de año) y, en cada `SeasonRecord`, `trofeos`, `ganadores` y `gala`.
   Lobato recibe `WeekendState.memo`. Probar con `scripts/hitos.ts`.
+  De paso: en carrera, una vuelta cortada por una bandera roja o una salida parada (de unos segundos) contaba como
+  la mejor (`raceLine`, ahora con un mínimo del 85 % de `lapRefRace`); salía en la vuelta rápida del resumen.
 - **Asfalto sin baldosas:** la textura de 2,7 m se repetía y se veía una cuadrícula. `asfalto.webp` aplanada (paso
   alto sin costuras, `python3 scripts/assets.py --aplanar`) y el árido leído dos veces en el sombreador (la segunda
   girada 37° y a otra escala) mezcladas con ruido (`ASF_R` en `map3d.ts`). Una lectura de textura más en la pista.
