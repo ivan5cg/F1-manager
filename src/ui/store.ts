@@ -16,10 +16,12 @@ import { DEFAULT_SOUND, type SoundPrefs } from "./audio";
 // pequeños y se leen al arrancar.
 export const SLOTS = 3;
 const ACTIVE = "muro-ranura";
+/** Modo gran premio: un fin de semana suelto, guardado aparte (no ocupa ninguna de las partidas). */
+export const GP_SLOT = 0;
 const suffix = (n: number) => (n === 1 ? "" : `-${n}`);
-const seasonKey = (n: number) => `muro-temporada-2026${suffix(n)}`;
-const sessionKey = (n: number) => `muro-sesion-2026${suffix(n)}`;
-const parkedKey = (n: number) => `muro-sesion-aparcada${suffix(n)}`;
+const seasonKey = (n: number) => (n === GP_SLOT ? "muro-gp-temporada" : `muro-temporada-2026${suffix(n)}`);
+const sessionKey = (n: number) => (n === GP_SLOT ? "muro-gp-sesion" : `muro-sesion-2026${suffix(n)}`);
+const parkedKey = (n: number) => (n === GP_SLOT ? "muro-gp-aparcada" : `muro-sesion-aparcada${suffix(n)}`);
 const SLOT_KEYS = Array.from({ length: SLOTS }, (_, i) => [seasonKey(i + 1), sessionKey(i + 1), parkedKey(i + 1)]).flat();
 
 /** Lo que hay en IndexedDB, en memoria. null: sin IndexedDB (todo en localStorage). */
@@ -86,8 +88,9 @@ export async function storageUse(): Promise<{ used: number; persisted: boolean }
 }
 
 export function getActiveSlot(): number {
-  const n = Number(lsGet(ACTIVE));
-  return n >= 1 && n <= SLOTS ? n : 1;
+  const raw = lsGet(ACTIVE);
+  const n = Number(raw);
+  return raw !== null && n >= GP_SLOT && n <= SLOTS ? n : 1;
 }
 export function setActiveSlot(n: number) {
   try { localStorage.setItem(ACTIVE, String(n)); } catch { /* nada */ }
@@ -196,6 +199,9 @@ export function loadSession(): SessionSnapshot | null {
   const raw = get(sessionKey(getActiveSlot()));
   return raw ? parseSnapshot(raw) : null;
 }
+
+/** ¿Hay una sesión a medias en esa partida? */
+export const hasSession = (n: number) => !!get(sessionKey(n));
 
 export function clearSession() {
   const n = getActiveSlot();

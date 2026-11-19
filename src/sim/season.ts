@@ -79,7 +79,12 @@ export interface SeasonState {
   aviso?: number;
   /** Cambios de piloto a mitad de temporada (lesiones, destituciones, tus fichajes), en orden. */
   swaps?: SeatSwap[];
+  /** Modo gran premio: un solo fin de semana (calendario de un circuito), con el tiempo que se eligió. */
+  gp?: { tiempo: GpWeather };
 }
+
+/** Tiempo de un gran premio suelto: el del clima del circuito, o forzado. */
+export type GpWeather = "clima" | "seco" | "variable" | "lluvia";
 
 /** Un cambio de piloto a mitad de temporada: desde la ronda `round` (índice, 0 la primera), en el asiento `seat` (el id
  *  del coche), corre `in` en lugar de `out`. */

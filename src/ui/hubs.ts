@@ -16,7 +16,8 @@ import { stintProfile } from "../sim/strategy";
 import { setupEstimate, carSetup, proposedSetup, WET_SHIFT, SETUP_MIN, SETUP_MAX, type Setup } from "../sim/setup";
 import type { Track } from "../sim/track";
 import { SCENARIO_NAMES } from "../sim/weather";
-import { saveSeason, loadSeason, slotList, getActiveSlot, deleteSlot, exportSlot, checkImport, importInto, SLOTS, storageUse, installed, isSafariLike, markExported, exportDue, loadPrefs, savePrefs } from "./store";
+import { gpWhere } from "./grandPrix";
+import { GP_SLOT, hasSession, saveSeason, loadSeason, slotList, getActiveSlot, deleteSlot, exportSlot, checkImport, importInto, SLOTS, storageUse, installed, isSafariLike, markExported, exportDue, loadPrefs, savePrefs } from "./store";
 import { raceSummaryHtml, drawRaceSummary, photosHtml } from "./summary";
 
 export interface Nav {
@@ -37,6 +38,10 @@ export interface Nav {
   nextSeason(next: SeasonState): void;
   /** Modo escenario: momentos reales de 2010 en adelante (no toca las partidas). */
   scenarios(): void;
+  /** Modo gran premio: elegir equipo, circuito y tiempo para un fin de semana suelto. */
+  gp(): void;
+  /** Sigue el gran premio guardado. */
+  openGp(): void;
 }
 
 const app = () => document.getElementById("app")!;
@@ -79,6 +84,7 @@ export function startScreen(nav: Nav, notice = "") {
   const list = slotList();
   const active = getActiveSlot();
   const any = list.some((x) => x.season);
+  const gpSave = loadSeason(GP_SLOT);
   app().innerHTML = `
   <div style="padding-bottom:16px">
     <div class="hero"><canvas id="herocv" aria-hidden="true"></canvas>
@@ -105,6 +111,10 @@ export function startScreen(nav: Nav, notice = "") {
         <button class="newcard" id="build"><b>Crea tu equipo</b><span>Ficha pilotos, jefe, técnico y motor con 100 M de techo de gasto, y gestiona las unidades de potencia.</span></button>
       </div>
     </div></div>
+    <div class="panel"><div class="hd"><span class="t">Gran premio</span></div><div class="bd">
+      ${gpSave ? `<div class="slotrow${active === GP_SLOT ? " on" : ""}" style="margin:-4px -10px 8px"><span class="teamdot" style="background:${seasonTeam(gpSave).color};height:34px"></span><div class="grow" style="min-width:0"><b class="up">Tu gran premio</b><br><span class="small">${gpWhere(gpSave, hasSession(GP_SLOT))}</span></div><button class="${active === GP_SLOT ? "red" : ""}" id="gpopen">${gpSave.rounds.length ? "Ver" : "Seguir"}</button></div>` : ""}
+      <button class="newcard wide gpcard" id="gpnew"><b>${gpSave ? "Otro gran premio" : "Gran premio suelto"}</b><span>Eliges equipo, circuito y tiempo, y disputas un fin de semana entero: libres, clasificación, sprint si lo hay y carrera.${gpSave ? " Sustituye al que tienes guardado." : ""}</span></button>
+    </div></div>
     <div class="panel"><div class="hd"><span class="t">Modo escenario</span></div><div class="bd">
       <button class="newcard wide" id="scen"><b>Escenarios</b><span>Once carreras reales de 2010 a 2024, a mitad de carrera y con la parrilla de aquel año. Te toca decidir en el muro: Abu Dabi 2010, Canadá 2011, Mónaco 2016, Abu Dabi 2021...</span></button>
     </div></div>
@@ -119,6 +129,9 @@ export function startScreen(nav: Nav, notice = "") {
   if (sx) sx.onclick = () => { const p = loadPrefs(); p.sinAvisoSafari = true; savePrefs(p); document.getElementById("safari")?.remove(); };
   $("#build").onclick = () => chooseSlot("Nueva temporada", (slot) => nav.build(slot));
   $("#scen").onclick = () => nav.scenarios();
+  $("#gpnew").onclick = () => { if (gpSave && !gpSave.rounds.length && !confirm("¿Empezar otro gran premio? El que tienes a medias se borra.")) return; nav.gp(); };
+  const gpo = document.getElementById("gpopen");
+  if (gpo) gpo.onclick = () => nav.openGp();
   document.querySelectorAll<HTMLElement>("[data-open]").forEach((b) => (b.onclick = () => nav.open(Number(b.dataset.open))));
   document.querySelectorAll<HTMLElement>("[data-more]").forEach((b) => (b.onclick = () => slotSheet(nav, Number(b.dataset.more))));
   const inp = $<HTMLInputElement>("#importf");
@@ -142,7 +155,7 @@ export function startScreen(nav: Nav, notice = "") {
     const mb = u.used / 1048576;
     el.textContent = ` Ocupan ${mb < 0.1 ? "menos de 0,1" : mb.toFixed(1).replace(".", ",")} MB${u.persisted ? "; el navegador no las borrará por su cuenta" : ""}.`;
   });
-  const cur = list[active - 1].season;
+  const cur = active === GP_SLOT ? gpSave : list[active - 1]?.season;
   setBack(cur ? () => nav.open(active) : null);
   // la carrera de fondo se monta después de pintar la pantalla (tarda unas décimas)
   setTimeout(() => { const cv = document.getElementById("herocv") as HTMLCanvasElement | null; if (cv) startAttract(cv, $("#herolive")); }, 80);
@@ -540,7 +553,7 @@ export function weekendScreen(nav: Nav, s: SeasonState, pending: SessionSnapshot
   const heroGloom = Math.min(1, (outlook.find((o) => o.kind === next)?.rain ?? 0) * 1.2);
   app().innerHTML = `
   <div style="padding-bottom:16px">
-    <div class="panel"><div class="hd"><span class="t">Ronda ${st.round} · ${flagHtml(def.bandera)} ${esc(def.pais)}</span><button id="back">Temporada</button></div><div class="bd gphero${lightAt(heroClock) === "noche" ? " night" : ""}" style="background:${skyGradient(heroClock, heroGloom)}">
+    <div class="panel"><div class="hd"><span class="t">${s.gp ? "Gran premio" : `Ronda ${st.round}`} · ${flagHtml(def.bandera)} ${esc(def.pais)}</span><button id="back">${s.gp ? "Inicio" : "Temporada"}</button></div><div class="bd gphero${lightAt(heroClock) === "noche" ? " night" : ""}" style="background:${skyGradient(heroClock, heroGloom)}">
       <canvas id="mini"></canvas>
       <div class="gpt"><h1>${esc(def.gp)}</h1>
       <div>${esc(def.nombre)} · ${(track.length / 1000).toFixed(3)} km · ${def.vueltas} vueltas${st.sprint ? ` · <span class="yellow">sprint (${def.vueltasSprint} v)</span>` : ""} · ${fmtDate(def.fecha)}</div></div>
@@ -585,7 +598,7 @@ export function weekendScreen(nav: Nav, s: SeasonState, pending: SessionSnapshot
   wirePu(st, redraw);
   wireSetup(wk, team, redraw);
   setBack(() => nav.season());
-  $("#back").onclick = () => nav.season();
+  $("#back").onclick = () => (s.gp ? nav.home() : nav.season());
   if (next && pending) $("#resume").onclick = () => nav.session(pending.kind, pending);
   else if (next) {
     $("#play").onclick = () => nav.session(next);

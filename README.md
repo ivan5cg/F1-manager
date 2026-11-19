@@ -1,6 +1,6 @@
 # Muro de Boxes
 
-Juego de estrategia de Fórmula 1 centrado en el **fin de semana de carrera**: eres el muro de boxes de tus dos pilotos en una temporada de 9 grandes premios. Dos modos de temporada (y además el [modo escenario](#modo-escenario)):
+Juego de estrategia de Fórmula 1 centrado en el **fin de semana de carrera**: eres el muro de boxes de tus dos pilotos en una temporada de 9 grandes premios. Dos modos de temporada (y además el [modo gran premio](#modo-gran-premio) y el [modo escenario](#modo-escenario)):
 
 - **Equipo real:** eliges uno de los 11 equipos de la parrilla real de 2026 y lo llevas tal cual es.
 - **Crea tu equipo:** fichas pilotos, jefe de equipo, director técnico y motor con un techo de gasto de 100 millones, y gestionas las unidades de potencia durante el año (ver más abajo).
@@ -140,6 +140,22 @@ En la realidad, en 2026 el GP de Baréin no se corrió en Sakhir: se trasladó a
   - **Undercut:** si el de detrás para ya y tú respondes en la vuelta siguiente, ¿te pasa? Y al revés con el de delante.
   - **Huecos en meta** de las últimas 15 vueltas con el de delante, el de detrás y tu compañero. Tocando la gráfica se ven los de cada vuelta.
 - ⏸ ×1 ×2 ×4 ×8 ×16 ×64 (teclas 1-6) y ⏭ (simular hasta el final). La sesión se pausa sola en los momentos clave.
+
+## Modo gran premio
+
+Desde el inicio, «Gran premio suelto»: un solo fin de semana, sin temporada. Eliges:
+
+- **Equipo:** uno de los 11 de 2026, con sus dos pilotos y su coche tal cual.
+- **Circuito:** cualquiera de los 25 del juego (incluido el ficticio Sierra Norte). En Silverstone e Interlagos se
+  puede elegir también el formato (normal o sprint); el resto corre con el suyo.
+- **Tiempo:** el clima del circuito en su fecha, estable (casi seguro en seco), chubascos los tres días o lluvia casi
+  todo el fin de semana.
+
+Y lo disputas entero, igual que en una temporada: libres (o libres y sprint), clasificación y carrera, con reglajes,
+juegos de neumáticos y lo que saben tus ingenieros. Cada sesión se puede jugar o simular. Al acabar salen el podio, la
+carrera y su resumen, y puedes repetirlo (otra semilla, mismas elecciones) o elegir otro. Se guarda aparte, sin ocupar
+ninguna de las tres partidas: si cierras la app a mitad, se retoma desde el inicio («Tu gran premio»). Solo hay uno
+guardado: empezar otro lo sustituye.
 
 ## Modo escenario
 
