@@ -474,7 +474,7 @@ se iluminan al rojo en las frenadas fuertes, surcos de agua en intermedios y llu
 volante con la pantalla LED viva (marcha, velocidad, batería y LEDs de RPM). Además se puede sustituir
 el monoplaza por un `.glb` propio comprimido con Draco (`public/assets/models/`, ver
 `docs/GUIA-BLENDER-COCHE.md`). En las paradas el coche se para delante
-de su garaje, sube en los gatos y los mecánicos (del color del equipo) quitan las ruedas viejas y ponen las nuevas, del
+de su garaje, sube en los gatos y los mecánicos (mono del color del equipo, y casco y franjas de los hombros y las piernas del segundo color) quitan las ruedas viejas y ponen las nuevas, del
 compuesto que toca. Los percances de la simulación se ven: el trompo gira el coche con humo de goma, la salida de pista
 lo lleva a la escapatoria levantando polvo de la grava o de la hierba, el bloqueo echa humo de la rueda delantera y el
 accidente deja el coche contra la barrera un par de minutos.

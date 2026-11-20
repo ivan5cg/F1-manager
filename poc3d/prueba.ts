@@ -1,4 +1,4 @@
-// Página de prueba del 3D (no se sube): ?c=circuito&q=calidad&h=hora&v=vista&s=punto&storm=1&sc=1
+// Página de prueba del 3D (no se sube): ?c=circuito&q=calidad&h=hora&v=vista&s=punto&storm=1&sc=1&pit=1
 import teamsJson from "../data/equipos-2026.json";
 import { CIRCUITS } from "../src/ui/data";
 import { buildTrack } from "../src/sim/track";
@@ -13,6 +13,9 @@ for (let i = 0; i < +(P.get("n") ?? 1800); i++) sess.step();
 if (P.get("h")) sess.weather.clock = +P.get("h")! * 60;
 // sc=1: coche de seguridad en pista (delante del líder, al que sigue la cámara)
 if (P.get("sc")) sess.flag = "sc";
+// pit=1: sigue hasta que un coche está parado en boxes (para ver a los mecánicos), y la cámara va con él
+let pitCar: any = null;
+if (P.get("pit")) for (let i = 0; i < 400000 && !pitCar; i++) { sess.step(); pitCar = sess.cars.find((c: any) => c.loc === "pit" && c.pit && c.pit.t / c.pit.total > 0.5) ?? null; }
 const VIEWS: Record<string, any> = {
   horizonte: { pos: [-60, 25, 40], look: [200, 0, -80], fov: 50 },
   general: { pos: [-1500, 1800, 900], look: [0, 0, 0], fov: 40 },
@@ -27,7 +30,7 @@ const v = P.get("v") || "horizonte", view = VIEWS[v] ? { ...VIEWS[v] } : JSON.pa
 if (P.get("s")) view.s = +P.get("s")!;
 const debug: any = { view, noLod: !!P.get("nolod"), noCull: !!P.get("nocull"), propFar: P.get("far") ? +P.get("far")! : undefined, splash: P.get("charco") ? +P.get("charco")! : undefined };
 const m = createMap3d({ canvas: document.getElementById("c"), labels: document.getElementById("lbl"), box: document.querySelector(".mapbox"), sess,
-  mine: () => sess.cars.filter((c: any) => c.team.id === TEAMS[0].id), selId: () => (P.get("sc") ? sess.leaderId : sess.cars[0].id), alpha: () => 1, paused: () => true, speed: () => 1,
+  mine: () => sess.cars.filter((c: any) => c.team.id === TEAMS[0].id), selId: () => (pitCar ? pitCar.id : P.get("sc") ? sess.leaderId : sess.cars[0].id), alpha: () => 1, paused: () => true, speed: () => 1,
   ghosts: () => [], quality: q, debug });
 let n = 0, t0 = performance.now();
 let last = performance.now();
