@@ -65,6 +65,41 @@ Ya hecho de lo que viene ahora (noviembre de 2026):
 - **Realismo 3D — Oleadas 1 y 2 (`src/ui/map3d.ts`, `src/ui/car3d.ts`):**
   - *Oleada 1 (iluminación, sombras y materiales):* sombra de contacto suave siempre activa bajo los coches en todas las calidades; relieve normal procedural + AO de contacto en el suelo para `propMat` y `cityMat`; profundidad `FloatType` + `near`/`far` dinámicos + `GTAOPass` calibrado; `UnrealBloomPass` saneado contra `NaN` y emisivos nocturnos equilibrados; reflejo del agua y anti-aliasing en chapas corrugadas del techo de boxes.
   - *Oleada 2 (terreno, pista y atmósfera):* 6 biomas completos (`bosque`, `tropical`, `seco`, `mediterraneo`, `dunas`, `desierto`) cubriendo los 25 circuitos; estratos rocosos triplanares sin estiramiento en taludes y laderas; líneas blancas de anchura FIA, pianos serrados 3D y escapatorias de grava rastrillada; vallas protectoras traslúcidas con anti-aliasing, guardarraíl Armco en W y pilas de neumáticos con relieve; neblina atmosférica exponencial (`THREE.FogExp2`).
+- **11.3 Fachadas y arquitectura (Oleada 3) y 11.5 Boxes y lluvia (Oleada 4)** (sin tocar la simulación; todo en
+  `src/ui/map3d.ts`, sin assets nuevos):
+  - *Tercer nivel de detalle en el decorado:* `B.fine(fn)` en `propBuilder` (además de `near`) apunta lo que solo se
+    dibuja de cerca **y con calidad 2 o 3**; cada tramo guarda `n0`, `n1` y `n2` y `propLod` rehace los índices
+    también al cambiar de calidad. Así los escalones 0 y 1 dibujan exactamente el mismo decorado que antes. El detalle
+    fino tira de su propio azar (`rnd3`) para que lo de siempre salga igual. `B.beam(a, b, r…)` hace vigas y tirantes.
+  - *Interiores falsos* (`roomAt` en `PROP_FH`): el rayo de la vista se pasa al plano de la cara con las derivadas de
+    la posición y de uv (sin atributos nuevos) y choca con una caja (fondo, paredes, suelo, techo, mueble, cuadro,
+    cortina). En la fachada clásica (5), el muro cortina (6) y el cristal de los boxes (2), con `uHiQ` (calidad ≥ 2) y
+    de cerca (`inK`); de día lo alumbra `uDay` y de noche la lámpara (`winOn` de siempre). El cristal pasa a casi negro
+    con rugosidad baja: el reflejo lo pone el entorno con su Fresnel.
+  - Vestíbulos de doble altura en las torres (`uv.y < 5,6`), soportales en Mónaco (`h21(sd, 17) < 0,3`), pasillos de
+    escalones en las gradas cada 14 m, paños y churretes en el hormigón (9) y dibujos nuevos: 12 teja árabe,
+    13 barandilla (con `discard`; de lejos, tramada) y 14 helipuerto.
+  - Remates de los edificios de calle (`roofTop`), mástiles y tirantes de las gradas, cristalera inclinada de los palcos,
+    cabina de la torre de control y barandillas de los puentes, todo en `B.fine`.
+  - Manzanas lejanas: dos mallas más con los tejados (`CITY_GABLE`, `CITY_TOP`, hechas con `facesGeo`) sobre las mismas
+    matrices, `cityMat(style, part)`; `world.cityRoofs` solo se ve con calidad ≥ 2 (`applyQuality`). La normal de las
+    instancias se corrige con la escala (antes daba igual: solo había cajas).
+  - Hormigón de la zona de trabajo y del paddock: cinta nueva `RMODE 8` (losas de 5 m con juntas, aceite y agua en las
+    juntas con lluvia); el muro del pit-lane (`RMODE 0`), piezas de 6 m.
+  - Pórtico de la parada: `GANTRY_GEO` con pértiga sobre el coche, mangueras (`TubeGeometry`) hasta las cuatro pistolas
+    y carcasa con viseras; las luces, `GLIT_GEO`/`GLIT_MAT` (cuadros con halo que se suman, el color de la instancia
+    dice cuál se enciende: rojo, ámbar entre 0,84 y 0,92 de la parada, verde).
+  - Estela (`SPRAY_MAT`): jirones que giran y se estiran, ruido deformado que se deshilacha con la edad, un 30 % son
+    chorros de las ruedas traseras; color tope 0,78.
+  - Lluvia de noche: `shafts` (16 conos con gotas bajo los focos que ya se reflejan; sale de `updateLampRefl`), halos de
+    las farolas mayores y gotas en el objetivo de las cámaras de tele (`TV_CAMS`), las dos cosas con calidad ≥ 2.
+  - Página de prueba: `lluvia=<mm/h>` moja la pista entera.
+  - Medido con la página de prueba (Mónaco y Singapur, calidad 0 y 1): mismas llamadas, triángulos y vértices dibujados
+    del decorado que antes. El detalle fino que pisaría la pista de cerca se quita solo (`B.dropFine`) sin tocar el
+    edificio. Lo único que sube en todos los escalones es el pórtico de la parada (unos 640 triángulos por coche
+    parado, la misma llamada).
+  - Ideas sin hacer: la barandilla y la celosía dan sombra entera (la sombra no hace `discard`); interiores en las
+    manzanas lejanas (de lejos no se ven); reflejo del cielo propio en los charcos.
 - **11.2 Árboles por bioma, 11.4 Mecánicos `.glb` y yates `.glb` (`scripts/prepara_entorno_glb.py`, `src/ui/map3d.ts`):**
   - 5 modelos CC-BY-4.0 de Sketchfab optimizados a ~712 KB en total (`tree_leaf.glb`, `tree_leaf_lo.glb`, `tree_pine.glb`, `tree_palm.glb`, `crew_stand.glb`, `crew_crouch.glb`, `yacht.glb`), con texturas WebP (`EXT_texture_webp`), recorte alfa `MASK` con sangrado anti-halos y respaldo procedural instantáneo.
   - Carga bajo demanda por bioma y circuito (Baréin solo descarga palmeras; Mónaco/Singapur descargan yates), rotación Y aleatoria, tintado sutil de copa por bioma, LOD `tree_leaf_lo` en vista general y atribución en `public/assets/LICENCIA-MODELOS-SKETCHFAB.txt` y `README.md`.
@@ -80,7 +115,8 @@ Primero lo que se nota en cada carrera; los gráficos se ven una vez y se olvida
 5. ~~9.1 Rueda de prensa, 8.2 Moral y desobediencia y 8.3 Rivalidades~~ ✅.
 6. ~~9.4 a 9.6 Ritual de la temporada~~ ✅, ~~10.2 a 10.4~~ ✅ y ~~13 Gestión~~ ✅.
 7. ~~11.2 Árboles por bioma y 11.4 Mecánicos `.glb` (+ yates `.glb` y Oleadas 1–2)~~ ✅.
-8. **11.3 Fachadas urbanas y arquitectura (Oleada 3)**, **11.5 Detalle de boxes y lluvia (Oleada 4)** y **12.3 Escudos de equipo**: pulido visual final (todo en código, sin más `.glb`).
+8. ~~11.3 Fachadas urbanas y arquitectura (Oleada 3)~~ ✅ y ~~11.5 Detalle de boxes y lluvia (Oleada 4)~~ ✅.
+9. **12.3 Escudos de equipo**: lo último que queda.
 
 ### Presupuesto de assets (vale para los bloques 11 y 12)
 
@@ -177,7 +213,7 @@ no de crearlos. Respetar el presupuesto de assets.
   bioma activo, rotación Y aleatoria, tintado suave por bioma, sombras con recorte alfa en `q >= 3` y respaldo procedural.
 - Incluye además `yacht.glb` para los puertos de circuitos urbanos con mar (Mónaco, Singapur…).
 
-### 11.3 Fachadas urbanas y arquitectura de circuito · Oleada 3 (M)
+### 11.3 Fachadas urbanas y arquitectura de circuito · Oleada 3 (M) · ✅ Hecho
 Todo en código/shaders (`src/ui/map3d.ts`), sin añadir más `.glb`:
 - **Edificios urbanos (`cityMat` en Mónaco, Singapur, Bakú, Las Vegas):**
   - Interiores con profundidad falsa (parallax sencillo o degradado de techo/suelo detrás del cristal) y reflejo de cielo/entorno más realista en las ventanas en lugar de rectángulos planos.
@@ -193,7 +229,7 @@ Todo en código/shaders (`src/ui/map3d.ts`), sin añadir más `.glb`:
   color o blanco en comisarios, `G` visera/guantes/botas/pistola). Sustituyen a `CREW_STAND`/`CREW_CROUCH` en
   `crewS`, `crewC`, `marsh` y el comisario de bandera a cuadros manteniendo el respaldo procedural.
 
-### 11.5 Detalle de boxes y lluvia · Oleada 4 (P/M)
+### 11.5 Detalle de boxes y lluvia · Oleada 4 (P/M) · ✅ Hecho
 Todo en código/shaders (`src/ui/map3d.ts` y `src/ui/car3d.ts`):
 - **Pórtico de parada en boxes (`gant` / `glit`):** carcasa de semáforo más detallada con visera/parasol, tres ópticas diferenciadas (rojo/ámbar/verde con halo suave) y mangueras neumáticas colgando del brazo aéreo hacia las pistolas.
 - **Lluvia y estela (`spray` / `puffs` / `rain`):**
@@ -249,6 +285,8 @@ Todo en código/shaders (`src/ui/map3d.ts` y `src/ui/car3d.ts`):
 | 5.1 Niveles de detalle | ✅ Hecho | `map3d.ts` (`propBuilder`, `propLod`, manzanas, árboles), `car3d.ts` (`carMinGeometry`) |
 | 5.2 Nubes y lluvia | ✅ Hecho | `map3d.ts` (cielo: `cloudSides`, `updateStorm`; `uDrops`; spray `aSpl`), `car3d.ts` (`DROPS_GLSL`), `audio.ts` (`thunder`) |
 | 5.3 Hora del día | ✅ Hecho | `map3d.ts` (`winOn`, `uCity`, `townLights`, caja de sombras) |
+| 11.3 Fachadas y arquitectura | ✅ Hecho | `map3d.ts` (`roomAt`, `B.fine`, `roofTop`, `CITY_GABLE`/`CITY_TOP`, `RMODE 8`) |
+| 11.5 Boxes y lluvia | ✅ Hecho | `map3d.ts` (`GANTRY_GEO`, `GLIT_MAT`, `SPRAY_MAT`, `shafts`, `TV_CAMS`) |
 
 **Los bloques 1 a 7 están hechos.** Ideas sin hacer, al final de cada tarea.
 
