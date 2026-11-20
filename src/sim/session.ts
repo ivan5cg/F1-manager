@@ -107,6 +107,8 @@ const MORAL_PACE = 0.0012; // agarre por cada 40 puntos de moral sobre 60
 const DISOBEY_K: Record<Caracter, number> = { volcanico: 1, quejica: 0.65, socarron: 0.45, cerebral: 0.25, novato: 0.15, autocritico: 0.1, calmado: 0.08 };
 // rivalidad de temporada (0 a 1): defienden más contra el rival y se tocan más
 const RIVAL_DEF = 0.18, RIVAL_CONTACT = 0.8;
+// banderas azules ignoradas: probabilidad por cada vez que doblan a un coche (antes de su carácter)
+const BLUE_IGNORE_P = 0.02;
 
 type IncidentKind = "crash" | "failure" | "debris";
 const ERS_POWER = [-3.5, 0, 2.0, 4.5];
@@ -335,6 +337,9 @@ export interface Car {
   moral?: number;
   /** Ya se ha negado una vez a parar con la parada que tiene pedida: a la siguiente entra. */
   pitHold?: boolean;
+  /** Banderas azules: el coche que le está doblando ahora y hasta cuándo no se aparta (si las ignora). */
+  blueFor?: number;
+  blueHold?: number;
   /** Avería que se está gestando: qué es, lo cerca que está de romperse (0 a 1) y si es de la unidad de potencia. */
   fault?: { what: string; lvl: number; pu: boolean; warned: number };
 }
@@ -360,7 +365,7 @@ export interface RaceEvent {
   /** Radio mítica: lo que se dijo de verdad y dónde. */
   mitica?: string;
   /** Por qué es la sanción (code "sancion"). */
-  motivo?: "toque" | "limites" | "pitlane" | "insegura";
+  motivo?: "toque" | "limites" | "pitlane" | "insegura" | "azules";
 }
 
 /** Sucesos con código (ver RaceEvent.code). */
@@ -371,7 +376,9 @@ export type EventCode = "fondo" | "limites" | "abandono" | "pinchazo" | "tarde" 
   | "vsc" | "sc" | "roja" | "verde" | "cuadros" | "empieza" | "eliminados" | "sancion" | "sinSancion" | "blancaNegra"
   | "desdoblar" | "liderAcelera" | "salidaParada" | "banderaAmarilla" | "descalificado" | "anulada" | "lluvia" | "seca" | "boxes"
   // el piloto no obedece al muro (n: 0 no deja pasar, 1 retrasa la parada)
-  | "desobedece";
+  | "desobedece"
+  // un doblado no hace caso a las banderas azules (other: el que le dobla)
+  | "azules";
 
 export interface SessionOptions {
   kind: SessionKind;
@@ -487,6 +494,10 @@ export class Session {
   orders: { carId: number; kind: "dejarPasar" | "box"; mate?: number; obeyed: boolean }[] = [];
   /** Estado del azar de la moral: aparte del de la sesión, para no mover nada cuando no hay órdenes. */
   moodS = 1;
+  /** Estado del azar de las banderas azules ignoradas (aparte, para que sin ellas la carrera sea la misma). */
+  blueS = 1;
+  /** Tras una bandera roja por lluvia: cuando se retire el coche de seguridad, salida parada (si la pista lo permite). */
+  standAfterSc = false;
   /** Ventaja (s/vuelta) con la que se adelanta una de cada dos veces en la mejor frenada del circuito. */
   get passT(): number { return passTOverride ?? this.track.def.adelantamientos?.umbral ?? PASS_T0; }
   /** Lo difícil que es adelantar aquí: la ventaja (s/vuelta) que hace falta en la mejor frenada que tenga el circuito. */
@@ -539,6 +550,7 @@ export class Session {
     this.N = this.track.ms.length;
     this.rng = new Rng(opt.seed);
     this.moodS = ((opt.seed ^ 0x5bd1e995) >>> 0) || 1;
+    this.blueS = ((opt.seed ^ 0x1b873593) >>> 0) || 1;
     for (const [a, b, k] of opt.rivals ?? []) this.rivalK[pairKey(a, b)] = clamp(k, 0, 1);
     this.weather = opt.weather;
     this.water = Float64Array.from(opt.water.length === this.N ? opt.water : new Array(this.N).fill(0));
@@ -1242,13 +1254,15 @@ export class Session {
       this.log({ kind: "control", text: "🟢 Se reanuda la sesión. Pit-lane abierto.", important: true, pause: true });
       return;
     }
-    // con lluvia se reanuda detrás del coche de seguridad; si no, salida parada desde la parrilla
+    // con lluvia se reanuda detrás del coche de seguridad y, cuando se retira (si la pista lo permite), salida parada
+    // desde la parrilla, como en el reglamento; si no, salida parada directamente
     if (!rain) return this.standingRestart();
     this.flag = "sc";
     this.scLapsLeft = 2;
     this.scWet = true;
+    this.standAfterSc = true;
     this.drsEnabledFromLap = this.leaderLap + 4;
-    this.log({ kind: "control", text: "🟨 Se reanuda la carrera detrás del coche de seguridad", important: true, pause: true });
+    this.log({ kind: "control", text: "🟨 Se reanuda la carrera detrás del coche de seguridad; después, salida parada", important: true, pause: true });
   }
 
   /** Lluvia torrencial: bandera roja. */
@@ -1689,7 +1703,17 @@ export class Session {
         } else if (this.cars.some((c) => c.unlap) && this.unlapWait < 1) {
           this.unlapWait++;
           this.scLapsLeft = 1;
+        } else if (this.standAfterSc && this.laps - lap > 3) {
+          // tras la bandera roja por lluvia: en vez de lanzada, todos a la parrilla y salida parada
+          this.standAfterSc = false;
+          for (const c of this.cars) c.unlap = undefined;
+          this.flag = "green";
+          this.scWet = false;
+          this.unlapCalled = false;
+          this.unlapWait = 0;
+          this.standingRestart();
         } else {
+          this.standAfterSc = false;
           for (const c of this.cars) c.unlap = undefined;
           this.flag = "sc_in";
           // el líder elige dónde acelerar: en el último tramo, unos antes y otros apurando hasta cerca de la meta
@@ -2130,7 +2154,19 @@ export class Session {
     const lapped = this.lapsDone(c) > this.lapsDone(a) || c.s - a.s > this.L * 0.5;
     if (a.s - c.s > this.L * 0.5) return;
     if (lapped) {
-      // banderas azules: el doblado se aparta (y pierde tiempo) y el que dobla también levanta algo al pasarle
+      // banderas azules: de vez en cuando un doblado no hace caso (más los agresivos y los novatos) y aguanta un rato
+      // al que le dobla; los comisarios le ponen 5 s. Con su propio azar: sin ninguna, la carrera es la misma.
+      if (a.blueFor !== c.id) {
+        a.blueFor = c.id;
+        a.blueHold = undefined;
+        if (isRaceKind(this.kind) && this.blueRoll(BLUE_IGNORE_P * (0.6 + a.d.agresividad / 100) * (1 + 0.6 * this.greenness(a)))) {
+          a.blueHold = this.t + 12 + 10 * this.blueRoll(1, true);
+          this.log({ kind: "control", carId: a.id, text: `🔵 ${a.d.abrev} no hace caso a las banderas azules y aguanta a ${c.d.abrev}`, important: a.player || c.player, code: "azules", other: c.id });
+          this.penalize(a, 5, "ignorar las banderas azules", "azules");
+        }
+      }
+      if (a.blueHold !== undefined && this.t < a.blueHold) return;
+      // el doblado se aparta (y pierde tiempo) y el que dobla también levanta algo al pasarle
       if (this.rng.chance(0.55)) { this.grantPass(c, a, this.rng.range(0.2, 0.6)); c.delay += this.rng.range(0.05, 0.25); }
       return;
     }
@@ -2518,6 +2554,25 @@ export class Session {
       }
     }
     front.letPass = mate.id;
+  }
+
+  /** Azar de las banderas azules: ¿pasa algo con probabilidad p? (con u, el número de 0 a 1 tal cual). */
+  private blueRoll(p: number): boolean;
+  private blueRoll(p: number, u: true): number;
+  private blueRoll(p: number, u?: boolean): boolean | number {
+    const x = new Rng(this.blueS).next();
+    this.blueS = ((this.blueS >>> 0 || 1) + 0x6d2b79f5) >>> 0;
+    return u ? x : x < p;
+  }
+
+  /**
+   * Sanciones que no se han podido cumplir (el sancionado ha abandonado): pasan a la parrilla de la carrera siguiente,
+   * 3 puestos por 5 s y 5 por 10 s o más (como mucho 10). Solo en carrera.
+   */
+  gridPenaltiesNext(): { carId: number; places: number; why: string }[] {
+    if (!isRaceKind(this.kind)) return [];
+    return this.cars.filter((c) => c.loc === "out" && (c.penS ?? 0) > 0)
+      .map((c) => ({ carId: c.id, places: Math.min(10, (c.penS ?? 0) >= 10 ? 5 : 3), why: `${c.penS} s de sanción sin cumplir` }));
   }
 
   /** Rivalidad de temporada entre dos coches (0 a 1). */

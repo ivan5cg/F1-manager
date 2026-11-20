@@ -154,7 +154,8 @@ export function boardMessage(s: SeasonState, teams: TeamDef[], mine: number[], r
   if (done.length) lines.push(`${done.length > 1 ? "Objetivos cumplidos" : "Objetivo cumplido"}: ${done.join(" y ")}. Lo tendremos en cuenta en el presupuesto.`);
   if (failed.length) lines.push(`Ya no llegamos a «${list(failed)}». Esto pesará en el presupuesto del año que viene.`);
   if (off.length) lines.push(`Cuidado: ahora mismo no llegamos a «${list(off)}».`);
-  if ((s.aviso ?? 0) > 0 && bestPos > expect) lines.push("Os recuerdo que vuestro puesto está en juego.");
+  if ((s.aviso ?? 0) >= 2 && bestPos > expect) lines.push("Es tu última oportunidad: si este año tampoco cumplimos nada, buscaremos a otro.");
+  else if ((s.aviso ?? 0) > 0 && bestPos > expect) lines.push("Os recuerdo que vuestro puesto está en juego.");
   // lo que dijiste en la rueda de prensa
   const said = (s.boardMood ?? 0) > 0 ? pick(["Bien dicho en la rueda de prensa.", "Me gustó lo que dijiste ante la prensa."]) : (s.boardMood ?? 0) < 0 ? pick(["Y lo de la rueda de prensa sobraba.", "Cuidado con lo que se dice ante la prensa."]) : "";
   return [...lines.slice(0, 3), said].filter(Boolean).join(" ");

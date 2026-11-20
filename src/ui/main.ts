@@ -68,6 +68,9 @@ function finishSession(wk: Weekend, kind: SessionKind, sess: Session) {
     const tp = ts.findIndex((x) => x.team.id === s.playerTeam);
     // (los cambios de pilotos van después del mundial; antes se perdían al pintar el mundial)
     extra = standingsHtml(gp, before, all, s.playerTeam, `<div class="small dim" style="margin-top:6px">Constructores: ${esc(ts[tp].team.nombre)}, ${tp + 1}.º con ${ts[tp].points} pts.</div>`) + extra;
+    // sanciones sin cumplir: pasan a la parrilla de la carrera siguiente (también las de los rivales)
+    s.gridPens = sess.gridPenaltiesNext().map((g) => ({ nombre: sess.carById(g.carId).d.nombre, places: g.places, why: g.why }));
+    if (s.gridPens.length) extra += `<div class="panel"><div class="hd"><span class="t">⚖️ Sanciones para la próxima carrera</span></div><div class="bd small">${s.gridPens.map((g) => `<div>${esc(g.nombre)}: <b>${g.places} puestos</b> en la parrilla (${esc(g.why)}).</div>`).join("")}</div></div>`;
     // hitos de tu equipo (primeras victorias, rachas, récords...): como rótulo, arriba del todo
     const hs = hitosAfterRace(s, seatAt(s), gpOf);
     if (hs.length) s.hitos = [...(s.hitos ?? []), ...hs].slice(-200);

@@ -47,6 +47,12 @@ Ya hecho de lo que viene ahora (noviembre de 2026):
   simulación): `src/ui/experta.ts` (Begoña Arrieta, `Prefs.experta`, voz «experta» en `audio.ts`), el público de casa
   (`isLocal` y el himno en `sessionView.ts`, `audio.anthem`, `FAN_U`/`loadFanFlag` en `map3d.ts`) y
   `src/ui/planos.ts` (`devPlanoHtml`, `setupPlanoHtml`).
+- **13 Gestión** (cambia la simulación en lo que toca a sanciones): despido de verdad (`firedNow`, `firingOffers`,
+  `SeasonState.despedido` en `nextSeason.ts`/`hubs.ts`), cambio de jefe, técnico y motor en «crear equipo»
+  (`StaffChoice`, `staffCost`), sanciones sin cumplir a la parrilla siguiente (`Session.gridPenaltiesNext`,
+  `SeasonState.gridPens`, `WeekendState.gridPens`), banderas azules ignoradas (`BLUE_IGNORE_P` con su azar `blueS`:
+  sin ninguna, la carrera es la misma) y salida parada tras la bandera roja por lluvia (`standAfterSc`). Banco de
+  realismo (6 circuitos × 6 carreras) igual que en main salvo las sanciones (1,2 → 1,4); `finde.ts` igual.
 - **Asfalto sin baldosas:** la textura de 2,7 m se repetía y se veía una cuadrícula. `asfalto.webp` aplanada (paso
   alto sin costuras, `python3 scripts/assets.py --aplanar`) y el árido leído dos veces en el sombreador (la segunda
   girada 37° y a otra escala) mezcladas con ruido (`ASF_R` en `map3d.ts`). Una lectura de textura más en la pista.
@@ -63,7 +69,7 @@ Primero lo que se nota en cada carrera; los gráficos se ven una vez y se olvida
 3. ~~9.2 Titulares~~ ✅ y ~~9.3 La directiva te escribe~~ ✅.
 4. ~~12.2 Planos técnicos en Desarrollo~~ ✅.
 5. ~~9.1 Rueda de prensa, 8.2 Moral y desobediencia y 8.3 Rivalidades~~ ✅.
-6. ~~9.4 a 9.6 Ritual de la temporada~~ ✅, ~~10.2 a 10.4~~ ✅; queda **13 Gestión**.
+6. ~~9.4 a 9.6 Ritual de la temporada~~ ✅, ~~10.2 a 10.4~~ ✅ y ~~13 Gestión~~ ✅.
 7. **11.2 a 11.4 Árboles, fachadas y mecánicos**: para pulir al final.
 
 ### Presupuesto de assets (vale para los bloques 11 y 12)
@@ -188,7 +194,7 @@ no de crearlos. Respetar el presupuesto de assets.
 - Escudos vectoriales **inventados** para los equipos creados en «crear equipo» (forma, colores e iniciales). Para los
   equipos reales, nada de logos: sus colores y su nombre, como ahora.
 
-## Bloque 13 · Gestión
+## Bloque 13 · Gestión · ✅ Hecho
 
 - Cambiar de jefe de equipo, director técnico o motor entre temporadas en «crear equipo».
 - Que te despidan de verdad (hoy solo hay un aviso, `aviso` en 3.5).

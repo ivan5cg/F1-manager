@@ -76,7 +76,14 @@ En la realidad, en 2026 el GP de Baréin no se corrió en Sakhir: se trasladó a
   cumplir.
   En el calendario completo se piden más (las mismas por carrera). Al acabar, cumplirlos sube el presupuesto de
   desarrollo del año siguiente (6 M por objetivo) y fallarlos lo baja (5 M); dos temporadas seguidas sin cumplir
-  ninguno y la directiva avisa de que el jefe de equipo peligra.
+  ninguno y la directiva avisa de que el jefe de equipo peligra, y a la **tercera te despide**: con un equipo real, te
+  ofrecen los dos equipos peor clasificados del mundial (sigues la partida con el que elijas, sin aviso y con objetivos
+  nuevos) o dejas la Fórmula 1 y la partida se queda terminada; con «crea tu equipo», los inversores toman el control
+  y la partida termina. Durante ese último año, la directiva te lo recuerda tras las malas carreras.
+- **Equipo técnico entre temporadas** («crea tu equipo»): en la pantalla de fin de temporada puedes cambiar de jefe de
+  equipo, director técnico o motor. Fichar a uno de otro equipo cuesta su cláusula, que sale del presupuesto de
+  desarrollo, y su equipo se queda con un interino; los salarios y el motor cuentan en el techo de gasto del año
+  siguiente. Lo que valen de verdad no se sabe hasta verlos trabajar.
 - **Varias temporadas:** al acabar el año, «Empezar la temporada 2027» (y así cada año) en la misma partida. Antes se
   ve el resumen (campeones, tu puesto, los objetivos y lo que cambia el presupuesto) y se decide qué hacer con tus
   pilotos: seguir (o renovar si se les acaba el contrato) o cambiarlos por otro. Se puede fichar a cualquiera: a los
@@ -278,6 +285,13 @@ acabó en pinchazo o accidente. Los **límites de pista** también cuentan en ca
 negra; a la cuarta, 5 s, y otros 5 cada tres más. Pasarse de velocidad en el pit-lane, 5 s. La sanción se cumple
 parado en la próxima parada (el Muro ya la cuenta en «Si para ahora») o, si no se para más, se suma al tiempo final.
 En la torre sale en rojo (+5s) hasta que se cumple. Con las banderas azules, el que dobla también pierde algo al pasar.
+Si el sancionado **abandona sin cumplirla**, pasa a la **parrilla de la carrera siguiente**: 3 puestos por 5 s y 5 por
+10 s (sale en los resultados, en «¿Y ahora qué?» y en el aviso de la parrilla). De vez en cuando un doblado **no hace
+caso a las banderas azules** (más los agresivos y los novatos; algo así como una vez cada diez carreras, más en los
+circuitos donde se dobla mucho, como Monza) y aguanta un rato al que le dobla: 5 s. Tras una **bandera roja por lluvia**,
+la carrera se reanuda detrás del coche de seguridad y, cuando se retira, con **salida parada** desde la parrilla.
+`npx tsx scripts/gestion.ts [circuito] [carreras]` cuenta las banderas azules ignoradas y las sanciones que pasan a la
+carrera siguiente, y fuerza una bandera roja por lluvia para ver la salida parada.
 
 **Daños.** El alerón delantero se rompe en toques y salidas de pista; el **fondo**, en la grava, en toques en los que
 los dos se van largos y en los bordillos si el coche va más bajo de lo que pide el circuito (ver «Reglajes»). Los dos
