@@ -22,11 +22,209 @@ import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { toCreasedNormals } from "three/addons/utils/BufferGeometryUtils.js";
 import { HDRLoader } from "three/addons/loaders/HDRLoader.js";
 import { rainAt } from "../sim/weather";
-import { BRANDS, FONT, SECOND, collect, skin, carGeometry, carMinGeometry, wheelGeometry, steerGeometry, liveryTexture, makeCarMaterial, makeWheelMaterial, loadCarAssets } from "./car3d";
+import { BRANDS, FONT, SECOND, collect, skin, carGeometry, carMinGeometry, wheelGeometry, steerGeometry, liveryTexture, makeCarMaterial, makeWheelMaterial, loadCarAssets, createDracoGltfLoader } from "./car3d";
 import { gearFor, rpmFor } from "./audio";
 import { helmetDesign } from "./visual";
 
 const ASSET = (p) => `${import.meta.env.BASE_URL}assets/${p}`;
+
+// Entornos 3D cargados bajo demanda (solo en los circuitos que tienen rejilla de altura/mar)
+const ENV_TRACKS = new Set(["monaco", "singapur", "baku", "lasvegas"]);
+const envTrackCache = new Map();
+
+/** Descarga y cachea el entorno 3D de un circuito urbano si existe (null en el resto o si falla). */
+export async function loadTrackEnv(id) {
+  if (!ENV_TRACKS.has(id)) return null;
+  if (!envTrackCache.has(id)) {
+    envTrackCache.set(
+      id,
+      fetch(ASSET(`env-tracks/${id}.json`))
+        .then((r) => (r.ok ? r.json() : null))
+        .catch(() => null),
+    );
+  }
+  return envTrackCache.get(id);
+}
+
+// Cachés compartidas entre sesiones (solo datos en CPU/plantillas; cada WebGLRenderer crea y libera sus propios recursos GPU)
+const SC_COLORS = {
+  pintura: [0.72, 0.74, 0.78], negro: [0.025, 0.025, 0.03], carbono: [0.05, 0.052, 0.058], metal: [0.55, 0.57, 0.6],
+  llanta: [0.09, 0.095, 0.1], goma: [0.018, 0.018, 0.018], cristal: [0.02, 0.026, 0.034], rojo: [0.45, 0.015, 0.015],
+  ambar: [0.9, 0.35, 0.02], acento: [0.6, 0.03, 0.03],
+};
+let modManifestCache = null, modGltfLoaderP = null, modScCache = null, modCrewCache = null, modYachtCache = null;
+const modEnvTreeCache = new Map();
+const modTexImgCache = new Map();
+const modHdriRawCache = new Map();
+const modHdrLoader = new HDRLoader();
+
+function modLoadManifest() {
+  if (!modManifestCache) modManifestCache = fetch(`${ASSET("models/")}manifest.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+  return modManifestCache;
+}
+function getSharedGltfLoader() {
+  if (!modGltfLoaderP) modGltfLoaderP = createDracoGltfLoader().then(({ loader }) => loader);
+  return modGltfLoaderP;
+}
+function modLoadSafetyCar() {
+  if (!modScCache) modScCache = (async () => {
+    try {
+      const base = ASSET("models/");
+      const man = await modLoadManifest();
+      if (!man?.safety) return null;
+      const loader = await getSharedGltfLoader();
+      const build = async (file) => {
+        const gltf = await loader.loadAsync(base + file);
+        const body = collect(), bar = collect();
+        let nBar = 0;
+        gltf.scene.updateWorldMatrix(true, true);
+        gltf.scene.traverse((o) => {
+          if (!o.isMesh) return;
+          // posiciones cuantizadas (int16) o float tras Draco: a float antes de aplicar la escala del nodo
+          const q = o.geometry.attributes.position, f = new Float32Array(q.count * 3);
+          for (let i = 0; i < q.count; i++) f.set([q.getX(i), q.getY(i), q.getZ(i)], i * 3);
+          let g = new THREE.BufferGeometry();
+          g.setAttribute("position", new THREE.BufferAttribute(f, 3));
+          if (o.geometry.index) g.setIndex(o.geometry.index.clone());
+          g.applyMatrix4(o.matrixWorld);
+          g = toCreasedNormals(g, 0.6);
+          if (o.name === "luz") { bar.keep(g, [1, 1, 1]); nBar++; } else body.keep(g, SC_COLORS[o.name] ?? SC_COLORS.negro);
+        });
+        if (!nBar) return { car: body.done(), bar: null };
+        // la tira de luces de delante es muy fina para verla de lejos: una barra que la envuelve, como las de verdad
+        const lb = bar.done(), p = lb.attributes.position, bb = new THREE.Box3(), v = new THREE.Vector3();
+        for (let i = 0; i < p.count; i++) { v.fromBufferAttribute(p, i); if (v.x > -1.2) bb.expandByPoint(v); }
+        if (!bb.isEmpty()) {
+          const sz = bb.getSize(new THREE.Vector3()), c = bb.getCenter(new THREE.Vector3());
+          bar.keep(new THREE.BoxGeometry(Math.max(0.1, sz.x + 0.04), Math.max(0.05, sz.y + 0.03), sz.z + 0.04).translate(c.x, c.y + 0.01, c.z).toNonIndexed(), [1, 1, 1]);
+        }
+        lb.dispose();
+        return { car: body.done(), bar: bar.done() };
+      };
+      const [hi, lo] = await Promise.all([build(man.safety), man.safetyLo ? build(man.safetyLo) : null]);
+      return { hi, lo: lo ?? hi };
+    } catch (e) { console.warn("coche de seguridad .glb:", e); return null; }
+  })();
+  return modScCache;
+}
+function modLoadEnvTree(key) {
+  if (!modEnvTreeCache.has(key)) modEnvTreeCache.set(key, (async () => {
+    try {
+      const base = ASSET("models/"), man = await modLoadManifest(), file = man?.trees?.[key];
+      if (!file) return null;
+      const loader = await getSharedGltfLoader();
+      const parse = async (f) => {
+        const gltf = await loader.loadAsync(base + f);
+        const parts = [];
+        gltf.scene.updateWorldMatrix(true, true);
+        gltf.scene.traverse((o) => {
+          if (!o.isMesh) return;
+          const geo = o.geometry.clone();
+          geo.applyMatrix4(o.matrixWorld);
+          const m = o.material.clone();
+          if (m.alphaTest > 0) { m.transparent = false; m.depthWrite = true; m.side = THREE.DoubleSide; }
+          m.roughness = Math.max(m.roughness ?? 0.85, 0.85);
+          m.metalness = 0;
+          parts.push({ geo, mat: m, tintable: o.name !== "trunk" });
+        });
+        return parts.length ? parts : null;
+      };
+      const hi = await parse(file);
+      if (!hi) return null;
+      const loFile = key === "leaf" ? man?.trees?.leafLo : null;
+      const lo = loFile ? await parse(loFile) : null;
+      return { hi, lo };
+    } catch (e) { console.warn("árbol .glb:", key, e); return null; }
+  })());
+  return modEnvTreeCache.get(key);
+}
+function modLoadCrewModels() {
+  if (!modCrewCache) modCrewCache = (async () => {
+    try {
+      const base = ASSET("models/"), man = await modLoadManifest();
+      if (!man?.crew?.stand || !man?.crew?.crouch) return null;
+      const loader = await getSharedGltfLoader();
+      const parse = async (f) => {
+        const gltf = await loader.loadAsync(base + f);
+        let geo = null;
+        gltf.scene.updateWorldMatrix(true, true);
+        gltf.scene.traverse((o) => {
+          if (!o.isMesh || geo) return;
+          const g = o.geometry.clone();
+          g.applyMatrix4(o.matrixWorld);
+          // asegurar color de vértice RGB float32 para CREW_MAT
+          const cAttr = g.attributes.color;
+          if (cAttr && cAttr.itemSize !== 3) {
+            const arr = new Float32Array(cAttr.count * 3);
+            for (let i = 0; i < cAttr.count; i++) { arr[i * 3] = cAttr.getX(i); arr[i * 3 + 1] = cAttr.getY(i); arr[i * 3 + 2] = cAttr.getZ(i); }
+            g.setAttribute("color", new THREE.BufferAttribute(arr, 3));
+          }
+          geo = g;
+        });
+        return geo;
+      };
+      const [stand, crouch] = await Promise.all([parse(man.crew.stand), parse(man.crew.crouch)]);
+      return stand && crouch ? { stand, crouch } : null;
+    } catch (e) { console.warn("mecánicos .glb:", e); return null; }
+  })();
+  return modCrewCache;
+}
+function modLoadYachtModel() {
+  if (!modYachtCache) modYachtCache = (async () => {
+    try {
+      const base = ASSET("models/"), man = await modLoadManifest();
+      if (!man?.yacht) return null;
+      const loader = await getSharedGltfLoader();
+      const gltf = await loader.loadAsync(base + man.yacht);
+      let res = null;
+      gltf.scene.updateWorldMatrix(true, true);
+      gltf.scene.traverse((o) => {
+        if (!o.isMesh || res) return;
+        const geo = o.geometry.clone();
+        geo.applyMatrix4(o.matrixWorld);
+        const mat = o.material.clone();
+        mat.roughness = 0.40; mat.metalness = 0.08; mat.side = THREE.DoubleSide; mat.vertexColors = false;
+        res = { geo, mat };
+      });
+      return res;
+    } catch (e) { console.warn("yate .glb:", e); return null; }
+  })();
+  return modYachtCache;
+}
+function modLoadTexImage(kind) {
+  if (!modTexImgCache.has(kind)) {
+    modTexImgCache.set(kind, new Promise((resolve) => {
+      const img = new Image();
+      img.decoding = "async";
+      img.onload = () => resolve(img);
+      img.onerror = () => resolve(null);
+      img.src = ASSET(`tex/${kind}.webp`);
+    }));
+  }
+  return modTexImgCache.get(kind);
+}
+function modLoadHdriRaw(preset) {
+  if (!modHdriRawCache.has(preset)) {
+    modHdriRawCache.set(preset, new Promise((resolve) => {
+      modHdrLoader.load(ASSET(`env/${preset}.hdr`), (hdr) => resolve(hdr), undefined, () => { modHdriRawCache.delete(preset); resolve(null); });
+    }));
+  }
+  return modHdriRawCache.get(preset);
+}
+function cloneTemplateTex(srcTex, maxAniso, disposeBag) {
+  if (!srcTex?.image) return null;
+  const tex = new THREE.Texture(srcTex.image);
+  tex.flipY = srcTex.flipY;
+  tex.colorSpace = srcTex.colorSpace;
+  tex.wrapS = srcTex.wrapS;
+  tex.wrapT = srcTex.wrapT;
+  tex.magFilter = srcTex.magFilter;
+  tex.minFilter = srcTex.minFilter;
+  tex.anisotropy = maxAniso;
+  tex.needsUpdate = true;
+  disposeBag.push(tex);
+  return tex;
+}
 
 // las cuatro del botón (se van rotando) y las de «Más cámaras» (manteniendo pulsado el botón)
 const CAMS = ["circuito", "seguir", "tele", "abordo"];
@@ -39,13 +237,16 @@ const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
 const sstep = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
 
 /**
- * opt: { canvas, labels, box, sess, mine(), selId(), alpha(), paused(), speed(), ghosts(), quality? }
+ * opt: { canvas, labels, box, sess, env?, mine(), selId(), alpha(), paused(), speed(), ghosts(), quality?, targetFps?, autoTv?, onContextLost?, onContextRestored? }
  *  · alpha(): cuánto del paso de simulación en curso ha pasado ya (0..1), para interpolar posiciones;
  *  · ghosts(): [{ s, text, color }] con los fantasmas de parada;
  *  · quality (opcional): calidad fija de 0 a 3, sin memoria y sin bajar sola (pruebas, o fijada a mano en Ajustes);
+ *  · autoTv (opcional): realiza la cámara Tele con dirección automática (salida, boxes, incidentes, batallas);
  *  · debug (opcional, solo pruebas): { view: { pos, look, fov, s? } } pone la cámara a mano, relativa al coche seguido
  *    (o al punto s de la pista); en el mismo objeto se dejan algunos datos internos para comprobarlos.
- * Devuelve { beforeStep, draw, resize, cycleCam, pick, selChanged, stats, setQuality, dispose }.
+ * Devuelve { beforeStep, draw, idle, audioView, stats, setQuality, moving, lastIncident, replay, stopReplay, replaying,
+ *   photos, resize, cycleCam, camList, setCamera, cam, canOrbit, orbit, zoomBy, resetOrbit, orbitState, tvState, resetAutoTv,
+ *   pick, selChanged, dispose }.
  */
 export function createMap3d(opt) {
 const sess = opt.sess, track = sess.track;
@@ -202,8 +403,7 @@ function updateEnv(now, sig) {
   if (!hdriEnv) scene.environment = envRT.texture;
 }
 const hdriCache = new Map();
-const hdrLoader = new HDRLoader();
-let alive3d = true, hdriPreset = "", hdriEnv = null;
+let alive3d = true, ctxLost = false, hdriPreset = "", hdriEnv = null;
 function needHdri(preset) {
   if (preset === hdriPreset && hdriEnv) return;
   hdriPreset = preset;
@@ -211,13 +411,12 @@ function needHdri(preset) {
   if (hit) { hdriEnv = hit; scene.environment = hit.texture; return; }
   if (hit === null) return;
   hdriCache.set(preset, null);
-  hdrLoader.load(ASSET(`env/${preset}.hdr`), (hdr) => {
-    if (!alive3d) { hdr.dispose(); return; }
+  modLoadHdriRaw(preset).then((hdr) => {
+    if (!alive3d || !hdr) { if (!hdr) hdriCache.delete(preset); return; }
     const rt = pmrem.fromEquirectangular(hdr);
-    hdr.dispose();
     hdriCache.set(preset, rt);
     if (hdriPreset === preset) { hdriEnv = rt; scene.environment = rt.texture; }
-  }, undefined, () => { hdriCache.delete(preset); });
+  });
 }
 
 // ------------------------------------------------------------------ texturas de detalle (asfalto, hierba, grava)
@@ -269,11 +468,11 @@ const DET_U = {
 };
 const loadedTexs = [];
 {
-  const loader = new THREE.TextureLoader();
   const aniso = Math.min(8, renderer.capabilities.getMaxAnisotropy());
   for (const k of ["asfalto", "hierba", "grava", "hormigon", "fachada"]) {
-    loader.load(ASSET(`tex/${k}.webp`), (tex) => {
-      if (!alive3d) { tex.dispose(); return; }
+    modLoadTexImage(k).then((img) => {
+      if (!alive3d || !img) return;
+      const tex = new THREE.Texture(img);
       tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
       tex.magFilter = THREE.LinearFilter;
       tex.minFilter = THREE.LinearMipmapLinearFilter;
@@ -283,7 +482,7 @@ const loadedTexs = [];
       tex.needsUpdate = true;
       DET_U[k].value = tex;
       loadedTexs.push(tex);
-    }, undefined, () => { /* respaldo procedural */ });
+    });
   }
 }
 
@@ -766,160 +965,10 @@ const SC_GEO = (() => {
   return c.done();
 })();
 const SC_BAR = new THREE.BoxGeometry(0.2, 0.08, 1.0).translate(-0.35, 1.31, 0);
-// Coche de seguridad del .glb (public/assets/models, scripts/prepara_safety_glb.py): cada malla es un grupo de piezas
-// y aquí lleva su color; las luces del techo («luz») van aparte para que parpadeen. Fina de cerca y ligera de lejos.
-// Mientras carga, o si no está, el de siempre (SC_GEO y SC_BAR).
-const SC_COLORS = {
-  pintura: [0.72, 0.74, 0.78], negro: [0.025, 0.025, 0.03], carbono: [0.05, 0.052, 0.058], metal: [0.55, 0.57, 0.6],
-  llanta: [0.09, 0.095, 0.1], goma: [0.018, 0.018, 0.018], cristal: [0.02, 0.026, 0.034], rojo: [0.45, 0.015, 0.015],
-  ambar: [0.9, 0.35, 0.02], acento: [0.6, 0.03, 0.03],
-};
-let manCache = null, gltfLoaderP = null, scCache = null, crewCache = null, yachtCache = null;
-const envTreeCache = new Map();
-const envResDispose = []; // geometrías, materiales y texturas compartidas de .glb de entorno para liberar en dispose()
-function loadManifest() {
-  if (!manCache) manCache = fetch(`${ASSET("models/")}manifest.json`).then((r) => r.json()).catch(() => null);
-  return manCache;
-}
-function getGltfLoader() {
-  if (!gltfLoaderP) gltfLoaderP = import("three/addons/loaders/GLTFLoader.js").then(({ GLTFLoader }) => new GLTFLoader());
-  return gltfLoaderP;
-}
-function loadSafetyCar() {
-  if (!scCache) scCache = (async () => {
-    try {
-      const base = ASSET("models/");
-      const man = await loadManifest();
-      if (!man?.safety) return null;
-      const loader = await getGltfLoader();
-      const build = async (file) => {
-        const gltf = await loader.loadAsync(base + file);
-        const body = collect(), bar = collect();
-        let nBar = 0;
-        gltf.scene.updateWorldMatrix(true, true);
-        gltf.scene.traverse((o) => {
-          if (!o.isMesh) return;
-          // posiciones cuantizadas (int16): a float antes de aplicar la escala del nodo
-          const q = o.geometry.attributes.position, f = new Float32Array(q.count * 3);
-          for (let i = 0; i < q.count; i++) f.set([q.getX(i), q.getY(i), q.getZ(i)], i * 3);
-          let g = new THREE.BufferGeometry();
-          g.setAttribute("position", new THREE.BufferAttribute(f, 3));
-          if (o.geometry.index) g.setIndex(o.geometry.index.clone());
-          g.applyMatrix4(o.matrixWorld);
-          g = toCreasedNormals(g, 0.6);
-          if (o.name === "luz") { bar.keep(g, [1, 1, 1]); nBar++; } else body.keep(g, SC_COLORS[o.name] ?? SC_COLORS.negro);
-        });
-        if (!nBar) return { car: body.done(), bar: null };
-        // la tira de luces de delante es muy fina para verla de lejos: una barra que la envuelve, como las de verdad
-        const lb = bar.done(), p = lb.attributes.position, bb = new THREE.Box3(), v = new THREE.Vector3();
-        for (let i = 0; i < p.count; i++) { v.fromBufferAttribute(p, i); if (v.x > -1.2) bb.expandByPoint(v); }
-        if (!bb.isEmpty()) {
-          const sz = bb.getSize(new THREE.Vector3()), c = bb.getCenter(new THREE.Vector3());
-          bar.keep(new THREE.BoxGeometry(Math.max(0.1, sz.x + 0.04), Math.max(0.05, sz.y + 0.03), sz.z + 0.04).translate(c.x, c.y + 0.01, c.z).toNonIndexed(), [1, 1, 1]);
-        }
-        lb.dispose();
-        return { car: body.done(), bar: bar.done() };
-      };
-      const [hi, lo] = await Promise.all([build(man.safety), man.safetyLo ? build(man.safetyLo) : null]);
-      return { hi, lo: lo ?? hi };
-    } catch (e) { console.warn("coche de seguridad .glb:", e); return null; }
-  })();
-  return scCache;
-}
-/** Carga un árbol de entorno (.glb) bajo demanda según el bioma del circuito (tronco + copa o malla única). */
-function loadEnvTree(key) {
-  if (!envTreeCache.has(key)) envTreeCache.set(key, (async () => {
-    try {
-      const base = ASSET("models/"), man = await loadManifest(), file = man?.trees?.[key];
-      if (!file) return null;
-      const loader = await getGltfLoader();
-      const maxAniso = Math.min(4, renderer.capabilities.getMaxAnisotropy());
-      const parse = async (f) => {
-        const gltf = await loader.loadAsync(base + f);
-        const parts = [];
-        gltf.scene.updateWorldMatrix(true, true);
-        gltf.scene.traverse((o) => {
-          if (!o.isMesh) return;
-          const geo = o.geometry.clone();
-          geo.applyMatrix4(o.matrixWorld);
-          const m = o.material.clone();
-          if (m.map) { m.map.anisotropy = maxAniso; envResDispose.push(m.map); }
-          if (m.alphaTest > 0) { m.transparent = false; m.depthWrite = true; m.side = THREE.DoubleSide; }
-          m.roughness = Math.max(m.roughness ?? 0.85, 0.85);
-          m.metalness = 0;
-          envResDispose.push(geo, m);
-          parts.push({ geo, mat: m, tintable: o.name !== "trunk" });
-        });
-        return parts.length ? parts : null;
-      };
-      const hi = await parse(file);
-      if (!hi) return null;
-      const loFile = key === "leaf" ? man?.trees?.leafLo : null;
-      const lo = loFile ? await parse(loFile) : null;
-      return { hi, lo };
-    } catch (e) { console.warn("árbol .glb:", key, e); return null; }
-  })());
-  return envTreeCache.get(key);
-}
-/** Carga los mecánicos realistas (de pie y agachado) compatibles con CREW_MAT. */
-function loadCrewModels() {
-  if (!crewCache) crewCache = (async () => {
-    try {
-      const base = ASSET("models/"), man = await loadManifest();
-      if (!man?.crew?.stand || !man?.crew?.crouch) return null;
-      const loader = await getGltfLoader();
-      const parse = async (f) => {
-        const gltf = await loader.loadAsync(base + f);
-        let geo = null;
-        gltf.scene.updateWorldMatrix(true, true);
-        gltf.scene.traverse((o) => {
-          if (!o.isMesh || geo) return;
-          const g = o.geometry.clone();
-          g.applyMatrix4(o.matrixWorld);
-          // asegurar color de vértice RGB float32 para CREW_MAT
-          const cAttr = g.attributes.color;
-          if (cAttr && cAttr.itemSize !== 3) {
-            const arr = new Float32Array(cAttr.count * 3);
-            for (let i = 0; i < cAttr.count; i++) { arr[i * 3] = cAttr.getX(i); arr[i * 3 + 1] = cAttr.getY(i); arr[i * 3 + 2] = cAttr.getZ(i); }
-            g.setAttribute("color", new THREE.BufferAttribute(arr, 3));
-          }
-          envResDispose.push(g);
-          geo = g;
-        });
-        return geo;
-      };
-      const [stand, crouch] = await Promise.all([parse(man.crew.stand), parse(man.crew.crouch)]);
-      return stand && crouch ? { stand, crouch } : null;
-    } catch (e) { console.warn("mecánicos .glb:", e); return null; }
-  })();
-  return crewCache;
-}
-/** Carga el yate texturizado (solo en circuitos con mar/puerto: Mónaco, Singapur…). */
-function loadYachtModel() {
-  if (!yachtCache) yachtCache = (async () => {
-    try {
-      const base = ASSET("models/"), man = await loadManifest();
-      if (!man?.yacht) return null;
-      const loader = await getGltfLoader();
-      const gltf = await loader.loadAsync(base + man.yacht);
-      let res = null;
-      const maxAniso = Math.min(4, renderer.capabilities.getMaxAnisotropy());
-      gltf.scene.updateWorldMatrix(true, true);
-      gltf.scene.traverse((o) => {
-        if (!o.isMesh || res) return;
-        const geo = o.geometry.clone();
-        geo.applyMatrix4(o.matrixWorld);
-        const mat = o.material.clone();
-        if (mat.map) { mat.map.anisotropy = maxAniso; envResDispose.push(mat.map); }
-        mat.roughness = 0.40; mat.metalness = 0.08; mat.side = THREE.DoubleSide; mat.vertexColors = false;
-        envResDispose.push(geo, mat);
-        res = { geo, mat };
-      });
-      return res;
-    } catch (e) { console.warn("yate .glb:", e); return null; }
-  })();
-  return yachtCache;
-}
+// Coche de seguridad del .glb (public/assets/models, scripts/prepara_safety_glb.py): fina de cerca y ligera de lejos.
+// Mientras carga, o si no está, el de siempre (SC_GEO y SC_BAR). Las plantillas y los .glb se cachean a nivel de módulo;
+// aquí solo se guardan los envoltorios GPU (materiales y texturas) propios de este renderer para liberarlos en dispose().
+const envResDispose = [];
 // bandera de comisario: mástil (oscuro) y paño que ondea (el color lo pone cada puesto)
 const FLAG_GEO = (() => {
   const g = new THREE.PlaneGeometry(1.1, 0.75, 8, 2).translate(0.55, 2.05, 0);
@@ -1237,7 +1286,7 @@ function blur(src, win, n) {
   for (let i = 0; i < n; i++) { out[i] = acc / (2 * win + 1); acc += src[mod(i + win + 1, n)] - src[mod(i - win, n)]; }
   return out;
 }
-function buildTrackData(tr, id) {
+function buildTrackData(tr, id, envData) {
   const n = tr.xs.length, ds = tr.ds, L = tr.length;
   let minx = 1e9, maxx = -1e9, miny = 1e9, maxy = -1e9;
   for (let i = 0; i < n; i++) { minx = Math.min(minx, tr.xs[i]); maxx = Math.max(maxx, tr.xs[i]); miny = Math.min(miny, tr.ys[i]); maxy = Math.max(maxy, tr.ys[i]); }
@@ -1255,10 +1304,10 @@ function buildTrackData(tr, id) {
   // cambios de rasante: donde la pista pasa de bajar a subir el coche se aplasta y toca abajo (chispas)
   const dip = new Float32Array(n);
   for (let i = 0; i < n; i++) dip[i] = Math.max(0, (H[(i + 3) % n] - 2 * H[i] + H[(i - 3 + n) % n]) / (9 * ds * ds));
-  // terreno real alrededor (urbanos, campo «entorno»): altitud absoluta en una rejilla; el mar sale a 0 m o menos.
+  // terreno real alrededor (public/assets/env-tracks/<id>.json): altitud absoluta en una rejilla; el mar sale a 0 m o menos.
   // La pista del juego va referida a su punto más bajo: el desfase es la mediana de (terreno − pista) bajo el trazado.
   let env = null;
-  const en = tr.def.entorno;
+  const en = envData ?? tr.def.entorno;
   if (en) {
     const N = en.n, eh = en.h;
     const abs = (x, z) => {
@@ -1283,8 +1332,8 @@ function buildTrackData(tr, id) {
   for (let i = 0; i < n; i++) line[i] = -0.6 * clamp(1.7 * narrow[i] - 1.9 * wide[i], -1, 1);
   line = blur(blur(line, Math.round(18 / ds), n), Math.round(18 / ds), n);
   // escapatorias: metros de grava por fuera de las curvas (izquierda y derecha)
-  // urbanos: los que traen su entorno (Mónaco, Singapur, Bakú, Las Vegas)
-  const street = !!tr.def.entorno;
+  // urbanos: los que marcan urbano o traen entorno urbano (Mónaco, Singapur, Bakú, Las Vegas)
+  const street = !!(tr.def.urbano ?? (en && en.tipo !== "semiurbano"));
   // anchura real por punto (campo «ancho»), como proporción de la media
   const an = tr.def.ancho;
   let wr = new Float32Array(n).fill(1), wReal = street ? 5 : 6.5;
@@ -2514,7 +2563,7 @@ function buildWorld() {
   const scCar = add(new THREE.Mesh(SC_GEO, new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.35, metalness: 0.5, clearcoat: 1, clearcoatRoughness: 0.06 })));
   const scBar = add(new THREE.Mesh(SC_BAR, new THREE.MeshBasicMaterial({ color: 0xffa000 })));
   scCar.matrixAutoUpdate = scBar.matrixAutoUpdate = false; scCar.visible = scBar.visible = false; scCar.castShadow = true; scCar.frustumCulled = scBar.frustumCulled = false;
-  loadSafetyCar().then((sc) => { if (sc && alive3d && world) world.scGlb = sc; });
+  modLoadSafetyCar().then((sc) => { if (sc && alive3d && world) world.scGlb = sc; });
 
   // ---- coches, ruedas, spray, sombras de reserva, fichas y aros
   const NC = sess.cars.length;
@@ -2677,10 +2726,21 @@ function buildWorld() {
   // ---- carga asíncrona de los .glb de entorno (árboles del bioma, mecánicos y yates) sin bloquear el arranque
   if (trees.length && bio.species?.length) {
     const spKeys = bio.species.map(([k]) => k);
-    Promise.all(spKeys.map((k) => loadEnvTree(k))).then((loaded) => {
+    Promise.all(spKeys.map((k) => modLoadEnvTree(k))).then((loaded) => {
       if (!alive3d || world !== curWorld) return;
       const byKey = new Map();
-      spKeys.forEach((k, idx) => { if (loaded[idx]) byKey.set(k, loaded[idx]); });
+      const maxAniso = Math.min(4, renderer.capabilities.getMaxAnisotropy());
+      spKeys.forEach((k, idx) => {
+        const tpl = loaded[idx];
+        if (!tpl) return;
+        const wrapParts = (parts) => parts.map((pt) => {
+          const mat = pt.mat.clone();
+          if (pt.mat.map) mat.map = cloneTemplateTex(pt.mat.map, maxAniso, envResDispose);
+          envResDispose.push(mat);
+          return { geo: pt.geo, mat, tintable: pt.tintable };
+        });
+        byKey.set(k, { hi: wrapParts(tpl.hi), lo: tpl.lo ? wrapParts(tpl.lo) : null });
+      });
       if (!byKey.size) return;
       // repartir árboles entre las especies disponibles del bioma según pesos acumulados
       const buckets = new Map([...byKey.keys()].map((k) => [k, []]));
@@ -2733,7 +2793,7 @@ function buildWorld() {
       curWorld.treeLod = lodLo.length ? { hi: lodHi, lo: lodLo } : null;
     });
   }
-  loadCrewModels().then((cr) => {
+  modLoadCrewModels().then((cr) => {
     if (!cr || !alive3d || world !== curWorld) return;
     const swapCrew = (mesh, tplGeo) => {
       const g = tplGeo.clone();
@@ -2747,11 +2807,15 @@ function buildWorld() {
     if (chkMan) { chkMan.geometry = cr.stand; chkMan.userData.sharedGeo = true; }
   });
   if (boatMeshRef) {
-    loadYachtModel().then((y) => {
+    modLoadYachtModel().then((y) => {
       if (!y || !alive3d || world !== curWorld) return;
       const oldMat = boatMeshRef.material;
+      const maxAniso = Math.min(4, renderer.capabilities.getMaxAnisotropy());
+      const mat = y.mat.clone();
+      if (y.mat.map) mat.map = cloneTemplateTex(y.mat.map, maxAniso, envResDispose);
+      envResDispose.push(mat);
       boatMeshRef.geometry = y.geo;
-      boatMeshRef.material = y.mat;
+      boatMeshRef.material = mat;
       boatMeshRef.userData.sharedGeo = true;
       boatMeshRef.userData.sharedMat = true;
       oldMat?.dispose();
@@ -2967,6 +3031,7 @@ function makePost() {
 }
 let lastInfo = { calls: 0, tris: 0, q };
 function render() {
+  if (ctxLost) return;
   renderer.info.autoReset = false; renderer.info.reset();
   try { render2(); } finally { DBG.info = lastInfo = { calls: renderer.info.render.calls, tris: renderer.info.render.triangles, q }; renderer.info.autoReset = true; }
 }
@@ -3422,10 +3487,11 @@ let curW = 20, camFrom = null, camT = 1, camSnap = true, yaw = 0, teleIdx = -1;
 const cur = { pos: new THREE.Vector3(), look: new THREE.Vector3(), fov: 36 };
 const want = { pos: new THREE.Vector3(), look: new THREE.Vector3(), fov: 36 };
 const ov = { az: 0, dist: 4000, shift: 0, el: 54 * Math.PI / 180 };
+const orb = { dAz: 0, dEl: 0, zoom: 1, active: false };
 const _v = new THREE.Vector3(), probe = new THREE.PerspectiveCamera(36, 1, 5, 80000);
-function ovPose(az, dist, shift, out) {
-  const ch = Math.cos(ov.el), sh = Math.sin(ov.el), dx = Math.cos(az), dz = Math.sin(az);
-  out.look.set(dx * shift, T.hmean, dz * shift);
+function ovPose(az, dist, shift, out, el = ov.el, lookAz = az) {
+  const ch = Math.cos(el), sh = Math.sin(el), dx = Math.cos(az), dz = Math.sin(az);
+  out.look.set(Math.cos(lookAz) * shift, T.hmean, Math.sin(lookAz) * shift);
   out.pos.set(out.look.x + dx * ch * dist, T.hmean + sh * dist, out.look.z + dz * ch * dist);
 }
 /** Encaja el circuito entero en el hueco: gira para que el eje largo coincida con el lado largo y busca la distancia justa. */
@@ -3453,9 +3519,15 @@ function fitOverview() {
   }
   ov.dist = dist; ov.shift = shift;
 }
+const isAutoTv = () => (opt.autoTv ? !!opt.autoTv() : true);
+const tvDir = { carId: null, shot: "tele", reason: "", prio: 0, since: -1e9, holdMs: 7000 };
+let camFocusCar = null;
+function clearOrbit() { orb.dAz = 0; orb.dEl = 0; orb.zoom = 1; orb.active = false; }
 function setCam(m) {
   if (m === camMode) return;
   camMode = m; teleIdx = -1;
+  clearOrbit();
+  if (m === "tele") { tvDir.carId = null; tvDir.shot = "tele"; tvDir.reason = ""; tvDir.prio = 0; tvDir.since = -1e9; }
   camFrom = { pos: cur.pos.clone(), look: cur.look.clone(), fov: cur.fov }; camT = 0;
 }
 const _tp = mkS(), _tq = mkS(), _hv = new THREE.Vector3(), heliPos = new THREE.Vector3(), segPos = new THREE.Vector3();
@@ -3463,9 +3535,84 @@ let heliOn = false, segOn = false;
 const _up = new THREE.Vector3(0, 1, 0), _sr = new THREE.Vector3(), _su = new THREE.Vector3(), _sc = new THREE.Vector3();
 /** Distancia (m, de cerca) del eje a la torre de la cámara de tele: en los urbanos, en la acera entre la valla y las casas. */
 const tvLat = (i) => (T.street ? (T.SH - 0.08) * W_REAL + T.rO[i] + 2.3 : 1.7 * W_REAL + T.rO[i] + 0.9);
+const isPitPose = (p) => !!p && (p.pf >= 0 || p.c.loc === "pit" || p.c.loc === "lane_in" || p.c.loc === "lane_out");
+/** Realización automática en Tele (con histéresis): salida en grúa, boxes de tus pilotos, incidentes y batallas. */
+function resolveTvShot(now) {
+  const isRace = sess.kind === "RACE" || sess.kind === "SPRINT";
+  const ord = typeof sess.order === "function" ? sess.order() : [];
+  const lead = ord[0] && pose.has(ord[0].id) ? ord[0] : followCar();
+  const leadP = lead ? pose.get(lead.id) : null;
+  const inStart = isRace && !sess.chequered && (
+    (sess.startLights ? sess.startLights() > 0 : false)
+    || (sess.t === 0 && sess.flag === "green")
+    || !!sess.restartHold
+    || (sess.t > 0 && sess.t < 20 && (sess.leaderLap ?? 0) === 0 && !!leadP && leadP.s < Math.min(480, T.L * 0.16))
+    || ((sess.launchT ?? 0) > 0 && sess.t - sess.launchT < 14)
+  );
+  let cand = null;
+  if (inStart && lead) {
+    cand = { carId: lead.id, shot: "grua", reason: "start", prio: 5, holdMs: 7000 };
+  }
+  if (!cand) {
+    let inc = null, bt = 1e9;
+    for (const p of pose.values()) {
+      if (!p.fxK || p.fxK === "lock") continue;
+      if (p.fxTau < (p.fxK === "crash" ? 8 : 5) && (p.fxTau < bt || (p.fxTau === bt && p.c.player))) { inc = p; bt = p.fxTau; }
+    }
+    if (inc) cand = { carId: inc.c.id, shot: "tele", reason: "incident", prio: 4, holdMs: 6500 };
+  }
+  if (!cand) {
+    for (const c of opt.mine()) {
+      const p = pose.get(c.id);
+      if (c.loc !== "garage" && isPitPose(p)) {
+        cand = { carId: c.id, shot: "boxes", reason: "pit", prio: 3, holdMs: 6500 };
+        break;
+      }
+    }
+  }
+  if (!cand && isRace && ord.length > 1 && typeof sess.gapBetween === "function") {
+    let bestCar = null, bestScore = -1e9;
+    for (let i = 1; i < ord.length; i++) {
+      const a = ord[i - 1], b = ord[i];
+      if (a.loc !== "track" || b.loc !== "track" || !pose.has(a.id) || !pose.has(b.id)) continue;
+      const gap = sess.gapBetween(a, b);
+      if (!(gap > 0 && gap < 0.4)) continue;
+      const hasMe = a.player || b.player;
+      const sc = (hasMe ? 50 : 0) + Math.max(0, 22 - i) + (0.4 - gap) * 15;
+      if (sc > bestScore) { bestScore = sc; bestCar = b.player ? b : a.player ? a : b; }
+    }
+    if (bestCar) cand = { carId: bestCar.id, shot: "tele", reason: "battle", prio: 2, holdMs: 7500 };
+  }
+  if (!cand) {
+    const fc = followCar();
+    if (fc) cand = { carId: fc.id, shot: "tele", reason: "follow", prio: 1, holdMs: 7000 };
+  }
+  const curP = tvDir.carId !== null ? pose.get(tvDir.carId) : null;
+  if (opt.paused() && curP) return { car: curP.c, shot: tvDir.shot, cut: false };
+  const valid = !!curP && (tvDir.shot !== "boxes" || isPitPose(curP)) && (tvDir.reason !== "start" || inStart);
+  let cut = false;
+  if (cand && (!valid || cand.prio > tvDir.prio || (now - tvDir.since >= tvDir.holdMs && (cand.carId !== tvDir.carId || cand.shot !== tvDir.shot || cand.reason !== tvDir.reason)))) {
+    if (tvDir.carId !== cand.carId || tvDir.shot !== cand.shot) cut = true;
+    tvDir.carId = cand.carId;
+    tvDir.shot = cand.shot;
+    tvDir.reason = cand.reason;
+    tvDir.prio = cand.prio;
+    tvDir.since = now;
+    tvDir.holdMs = cand.holdMs;
+    if (cut) teleIdx = -1;
+  }
+  const fp = tvDir.carId !== null ? pose.get(tvDir.carId) : null;
+  return { car: fp ? fp.c : followCar(), shot: fp ? tvDir.shot : "tele", cut };
+}
 /** En la cámara de tele, como en la realización: si alguien acaba de trompear, salirse o estrellarse, se corta a él. */
 function camTarget() {
   if (camMode === "tele") {
+    if (isAutoTv()) {
+      const fp = tvDir.carId !== null ? pose.get(tvDir.carId) : null;
+      if (fp) return fp.c;
+    } else {
+      return followCar();
+    }
     let best = null, bt = 1e9;
     for (const p of pose.values()) if (p.fxK && p.fxK !== "lock" && p.fxTau < (p.fxK === "crash" ? 7 : 4.5) && p.fxTau < bt) { best = p.c; bt = p.fxTau; }
     if (best) return best;
@@ -3473,20 +3620,48 @@ function camTarget() {
   return followCar();
 }
 function updateCamera(dt, now) {
-  const tgt = camTarget(), p = tgt && pose.get(tgt.id);
-  let mode = camMode;
+  let tgt = followCar(), mode = camMode, cut = false, onboard = false;
+  if (mode === "tele") {
+    if (isAutoTv() && !replay && !photoNow && !opt.debug?.view) {
+      const res = resolveTvShot(now);
+      tgt = res.car; mode = res.shot; cut = res.cut;
+    } else if (!isAutoTv()) {
+      tgt = followCar();
+    } else {
+      tgt = camTarget();
+    }
+  } else {
+    tgt = camTarget();
+  }
+  let p = tgt && pose.get(tgt.id);
   if (!p && mode !== "circuito") mode = "circuito";
+  camFocusCar = p ? p.c : null;
   // pit-lane: solo con el coche en boxes (entrando, parado o saliendo, o en su garaje); si no, se le sigue de cerca
   const inPits = p && (p.pf >= 0 || p.gar > 0 || p.lane2 || p.c.loc === "lane_out" || p.c.loc === "lane_in");
   if (mode === "boxes" && !inPits) mode = "seguir";
   if (mode !== "heli") heliOn = false;
-  if (mode !== "seguir") segOn = false;
-  let cut = false, onboard = false;
+  if (mode !== "seguir" || orb.active) segOn = false;
   const fast = Math.sqrt(Math.max(1, opt.speed() / 4));
   if (mode === "circuito") {
-    if (!opt.paused()) swayT += dt; // en pausa la vista se queda quieta
-    const sway = reduced ? 0 : 0.11 * Math.sin(swayT * 2 * Math.PI / 48);
-    ovPose(ov.az + sway, ov.dist * 1.03, ov.shift, want); want.fov = 36;
+    if (orb.active) {
+      ovPose(ov.az + orb.dAz, ov.dist * 1.03 * orb.zoom, ov.shift, want, clamp(ov.el + orb.dEl, 0.24, 1.43), ov.az);
+    } else {
+      if (!opt.paused()) swayT += dt; // en pausa la vista se queda quieta
+      const sway = reduced ? 0 : 0.11 * Math.sin(swayT * 2 * Math.PI / 48);
+      ovPose(ov.az + sway, ov.dist * 1.03, ov.shift, want);
+    }
+    want.fov = 36;
+  } else if (mode === "seguir" && orb.active) {
+    sample(p.s + 28, _tp);
+    const yt = Math.atan2(_tp.tz, _tp.tx);
+    let d = yt - yaw; d = Math.atan2(Math.sin(d), Math.cos(d));
+    yaw += d * (1 - Math.exp(-dt / 0.95));
+    const D0 = (T.street ? 32 : 62) * fast, el0 = T.street ? 0.42 : 0.4;
+    const D = clamp(D0 * orb.zoom, 10, 220), el = clamp(el0 + orb.dEl, 0.1, 1.38);
+    const ang = yaw + orb.dAz, cx = Math.cos(ang), cz = Math.sin(ang);
+    want.look.set(p.px + p.fx * 4, p.py + 1, p.pz + p.fz * 4);
+    want.pos.set(want.look.x - cx * D * Math.cos(el), want.look.y + D * Math.sin(el), want.look.z - cz * D * Math.cos(el));
+    want.fov = T.street ? 40 : 38;
   } else if (mode === "seguir" && T.street) {
     // en urbanos, la cámara sigue el corredor abierto de la calzada para que ningún edificio tape al coche
     sample(p.s - 26 * fast, _tq);
@@ -3841,7 +4016,7 @@ function drawFlags(now, W, k) {
       const hl = Math.hypot(fx, fz) || 1, rx = -fz / hl, rz = fx / hl;
       // el del .glb, fino de cerca y ligero de lejos (si no ha cargado, el de siempre)
       const g = world.scGlb && (camera.position.distanceToSquared(_ws.set(x0, _sa.y, z0)) < (90 * k) ** 2 ? world.scGlb.hi : world.scGlb.lo);
-      if (g && scCar.geometry !== g.car) { scCar.geometry = g.car; scBar.geometry = g.bar ?? SC_BAR; }
+      if (g && scCar.geometry !== g.car) { scCar.geometry = g.car; scCar.userData.sharedGeo = true; scBar.geometry = g.bar ?? SC_BAR; scBar.userData.sharedGeo = !!g.bar; }
       scCar.matrix.set(fx * k, 0, rx * k, x0, fy * k, k, 0, _sa.y + 0.03 * k, fz * k, 0, rz * k, z0, 0, 0, 0, 1);
       scBar.matrix.copy(scCar.matrix);
       scBar.material.color.setRGB(...(Math.floor(now / 250) % 2 ? [8, 3.5, 0] : [0.3, 0.12, 0]));
@@ -4121,28 +4296,62 @@ function draw3d(dt, now) {
     u.uWind.value.set(Math.cos(sess.weather.windDir), -Math.sin(sess.weather.windDir));
   }
   render();
-  // rótulos y puntos para tocar
-  const box = opt.box, w = box.clientWidth, h = box.clientHeight, close = camMode !== "circuito" && W < 12;
+  // rótulos tocables y enriquecidos de cerca (posición + compuesto)
+  const box = opt.box, w = box.clientWidth, h = box.clientHeight, close = W < 12;
   screenPts = [];
-  const placed = [], fc = followCar(), fp = fc && pose.get(fc.id);
-  for (const p of list) {
+  const placed = [], fc = camFocusCar || followCar(), fp = fc && pose.get(fc.id), selIdNow = opt.selId();
+  const posMap = close && typeof sess.order === "function" ? new Map(sess.order().map((c, idx) => [c.id, idx + 1])) : null;
+  const lblList = list.slice().sort((a, b) => {
+    const ka = a.c.id === selIdNow ? 0 : a.c.player ? 1 : 2;
+    const kb = b.c.id === selIdNow ? 0 : b.c.player ? 1 : 2;
+    return ka - kb;
+  });
+  for (const p of lblList) {
     _v.set(p.px, p.py + 1.6 * k, p.pz).project(camera);
     const ok = _v.z < 1 && Math.abs(_v.x) < 1.05 && Math.abs(_v.y) < 1.05;
     const x = (_v.x * 0.5 + 0.5) * w, y = (-_v.y * 0.5 + 0.5) * h;
     if (ok) screenPts.push({ id: p.c.id, x, y });
-    const el = labels.get(p.c.id);
-    if (!el) continue;
+    const rec = labels.get(p.c.id);
+    if (!rec) continue;
+    const el = rec.el;
     const near = close && fp && Math.min(mod(p.s - fp.s, T.L), mod(fp.s - p.s, T.L)) < 22 * k;
-    if (ok && (p.c.player || p.c.id === opt.selId() || near) && !((camMode === "abordo" || camMode === "trasera") && p === fp)) {
+    if (ok && (p.c.player || p.c.id === selIdNow || near) && !((camMode === "abordo" || camMode === "trasera") && p === fp)) {
+      if (close) {
+        const pos = posMap ? posMap.get(p.c.id) : undefined;
+        const cmp = p.c.tyres?.c || "";
+        const key = `${pos ?? ""}|${cmp}`;
+        if (rec.key !== key) {
+          rec.key = key;
+          rec.lp.textContent = pos ? `P${pos}` : "";
+          rec.lc.textContent = cmp;
+          rec.lc.style.background = COMPOUND[cmp] || "";
+          rec.lc.style.color = cmp === "M" || cmp === "H" ? "#111" : "#fff";
+          rec.lc.hidden = !cmp;
+        }
+        el.classList.add("rich");
+      } else {
+        if (rec.key !== "") {
+          rec.key = "";
+          rec.lp.textContent = "";
+          rec.lc.textContent = "";
+          rec.lc.hidden = true;
+        }
+        el.classList.remove("rich");
+      }
       el.hidden = false;
-      let ly = y - 19;
-      while (placed.some((o) => Math.abs(o.x - x) < 30 && Math.abs(o.y - ly) < 13)) ly -= 14;
-      placed.push({ x, y: ly });
-      el.style.transform = `translate3d(${(x + 3).toFixed(1)}px, ${ly.toFixed(1)}px, 0)`;
-      el.classList.toggle("sel", p.c.id === opt.selId());
+      const bw = close ? 76 : 36, bh = close ? 16 : 14;
+      const lx = clamp(x - bw * 0.5, 4, Math.max(4, w - bw - 4));
+      let ly = clamp(y - (close ? 24 : 19), 30, Math.max(30, h - bh - 4));
+      for (let tries = 0; tries < 4 && placed.some((o) => Math.abs(o.x - lx) < bw && Math.abs(o.y - ly) < bh); tries++) {
+        const up = ly - (bh + 2);
+        ly = up >= 30 ? up : Math.min(Math.max(30, h - bh - 4), ly + (bh + 2));
+      }
+      placed.push({ x: lx, y: ly });
+      el.style.transform = `translate3d(${lx.toFixed(1)}px, ${ly.toFixed(1)}px, 0)`;
+      el.classList.toggle("sel", p.c.id === selIdNow);
     } else if (!el.hidden) el.hidden = true;
   }
-  for (const [id, el] of labels) if (!pose.has(id) && !el.hidden) el.hidden = true;
+  for (const [id, rec] of labels) if (!pose.has(id) && !rec.el.hidden) rec.el.hidden = true;
   // fantasma de parada: dónde estaría tu piloto si parase ahora
   const gs = opt.ghosts ? opt.ghosts() : [];
   ghostEls.forEach((el, j) => {
@@ -4159,15 +4368,18 @@ function draw3d(dt, now) {
 
 
 // ------------------------------------------------------------------ arranque y lo que se ofrece fuera
-T = buildTrackData(track, track.id);
+T = buildTrackData(track, track.id, opt.env);
 const remember = () => { for (const c of sess.cars) { prevS.set(c.id, c.s); prevV.set(c.id, c.v); } };
 remember();
 buildWorld();
 for (const c of sess.cars) {
   const el = document.createElement("div");
   el.className = "lbl3" + (c.player ? " me" : ""); el.hidden = true;
-  el.innerHTML = `<i style="background:${c.team.color}"></i><span>${c.d.abrev}</span>`;
-  opt.labels.appendChild(el); labels.set(c.id, el);
+  el.dataset.car = String(c.id);
+  el.setAttribute("role", "button");
+  el.innerHTML = `<i style="background:${c.team.color}"></i><em class="lp"></em><span class="ln">${c.d.abrev}</span><b class="lc" hidden></b>`;
+  opt.labels.appendChild(el);
+  labels.set(c.id, { el, lp: el.querySelector(".lp"), lc: el.querySelector(".lc"), key: "" });
 }
 const repEl = document.createElement("div"); repEl.className = "rep3"; repEl.hidden = true; repEl.textContent = "Repetición"; opt.labels.appendChild(repEl);
 const ghostEls = [0, 1].map(() => { const el = document.createElement("div"); el.className = "gh3"; el.hidden = true; opt.labels.appendChild(el); return el; });
@@ -4213,10 +4425,37 @@ function audioView(now) {
   }
   return { cars, stops, crowd: clamp(crowd, 0, 1), rain: clamp(rainHere / 2.5, 0, 1), onboard: !!tgt, thunders: thunders.splice(0) };
 }
+const onCtxLost = (e) => {
+  e.preventDefault();
+  ctxLost = true;
+  opt.onContextLost?.();
+};
+const onCtxRestored = () => {
+  ctxLost = false;
+  if (post) { post.rt.dispose(); post.composer.dispose(); post.ao.dispose(); post.bloom.dispose(); post = null; }
+  for (const rt of hdriCache.values()) if (rt) rt.dispose();
+  hdriCache.clear();
+  if (envRT) { envRT.dispose(); envRT = null; }
+  envSig = ""; hdriPreset = ""; hdriEnv = null;
+  applyQuality();
+  busyUntil = performance.now() + 500;
+  opt.onContextRestored?.();
+};
+glc.addEventListener("webglcontextlost", onCtxLost);
+glc.addEventListener("webglcontextrestored", onCtxRestored);
+
+const canOrbit = () => camMode === "circuito" || camMode === "seguir";
+function prepSegOrbit() {
+  if (T.street && camMode === "seguir" && !orb.active) {
+    yaw = Math.atan2(cur.look.z - cur.pos.z, cur.look.x - cur.pos.x);
+  }
+}
+
 return {
   /** Antes de cada paso de la simulación: guarda dónde estaba cada coche, para interpolar. */
   beforeStep: remember,
   draw(dt, now) {
+    if (ctxLost) { fN = 0; fT = now; lowSecs = 0; fps = 0; return; }
     scanEvents();
     const shot = pickPhoto();
     if (shot) {
@@ -4225,11 +4464,13 @@ return {
     }
     draw3d(dt, now);
     if (opt.paused()) { fN = 0; fT = now; lowSecs = 0; fps = 0; return; } // en pausa se dibuja poco a propósito: no cuenta
-    // calidad automática: si no llega a 40 fps tres segundos seguidos, baja un escalón (ver lowerQuality)
+    // calidad automática: si no llega al mínimo tres segundos seguidos, baja un escalón (ver lowerQuality)
+    const target = opt.targetFps ? opt.targetFps() : 60;
+    const minFps = target <= 30 ? 22 : 40;
     fN++;
     if (now - fT >= 1000) {
       fps = (fN * 1000) / (now - fT);
-      if (++warm > 3) { lowSecs = fps < 40 ? lowSecs + 1 : 0; if (lowSecs >= 3) { lowSecs = 0; lowerQuality(); } }
+      if (++warm > 3) { lowSecs = fps < minFps ? lowSecs + 1 : 0; if (lowSecs >= 3) { lowSecs = 0; lowerQuality(); } }
       fN = 0; fT = now;
     }
   },
@@ -4263,6 +4504,39 @@ return {
   camList: () => [...CAMS, ...MORE_CAMS].map((id) => ({ id, name: CAM_NAME[id], more: MORE_CAMS.includes(id) })),
   setCamera(m) { if (CAM_NAME[m]) { busyUntil = performance.now() + 1300; setCam(m); } return CAM_NAME[camMode]; },
   cam: () => camMode,
+  canOrbit,
+  /** Orbita manualmente las cámaras Circuito o Seguir sin soltar la cámara al terminar el gesto. */
+  orbit(dAz, dEl) {
+    if (!canOrbit()) return;
+    prepSegOrbit();
+    const el0 = camMode === "circuito" ? ov.el : T.street ? 0.42 : 0.4;
+    const elMin = camMode === "circuito" ? 0.24 : 0.1;
+    const elMax = camMode === "circuito" ? 1.43 : 1.38;
+    orb.dAz += dAz;
+    orb.dEl = clamp(orb.dEl + dEl, elMin - el0, elMax - el0);
+    orb.active = true; camFrom = null; camT = 1;
+    busyUntil = performance.now() + 500;
+  },
+  /** Acerca (< 1) o aleja (> 1) la cámara en Circuito o Seguir. */
+  zoomBy(factor) {
+    if (!canOrbit() || !(factor > 0)) return;
+    prepSegOrbit();
+    const [zMin, zMax] = camMode === "circuito" ? [0.25, 1.8] : [0.35, 2.6];
+    orb.zoom = clamp(orb.zoom * factor, zMin, zMax);
+    orb.active = true; camFrom = null; camT = 1;
+    busyUntil = performance.now() + 500;
+  },
+  /** Vuelve suavemente al encuadre automático de la cámara actual. */
+  resetOrbit() {
+    if (!orb.active) return;
+    clearOrbit();
+    camFrom = { pos: cur.pos.clone(), look: cur.look.clone(), fov: cur.fov };
+    camT = 0;
+    busyUntil = performance.now() + 900;
+  },
+  orbitState: () => ({ ...orb }),
+  tvState: () => ({ ...tvDir, auto: isAutoTv() }),
+  resetAutoTv() { tvDir.since = -1e9; tvDir.carId = null; tvDir.prio = 0; busyUntil = performance.now() + 300; },
   /** Coche más cercano al punto tocado (px del recuadro), o null. */
   pick(x, y) {
     let best = null, bd = 24 * 24;
@@ -4270,12 +4544,35 @@ return {
     return best;
   },
   /** Ha cambiado el coche seguido: la cámara va hacia el nuevo con suavidad. */
-  selChanged() { busyUntil = performance.now() + 1300; segOn = false; if (camMode !== "circuito") { camFrom = { pos: cur.pos.clone(), look: cur.look.clone(), fov: cur.fov }; camT = 0; teleIdx = -1; } },
+  selChanged() {
+    busyUntil = performance.now() + 1300;
+    segOn = false;
+    if (camMode === "tele" && isAutoTv() && opt.selId() !== null) {
+      tvDir.carId = opt.selId();
+      tvDir.shot = "tele";
+      tvDir.reason = "manual";
+      tvDir.prio = 2;
+      tvDir.since = performance.now();
+      tvDir.holdMs = 7000;
+      teleIdx = -1;
+      camSnap = true;
+      return;
+    }
+    if (camMode !== "circuito") {
+      camFrom = { pos: cur.pos.clone(), look: cur.look.clone(), fov: cur.fov };
+      camT = 0; teleIdx = -1;
+    }
+  },
   dispose() {
     alive3d = false;
-    scene.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => m.dispose()); });
-    cloudTex.dispose(); wxTex.dispose(); dashTex.dispose(); blobTex.dispose(); if (sun.shadow.map) sun.shadow.map.dispose();
-    for (const g of [CAR_GEO, WHEEL_GEO, CAR_LO, WHEEL_LO, CAR_MIN, STEER_GEO, CREW_STAND, CREW_CROUCH, BOAT_GEO, extCarLoGeo]) g?.dispose();
+    glc.removeEventListener("webglcontextlost", onCtxLost);
+    glc.removeEventListener("webglcontextrestored", onCtxRestored);
+    scene.traverse((o) => {
+      if (o.geometry && !o.userData?.sharedGeo) o.geometry.dispose();
+      if (o.material && !o.userData?.sharedMat) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => m.dispose());
+    });
+    cloudTex.dispose(); wxTex.dispose(); dashTex.dispose(); blobTex.dispose(); FAN_U.tex.value?.dispose(); if (sun.shadow.map) sun.shadow.map.dispose();
+    for (const g of [CAR_GEO, WHEEL_GEO, CAR_LO, WHEEL_LO, CAR_MIN, STEER_GEO, CREW_STAND, CREW_CROUCH, BOAT_GEO, CITY_GABLE, CITY_TOP, SC_GEO, SC_BAR, extCarLoGeo]) g?.dispose();
     for (const r of envResDispose) r?.dispose();
     envResDispose.length = 0;
     for (const t of Object.values(DET)) t.dispose();

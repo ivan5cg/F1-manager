@@ -9,6 +9,7 @@ import { Weekend, WeekendState, newWeekend, preparePu, DAY_NAMES } from "../sim/
 import { puPenalty, quotaFor } from "../sim/powerunit";
 import { yearOf, offSeasonScreen, historyPanel, newsPanel, swapsPanel, swapSheet } from "./nextSeason";
 import { startAttract } from "./attract";
+import { canInstall, onInstallChange, promptInstall } from "./pwa";
 import { saveFile, helmetSvg, circuitSvg, skyGradient, lightAt, reducedMotion, forecastIcon, teamCrest } from "./visual";
 import { SESSION_NAMES, SessionKind, ResultRow, isRaceKind, isQualiKind, Car, Session, LongRun, TeamDef, DriverDef } from "../sim/session";
 import { COMPOUNDS, DRY, ALL, setWear, Compound, TyreSet } from "../sim/tyres";
@@ -101,6 +102,7 @@ export function startScreen(nav: Nav, notice = "") {
       <div class="herolive" id="herolive"></div>
       <div class="herotxt"><span class="kick">Temporada 2026</span><h1>Muro de Boxes</h1><div>${ROUNDS.length} o ${CALENDARS.completa.ids.length} grandes premios. Tú decides en el muro.</div></div>
     </div>
+    <div id="instslot"></div>
     ${any && isSafariLike() && !installed() && !loadPrefs().sinAvisoSafari ? `<div class="notice" id="safari"><div class="grow small">Instala el juego en la pantalla de inicio (Compartir → «Añadir a pantalla de inicio») o exporta la partida: Safari borra los datos de las webs que no se usan en 7 días.</div><button id="safarix" aria-label="No volver a mostrar">✕</button></div>` : ""}
     ${any ? `<div class="panel"><div class="hd"><span class="t">Tus partidas</span></div><div class="bd" style="padding:0">
       ${list.map(({ slot, season, midSession }) => {
@@ -137,6 +139,17 @@ export function startScreen(nav: Nav, notice = "") {
   }));
   const sx = document.getElementById("safarix");
   if (sx) sx.onclick = () => { const p = loadPrefs(); p.sinAvisoSafari = true; savePrefs(p); document.getElementById("safari")?.remove(); };
+  const renderInstall = () => {
+    const slot = document.getElementById("instslot");
+    if (!slot) return false;
+    if (!canInstall() || installed() || loadPrefs().sinAvisoInstalar) { slot.innerHTML = ""; return true; }
+    slot.innerHTML = `<div class="notice" id="instban"><div class="grow small">Instala Muro de Boxes en el móvil para abrirlo a pantalla completa y jugar sin conexión.</div><button class="yellow" id="instgo">Instalar</button><button id="instx" aria-label="No volver a mostrar">✕</button></div>`;
+    document.getElementById("instgo")!.onclick = () => { void promptInstall(); };
+    document.getElementById("instx")!.onclick = () => { const p = loadPrefs(); p.sinAvisoInstalar = true; savePrefs(p); slot.innerHTML = ""; };
+    return true;
+  };
+  renderInstall();
+  const offInstall = onInstallChange(() => { if (!renderInstall()) offInstall(); });
   $("#build").onclick = () => chooseSlot("Nueva temporada", (slot) => nav.build(slot));
   $("#scen").onclick = () => nav.scenarios();
   $("#gpnew").onclick = () => { if (gpSave && !gpSave.rounds.length && !confirm("¿Empezar otro gran premio? El que tienes a medias se borra.")) return; nav.gp(); };

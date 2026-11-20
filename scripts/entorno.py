@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
-"""Altitud del terreno alrededor de los circuitos urbanos (dónde hay mar y cómo sube la ciudad).
+"""Altitud del terreno alrededor de los circuitos urbanos y semiurbanos (mar, puertos y edificios).
 
-  python3 scripts/entorno.py [carpeta-de-caché] [id ...]
+  python3 scripts/entorno.py [carpeta-de-caché] [id ...] [--semiurbano]
 
 Sitúa el trazado del juego sobre el mapa igual que scripts/relieve.py y lee en una rejilla
 de N × N puntos (en coordenadas del juego, centrada en el circuito) la altitud de las teselas
 «terrarium» de Mapzen/AWS Terrain Tiles. El mar sale a 0 m o por debajo.
 
-Campo que escribe: "entorno": {"x0", "y0", "paso", "n", "h": [...]} con la altitud en metros
-(fila a fila, de y0 hacia arriba). La simulación no lo usa: es para dibujar el mapa 3D.
+Escribe el resultado en public/assets/env-tracks/<id>.json (cargado bajo demanda en el 3D)
+con "tipo": "urbano" (o "semiurbano" con --semiurbano), "x0", "y0", "paso", "n", "h".
+Si el circuito es urbano y su JSON tenía "entorno" incrustado, lo sustituye por "urbano": true.
+La simulación no lee este archivo: solo usa "urbano" en el JSON del circuito.
 """
 import json, math, os, re, sys
 import numpy as np
@@ -19,11 +21,15 @@ lib = src[: src.index("for cid, (bac, tum, sentido_real, lado) in CIRCUITS.items
 g = {"__file__": lib_path}
 exec(compile(lib, lib_path, "exec"), g)
 ROOT, fetch, resample, fit, elevation, CIRCUITS = g["ROOT"], g["fetch"], g["resample"], g["fit"], g["elevation"], g["CIRCUITS"]
+ENV_DIR = os.path.join(os.path.dirname(os.path.dirname(ROOT)), "public", "assets", "env-tracks")
 
 N = 72
 SEA = {"baku": -27.0}
-# python3 scripts/entorno.py <caché> <id> ...: solo esos (por defecto, los urbanos)
-for cid in (sys.argv[2:] or ("monaco", "singapur", "baku", "lasvegas")):
+args = [a for a in sys.argv[2:] if not a.startswith("--")]
+tipo = "semiurbano" if "--semiurbano" in sys.argv[2:] else "urbano"
+os.makedirs(ENV_DIR, exist_ok=True)
+# python3 scripts/entorno.py <caché> <id> ... [--semiurbano]: solo esos (por defecto, los urbanos)
+for cid in (args or ("monaco", "singapur", "baku", "lasvegas")):
     bac = CIRCUITS[cid][0]
     path = os.path.join(ROOT, cid + ".json")
     d = json.load(open(path, encoding="utf8"))
@@ -46,12 +52,18 @@ for cid in (sys.argv[2:] or ("monaco", "singapur", "baku", "lasvegas")):
     # el mar del juego está a 0 m: el Caspio está a unos 27 m por debajo (así sale en las teselas) del nivel del mar
     h = h - SEA.get(cid, 0.0)
     hh = [int(round(max(-5.0, float(v)))) for v in h]
-    txt = open(path, encoding="utf8").read()
-    txt = re.sub(r',\s*"entorno"\s*:\s*\{.*?\}', "", txt, flags=re.S)
-    end = txt.rstrip().rfind("}")
     val = {"fuente": "Mapzen/AWS Terrain Tiles (terrarium, z14) con el trazado situado con bacinger/f1-circuits",
-           "x0": round(float(x0), 1), "y0": round(float(y0), 1), "paso": round(float(paso), 2), "n": N, "h": hh}
-    open(path, "w", encoding="utf8").write(txt[:end].rstrip() + ',\n  "entorno":' + json.dumps(val, separators=(",", ":"), ensure_ascii=False) + "\n}\n")
+           "tipo": tipo, "x0": round(float(x0), 1), "y0": round(float(y0), 1), "paso": round(float(paso), 2), "n": N, "h": hh}
+    out_env = os.path.join(ENV_DIR, cid + ".json")
+    open(out_env, "w", encoding="utf8").write(json.dumps(val, separators=(",", ":"), ensure_ascii=False) + "\n")
+    if tipo == "urbano":
+        txt = open(path, encoding="utf8").read()
+        txt = re.sub(r',\s*"entorno"\s*:\s*\{.*?\}', "", txt, flags=re.S)
+        if not d.get("urbano"):
+            txt = re.sub(r',\s*"urbano"\s*:\s*(?:true|false)', "", txt)
+            end = txt.rstrip().rfind("}")
+            txt = txt[:end].rstrip() + ',\n  "urbano": true\n}\n'
+        open(path, "w", encoding="utf8").write(txt)
     a = np.array(hh).reshape(N, N)
     print(f"{cid}: ajuste {rms:.1f} m, rejilla {N}×{N} cada {paso:.0f} m, mar {np.mean(a <= 0) * 100:.0f} %, máx {a.max()} m")
     # mapa en texto (norte del juego arriba) con la pista encima

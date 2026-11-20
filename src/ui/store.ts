@@ -242,14 +242,19 @@ export interface Prefs {
   rendimiento3d?: boolean;
   /** Calidad del mapa 3D fijada a mano (0 a 3); sin ella, automática. */
   calidad3d?: number;
+  /** Modo ahorro de batería: limita el mapa 3D a 30 fotogramas por segundo. */
+  ahorro3d?: boolean;
+  /** Realización automática en la cámara Tele (salida, boxes, incidentes y batallas; por defecto, sí). */
+  autoTv?: boolean;
   /** Sonido de la sesión: sí/no y volúmenes (0 a 1). */
   sonido: SoundPrefs;
   /** Copias de seguridad: carreras que llevaba cada partida (por número) la última vez que se exportó. */
   exportadas?: Record<number, number>;
   /** Fecha (ms) de la última exportación. */
   ultimaExportacion?: number;
-  /** El jugador cerró para siempre el aviso de Safari o el recordatorio de exportar. */
+  /** El jugador cerró para siempre el aviso de Safari, el de instalar o el recordatorio de exportar. */
   sinAvisoSafari?: boolean;
+  sinAvisoInstalar?: boolean;
   sinRecordatorio?: boolean;
   /** Calendario de las temporadas nuevas: el corto (9 carreras, por defecto) o el completo de 2026. */
   calendario?: "corta" | "completa";
@@ -276,9 +281,12 @@ export function loadPrefs(): Prefs {
       if (o.rendimiento3d === true) p.rendimiento3d = true;
       if (o.rotulos === false) p.rotulos = false;
       if ([0, 1, 2, 3].includes(o.calidad3d as number)) p.calidad3d = o.calidad3d;
+      if (o.ahorro3d === true) p.ahorro3d = true;
+      if (o.autoTv === false) p.autoTv = false;
       if (o.exportadas && typeof o.exportadas === "object") p.exportadas = o.exportadas;
       if (typeof o.ultimaExportacion === "number") p.ultimaExportacion = o.ultimaExportacion;
       if (o.sinAvisoSafari === true) p.sinAvisoSafari = true;
+      if (o.sinAvisoInstalar === true) p.sinAvisoInstalar = true;
       if (o.sinRecordatorio === true) p.sinRecordatorio = true;
       if (o.calendario === "completa" || o.calendario === "corta") p.calendario = o.calendario;
       if (o.escenarios && typeof o.escenarios === "object") p.escenarios = Object.fromEntries(Object.entries(o.escenarios).filter(([, v]) => typeof v === "number"));

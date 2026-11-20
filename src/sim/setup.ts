@@ -43,7 +43,7 @@ export function newSetupState(track: Track, teams: TeamDef[], seed: number): Set
   const rng = new Rng((seed ^ 0x5e7a9) >>> 0);
   const id = String(track.def.id ?? track.id);
   // cada circuito tiene el suyo (casi el mismo cada año) y algo cambia de un fin de semana a otro (asfalto, viento)
-  const urban = !!track.def.entorno;
+  const urban = !!(track.def.urbano ?? track.def.entorno);
   const opt = {
     a: clamp((hash(id + "a") * 2 - 1) * 1.5 + rng.gauss(0, 0.3), -1.9, 1.9),
     r: clamp((hash(id + "r") * 2 - 1) * 1.2 + (urban ? 0.6 : -0.1) + rng.gauss(0, 0.3), -1.9, 1.9),

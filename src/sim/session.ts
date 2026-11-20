@@ -1290,7 +1290,7 @@ export class Session {
       else this.yellow(ms, true, this.rng.range(40, 90), why);
       return;
     }
-    const urban = !!this.track.def.entorno;
+    const urban = !!(this.track.def.urbano ?? this.track.def.entorno);
     // un accidente fuerte (barreras dañadas) puede parar la carrera
     if (kind === "crash" && severity >= 0.7 && this.rng.chance((urban ? 0.16 : 0.08) * severity)) { this.redFlag(`accidente de ${c.d.abrev}, reparación de barreras`); return; }
     let pSC: number, pVSC: number;

@@ -67,7 +67,11 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     saveSession(snapshotSession(sess, wk.st));
   };
   if (!scn) setParked(false); // está dentro de la sesión: si se cierra la app, al volver se retoma sola
-  const onHide = () => { if (document.visibilityState === "hidden") { persist(); hush(); } };
+  let ctxLost3d = false, ctxLostTimer = 0;
+  const onHide = () => {
+    if (document.visibilityState === "hidden") { persist(); hush(); clearTimeout(ctxLostTimer); }
+    else if (ctxLost3d) scheduleCtxFallback();
+  };
   document.addEventListener("visibilitychange", onHide);
   window.addEventListener("pagehide", persist);
   const mine = () => sess.cars.filter((c) => c.player).sort((a, b) => a.id - b.id);
@@ -118,7 +122,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     <div class="main"><div class="bigban" id="bigban" aria-live="polite"></div>
       <div class="leftcol"><div class="tower" id="tower"></div><div class="toast" id="toast" title="Dirección de carrera y meteo"></div></div>
       <div class="side${race ? "" : " timed"}">
-        <div class="mapbox"><canvas id="map" title="Toca un coche para seguirlo.${sess.aidShort ? ` Línea discontinua: zona de ${sess.aidShort === "DRS" ? "DRS" : "modo adelantamiento"} ·` : ""} naranja: frenada donde se adelanta${race ? " · círculo discontinuo: dónde estaría tu piloto si parase ahora" : ""}"></canvas><canvas id="map3d" hidden aria-label="Mapa 3D"></canvas><div class="lbl3d" id="lbl3d" hidden></div><button class="perf3" id="perf3" hidden title="Rendimiento del mapa 3D. Toca para cambiar la calidad (automática, 0, 1, 2, 3)"></button><div class="flyov" id="flyov"></div><div class="tvg" id="tvg" hidden></div><div class="selchip" id="selchip"></div><button class="camb" id="camb" title="Cámara: sigue de cerca a tu piloto (o al coche que sigues). En 3D, mantenlo pulsado para ver todas las cámaras" aria-label="Cámara que sigue"><svg viewBox="0 0 20 16" width="20" height="16" aria-hidden="true"><rect x="1" y="3" width="13" height="10" rx="2" fill="currentColor"/><path d="M14.5 7 19 4.5v7L14.5 9z" fill="currentColor"/></svg><span id="camn"></span></button><button class="repb" id="repb" hidden title="Volver a ver el último percance a cámara lenta" aria-label="Repetición del último percance">↺</button><button class="m3b" id="m3b" title="Cambia entre el mapa 2D y el 3D" aria-label="Mapa en 3D" aria-pressed="false">3D</button><button class="bigb" id="bigb" title="Amplía el mapa sobre la clasificación" aria-label="Ampliar el mapa" aria-pressed="false"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" fill="none" stroke="currentColor" stroke-width="2"/></svg></button></div>
+        <div class="mapbox"><canvas id="map" title="Toca un coche para seguirlo.${sess.aidShort ? ` Línea discontinua: zona de ${sess.aidShort === "DRS" ? "DRS" : "modo adelantamiento"} ·` : ""} naranja: frenada donde se adelanta${race ? " · círculo discontinuo: dónde estaría tu piloto si parase ahora" : ""}"></canvas><canvas id="map3d" hidden aria-label="Mapa 3D"></canvas><div class="lbl3d" id="lbl3d" hidden></div><div class="drvchips" id="drvchips"></div><div class="selchip" id="selchip"></div><button class="perf3" id="perf3" hidden title="Rendimiento del mapa 3D. Toca para cambiar la calidad (automática, 0, 1, 2, 3)"></button><div class="flyov" id="flyov"></div><div class="tvg" id="tvg" hidden></div><div class="bighud" id="bighud" hidden><div class="minitower" id="minitower"></div><div class="bigbar" id="bigbar"></div></div><button class="camb" id="camb" title="Cámara: en 2D sigue al coche; en 3D abre el menú de cámaras" aria-label="Cámara" aria-expanded="false"><svg viewBox="0 0 20 16" width="20" height="16" aria-hidden="true"><rect x="1" y="3" width="13" height="10" rx="2" fill="currentColor"/><path d="M14.5 7 19 4.5v7L14.5 9z" fill="currentColor"/></svg><span id="camn"></span></button><div class="campop" id="campop" hidden role="menu" aria-label="Cámaras 3D"></div><button class="repb" id="repb" hidden title="Volver a ver el último percance a cámara lenta" aria-label="Repetición del último percance">↺</button><button class="m3b" id="m3b" title="Cambia entre el mapa 2D y el 3D" aria-label="Mapa en 3D" aria-pressed="false">3D</button><button class="bigb" id="bigb" title="Amplía el mapa sobre la clasificación" aria-label="Ampliar el mapa" aria-pressed="false"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" fill="none" stroke="currentColor" stroke-width="2"/></svg></button></div>
         ${race ? `<canvas id="gapstrip" class="gapstrip" title="Toda la parrilla en una vuelta: el líder a la izquierda. El círculo discontinuo es dónde saldría tu piloto si parase ahora."></canvas>` : ""}
         <div class="wxbox" id="wx"></div>
         <div id="lapban"></div>
@@ -223,6 +227,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     spEl.querySelector<HTMLButtonElement>(".ffb")!.classList.toggle("on", ff);
     // con la sesión corriendo, que el móvil no apague la pantalla
     keepAwake(!paused && !ended && !skipping);
+    renderBigHud();
   }
   // ----------------------------------------------------------------- teclado (escritorio)
   // espacio: pausa · 1-6: velocidad · P/M/R/D: pilotos, muro, radar, radio · Esc: cierra la hoja
@@ -231,7 +236,13 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     unlockAudio();
     const tag = (e.target as HTMLElement | null)?.tagName;
     if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
-    if (e.key === "Escape") { if (closeTopSheet()) e.preventDefault(); else if (selId !== null) select(null); return; }
+    if (e.key === "Escape") {
+      if (!document.getElementById("campop")?.hidden) { closeCamPop(); e.preventDefault(); return; }
+      const box = document.querySelector<HTMLElement>(".mapbox");
+      if (box?.classList.contains("hudclean")) { box.classList.remove("hudclean"); e.preventDefault(); return; }
+      if (closeTopSheet()) e.preventDefault(); else if (selId !== null) select(null);
+      return;
+    }
     if (anySheetOpen()) return;
     const k = e.key.toLowerCase();
     if (k === " ") {
@@ -515,25 +526,204 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   // pulsa «3D» y ocupa el mismo recuadro; lo elegido se recuerda para la próxima sesión.
   type Map3d = ReturnType<typeof import("./map3d").createMap3d>;
   let view3d = false, m3: Map3d | null = null, m3busy = false;
-  function cam3d(name: string) {
-    $("#camn").textContent = view3d ? name : "";
-    $("#camb").classList.toggle("on", view3d ? name !== "Circuito" : camOn);
+  const CAM_SHORT: Record<string, string> = { circuito: "Circ.", seguir: "Seguir", tele: "Tele", abordo: "Bordo", heli: "Heli", boxes: "Boxes", trasera: "Alerón", grua: "Grúa" };
+  const DRAG_PX = 8;
+  const ptrs = new Map<number, { x: number; y: number }>();
+  let dragMode: "none" | "orbit" | "pinch" = "none";
+  let dragLast = { x: 0, y: 0 }, downPos = { x: 0, y: 0 }, movedBeyond = false, prevPinch = 0;
+  let lastTapAt = 0, lastTapPos = { x: 0, y: 0 }, suppressClickUntil = 0;
+  function onMap3dClick(e: MouseEvent) {
+    if (performance.now() < suppressClickUntil) return;
+    if (!$("#campop").hidden) { closeCamPop(); return; }
+    const box = document.querySelector<HTMLElement>(".mapbox")!;
+    if (box.classList.contains("hudclean")) { box.classList.remove("hudclean"); return; }
+    if (!m3) return;
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const best = m3.pick(e.clientX - r.left, e.clientY - r.top) as number | null;
+    if (best !== null) { select(best); return; }
+    if (document.querySelector(".main")!.classList.contains("mapbig")) {
+      box.classList.add("hudclean");
+    } else if (selId !== null) {
+      select(null);
+    }
   }
+  function bindMap3dInput(cv: HTMLCanvasElement) {
+    cv.addEventListener("pointerdown", (e) => {
+      if (!m3 || e.button > 0) return;
+      ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      try { cv.setPointerCapture(e.pointerId); } catch { /* noop */ }
+      if (ptrs.size === 1) {
+        dragMode = "orbit";
+        dragLast = { x: e.clientX, y: e.clientY };
+        downPos = { x: e.clientX, y: e.clientY };
+        movedBeyond = false;
+      } else if (ptrs.size === 2) {
+        const [a, b] = [...ptrs.values()];
+        dragMode = "pinch";
+        prevPinch = Math.hypot(a.x - b.x, a.y - b.y);
+        movedBeyond = true;
+      }
+    });
+    cv.addEventListener("pointermove", (e) => {
+      if (!m3 || !ptrs.has(e.pointerId)) return;
+      ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (ptrs.size >= 2) {
+        const [a, b] = [...ptrs.values()];
+        const dist = Math.hypot(a.x - b.x, a.y - b.y);
+        if (prevPinch > 8 && dist > 8 && m3.canOrbit()) m3.zoomBy(prevPinch / dist);
+        prevPinch = dist;
+        movedBeyond = true;
+        return;
+      }
+      if (dragMode !== "orbit") return;
+      if (!movedBeyond && Math.hypot(e.clientX - downPos.x, e.clientY - downPos.y) >= DRAG_PX) movedBeyond = true;
+      if (movedBeyond && m3.canOrbit()) {
+        const dx = e.clientX - dragLast.x, dy = e.clientY - dragLast.y;
+        m3.orbit(dx * 0.0075, dy * 0.0055);
+      }
+      dragLast = { x: e.clientX, y: e.clientY };
+    });
+    const endPtr = (e: PointerEvent) => {
+      const wasPinch = dragMode === "pinch" || ptrs.size > 1;
+      const wasDrag = movedBeyond;
+      ptrs.delete(e.pointerId);
+      if (ptrs.size === 1) {
+        const [rem] = [...ptrs.values()];
+        dragMode = "orbit";
+        dragLast = { x: rem.x, y: rem.y };
+        prevPinch = 0;
+        return;
+      }
+      if (ptrs.size === 0) {
+        dragMode = "none";
+        prevPinch = 0;
+        if (wasDrag || wasPinch) {
+          suppressClickUntil = performance.now() + 250;
+          lastTapAt = 0;
+          return;
+        }
+        if (e.type === "pointerup" && e.pointerType !== "mouse" && m3?.canOrbit()) {
+          const now = performance.now();
+          if (now - lastTapAt < 300 && Math.hypot(e.clientX - lastTapPos.x, e.clientY - lastTapPos.y) < 28) {
+            m3.resetOrbit();
+            suppressClickUntil = now + 350;
+            lastTapAt = 0;
+          } else {
+            lastTapAt = now;
+            lastTapPos = { x: e.clientX, y: e.clientY };
+          }
+        }
+      }
+    };
+    cv.addEventListener("pointerup", endPtr);
+    cv.addEventListener("pointercancel", endPtr);
+    cv.addEventListener("wheel", (e) => {
+      if (!m3 || !m3.canOrbit()) return;
+      e.preventDefault();
+      m3.zoomBy(Math.exp(e.deltaY * 0.0012));
+    }, { passive: false });
+    cv.addEventListener("dblclick", (e) => {
+      if (!m3 || !m3.canOrbit()) return;
+      e.preventDefault();
+      m3.resetOrbit();
+      suppressClickUntil = performance.now() + 350;
+    });
+    cv.addEventListener("click", onMap3dClick);
+  }
+  function scheduleCtxFallback() {
+    clearTimeout(ctxLostTimer);
+    if (!ctxLost3d) return;
+    ctxLostTimer = window.setTimeout(() => {
+      if (ended || !ctxLost3d || !m3 || document.visibilityState !== "visible") return;
+      ctxLost3d = false;
+      const dead = m3;
+      m3 = null;
+      void set3d(false, false);
+      dead.dispose();
+      // dispose() fuerza WebGLContextLost en el lienzo; sustituirlo por uno limpio permite reabrir el 3D luego
+      const oldCv = document.getElementById("map3d");
+      if (oldCv?.parentNode) {
+        const freshCv = document.createElement("canvas");
+        freshCv.id = "map3d";
+        freshCv.hidden = true;
+        freshCv.setAttribute("aria-label", "Mapa 3D");
+        bindMap3dInput(freshCv);
+        oldCv.parentNode.replaceChild(freshCv, oldCv);
+      }
+      showToast("El móvil pausó los gráficos 3D en segundo plano: sigues en 2D. Pulsa 3D para reabrirlo.", 5000, "Mapa");
+    }, 1500);
+  }
+  function cam3d(id: string) {
+    const popOpen = !document.getElementById("campop")?.hidden;
+    $("#camn").textContent = view3d ? (CAM_SHORT[id] ?? id) : "";
+    $("#camb").classList.toggle("on", view3d ? (id !== "circuito" && id !== "") || popOpen : camOn);
+    $("#camb").setAttribute("aria-expanded", String(view3d && popOpen));
+  }
+  function closeCamPop() {
+    const pop = document.getElementById("campop");
+    if (!pop || pop.hidden) return;
+    pop.hidden = true;
+    cam3d(view3d && m3 ? (m3.cam() as string) : "");
+  }
+  function openCamPop() {
+    if (!view3d || !m3) return;
+    const pop = $("#campop");
+    const list = m3.camList() as { id: string; name: string; more: boolean }[], cur = m3.cam() as string;
+    // Bloque 4.4 añadirá aquí los interruptores de capas tácticas
+    pop.innerHTML = `<div class="campop-grid">${list.map((c) => `<button type="button" data-cam="${c.id}" class="${c.id === cur ? "on" : ""}" aria-pressed="${c.id === cur}">${esc(c.name)}</button>`).join("")}</div>
+      <label class="camopt"><input type="checkbox" id="cautotv" ${prefs.autoTv !== false ? "checked" : ""}><span><b>Auto-TV</b><small>Salida, boxes y peleas en Tele</small></span></label>`;
+    pop.hidden = false;
+    pop.querySelectorAll<HTMLButtonElement>("[data-cam]").forEach((b) => (b.onclick = (e) => {
+      e.stopPropagation();
+      m3?.setCamera(b.dataset.cam!);
+      closeCamPop();
+    }));
+    const atv = pop.querySelector<HTMLInputElement>("#cautotv")!;
+    atv.onchange = () => {
+      prefs.autoTv = atv.checked;
+      savePrefs(prefs);
+      m3?.resetAutoTv();
+    };
+    cam3d(cur);
+  }
+  const onDocDown = (e: PointerEvent) => {
+    const pop = document.getElementById("campop");
+    if (!pop || pop.hidden) return;
+    const t = e.target as Node | null;
+    if (t && (pop.contains(t) || document.getElementById("camb")?.contains(t))) return;
+    closeCamPop();
+  };
+  document.addEventListener("pointerdown", onDocDown);
   async function set3d(on: boolean, save = true) {
     if (m3busy) return;
+    if (!on) closeCamPop();
     if (on && !m3) {
       m3busy = true;
       $("#m3b").classList.add("busy");
       try {
         const mod = await import("./map3d");
         if (ended) return;
+        const env = await mod.loadTrackEnv(track.id);
+        if (ended) return;
         // el recuadro tiene que estar visible para que el lienzo coja su tamaño
         $("#map3d").hidden = false;
+        ctxLost3d = false;
         m3 = mod.createMap3d({
-          canvas: $<HTMLCanvasElement>("#map3d"), labels: $("#lbl3d"), box: document.querySelector<HTMLElement>(".mapbox")!, sess,
+          canvas: $<HTMLCanvasElement>("#map3d"), labels: $("#lbl3d"), box: document.querySelector<HTMLElement>(".mapbox")!, sess, env,
           mine, selId: () => selId,
           alpha: () => (paused ? 1 : Math.min(1, leftover / sess.dt)),
           paused: () => paused, speed: () => (ff ? FF_SPEED : speed), quality: prefs.calidad3d,
+          targetFps: () => (prefs.ahorro3d ? 30 : 60),
+          autoTv: () => prefs.autoTv !== false,
+          onContextLost: () => {
+            ctxLost3d = true;
+            clearTimeout(ctxLostTimer);
+            if (document.visibilityState === "visible") scheduleCtxFallback();
+          },
+          onContextRestored: () => {
+            ctxLost3d = false;
+            clearTimeout(ctxLostTimer);
+          },
           ghosts: () => mine().flatMap((c) => { const gh = ghosts.get(c.id); const sNow = c.s + (paused ? 0 : c.v * leftover); return gh ? [{ s: sNow - metersBack(sNow, gh.loss), text: `${c.d.abrev} P${gh.pos}`, color: c.team.color }] : []; }),
         });
       } catch (err) {
@@ -550,12 +740,11 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     view3d = on && !!m3;
     $("#map").hidden = view3d; $("#map3d").hidden = !view3d; $("#lbl3d").hidden = !view3d;
     $("#m3b").classList.toggle("on", view3d); $("#m3b").setAttribute("aria-pressed", String(view3d));
-    cam3d(view3d ? "Circuito" : "");
-    if (view3d) { while (m3!.cam() !== "circuito") m3!.cycleCam(); m3!.resize(); m3!.idle(); } else drawMap();
+    if (view3d) { m3!.setCamera("circuito"); m3!.resize(); m3!.idle(); cam3d("circuito"); } else { cam3d(""); drawMap(); }
     renderPerf();
     if (save) { prefs.mapa3d = view3d; savePrefs(prefs); }
   }
-  $("#m3b").onclick = (e) => { e.stopPropagation(); unlockAudio(); void set3d(!view3d); };
+  $("#m3b").onclick = (e) => { e.stopPropagation(); closeCamPop(); unlockAudio(); void set3d(!view3d); };
   // medidor de rendimiento del 3D (se enciende en Ajustes): fps, calidad, resolución, llamadas y triángulos
   const QNAME = ["baja", "media", "alta", "máxima"];
   function renderPerf() {
@@ -564,7 +753,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     if (!on) return;
     const st = m3!.stats() as { fps: number; q: number; scale: number; pr: number; calls: number; tris: number; fixed: boolean };
     const k = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)} M` : n >= 1e3 ? `${Math.round(n / 1e3)} k` : String(n));
-    el.innerHTML = `<b>${paused ? "pausa" : `${Math.round(st.fps)} fps`}</b> · C${st.q}${st.fixed ? "" : " auto"} · ×${(st.pr).toFixed(2).replace(".", ",")}${st.scale < 1 ? ` (${Math.round(st.scale * 100)} %)` : ""}<br>${k(st.tris)} triáng. · ${st.calls} llam.`;
+    el.innerHTML = `<b>${paused ? "pausa" : `${Math.round(st.fps)} fps`}</b>${prefs.ahorro3d ? " (30)" : ""} · C${st.q}${st.fixed ? "" : " auto"} · ×${(st.pr).toFixed(2).replace(".", ",")}${st.scale < 1 ? ` (${Math.round(st.scale * 100)} %)` : ""}<br>${k(st.tris)} triáng. · ${st.calls} llam.`;
   }
   /** Calidad del 3D: undefined = automática. Se guarda y se aplica al momento. */
   function setQuality3d(v: number | undefined) {
@@ -584,6 +773,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   let repWasPaused = true;
   $("#repb").onclick = (e) => {
     e.stopPropagation();
+    closeCamPop();
     if (!m3 || !view3d) return;
     if (m3.replaying()) { m3.stopReplay(); return; }
     const inc = m3.lastIncident() as { id: number } | null;
@@ -592,17 +782,96 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     if (!m3.replay(inc.id, () => { paused = repWasPaused; updSpeed(); $("#repb").classList.remove("on"); })) { paused = repWasPaused; updSpeed(); return; }
     $("#repb").classList.add("on");
   };
+  function renderDrvChips() {
+    const el = document.getElementById("drvchips");
+    if (!el) return;
+    const html = mine().map((c) => `<button type="button" class="dchip${selId === c.id ? " on" : ""}${c.loc === "out" ? " out" : ""}" data-drv="${c.id}" aria-pressed="${selId === c.id}" title="Seguir a ${esc(c.d.abrev)}"><i style="background:${c.team.color}"></i><span>${esc(c.d.abrev)}</span></button>`).join("");
+    if (el.innerHTML !== html) el.innerHTML = html;
+  }
+  $("#drvchips").addEventListener("click", (e) => {
+    const b = (e.target as HTMLElement | null)?.closest("[data-drv]") as HTMLElement | null;
+    if (!b) return;
+    e.stopPropagation();
+    closeCamPop();
+    select(Number(b.dataset.drv));
+  });
+  function renderBigHud() {
+    const hud = document.getElementById("bighud");
+    if (!hud) return;
+    const isBig = !!document.querySelector(".main")?.classList.contains("mapbig");
+    if (!isBig) { if (!hud.hidden) hud.hidden = true; return; }
+    if (hud.hidden) hud.hidden = false;
+    const ord = sess.order();
+    const mySet = new Set(mine().map((c) => c.id));
+    const extras = ord.filter((c, i) => i >= 3 && mySet.has(c.id));
+    const gapTxt = (c: Car, pos: number) => {
+      if (c.loc === "out") return "OUT";
+      if (!race) { const b = bestOf(c); return b !== undefined && isFinite(b) ? fmtLap(b) : "—"; }
+      if (pos === 1) return "LÍD";
+      const g = sess.gapBetween(ord[0], c);
+      return isFinite(g) && g > 0 ? `+${g.toFixed(1)}` : "—";
+    };
+    const rowHtml = (c: Car) => {
+      const pos = ord.indexOf(c) + 1;
+      const badge = c.loc === "out" ? `<span class="mt-st">OUT</span>` : c.loc === "pit" || c.loc === "lane_in" || c.loc === "lane_out" ? `<span class="mt-st pit">PIT</span>` : c.tyres ? tyreHtml(c.tyres.c) : "";
+      return `<button type="button" class="mtr${c.player ? " me" : ""}${selId === c.id ? " sel" : ""}" data-id="${c.id}"><b class="mt-p">${pos}</b><i class="mt-c" style="background:${c.team.color}"></i><span class="mt-n">${esc(c.d.abrev)}</span>${badge}<span class="mt-g mono">${gapTxt(c, pos)}</span></button>`;
+    };
+    const needSep = extras.some((c) => ord.indexOf(c) > 3);
+    const mtHtml = ord.slice(0, 3).map(rowHtml).join("") + (needSep ? `<div class="mt-sep"></div>` : "") + extras.map(rowHtml).join("");
+    const mt = $("#minitower");
+    if (mt.innerHTML !== mtHtml) mt.innerHTML = mtHtml;
+
+    const myCars = mine();
+    const sel = selCar();
+    const tgt = (sel?.player ? sel : myCars.find((c) => c.loc === "track") ?? myCars[0]) ?? null;
+    const red = sess.flag === "red";
+    const boxDis = !tgt || (race && tgt.loc !== "track") || skipping;
+    const boxCls = tgt && ((race && tgt.pitRequest) || (red && race && tgt.loc === "track")) ? " yellow" : "";
+    const boxLabel = race ? (tgt?.pitRequest ? "BOX ✓" : `BOX · ${tgt?.d.abrev ?? ""}`) : "Pilotos";
+    const barHtml = `<button type="button" id="bigpp" class="pp${paused ? " go" : ""}" aria-label="Pausa o seguir" ${skipping ? "disabled" : ""}>${paused ? ICON.play : ICON.pause}</button>`
+      + `<button type="button" id="bigbox" class="bigbox${boxCls}" ${boxDis ? "disabled" : ""}>${esc(boxLabel)}</button>`;
+    const bar = $("#bigbar");
+    if (bar.innerHTML !== barHtml) bar.innerHTML = barHtml;
+  }
+  $("#minitower").addEventListener("click", (e) => {
+    const row = (e.target as HTMLElement | null)?.closest(".mtr[data-id]") as HTMLElement | null;
+    if (!row) return;
+    e.stopPropagation();
+    closeCamPop();
+    select(Number(row.dataset.id));
+  });
+  $("#bigbar").addEventListener("click", (e) => {
+    const b = (e.target as HTMLElement | null)?.closest("button") as HTMLButtonElement | null;
+    if (!b || b.disabled) return;
+    e.stopPropagation();
+    closeCamPop();
+    unlockAudio();
+    if (b.id === "bigpp") { setSpeed(0); return; }
+    if (b.id === "bigbox") {
+      if (!race) { pilotsSheet(); return; }
+      const myCars = mine(), sel = selCar();
+      const tgt = (sel?.player ? sel : myCars.find((c) => c.loc === "track") ?? myCars[0]) ?? null;
+      if (!tgt || tgt.loc !== "track") return;
+      if (sess.flag === "red") redSheet(tgt); else boxSheet(tgt);
+    }
+  });
   $("#bigb").onclick = (e) => {
     e.stopPropagation();
+    closeCamPop();
+    document.querySelector(".mapbox")?.classList.remove("hudclean");
     const on = document.querySelector(".main")!.classList.toggle("mapbig");
     $("#bigb").classList.toggle("on", on); $("#bigb").setAttribute("aria-pressed", String(on));
+    renderBigHud();
+    sizeMap(); m3?.resize();
   };
-  $<HTMLCanvasElement>("#map3d").addEventListener("click", (e) => {
-    if (!m3) return;
-    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const best = m3.pick(e.clientX - r.left, e.clientY - r.top) as number | null;
-    if (best === null) { if (selId !== null) select(null); } else select(best);
+  $("#lbl3d").addEventListener("click", (e) => {
+    const tag = (e.target as HTMLElement | null)?.closest(".lbl3[data-car]") as HTMLElement | null;
+    if (!tag || !m3) return;
+    e.stopPropagation();
+    closeCamPop();
+    select(Number(tag.dataset.car));
   });
+  bindMap3dInput($<HTMLCanvasElement>("#map3d"));
 
   // ---------------------------------------------------------------- mapa
   // vista base (todo el circuito) y vista actual (con la cámara puede ir más cerca)
@@ -657,7 +926,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   function select(id: number | null) {
     selId = id !== null && id === selId ? null : id;
     m3?.selChanged();
-    renderSel(); renderTower(); drawMap(); drawStrip();
+    renderSel(); renderDrvChips(); renderBigHud(); renderTower(); drawMap(); drawStrip();
   }
   const L = track.length;
   const modL = (s: number) => ((s % L) + L) % L;
@@ -791,29 +1060,14 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     mapOx = cv.width / 2 - camX * mapScale;
     mapOy = cv.height / 2 + camY * mapScale;
   }
-  // en 3D, mantener pulsado el botón de cámara (o clic derecho) abre todas las cámaras, con las de «Más cámaras»
-  let camHold = 0, camHeld = false;
-  const camSheet = () => {
-    if (!view3d || !m3) return;
-    const list = m3.camList() as { id: string; name: string; more: boolean }[], cur = m3.cam();
-    const row = (c: { id: string; name: string }) => `<button data-cam="${c.id}" class="${c.id === cur ? "on" : ""}">${esc(c.name)}</button>`;
-    open(`<div class="row"><span class="tab">Cámaras</span><span class="grow"></span><button data-close>Cerrar</button></div>
-      <div class="camgrid">${list.filter((c) => !c.more).map(row).join("")}</div>
-      <h2>Más cámaras</h2>
-      <div class="camgrid">${list.filter((c) => c.more).map(row).join("")}</div>
-      <div class="small dim">El botón va pasando por las cuatro de arriba; mantenlo pulsado para volver aquí. Pit-lane: frente a su garaje cuando el coche está en boxes (si no, le sigue de cerca).</div>`, (el, close) => {
-      el.querySelectorAll<HTMLButtonElement>("[data-cam]").forEach((b) => (b.onclick = () => { cam3d(m3!.setCamera(b.dataset.cam!)); close(); }));
-    });
-  };
-  $("#camb").addEventListener("pointerdown", () => { camHeld = false; clearTimeout(camHold); camHold = window.setTimeout(() => { camHeld = true; camSheet(); }, 550); });
-  for (const ev of ["pointerup", "pointerleave", "pointercancel"]) $("#camb").addEventListener(ev, () => clearTimeout(camHold));
-  $("#camb").addEventListener("contextmenu", (e) => { e.preventDefault(); clearTimeout(camHold); if (!camHeld) camSheet(); camHeld = true; });
   $("#camb").onclick = (e) => {
     e.stopPropagation();
-    if (camHeld) { camHeld = false; return; } // ya se abrió la hoja al mantener pulsado
-    if (view3d && m3) { cam3d(m3.cycleCam()); return; }
+    if (view3d && m3) {
+      if ($("#campop").hidden) openCamPop(); else closeCamPop();
+      return;
+    }
     camOn = !camOn;
-    $("#camb").classList.toggle("on", camOn);
+    cam3d("");
     if (camOn && !camTarget()) showToast("La cámara sigue a tu piloto cuando está en pista (o al coche que toques).", 3500, "Mapa");
     drawMap();
   };
@@ -2108,6 +2362,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       ${([["volumen", "Volumen general"], ["motores", "Motores"], ["ambiente", "Ambiente"], ["radio", "Radio"]] as const).map(([k, n]) => `<label class="optrow volrow"><span class="grow">${n}</span><input type="range" min="0" max="100" step="5" data-vol="${k}" value="${Math.round(prefs.sonido[k] * 100)}" aria-label="${n}"></label>`).join("")}
       <h2>Mapa 3D</h2>
       <label class="optrow"><input type="checkbox" id="pperf" ${prefs.rendimiento3d ? "checked" : ""}><span><b>Mostrar rendimiento del 3D</b><br><span class="small dim">Fotogramas por segundo, calidad, resolución y triángulos, en una esquina del mapa. Tocándolo cambia la calidad.</span></span></label>
+      <label class="optrow"><input type="checkbox" id="pahorro" ${prefs.ahorro3d ? "checked" : ""}><span><b>Ahorro de batería (30 fps)</b><br><span class="small dim">Limita el mapa 3D a 30 fotogramas por segundo para gastar menos batería y evitar que el móvil se caliente.</span></span></label>
       <div class="optrow" style="display:block"><b>Calidad del 3D</b><br><span class="small dim">Automática: empieza alta y baja sola si el dispositivo no llega. 0: sin sombras ni efectos · 1: sombras · 2: resplandor · 3: oclusión ambiental y desenfoque.</span>
         <div class="row qsel" style="gap:4px;margin-top:6px">${[["auto", "Auto"], ["0", "0"], ["1", "1"], ["2", "2"], ["3", "3"]].map(([v, n]) => `<button class="grow${(prefs.calidad3d === undefined ? "auto" : String(prefs.calidad3d)) === v ? " on" : ""}" data-q="${v}">${n}</button>`).join("")}</div></div>
       <div class="small dim">Un aviso que para la sesión se reanuda tocándolo o con ▶. La velocidad que elijas se recuerda para la próxima sesión. ⏩ avanza a toda velocidad hasta que pasa algo de tus pilotos (sale o vuelve, marca tiempo, para, un aviso del ingeniero) o de dirección de carrera.<br>Teclado: espacio pausa, 1-6 o −/+ velocidad, F hasta lo siguiente, P pilotos, M muro, R radar, D radio, T columna de la torre, Esc cierra.</div>
@@ -2131,6 +2386,8 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       el.querySelectorAll<HTMLInputElement>("[data-vol]").forEach((r) => (r.oninput = () => { prefs.sonido[r.dataset.vol as "volumen"] = Number(r.value) / 100; soundPrefsChanged(); }));
       const pf = el.querySelector<HTMLInputElement>("#pperf")!;
       pf.onchange = () => { prefs.rendimiento3d = pf.checked; savePrefs(prefs); renderPerf(); };
+      const pa = el.querySelector<HTMLInputElement>("#pahorro")!;
+      pa.onchange = () => { prefs.ahorro3d = pa.checked; savePrefs(prefs); m3?.idle(); renderPerf(); };
       const qb = el.querySelectorAll<HTMLButtonElement>("[data-q]");
       qb.forEach((b) => (b.onclick = () => {
         setQuality3d(b.dataset.q === "auto" ? undefined : Number(b.dataset.q));
@@ -2314,7 +2571,9 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   /** Suelta todo lo que la pantalla tiene enganchado (al terminar o al salir). */
   function cleanup() {
     ended = true;
+    clearTimeout(ctxLostTimer);
     document.removeEventListener("visibilitychange", onHide);
+    document.removeEventListener("pointerdown", onDocDown);
     window.removeEventListener("pagehide", persist);
     document.removeEventListener("keydown", onKey);
     cancelAnimationFrame(raf);
@@ -2384,7 +2643,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
 
   sizeMap();
   window.onresize = sizeMap;
-  renderTower(); renderTop(); renderDrivers();
+  renderTower(); renderTop(); renderDrivers(); renderDrvChips(); renderBigHud();
   const mapObs = new ResizeObserver(() => { sizeMap(); m3?.resize(); });
   mapObs.observe(document.querySelector(".mapbox")!);
   updSpeed();
@@ -2421,7 +2680,11 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       const in3d = view3d && !!m3 && !wide;
       // en pausa, el 3D se redibuja 4 veces por segundo como el 2D, salvo mientras la cámara cambia de sitio
       const due = busy || now - lastDraw > 250;
-      if (in3d && !skipping && (due || m3!.moving())) { m3!.draw(Math.min(0.1, (now - last3d) / 1000), now); last3d = now; }
+      const gap3d = prefs.ahorro3d ? 32 : 0;
+      if (in3d && !skipping && (due || m3!.moving()) && (!gap3d || now - last3d >= gap3d)) {
+        m3!.draw(Math.min(0.1, (now - last3d) / 1000), now);
+        last3d = now;
+      }
       if (!skipping && due) { lastDraw = now; if (!in3d) drawMap(); drawStrip(); renderFly(); }
       if (now - lastUi > (busy ? 250 : 500) && !skipping) {
         lastUi = now;
@@ -2430,7 +2693,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
         if (started && !paused && prefs.experta !== false) exp.tick();
         if (started && !paused) for (const l of voces.tick()) sess.log({ kind: "radio", carId: l.carId, text: l.text, important: l.important, voz: true, mitica: l.mitica });
         if (now >= towerAnimUntil) renderTower();
-        renderTop(); renderMessages(); renderSel();
+        renderTop(); renderMessages(); renderSel(); renderDrvChips(); renderBigHud();
         { const rb = $("#repb"), can = view3d && !!m3 && (m3.replaying() || !!m3.lastIncident()); if (rb.hidden === can) rb.hidden = !can; }
         renderPerf();
         tvTick(now);

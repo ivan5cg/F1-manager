@@ -720,6 +720,21 @@ export function extractCarFromGltf(root, separateWheel = false) {
   return { carBase, wheelBase };
 }
 
+/** Crea un GLTFLoader con decodificador Draco WASM servido directamente desde three/addons. */
+export async function createDracoGltfLoader() {
+  const [{ GLTFLoader }, { DRACOLoader }, { default: js }, { default: wasm }] = await Promise.all([
+    import("three/addons/loaders/GLTFLoader.js"),
+    import("three/addons/loaders/DRACOLoader.js"),
+    import("three/addons/libs/draco/gltf/draco_wasm_wrapper.js?url"),
+    import("three/addons/libs/draco/gltf/draco_decoder.wasm?url"),
+  ]);
+  const draco = new DRACOLoader();
+  draco.setDecoderPath({ js, wasm });
+  const loader = new GLTFLoader();
+  loader.setDRACOLoader(draco);
+  return { loader, draco };
+}
+
 /** Carga de forma asíncrona el monoplaza .glb (con Draco) si existe en assets/models/manifest.json. */
 export function loadCarAssets(onReady) {
   if (!glbCache) {
@@ -730,14 +745,7 @@ export function loadCarAssets(onReady) {
         if (!res.ok) return null;
         const man = await res.json();
         if (!man?.car && !man?.wheel) return null;
-        const [{ GLTFLoader }, { DRACOLoader }] = await Promise.all([
-          import("three/addons/loaders/GLTFLoader.js"),
-          import("three/addons/loaders/DRACOLoader.js"),
-        ]);
-        const draco = new DRACOLoader();
-        draco.setDecoderPath(`${import.meta.env.BASE_URL}draco/`);
-        const loader = new GLTFLoader();
-        loader.setDRACOLoader(draco);
+        const { loader, draco } = await createDracoGltfLoader();
         const resolveUrl = (p) => (/^(https?:)?\//.test(p) ? p : p.startsWith("assets/") ? `${import.meta.env.BASE_URL}${p}` : `${base}${p}`);
         let carBase = null, wheelBase = null;
         if (man.car) {

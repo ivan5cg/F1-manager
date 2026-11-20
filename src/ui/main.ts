@@ -25,6 +25,7 @@ import { hitosAfterRace } from "../sim/hitos";
 import { hitosHtml, seatAt, gpOf } from "./ritual";
 import { runToEnd } from "./simulate";
 import { esc, setBack } from "./common";
+import { initPwa } from "./pwa";
 
 // las partidas se cargan de IndexedDB antes de pintar nada (ver initStore, al final)
 let season: SeasonState | null = null;
@@ -248,7 +249,7 @@ const nav: Nav = {
 };
 
 declare const __BUILD__: string;
-if ("serviceWorker" in navigator && location.protocol === "https:") navigator.serviceWorker.register(`sw.js?v=${__BUILD__}`).catch(() => {});
+initPwa(__BUILD__);
 void initStore().then(() => {
   season = loadSeason();
   useSeason(season);

@@ -117,9 +117,11 @@ En la realidad, en 2026 el GP de Baréin no se corrió en Sakhir: se trasladó a
 - Hay **3 partidas** (en el inicio: seguir, exportar o borrar cada una). Todo se guarda en el navegador del dispositivo, sin cuenta ni servidor: para hacer una copia de seguridad o seguir en otro dispositivo, «Exportar a un archivo» y luego «Importar partida» allí.
 - Las partidas van en IndexedDB (sin el límite de unos 5 MB de localStorage). Al arrancar se cargan a memoria y cada cambio se escribe sin esperar. Las partidas de versiones anteriores, que estaban en localStorage, se copian solas la primera vez y solo entonces se borran de allí. Si el navegador no tiene IndexedDB (algunos modos privados), todo sigue en localStorage como antes. Al crear la primera partida se pide al navegador que no borre los datos por su cuenta, y en el inicio se ve cuánto ocupan. Los ajustes y la partida activa siguen en localStorage.
 - Copias de seguridad: en Safari (y en cualquier navegador de iPhone o iPad) sin instalar el juego, el inicio avisa de
-  que Safari borra los datos de las webs que no se usan en 7 días. Y si el juego no está instalado, la pantalla de
-  temporada recuerda exportar la partida cada 2 carreras desde la última copia. Los dos avisos se pueden cerrar para
-  siempre.
+  que Safari borra los datos de las webs que no se usan en 7 días. En navegadores compatibles, la pantalla de inicio
+  también ofrece un botón directo «Instalar app» (descartable) y el *service worker* avisa con un cartel discreto
+  cuando hay una versión nueva lista para actualizar sin interrumpir una sesión en curso. Si el juego no está
+  instalado, la pantalla de temporada recuerda exportar la partida cada 2 carreras desde la última copia. Los avisos
+  se pueden cerrar para siempre.
 - En la sesión, **⏩ hasta lo siguiente** avanza a toda velocidad y se para en cuanto pasa algo de tus pilotos (sale o vuelve al garaje, marca tiempo, entra a boxes, un aviso del ingeniero o del estratega) o de dirección de carrera. Teclas: espacio pausa, 1-6 o −/+ velocidad, F hasta lo siguiente.
 - En el fin de semana, **¿Y ahora qué?** resume lo siguiente que conviene hacer: compuestos que tus ingenieros aún no han medido, blandos nuevos que quedan, previsión de lluvia, parrilla y sanciones.
 
@@ -434,13 +436,11 @@ Cada circuito tiene su balance. En Monza ir a rebufo compensa; en Silverstone o 
 
 ## Mapa 3D
 
-En la sesión, el botón **3D** del mapa cambia el mapa de siempre por una vista en 3D que ocupa el
-mismo recuadro (se descarga la primera vez que se pulsa y se recuerda para la siguiente sesión).
-El botón de la cámara pasa por *Circuito*, *Seguir*, *Tele* y *A bordo*, y el de la esquina amplía el mapa
-sobre la clasificación. Manteniendo pulsado el de la cámara (o con clic derecho) salen todas, con cuatro más:
-*Helicóptero* (alto, detrás y a un lado del coche seguido, con zoom suave y deriva lenta), *Pit-lane* (fija en el
-muro frente a su garaje mientras está en boxes; si no, le sigue de cerca), *Alerón trasero* (a bordo mirando hacia
-atrás) y *Grúa de meta* (de lado y en alto sobre la recta de meta, barriendo al pasar el coche).
+En la sesión, el botón **3D** del mapa cambia el mapa de siempre por una vista en 3D que ocupa el mismo recuadro (se descarga la primera vez que se pulsa y se recuerda para la siguiente sesión). Arriba a la izquierda tienes chips rápidos para saltar entre tus dos pilotos a un toque, y de cerca las etiquetas sobre cada monoplaza muestran su posición y neumático y se pueden tocar directamente para seguirlo.
+
+En 3D, tocar el botón **Cámara** abre un menú rápido con las ocho vistas —*Circuito*, *Seguir*, *Tele*, *A bordo*, *Helicóptero* (alto, detrás y a un lado del coche seguido, con zoom suave y deriva lenta), *Pit-lane* (fija en el muro frente a su garaje mientras está en boxes; si no, le sigue de cerca), *Alerón trasero* (a bordo mirando hacia atrás) y *Grúa de meta* (de lado y en alto sobre la recta de meta)— además del interruptor **Auto-TV** (activo por defecto), con el que la cámara *Tele* realiza automáticamente la salida desde la grúa, corta al *Pit-lane* en las paradas de tus pilotos y busca incidentes y batallas cercanas respetando varios segundos cada plano. En *Circuito* y *Seguir* puedes orbitar arrastrando el dedo (o el ratón), acercar o alejar con pellizco (o rueda) y volver al encuadre automático con doble toque.
+
+El botón de ampliar abre el 3D sobre la clasificación junto a una mini-torre flotante (Top 3 y tus dos pilotos) y botones rápidos de pausa y box; en ese modo, un toque en el fondo oculta o recupera toda la interfaz flotante sobre la pista.
 
 La luz es física (three.js, materiales PBR): el sol da la luz directa y las sombras, y los reflejos
 y la luz ambiente parten del cielo de cada momento con mapas de entorno HDRI (soleado, atardecer,
@@ -456,9 +456,12 @@ sigue en una sola llamada de dibujo: lo que cambia son los índices, y solo cuan
 (la vista general) los coches pasan a una malla mínima de unos 300 triángulos con las ruedas dentro y los árboles a
 una copa sola. En Mónaco y Singapur solo dan sombra las manzanas cercanas a la pista, y las fachadas lejanas, cuando
 cada ventana ocupa menos de medio píxel, cambian sus ventanas encendidas por un brillo uniforme que no parpadea.
-En Ajustes se puede fijar la calidad a mano (0 a 3, o automática; fijada no baja sola) y encender un medidor de
+En Ajustes se puede fijar la calidad a mano (0 a 3, o automática; fijada no baja sola), activar **«Ahorro de batería
+(30 fps)»** para limitar la tasa de fotogramas sin degradar el nivel de detalle, y encender un medidor de
 rendimiento: fotogramas por segundo (media del último segundo), calidad, escala de resolución y triángulos y llamadas
-de dibujo por fotograma. Tocando el medidor se pasa a la calidad siguiente.
+de dibujo por fotograma. Tocando el medidor se pasa a la calidad siguiente. Si el navegador o el sistema móvil suspende
+el contexto WebGL al cambiar de aplicación y no logra restaurarlo al volver, la vista salta al mapa 2D con un aviso para
+evitar la pantalla negra.
 
 Alrededor de la pista hay edificio de boxes con un garaje por equipo (con su cartel), puestos en el muro y
 motorhomes en el paddock, torre de control, tribunas con su perfil de verdad (gradas en pendiente con público y cubierta
