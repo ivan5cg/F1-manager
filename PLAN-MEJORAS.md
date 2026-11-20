@@ -53,6 +53,9 @@ Ya hecho de lo que viene ahora (noviembre de 2026):
   `SeasonState.gridPens`, `WeekendState.gridPens`), banderas azules ignoradas (`BLUE_IGNORE_P` con su azar `blueS`:
   sin ninguna, la carrera es la misma) y salida parada tras la bandera roja por lluvia (`standAfterSc`). Banco de
   realismo (6 circuitos × 6 carreras) igual que en main salvo las sanciones (1,2 → 1,4); `finde.ts` igual.
+- **11.4 Mecánicos con los colores del equipo** (`CREW_STAND`/`CREW_CROUCH`, `aCrew2` y `crewAttr` en `map3d.ts`):
+  mono del color del equipo y casco, hombros y franjas de las piernas del segundo (`SECOND`); los comisarios, con su
+  casco blanco. Mismas llamadas. Página de prueba: `pit=1` (la cámara va con un coche parado en boxes).
 - **Asfalto sin baldosas:** la textura de 2,7 m se repetía y se veía una cuadrícula. `asfalto.webp` aplanada (paso
   alto sin costuras, `python3 scripts/assets.py --aplanar`) y el árido leído dos veces en el sombreador (la segunda
   girada 37° y a otra escala) mezcladas con ruido (`ASF_R` en `map3d.ts`). Una lectura de textura más en la pista.
@@ -70,7 +73,7 @@ Primero lo que se nota en cada carrera; los gráficos se ven una vez y se olvida
 4. ~~12.2 Planos técnicos en Desarrollo~~ ✅.
 5. ~~9.1 Rueda de prensa, 8.2 Moral y desobediencia y 8.3 Rivalidades~~ ✅.
 6. ~~9.4 a 9.6 Ritual de la temporada~~ ✅, ~~10.2 a 10.4~~ ✅ y ~~13 Gestión~~ ✅.
-7. **11.2 a 11.4 Árboles, fachadas y mecánicos**: para pulir al final.
+7. **11.2 y 11.3 Árboles y fachadas** (necesitan texturas o modelos de fuera; ~~11.4 colores de los mecánicos~~ ✅): para pulir al final.
 
 ### Presupuesto de assets (vale para los bloques 11 y 12)
 
@@ -172,7 +175,7 @@ no de crearlos. Respetar el presupuesto de assets.
   estilo (mediterránea, torre de cristal) y tejados y cornisas dentro de `B.near(fn)` para que solo se vean de cerca.
 - Cuidado con lo que ya se probó en 5.1 (ventanas en Mónaco y Singapur).
 
-### 11.4 Mecánicos `.glb` (G) · lo último
+### 11.4 Mecánicos `.glb` (G) · lo último · ✅ Hecho lo de los colores (sin `.glb`)
 - Ya están hechos por código y animados. Un `.glb` necesita esqueleto y animaciones para no quedar como estatuas, y se
   ven unos segundos por parada. Antes que eso, mejorar los de ahora: monos y cascos con los colores del equipo.
 
@@ -418,8 +421,8 @@ Hecho (noviembre de 2026):
   de la IA (`midSeason` en career.ts, `applyMidSeason` al acabar cada carrera) y los tuyos entre carreras (`swapSheet`).
   `gridOf` aplica los cambios por ronda y el mundial cuenta por persona (`personId`: el asiento si lo lleva ahora, o
   1000 + el cambio en el que salió; `who`, `person`, `whoAt` en data.ts); constructores, por asiento.
-- Sin hacer: cambiar de jefe, técnico o motor; que te despidan de verdad; los
-  contratos reales de 2026 (son una estimación).
+- Sin hacer: los contratos reales de 2026 (son una estimación). Cambiar de jefe, técnico o motor y el despido, hechos
+  en el Bloque 13.
 
 Lo que decía la tarea:
 - Al acabar la temporada: pantalla de cierre (campeones, objetivos) y **«Empezar la temporada 2027»**.
@@ -452,8 +455,8 @@ Lo que decía la tarea:
   potencia y resistencia): constructores (top 2: su puesto; resto: uno más) y, según el nivel, 2 victorias,
   2 podios, puntuar en 5 carreras o puntuar en 2. Panel en la pantalla de temporada con su progreso (cumplido, ya
   no se puede, vas bien o por ahora no llegas) y un mensaje de la directiva al acabar.
-- Falta (necesita 3.4): cumplirlos da más presupuesto la temporada siguiente; fallarlos lo reduce (y en el peor
-  caso, un aviso de que el jefe de equipo peligra).
+- Hecho después (con 3.4 y el Bloque 13): cumplirlos da más presupuesto la temporada siguiente y fallarlos lo reduce;
+  a la segunda temporada sin cumplir ninguno, aviso, y a la tercera, despido.
 
 ---
 
@@ -647,9 +650,8 @@ Notas para quien siga:
   referencia); las de antes, al cargarlas, los dejan en su valor por defecto.
 - Los pilotos tienen ahora `nacimiento` y `debut` en `data/equipos-2026.json` y `mercado-2026.json`; `Session` recibe
   `year` del fin de semana (`WeekendState.year`) para saber quién es novato.
-- Ideas sin hacer: penalización en la parrilla de la carrera siguiente para el que provoca un toque y abandona; las
-  banderas azules ignoradas; la salida parada tras bandera roja con lluvia (ahora se reanuda detrás del coche de
-  seguridad); la vuelta de formación con frenos fríos.
+- Idea sin hacer: la vuelta de formación con frenos fríos. (La penalización en la parrilla siguiente, las banderas
+  azules ignoradas y la salida parada tras bandera roja con lluvia, hechas en el Bloque 13.)
 
 ### El análisis de partida
 

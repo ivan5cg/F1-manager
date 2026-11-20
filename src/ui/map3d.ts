@@ -717,25 +717,44 @@ const BOAT_GEO = (() => {
 })();
 // ------------------------------------------------------------------ paradas en boxes: mecánicos, gatos y ruedas
 // Figuras sencillas mirando hacia +x: de pie (gatos y los que llevan las ruedas) y agachadas con la pistola.
-// color de vértice: r = cuánto del color del equipo (el mono), g = gris fijo (casco, botas)
+// color de vértice: r = cuánto del color del equipo (el mono), b = cuánto del segundo color del equipo (casco, franja
+// de los hombros y de las piernas: aCrew2, por mecánico), g = gris fijo (visera, guantes, botas)
 const CREW_STAND = (() => {
-  const c = collect(), T1 = [1, 0, 0], HEL = [0, 0.85, 0], BLK = [0, 0.05, 0];
-  for (const z of [0.11, -0.11]) { c.add(new THREE.BoxGeometry(0.16, 0.85, 0.16).translate(0, 0.5, z), T1); c.add(new THREE.BoxGeometry(0.27, 0.1, 0.15).translate(0.04, 0.05, z), BLK); }
+  const c = collect(), T1 = [1, 0, 0], T2 = [0, 0, 1], BLK = [0, 0.05, 0];
+  for (const z of [0.11, -0.11]) {
+    c.add(new THREE.BoxGeometry(0.16, 0.85, 0.16).translate(0, 0.5, z), T1);
+    c.add(new THREE.BoxGeometry(0.17, 0.62, 0.03).translate(0, 0.56, z * 1.73), T2); // franja de la pierna, por fuera
+    c.add(new THREE.BoxGeometry(0.27, 0.1, 0.15).translate(0.04, 0.05, z), BLK);
+  }
   c.add(new THREE.BoxGeometry(0.27, 0.62, 0.44).translate(0, 1.22, 0), T1);
-  for (const z of [0.29, -0.29]) c.add(new THREE.BoxGeometry(0.12, 0.58, 0.12).translate(0.07, 1.16, z), T1);
-  c.keep(new THREE.SphereGeometry(0.15, 10, 8).translate(0.02, 1.7, 0), HEL);
+  c.add(new THREE.BoxGeometry(0.28, 0.1, 0.46).translate(0, 1.48, 0), T2); // hombros
+  for (const z of [0.29, -0.29]) { c.add(new THREE.BoxGeometry(0.12, 0.58, 0.12).translate(0.07, 1.16, z), T1); c.add(new THREE.BoxGeometry(0.13, 0.08, 0.13).translate(0.07, 0.86, z), BLK); }
+  c.keep(new THREE.SphereGeometry(0.15, 10, 8).translate(0.02, 1.7, 0), T2);
   c.add(new THREE.BoxGeometry(0.06, 0.07, 0.22).translate(0.14, 1.7, 0), BLK);
   return c.done();
 })();
 const CREW_CROUCH = (() => {
-  const c = collect(), T1 = [1, 0, 0], HEL = [0, 0.85, 0], BLK = [0, 0.05, 0];
-  for (const z of [0.12, -0.12]) { c.add(new THREE.BoxGeometry(0.14, 0.5, 0.14).translate(-0.22, 0.25, z), T1); c.add(new THREE.BoxGeometry(0.52, 0.16, 0.16).translate(0.0, 0.52, z), T1); }
+  const c = collect(), T1 = [1, 0, 0], T2 = [0, 0, 1], BLK = [0, 0.05, 0];
+  for (const z of [0.12, -0.12]) {
+    c.add(new THREE.BoxGeometry(0.14, 0.5, 0.14).translate(-0.22, 0.25, z), T1);
+    c.add(new THREE.BoxGeometry(0.52, 0.16, 0.16).translate(0.0, 0.52, z), T1);
+    c.add(new THREE.BoxGeometry(0.5, 0.04, 0.17).translate(0.0, 0.61, z), T2); // franja del muslo
+  }
   c.add(new THREE.BoxGeometry(0.27, 0.56, 0.42).rotateZ(-0.5).translate(-0.04, 0.9, 0), T1);
+  c.add(new THREE.BoxGeometry(0.28, 0.1, 0.44).rotateZ(-0.5).translate(0.08, 1.14, 0), T2); // hombros
   for (const z of [0.2, -0.2]) c.add(new THREE.BoxGeometry(0.46, 0.11, 0.11).translate(0.3, 0.92, z), T1);
   c.add(new THREE.BoxGeometry(0.32, 0.15, 0.15).translate(0.6, 0.88, 0), BLK);
-  c.keep(new THREE.SphereGeometry(0.15, 10, 8).translate(0.2, 1.26, 0), HEL);
+  c.keep(new THREE.SphereGeometry(0.15, 10, 8).translate(0.2, 1.26, 0), T2);
+  c.add(new THREE.BoxGeometry(0.05, 0.07, 0.2).translate(0.33, 1.27, 0), BLK); // visera
   return c.done();
 })();
+/** El segundo color de cada mecánico (casco y franjas): un atributo por instancia, con un color de partida. */
+function crewAttr(geo, n, hex) {
+  const a = new Float32Array(n * 3), c = new THREE.Color(hex);
+  for (let i = 0; i < n; i++) a.set([c.r, c.g, c.b], i * 3);
+  geo.setAttribute("aCrew2", new THREE.InstancedBufferAttribute(a, 3).setUsage(THREE.DynamicDrawUsage));
+  return geo;
+}
 // gato: la barra con sus ruedecillas, desde el coche (x = 0) hasta las manos del mecánico
 const JACK_GEO = (() => {
   const c = collect();
@@ -777,7 +796,8 @@ const GANTRY_GEO = (() => {
 })();
 const CREW_MAT = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.75 });
 CREW_MAT.onBeforeCompile = (sh) => {
-  sh.vertexShader = sh.vertexShader.replace("#include <color_vertex>", "vColor = vec4(instanceColor.rgb * pow(color.r, 2.2) + vec3(pow(color.g, 2.2)), 1.0);");
+  sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nattribute vec3 aCrew2;")
+    .replace("#include <color_vertex>", "vColor = vec4(instanceColor.rgb * pow(color.r, 2.2) + aCrew2 * pow(color.b, 2.2) + vec3(pow(color.g, 2.2)), 1.0);");
 };
 const JACK_MAT = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5, metalness: 0.4 });
 
@@ -1872,7 +1892,7 @@ function buildWorld() {
   const brakeH = new THREE.InstancedBufferAttribute(new Float32Array(NC * 4), 1).setUsage(THREE.DynamicDrawUsage);
   WHEEL_GEO.setAttribute("aBrake", brakeH);
   const steer = inst(STEER_GEO, STEER_MAT, NC, 10);
-  const crewS = inst(CREW_STAND, CREW_MAT, NC * 12, 10), crewC = inst(CREW_CROUCH, CREW_MAT, NC * 4, 10), jacks = inst(JACK_GEO, JACK_MAT, NC * 2, 10);
+  const crewS = inst(crewAttr(CREW_STAND, NC * 12, 0xe2e4e8), CREW_MAT, NC * 12, 10), crewC = inst(crewAttr(CREW_CROUCH, NC * 4, 0xe2e4e8), CREW_MAT, NC * 4, 10), jacks = inst(JACK_GEO, JACK_MAT, NC * 2, 10);
   carLoCur = CAR_LO; // hasta que llegue la del .glb (con los datos de este circuito), la integrada
   loadCarAssets(({ carGeo, wheelGeo, carLoGeo, steer, cam }) => {
     if (!alive3d || !world) { carGeo?.dispose(); wheelGeo?.dispose(); carLoGeo?.dispose(); return; }
@@ -1906,7 +1926,7 @@ function buildWorld() {
   const beams = inst(new THREE.BoxGeometry(1, 1, 1).translate(0, 0, 0.5), new THREE.MeshStandardMaterial({ roughness: 0.6, metalness: 0.2 }), NC * 2, 10);
   for (let i = 0; i < NC * 2; i++) beams.setColorAt(i, col.set(0xf2c00d));
   beams.count = 0; beams.castShadow = true;
-  const marsh = inst(CREW_STAND, CREW_MAT, NC * 3, 10), crane = inst(CRANE_GEO, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, metalness: 0.2 }), NC, 10);
+  const marsh = inst(crewAttr(CREW_STAND.clone(), NC * 3, 0xf2f2f2), CREW_MAT, NC * 3, 10), crane = inst(CRANE_GEO, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, metalness: 0.2 }), NC, 10);
   for (let i = 0; i < NC * 7; i++) debris.setColorAt(i, col.set(0x222222));
   for (let i = 0; i < NC * 3; i++) marsh.setColorAt(i, col.set(0xff6a00));
   debris.count = marsh.count = crane.count = 0; marsh.castShadow = crane.castShadow = true;
@@ -3136,12 +3156,14 @@ function draw3d(dt, now) {
       // agachados) y vuelven corriendo cuando se va. Encima del morro, el semáforo de salida.
       mG.set(fx * k, 0, rx * k, p.px, 0, k, 0, p.py, fz * k, 0, rz * k, p.pz, 0, 0, 0, 1);
       const tc = _col.set(c.team.color), gs = T.PS, gz = gs * (0.42 * W * arrAt(T.wr, p.s) + 4) / k;
+      const ci2 = world.carIdx.get(c.id) * 3, c2 = world.c2src.subarray(ci2, ci2 + 3); // segundo color del equipo
       const e = u < 0.5 ? sstep(-0.45, -0.1, u) : 1 - sstep(1.02, 1.35, u), moving = e > 0.001 && e < 0.999, ph = u * 40;
       const put = (mesh, idx, lx, lz, yw, colr = tc) => {
         // de su sitio (lx, lz) al garaje: mismo x, z del garaje; corriendo mira hacia donde va
         const x = lx, z = gz + (lz - gz) * e, bob = moving ? Math.abs(Math.sin(ph + lx * 3)) * 0.1 : 0;
         const ry = moving ? Math.atan2(-(u < 0.5 ? lz - gz : gz - lz), 0) : yw;
         mL.makeRotationY(ry).setPosition(x, bob, z); mW.multiplyMatrices(mG, mL); mesh.setMatrixAt(idx, mW); if (mesh.instanceColor) mesh.setColorAt(idx, colr);
+        const a2 = mesh.geometry.attributes.aCrew2; if (a2) a2.array.set(c2, idx * 3);
       };
       put(crewS, nS++, 4.25, 0, Math.PI); put(crewS, nS++, -3.9, 0, 0);
       if (c.pit?.noseChange) { put(crewS, nS++, 3.4, 1.2, Math.PI * 0.75); put(crewS, nS++, 3.4, -1.2, -Math.PI * 0.75); } // los del morro
@@ -3218,6 +3240,7 @@ function draw3d(dt, now) {
   cars.count = blobs.count = discs.count = world.decals.count = world.steer.count = i; wheels.count = i * 4; spray.geometry.instanceCount = ns;
   crewS.count = nS; crewC.count = nC; jacks.count = nJ; loose.count = nL; gant.count = glit.count = nG; blank.count = nB; fists.count = nF; world.debris.count = cs.d; world.marsh.count = cs.m; world.crane.count = cs.c; world.beams.count = cs.b;
   for (const m of [crewS, crewC, jacks, loose, gant, glit, blank, fists, world.debris, world.marsh, world.crane, world.beams]) { m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true; }
+  crewS.geometry.attributes.aCrew2.needsUpdate = crewC.geometry.attributes.aCrew2.needsUpdate = true;
   // humo y polvo: avanzan con el reloj de la sesión (en pausa se quedan quietos)
   stepParts(dt * (isPaused() ? 0 : Math.min(8, curSpeed())));
   { const pa = world.puffs.geometry.attributes.aP, pc = world.puffs.geometry.attributes.aC, P = parts;
