@@ -555,7 +555,11 @@ En las salidas paradas, la simulación enciende los cinco semáforos de uno en u
 espera no cuenta en el tiempo de carrera y no cambia ningún resultado.
 
 En «Crea tu equipo» se elige también la librea (dibujo, segundo color y tres patrocinadores de las 16 marcas inventadas),
-con el coche en 3D girando al lado.
+con el coche en 3D girando al lado. Y el escudo, vectorial e inventado: cinco formas (clásico, redondo, hexágono, punta y rombo)
+y seis motivos (banda, cuartelado, cheurón, franja, cuadros y estrella) con los dos colores del equipo y las iniciales del
+nombre (sin «de», «la»…). Si no se toca, la forma y el motivo salen del nombre. Se ve en la lista de partidas, en la
+cabecera de la temporada, en el panel del equipo y en el mundial de constructores. Los equipos reales no llevan logo:
+sus colores y su nombre.
 
 Posiciones, paradas, compuestos, percances, banderas, coche de seguridad, lluvia, nubes, hora y agua en pista (con el
 carril seco al secarse) salen de la simulación. La altitud, la anchura y el lado de los boxes salen de los datos

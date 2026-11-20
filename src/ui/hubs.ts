@@ -9,7 +9,7 @@ import { Weekend, WeekendState, newWeekend, preparePu, DAY_NAMES } from "../sim/
 import { puPenalty, quotaFor } from "../sim/powerunit";
 import { yearOf, offSeasonScreen, historyPanel, newsPanel, swapsPanel, swapSheet } from "./nextSeason";
 import { startAttract } from "./attract";
-import { saveFile, helmetSvg, circuitSvg, skyGradient, lightAt, reducedMotion, forecastIcon } from "./visual";
+import { saveFile, helmetSvg, circuitSvg, skyGradient, lightAt, reducedMotion, forecastIcon, teamCrest } from "./visual";
 import { SESSION_NAMES, SessionKind, ResultRow, isRaceKind, isQualiKind, Car, Session, LongRun, TeamDef, DriverDef } from "../sim/session";
 import { COMPOUNDS, DRY, ALL, setWear, Compound, TyreSet } from "../sim/tyres";
 import { stintProfile } from "../sim/strategy";
@@ -59,6 +59,11 @@ function seasonTeam(s: SeasonState): { name: string; color: string } {
   const t = BASE_TEAMS.find((x) => x.id === s.playerTeam);
   return { name: t?.nombre ?? s.playerTeam, color: t?.color ?? "#888" };
 }
+/** La marca del equipo en la lista de partidas: el escudo si es propio; si es real, su color (sin logos). */
+function seasonMark(s: SeasonState, h: number): string {
+  if (s.equipo) return `<span class="crestmark">${teamCrest(s.equipo, Math.round(h * 0.8))}</span>`;
+  return `<span class="teamdot" style="background:${seasonTeam(s).color};height:${h}px"></span>`;
+}
 
 /** Dónde va una partida nueva (o importada): la primera vacía o, si están todas llenas, la que elija el jugador. */
 function chooseSlot(what: string, onPick: (slot: number) => void) {
@@ -67,7 +72,7 @@ function chooseSlot(what: string, onPick: (slot: number) => void) {
   if (empty) return onPick(empty.slot);
   const { el, close } = sheet(`<div class="row"><b class="up grow">${esc(what)}</b><button data-close>Cancelar</button></div>
     <div class="small dim" style="margin:4px 0 8px">Las ${SLOTS} partidas están ocupadas. ¿Cuál sustituyes? Se borra entera (si la quieres guardar, expórtala antes).</div>
-    ${list.map(({ slot, season }) => { const t = seasonTeam(season!); return `<div class="slotrow"><span class="slotn">${slot}</span><span class="teamdot" style="background:${t.color};height:28px"></span><div class="grow"><b>${esc(t.name)}</b><br><span class="small dim">${slotWhere(season!)}</span></div><button data-over="${slot}">Sustituir</button></div>`; }).join("")}`);
+    ${list.map(({ slot, season }) => { const t = seasonTeam(season!); return `<div class="slotrow"><span class="slotn">${slot}</span>${seasonMark(season!, 28)}<div class="grow"><b>${esc(t.name)}</b><br><span class="small dim">${slotWhere(season!)}</span></div><button data-over="${slot}">Sustituir</button></div>`; }).join("")}`);
   el.querySelectorAll<HTMLButtonElement>("[data-over]").forEach((b) => (b.onclick = () => {
     const n = Number(b.dataset.over);
     if (!confirm(`¿Borrar la partida ${n} (${seasonTeam(list[n - 1].season!).name})?`)) return;
@@ -101,7 +106,7 @@ export function startScreen(nav: Nav, notice = "") {
       ${list.map(({ slot, season, midSession }) => {
         if (!season) return `<div class="slotrow empty"><span class="slotn">${slot}</span><span class="grow dim small">Vacía</span></div>`;
         const t = seasonTeam(season);
-        return `<div class="slotrow${slot === active ? " on" : ""}"><span class="slotn">${slot}</span><span class="teamdot" style="background:${t.color};height:34px"></span>
+        return `<div class="slotrow${slot === active ? " on" : ""}"><span class="slotn">${slot}</span>${seasonMark(season, 34)}
           <div class="grow" style="min-width:0"><b class="up">${esc(t.name)}</b> <span class="small dim">· ${season.equipo ? "equipo propio" : "equipo real"}</span><br><span class="small">${slotWhere(season)}${midSession ? ` · <span class="yellow">sesión a medias</span>` : ""}</span></div>
           <button data-more="${slot}" aria-label="Más opciones de la partida ${slot}">⋯</button><button class="${slot === active ? "red" : ""}" data-open="${slot}">Seguir</button></div>`;
       }).join("")}
@@ -250,7 +255,7 @@ export function seasonScreen(nav: Nav, s: SeasonState) {
   const prevPos = new Map(driverStandings({ ...s, rounds: s.rounds.slice(0, -1) }, DRIVERS.length).map((x, i) => [x.id, i]));
   app().innerHTML = `
   <div style="padding-bottom:16px">
-    <div class="panel"><div class="hd"><span class="t">Temporada ${yearOf(s)} · ${esc(myTeam.nombre)}</span><button id="home">Inicio</button></div><div class="bd">
+    <div class="panel"><div class="hd"><span class="t">${s.equipo ? teamCrest(s.equipo, 18) + " " : ""}Temporada ${yearOf(s)} · ${esc(myTeam.nombre)}</span><button id="home">Inicio</button></div><div class="bd">
       ${done ? `<div class="champ">${helmetSvg(champ!.team.color, champ!.d.numero, champ!.d.abrev, 72, champ!.d.nombre)}<div><span class="kick">Campeón del mundo</span><h1>🏆 ${esc(champ!.d.nombre)}</h1><div class="dim">${esc(champ!.team.nombre)} · ${ds[0].points} puntos</div></div></div>` : `<button class="red big-cta" id="go">${flagOf(ROUNDS_S[s.round])} ${s.weekend && s.weekend.round === s.round + 1 && s.weekend.next > 0 ? "Seguir en el" : "Ir al"} ${esc(CIRCUITS[ROUNDS_S[s.round]].gp)}</button>`}
       ${s.rounds.length ? `<div class="small" style="margin-top:8px">${esc(myTeam.nombre)}: <b>${ord(myPos)}</b> de constructores con ${ts[myPos - 1].points} pts · ${mine.map(({ x, i }) => `${esc(DRIVERS[x.id].d.abrev)} ${ord(i + 1)} (${x.points})`).join(" · ")}</div>` : ""}
     </div></div>
@@ -293,7 +298,7 @@ export function seasonScreen(nav: Nav, s: SeasonState) {
       }).join("")}</table>
     </div></div>
     <div class="panel"><div class="hd"><span class="t">Mundial de constructores</span></div><div class="bd cbars">
-      ${ts.map((x, i) => `<div class="cbar${x.team.id === s.playerTeam ? " me" : ""}"><span class="pos">${i + 1}</span><span class="cn">${esc(x.team.nombre)}</span><span class="cb"><i style="--w:${ts[0].points ? Math.max(1.5, (100 * x.points) / ts[0].points) : 1.5}%;background:${x.team.color};animation-delay:${i * 45}ms"></i></span><b class="mono">${x.points}</b></div>`).join("")}
+      ${ts.map((x, i) => `<div class="cbar${x.team.id === s.playerTeam ? " me" : ""}"><span class="pos">${i + 1}</span><span class="cn">${x.team.id === s.playerTeam && s.equipo ? teamCrest(s.equipo, 13) + " " : ""}${esc(x.team.nombre)}</span><span class="cb"><i style="--w:${ts[0].points ? Math.max(1.5, (100 * x.points) / ts[0].points) : 1.5}%;background:${x.team.color};animation-delay:${i * 45}ms"></i></span><b class="mono">${x.points}</b></div>`).join("")}
     </div></div>
     ${historyPanel(s)}
     ${done ? (s.despedido ? `<div class="panel"><div class="bd"><b>🚪 La directiva te despidió al acabar ${s.despedido}.</b> La partida se queda aquí, con todo lo que ganaste.</div></div><div style="padding:0 10px"><button class="red big-cta" id="again" style="width:100%">Otra partida</button></div>`
