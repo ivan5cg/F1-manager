@@ -535,7 +535,7 @@ CAR_MAT.onBeforeCompile = (sh) => {
     .replace("#include <roughnessmap_fragment>", "float roughnessFactor = mix(mix(mix(0.62, 0.34 + 0.18 * (1.0 - cw), isCarb), roughness, vPaint), 0.04, drop.x);")
     .replace("#include <metalnessmap_fragment>", "float metalnessFactor = metalness * vPaint;")
     .replace("#include <lights_physical_fragment>", "#include <lights_physical_fragment>\nmaterial.clearcoat *= mix(0.32 * isCarb, 1.0, vPaint);")
-    .replace("vec3 totalEmissiveRadiance = emissive;", "vec2 drop = vec2(0.0); float isCarb = 0.0, cw = 0.5;\nvec3 totalEmissiveRadiance = emissive + vColor.rgb * uFlood * 0.6 + vec3(7.0, 0.25, 0.1) * vGlow;")
+    .replace("vec3 totalEmissiveRadiance = emissive;", "vec2 drop = vec2(0.0); float isCarb = 0.0, cw = 0.5;\nvec3 totalEmissiveRadiance = emissive + vColor.rgb * uFlood * 0.28 + vec3(3.2, 0.16, 0.06) * vGlow;")
     .replace("#include <emissivemap_fragment>", "#include <emissivemap_fragment>\ntotalEmissiveRadiance += vec3(0.9, 0.95, 1.0) * drop.y * (0.15 + 0.6 * uFlood);");
 };
 CAR_MAT.userData.uLiv = uLiv; // para cambiar la librea sin rehacer el material

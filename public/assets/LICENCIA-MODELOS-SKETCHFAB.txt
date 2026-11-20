@@ -1,0 +1,20 @@
+Modelos 3D de entorno de Sketchfab bajo licencia CC-BY-4.0
+https://creativecommons.org/licenses/by/4.0/
+
+Adaptados con scripts/prepara_entorno_glb.py (texturas WebP reducidas, conversión a pbrMetallicRoughness,
+alfa en modo MASK, unificación de mallas/atlas y poses de mecánicos para el juego):
+
+- tree_leaf.glb, tree_leaf_lo.glb <- "Low Poly Forest Tree Pack" de 99.Miles
+  https://sketchfab.com/3d-models/low-poly-forest-tree-pack-5ff5a51e74324845a4e4905f182dfb2b
+
+- tree_pine.glb <- "Pine Trees Pack | PS1 Low Poly" de Vova Truestory (FlowOff)
+  https://sketchfab.com/3d-models/pine-trees-pack-ps1-low-poly-347d7f6122af4bf684f752df2dd0eb5a
+
+- tree_palm.glb <- "Arabic Palmtree" de gelmi.com.br (rodrigogelmi)
+  https://sketchfab.com/3d-models/arabic-palmtree-d76f0654b92d4cf994b528555525219b
+
+- crew_stand.glb, crew_crouch.glb <- "Race Car Driver - Low Poly" de tomkart
+  https://sketchfab.com/3d-models/race-car-driver-low-poly-0fedfae53537473ba2ee3d9b722e0c66
+
+- yacht.glb <- "Hinckley T44 FB Model" de mosak
+  https://sketchfab.com/3d-models/hinckley-t44-fb-model-1f4362d864424b7eb26bb429f6ef8f81

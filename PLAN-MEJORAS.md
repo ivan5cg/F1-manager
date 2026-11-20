@@ -62,6 +62,12 @@ Ya hecho de lo que viene ahora (noviembre de 2026):
 - **Inmersión visual:** monoplaza `.glb` propio con Draco (`public/assets/models`, guía en `docs/GUIA-BLENDER-COCHE.md`),
   entornos HDRI (`public/assets/env`), texturas PBR de Poly Haven (`public/assets/tex`: asfalto, hierba, grava,
   hormigón, fachada), banderas SVG (`public/assets/flags`) y brazos del piloto a bordo (`car3d.ts`).
+- **Realismo 3D — Oleadas 1 y 2 (`src/ui/map3d.ts`, `src/ui/car3d.ts`):**
+  - *Oleada 1 (iluminación, sombras y materiales):* sombra de contacto suave siempre activa bajo los coches en todas las calidades; relieve normal procedural + AO de contacto en el suelo para `propMat` y `cityMat`; profundidad `FloatType` + `near`/`far` dinámicos + `GTAOPass` calibrado; `UnrealBloomPass` saneado contra `NaN` y emisivos nocturnos equilibrados; reflejo del agua y anti-aliasing en chapas corrugadas del techo de boxes.
+  - *Oleada 2 (terreno, pista y atmósfera):* 6 biomas completos (`bosque`, `tropical`, `seco`, `mediterraneo`, `dunas`, `desierto`) cubriendo los 25 circuitos; estratos rocosos triplanares sin estiramiento en taludes y laderas; líneas blancas de anchura FIA, pianos serrados 3D y escapatorias de grava rastrillada; vallas protectoras traslúcidas con anti-aliasing, guardarraíl Armco en W y pilas de neumáticos con relieve; neblina atmosférica exponencial (`THREE.FogExp2`).
+- **11.2 Árboles por bioma, 11.4 Mecánicos `.glb` y yates `.glb` (`scripts/prepara_entorno_glb.py`, `src/ui/map3d.ts`):**
+  - 5 modelos CC-BY-4.0 de Sketchfab optimizados a ~712 KB en total (`tree_leaf.glb`, `tree_leaf_lo.glb`, `tree_pine.glb`, `tree_palm.glb`, `crew_stand.glb`, `crew_crouch.glb`, `yacht.glb`), con texturas WebP (`EXT_texture_webp`), recorte alfa `MASK` con sangrado anti-halos y respaldo procedural instantáneo.
+  - Carga bajo demanda por bioma y circuito (Baréin solo descarga palmeras; Mónaco/Singapur descargan yates), rotación Y aleatoria, tintado sutil de copa por bioma, LOD `tree_leaf_lo` en vista general y atribución en `public/assets/LICENCIA-MODELOS-SKETCHFAB.txt` y `README.md`.
 
 ### Orden recomendado
 
@@ -73,12 +79,13 @@ Primero lo que se nota en cada carrera; los gráficos se ven una vez y se olvida
 4. ~~12.2 Planos técnicos en Desarrollo~~ ✅.
 5. ~~9.1 Rueda de prensa, 8.2 Moral y desobediencia y 8.3 Rivalidades~~ ✅.
 6. ~~9.4 a 9.6 Ritual de la temporada~~ ✅, ~~10.2 a 10.4~~ ✅ y ~~13 Gestión~~ ✅.
-7. **11.2 y 11.3 Árboles y fachadas** (necesitan texturas o modelos de fuera; ~~11.4 colores de los mecánicos~~ ✅): para pulir al final.
+7. ~~11.2 Árboles por bioma y 11.4 Mecánicos `.glb` (+ yates `.glb` y Oleadas 1–2)~~ ✅.
+8. **11.3 Fachadas urbanas y arquitectura (Oleada 3)**, **11.5 Detalle de boxes y lluvia (Oleada 4)** y **12.3 Escudos de equipo**: pulido visual final (todo en código, sin más `.glb`).
 
 ### Presupuesto de assets (vale para los bloques 11 y 12)
 
 El juego es una PWA (`public/sw.js`) y se juega en el móvil: cada `.glb` y cada textura alarga la primera carga.
-- Hoy `public/assets` pesa unos 2,5 MB (texturas 1,7 MB, HDRI 0,5 MB, coche 0,1 MB). **Tope: 8 MB en total.**
+- Hoy `public/assets` pesa **3,59 MB** (texturas 1,8 MB, HDRI 0,5 MB, modelos `.glb` 1,1 MB, banderas 0,2 MB). **Tope: 8 MB en total.**
 - Lo que solo sale en algunos circuitos (fachadas de urbanos, árboles de un bioma) se carga al abrir ese circuito, no
   al arrancar, y el service worker lo guarda después de la primera vez.
 - Todo `.glb` con Draco y con lo hecho por código como respaldo si no carga (como el coche).
@@ -164,20 +171,34 @@ no de crearlos. Respetar el presupuesto de assets.
   `SC_GEO` de respaldo. Luces del techo que parpadeen (material emisivo) y el `scBar` de siempre. Coche genérico, sin
   marca.
 
-### 11.2 Árboles por bioma (M)
-- Hoy los árboles son lo que más triángulos pone (~99 000 de cerca). Un modelo `.glb` por bioma (mediterráneo,
-  templado, tropical, desierto), no tres: con instancing y su nivel ligero, sin pasar de los 124 / 26 triángulos de
-  ahora. Si con ese tope no quedan mejor, mejor una textura con transparencia en la copa que más geometría.
-- El bioma, un campo nuevo en `data/circuitos/*.json`; cargar solo el del circuito.
+### 11.2 Árboles por bioma (M) · ✅ Hecho
+- 6 biomas (`bosque`, `tropical`, `seco`, `mediterraneo`, `dunas`, `desierto`) en `src/ui/map3d.ts` con mezcla de especies
+  según circuito (`tree_leaf.glb` + `tree_leaf_lo.glb`, `tree_pine.glb`, `tree_palm.glb`), carga bajo demanda solo del
+  bioma activo, rotación Y aleatoria, tintado suave por bioma, sombras con recorte alfa en `q >= 3` y respaldo procedural.
+- Incluye además `yacht.glb` para los puertos de circuitos urbanos con mar (Mónaco, Singapur…).
 
-### 11.3 Fachadas urbanas (M)
-- Solo en los urbanos con `entorno` (Mónaco, Singapur, Bakú, Las Vegas): dos o tres texturas PBR más de fachada por
-  estilo (mediterránea, torre de cristal) y tejados y cornisas dentro de `B.near(fn)` para que solo se vean de cerca.
-- Cuidado con lo que ya se probó en 5.1 (ventanas en Mónaco y Singapur).
+### 11.3 Fachadas urbanas y arquitectura de circuito · Oleada 3 (M)
+Todo en código/shaders (`src/ui/map3d.ts`), sin añadir más `.glb`:
+- **Edificios urbanos (`cityMat` en Mónaco, Singapur, Bakú, Las Vegas):**
+  - Interiores con profundidad falsa (parallax sencillo o degradado de techo/suelo detrás del cristal) y reflejo de cielo/entorno más realista en las ventanas en lugar de rectángulos planos.
+  - Remates de azotea y variación arquitectónica: cornisas, pretiles, tejados inclinados mediterráneos (Mónaco), unidades de climatización / helipuertos / antenas en torres (Singapur, Las Vegas) y plantas bajas porticadas o acristaladas distintas del resto de pisos.
+  - Cuidado con el aliasing lejano ya controlado en 5.1 (ventanas en Mónaco y Singapur).
+- **Gradas y edificios de boxes/paddock (`propMat`):**
+  - Romper el aspecto de «caja»: viseras inclinadas con cerchas/tirantes visibles, peldaños y pasillos de acceso más marcados en gradas, cristaleras de los palcos VIP sobre los garajes, petos metálicos y detalle en las torres de control y pasarelas/puentes sobre pista.
+  - Variación de material/desgaste y juntas de dilatación en el hormigón del pit-lane y muros de boxes.
 
-### 11.4 Mecánicos `.glb` (G) · lo último · ✅ Hecho lo de los colores (sin `.glb`)
-- Ya están hechos por código y animados. Un `.glb` necesita esqueleto y animaciones para no quedar como estatuas, y se
-  ven unos segundos por parada. Antes que eso, mejorar los de ahora: monos y cascos con los colores del equipo.
+### 11.4 Mecánicos `.glb` (M) · ✅ Hecho
+- `crew_stand.glb` (1.343 tri., 49,7 KB) y `crew_crouch.glb` (1.379 tri., 52,5 KB) generados desde Sketchfab con
+  `scripts/prepara_entorno_glb.py`, sin texturas y compatibles con `CREW_MAT` (`R` mono del equipo, `B` casco/segundo
+  color o blanco en comisarios, `G` visera/guantes/botas/pistola). Sustituyen a `CREW_STAND`/`CREW_CROUCH` en
+  `crewS`, `crewC`, `marsh` y el comisario de bandera a cuadros manteniendo el respaldo procedural.
+
+### 11.5 Detalle de boxes y lluvia · Oleada 4 (P/M)
+Todo en código/shaders (`src/ui/map3d.ts` y `src/ui/car3d.ts`):
+- **Pórtico de parada en boxes (`gant` / `glit`):** carcasa de semáforo más detallada con visera/parasol, tres ópticas diferenciadas (rojo/ámbar/verde con halo suave) y mangueras neumáticas colgando del brazo aéreo hacia las pistolas.
+- **Lluvia y estela (`spray` / `puffs` / `rain`):**
+  - Estela de agua (`spray`) más orgánica y volumétrica: textura de nube/bruma suave con ruido rotado en vez de discos uniformes, con densidad ligada a la velocidad, al agua del minisector y al paso por charcos (`aSpl`), sin saturar el bloom.
+  - Mejora sutil de reflejos en pista mojada y gotas en cámara / halo húmedo bajo los focos en carreras nocturnas con lluvia.
 
 ## Bloque 12 · Pantallas e identidad 2D
 

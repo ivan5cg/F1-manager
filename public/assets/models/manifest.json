@@ -12,5 +12,16 @@
     1.38
   ],
   "safety": "safety.glb",
-  "safetyLo": "safety_lo.glb"
+  "safetyLo": "safety_lo.glb",
+  "trees": {
+    "leaf": "tree_leaf.glb",
+    "leafLo": "tree_leaf_lo.glb",
+    "pine": "tree_pine.glb",
+    "palm": "tree_palm.glb"
+  },
+  "crew": {
+    "stand": "crew_stand.glb",
+    "crouch": "crew_crouch.glb"
+  },
+  "yacht": "yacht.glb"
 }
