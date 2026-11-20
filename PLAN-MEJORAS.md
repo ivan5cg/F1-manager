@@ -65,6 +65,12 @@ Ya hecho de lo que viene ahora (noviembre de 2026):
 - **Realismo 3D — Oleadas 1 y 2 (`src/ui/map3d.ts`, `src/ui/car3d.ts`):**
   - *Oleada 1 (iluminación, sombras y materiales):* sombra de contacto suave siempre activa bajo los coches en todas las calidades; relieve normal procedural + AO de contacto en el suelo para `propMat` y `cityMat`; profundidad `FloatType` + `near`/`far` dinámicos + `GTAOPass` calibrado; `UnrealBloomPass` saneado contra `NaN` y emisivos nocturnos equilibrados; reflejo del agua y anti-aliasing en chapas corrugadas del techo de boxes.
   - *Oleada 2 (terreno, pista y atmósfera):* 6 biomas completos (`bosque`, `tropical`, `seco`, `mediterraneo`, `dunas`, `desierto`) cubriendo los 25 circuitos; estratos rocosos triplanares sin estiramiento en taludes y laderas; líneas blancas de anchura FIA, pianos serrados 3D y escapatorias de grava rastrillada; vallas protectoras traslúcidas con anti-aliasing, guardarraíl Armco en W y pilas de neumáticos con relieve; neblina atmosférica exponencial (`THREE.FogExp2`).
+- **12.3 Escudos de equipo** (sin tocar la simulación): `crestSvg`, `teamCrest`, `crestDefault` y `crestInitials` en
+  `src/ui/visual.ts` (cinco formas, seis motivos, los dos colores de la librea y las iniciales; los ids del SVG llevan un
+  hash para convivir en la misma página). `CustomTeam.escudo` guarda forma y motivo (opcional: las partidas viejas
+  toman los del nombre). Selector en «crear equipo» (`crestPick`/`wireCrest` en `teamBuilder.ts`, sin repintar para no
+  perder el foco del nombre); se ve en la lista de partidas (`seasonMark`), la cabecera de la temporada, el panel del
+  equipo y el mundial de constructores (`hubs.ts`).
 - **11.3 Fachadas y arquitectura (Oleada 3) y 11.5 Boxes y lluvia (Oleada 4)** (sin tocar la simulación; todo en
   `src/ui/map3d.ts`, sin assets nuevos):
   - *Tercer nivel de detalle en el decorado:* `B.fine(fn)` en `propBuilder` (además de `near`) apunta lo que solo se
@@ -116,7 +122,7 @@ Primero lo que se nota en cada carrera; los gráficos se ven una vez y se olvida
 6. ~~9.4 a 9.6 Ritual de la temporada~~ ✅, ~~10.2 a 10.4~~ ✅ y ~~13 Gestión~~ ✅.
 7. ~~11.2 Árboles por bioma y 11.4 Mecánicos `.glb` (+ yates `.glb` y Oleadas 1–2)~~ ✅.
 8. ~~11.3 Fachadas urbanas y arquitectura (Oleada 3)~~ ✅ y ~~11.5 Detalle de boxes y lluvia (Oleada 4)~~ ✅.
-9. **12.3 Escudos de equipo**: lo último que queda.
+9. ~~12.3 Escudos de equipo~~ ✅. **El plan está completo.**
 
 ### Presupuesto de assets (vale para los bloques 11 y 12)
 
@@ -250,7 +256,7 @@ Todo en código/shaders (`src/ui/map3d.ts` y `src/ui/car3d.ts`):
 - En «Reglajes», el mismo plano de lado con la altura y el ángulo del alerón que cambian con los valores.
 - `dev.png` (en la raíz) es la referencia de cómo se ve ahora esa pantalla.
 
-### 12.3 Escudos de equipo (P)
+### 12.3 Escudos de equipo (P) · ✅ Hecho
 - Escudos vectoriales **inventados** para los equipos creados en «crear equipo» (forma, colores e iniciales). Para los
   equipos reales, nada de logos: sus colores y su nombre, como ahora.
 
@@ -286,6 +292,7 @@ Todo en código/shaders (`src/ui/map3d.ts` y `src/ui/car3d.ts`):
 | 5.2 Nubes y lluvia | ✅ Hecho | `map3d.ts` (cielo: `cloudSides`, `updateStorm`; `uDrops`; spray `aSpl`), `car3d.ts` (`DROPS_GLSL`), `audio.ts` (`thunder`) |
 | 5.3 Hora del día | ✅ Hecho | `map3d.ts` (`winOn`, `uCity`, `townLights`, caja de sombras) |
 | 11.3 Fachadas y arquitectura | ✅ Hecho | `map3d.ts` (`roomAt`, `B.fine`, `roofTop`, `CITY_GABLE`/`CITY_TOP`, `RMODE 8`) |
+| 12.3 Escudos de equipo | ✅ Hecho | `visual.ts` (`crestSvg`, `teamCrest`), `teamBuilder.ts`, `hubs.ts`, `market.ts` (`CustomTeam.escudo`) |
 | 11.5 Boxes y lluvia | ✅ Hecho | `map3d.ts` (`GANTRY_GEO`, `GLIT_MAT`, `SPRAY_MAT`, `shafts`, `TV_CAMS`) |
 
 **Los bloques 1 a 7 están hechos.** Ideas sin hacer, al final de cada tarea.

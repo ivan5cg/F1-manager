@@ -119,6 +119,74 @@ export function helmetSvg(color: string, numero: number | string, abrev = "", si
   </svg>`;
 }
 
+// ------------------------------------------------------------------ escudos
+/** Formas y motivos del escudo de un equipo propio (inventado: nada de logos reales). */
+export const CREST_SHAPES = ["Clásico", "Redondo", "Hexágono", "Punta", "Rombo"];
+export const CREST_MOTIFS = ["Banda", "Cuartelado", "Cheurón", "Franja", "Cuadros", "Estrella"];
+const CREST_SKIP = new Set(["de", "del", "la", "las", "los", "el", "y", "e", "da", "di", "du", "le", "the", "of"]);
+/** Iniciales del escudo: la primera letra de hasta tres palabras (sin «de», «la»…); con una sola palabra, dos letras. */
+export function crestInitials(nombre: string): string {
+  const w = nombre.trim().split(/[\s\-_.]+/).filter((x) => x && !CREST_SKIP.has(x.toLowerCase()));
+  if (!w.length) return "?";
+  if (w.length === 1) return w[0].slice(0, 2).toUpperCase();
+  return w.slice(0, 3).map((x) => x[0]).join("").toUpperCase();
+}
+/** La forma y el motivo que tocan a un nombre si el jugador no ha elegido. */
+export function crestDefault(nombre: string): { forma: number; motivo: number } {
+  const h = hashStr(nombre.trim().toLowerCase() || "?");
+  return { forma: h % CREST_SHAPES.length, motivo: (h >>> 5) % CREST_MOTIFS.length };
+}
+const CREST_PATH = [
+  "M4 4 H36 V19 C36 31 29 39.5 20 44 C11 39.5 4 31 4 19 Z",
+  "M20 3 A19 19 0 1 1 19.99 3 Z",
+  "M20 2.5 L37 12.3 V32.2 L20 42 L3 32.2 V12.3 Z",
+  "M3 6 L20 2 L37 6 L35 27 L20 44 L5 27 Z",
+  "M20 1.5 L38.5 22 L20 43.5 L1.5 22 Z",
+];
+/**
+ * Escudo vectorial de un equipo propio: forma, motivo con el segundo color, borde e iniciales. Sale igual en todas las
+ * pantallas (los ids del SVG llevan un hash para que varios escudos convivan en la misma página).
+ */
+export function crestSvg(t: { nombre: string; color: string; color2?: string; forma?: number; motivo?: number }, size = 40): string {
+  const def = crestDefault(t.nombre);
+  const forma = ((t.forma ?? def.forma) % CREST_PATH.length + CREST_PATH.length) % CREST_PATH.length;
+  const motivo = ((t.motivo ?? def.motivo) % CREST_MOTIFS.length + CREST_MOTIFS.length) % CREST_MOTIFS.length;
+  const base = t.color;
+  let c2 = t.color2 ?? (luminance(base) > 0.6 ? "#16181c" : "#f5f5f5");
+  if (Math.abs(luminance(c2) - luminance(base)) < 0.12) c2 = luminance(base) > 0.5 ? shade(base, -0.55) : shade(base, 0.6);
+  const id = `c${hashStr(JSON.stringify([t.nombre, base, c2, forma, motivo])).toString(36)}`;
+  const path = CREST_PATH[forma];
+  const motif = [
+    `<path d="M-2 30 L30 -2 L42 -2 L42 4 L4 44 L-2 44 Z" fill="${c2}"/>`,
+    `<rect x="20" y="0" width="22" height="23" fill="${c2}"/><rect x="-2" y="23" width="22" height="23" fill="${c2}"/>`,
+    `<path d="M-2 18 L20 32 L42 18 L42 26 L20 40 L-2 26 Z" fill="${c2}"/>`,
+    `<rect x="15" y="-2" width="10" height="48" fill="${c2}"/><rect x="13" y="-2" width="1.2" height="48" fill="${c2}" opacity=".6"/><rect x="25.8" y="-2" width="1.2" height="48" fill="${c2}" opacity=".6"/>`,
+    `${Array.from({ length: 24 }, (_, k) => { const x = k % 8, y = Math.floor(k / 8); return (x + y) % 2 ? "" : `<rect x="${x * 5}" y="${y * 4}" width="5" height="4" fill="${c2}"/>`; }).join("")}<rect x="0" y="12" width="40" height="1.4" fill="${c2}"/>`,
+    `<path d="M20 4.5 L22.4 10.4 L28.8 10.6 L23.8 14.5 L25.6 20.6 L20 17 L14.4 20.6 L16.2 14.5 L11.2 10.6 L17.6 10.4 Z" fill="${c2}"/>`,
+  ][motivo];
+  const ini = crestInitials(t.nombre);
+  // las iniciales van abajo si el motivo ocupa lo alto (cuadros, estrella); si no, en el centro
+  const ty = motivo === 4 || motivo === 5 ? 32 : forma === 0 ? 25.5 : 27;
+  const fs = ini.length > 2 ? 10.5 : 13;
+  const txt = luminance(base) > 0.6 ? "#14181f" : "#ffffff", halo = txt === "#ffffff" ? "#000" : "#fff";
+  return `<svg class="crest" viewBox="0 0 40 46" width="${size}" height="${Math.round(size * 1.15)}" aria-hidden="true">
+    <defs>
+      <clipPath id="${id}k"><path d="${path}"/></clipPath>
+      <linearGradient id="${id}g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".32"/><stop offset=".45" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".25"/></linearGradient>
+    </defs>
+    <path d="${path}" fill="${base}"/>
+    <g clip-path="url(#${id}k)">${motif}<rect width="40" height="46" fill="url(#${id}g)"/></g>
+    <path d="${path}" fill="none" stroke="${shade(c2, luminance(c2) > 0.5 ? -0.25 : 0.15)}" stroke-width="2.6" stroke-linejoin="round"/>
+    <path d="${path}" fill="none" stroke="#000" stroke-opacity=".55" stroke-width=".8" stroke-linejoin="round"/>
+    <text x="20" y="${ty}" text-anchor="middle" font-family="'Titillium Web', sans-serif" font-weight="900" font-size="${fs}" letter-spacing=".3" fill="${txt}" stroke="${halo}" stroke-opacity=".45" stroke-width="1.6" paint-order="stroke">${esc(ini)}</text>
+  </svg>`;
+}
+/** El escudo de un equipo propio con lo que guarda la partida. */
+export function teamCrest(t: { nombre: string; color: string; librea?: { color2: string }; escudo?: { forma: number; motivo: number } }, size = 40): string {
+  return crestSvg({ nombre: t.nombre, color: t.color, color2: t.librea?.color2, forma: t.escudo?.forma, motivo: t.escudo?.motivo }, size);
+}
+const esc = (x: string) => x.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
+
 // ------------------------------------------------------------------ circuitos
 /** Puntos del trazado de un circuito (de su JSON, sin construir la pista), reducidos a unos `n`. */
 export function circuitPoints(def: { puntos: number[][]; escala?: number }, n = 140): [number, number][] {

@@ -22,7 +22,8 @@ export interface MarketEngine { id: string; nombre: string; potencia: number; fi
 export interface Market { techo: number; pilotos: MarketDriver[]; jefes: MarketBoss[]; tecnicos: MarketTech[]; motores: MarketEngine[] }
 
 /** Lo que ficha el jugador. */
-export interface CustomTeam { nombre: string; color: string; pilotos: string[]; jefe: string; tecnico: string; motor: string; librea?: import("./session").Librea }
+/** escudo: forma y motivo elegidos (sin él, los que tocan por el nombre: crestDefault en ui/visual.ts). */
+export interface CustomTeam { nombre: string; color: string; pilotos: string[]; jefe: string; tecnico: string; motor: string; librea?: import("./session").Librea; escudo?: { forma: number; motivo: number } }
 
 export const PLAYER_TEAM_ID = "propio";
 /** Un equipo nuevo empieza con menos infraestructura: coche, mecánicos y fiabilidad. */

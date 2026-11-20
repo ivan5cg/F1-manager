@@ -2,6 +2,7 @@
 import { BASE_TEAMS, MARKET, ROUNDS, getTrack } from "./data";
 import { $, esc, setBack } from "./common";
 import { BRANDS, LIV_STYLES, LIV_NAMES } from "./livery";
+import { CREST_MOTIFS, CREST_SHAPES, crestDefault, crestSvg, teamCrest } from "./visual";
 import type { TeamDef } from "../sim/session";
 import type { SeasonState } from "../sim/season";
 import type { WeekendState } from "../sim/weekend";
@@ -88,6 +89,20 @@ export function builderScreen(onCancel: () => void, onCreate: (spec: CustomTeam)
       try { preview = m.createCarPreview(cv, team); previewKey = key; } catch (e) { previewFailed = true; cv.remove(); box.hidden = true; }
     }).catch(() => { previewFailed = true; box.hidden = true; });
   };
+  // escudo: hasta que el jugador elige, la forma y el motivo salen del nombre
+  const crest = () => spec.escudo ?? crestDefault(spec.nombre);
+  const crestBase = () => ({ nombre: spec.nombre, color: spec.color, color2: spec.librea!.color2 });
+  const crestPick = () => `<span id="crestprev">${teamCrest(spec, 64)}</span>
+    <div class="grow">
+      <div class="row wrap" style="gap:4px">${CREST_SHAPES.map((n, i) => `<button class="crestbtn${crest().forma === i ? " on" : ""}" data-cf="${i}" title="${n}" aria-label="Forma: ${n}">${crestSvg({ ...crestBase(), forma: i, motivo: crest().motivo }, 26)}</button>`).join("")}</div>
+      <div class="row wrap" style="gap:4px;margin-top:4px">${CREST_MOTIFS.map((n, i) => `<button class="crestbtn${crest().motivo === i ? " on" : ""}" data-cm="${i}" title="${n}" aria-label="Motivo: ${n}">${crestSvg({ ...crestBase(), forma: crest().forma, motivo: i }, 26)}</button>`).join("")}</div>
+    </div>`;
+  /** Pone al día el escudo sin volver a pintar la pantalla (para no perder el foco del nombre). */
+  const wireCrest = () => {
+    $("#crestpick").innerHTML = crestPick();
+    document.querySelectorAll<HTMLElement>("[data-cf]").forEach((b) => (b.onclick = () => { spec.escudo = { ...crest(), forma: +b.dataset.cf! }; wireCrest(); }));
+    document.querySelectorAll<HTMLElement>("[data-cm]").forEach((b) => (b.onclick = () => { spec.escudo = { ...crest(), motivo: +b.dataset.cm! }; wireCrest(); }));
+  };
   let tab: "pilotos" | "jefe" | "tecnico" | "motor" = "pilotos";
   let filt: "todos" | "titular" | "reserva" | "libre" = "todos";
   const render = () => {
@@ -126,6 +141,8 @@ export function builderScreen(onCancel: () => void, onCreate: (spec: CustomTeam)
         <div class="row wrap" style="gap:4px">${LIV_STYLES.map((st) => `<button class="${spec.librea!.estilo === st ? "on" : ""}" data-liv="${st}">${LIV_NAMES[st]}</button>`).join("")}</div>
         <div class="row wrap" style="gap:6px;margin-top:6px">${C2.map((c) => `<button class="swatch${spec.librea!.color2 === c ? " on" : ""}" data-c2="${c}" style="background:${c}" aria-label="Segundo color ${c}"></button>`).join("")}</div>
         <div class="row wrap" style="gap:6px;margin-top:6px">${[0, 1, 2].map((k) => `<label class="small">${k ? "Patrocinador" : "Principal"} <select data-sp="${k}">${BRANDS.map(([n], i) => `<option value="${i}"${spec.librea!.marcas[k] === i ? " selected" : ""}>${n}</option>`).join("")}</select></label>`).join("")}</div>
+        <div class="small dim" style="margin-top:10px">Escudo: la forma y el motivo (con tus dos colores y las iniciales del nombre)</div>
+        <div class="crestpick" id="crestpick">${crestPick()}</div>
         <div class="budget${over ? " over" : ""}"><div class="row"><b class="grow">Techo de gasto</b><b class="mono">${fmtM(cost)} / ${fmtM(M.techo)}</b></div>
           <div class="progress"><i style="width:${Math.min(100, (cost / M.techo) * 100)}%"></i></div>
           <div class="small ${over ? "redt" : "dim"}">${over ? `Te pasas ${fmtM(-left)}.` : `Quedan ${fmtM(left)} para evoluciones: el coche se desarrolla ×${fx(mult, 2)} de rápido que con el presupuesto normal.`}</div></div>
@@ -137,11 +154,12 @@ export function builderScreen(onCancel: () => void, onCreate: (spec: CustomTeam)
       <div class="sticky-cta"><button class="red big-cta" id="go" ${complete && !over ? "" : "disabled"}>${complete && !over ? `Fichar y empezar la temporada · ${fmtM(cost)}` : over ? `Te pasas del techo en ${fmtM(-left)}` : `Falta: ${need.join(", ")}`}</button></div>
     </div>`;
     $("#cancel").onclick = onCancel;
-    $<HTMLInputElement>("#tname").oninput = (e) => { spec.nombre = (e.target as HTMLInputElement).value; };
+    $<HTMLInputElement>("#tname").oninput = (e) => { spec.nombre = (e.target as HTMLInputElement).value; wireCrest(); };
     document.querySelectorAll<HTMLElement>("[data-color]").forEach((b) => (b.onclick = () => { spec.color = b.dataset.color!; render(); }));
     const rerender = () => { const y = window.scrollY; render(); window.scrollTo(0, y); };
     document.querySelectorAll<HTMLElement>("[data-liv]").forEach((b) => (b.onclick = () => { spec.librea!.estilo = b.dataset.liv!; rerender(); }));
     document.querySelectorAll<HTMLElement>("[data-c2]").forEach((b) => (b.onclick = () => { spec.librea!.color2 = b.dataset.c2!; rerender(); }));
+    wireCrest();
     document.querySelectorAll<HTMLSelectElement>("[data-sp]").forEach((el) => (el.onchange = () => { spec.librea!.marcas[+el.dataset.sp!] = +el.value; rerender(); }));
     showPreview();
     document.querySelectorAll<HTMLElement>("[data-tab]").forEach((b) => (b.onclick = () => { tab = b.dataset.tab as typeof tab; render(); }));
@@ -162,7 +180,7 @@ export function builderScreen(onCancel: () => void, onCreate: (spec: CustomTeam)
     $("#go").onclick = () => {
       if (!(complete && !over)) return;
       spec.nombre = spec.nombre.trim() || "Escudería Muro";
-      onCreate({ ...spec, pilotos: [...spec.pilotos], librea: { ...spec.librea!, marcas: [...spec.librea!.marcas] } });
+      onCreate({ ...spec, pilotos: [...spec.pilotos], librea: { ...spec.librea!, marcas: [...spec.librea!.marcas] }, escudo: { ...crest() } });
     };
   };
   setBack(onCancel);
@@ -188,7 +206,7 @@ export function myTeamPanel(s: SeasonState, teams: TeamDef[]): string {
     return `<div class="mkh" style="margin-top:6px"><b class="grow">#${d.numero} ${esc(d.nombre)}</b>${incDots(inc)}</div>${driverBars(a, inc, trueDriver(M, BASE_TEAMS, a, ts, extra), seen, extra)}`;
   }).join("");
   const rank = 1 + teams.filter((x) => x.id !== PLAYER_TEAM_ID && x.agarre > me.agarre).length;
-  return `<div class="panel"><div class="hd"><span class="t">${esc(spec.nombre)} · lo que sabéis</span></div><div class="bd">
+  return `<div class="panel"><div class="hd"><span class="t">${teamCrest(spec, 18)} ${esc(spec.nombre)} · lo que sabéis</span></div><div class="bd">
     <div class="small dim">Gasto ${fmtM(costOf(M, spec))} de ${fmtM(M.techo)} · desarrollo ×${fx(mult, 2)}. ${seen ? `Tras ${seen} carrera${seen > 1 ? "s" : ""} los datos afinan las horquillas.` : "Antes de rodar solo hay los informes del mercado."}</div>
     ${drivers}
     <div class="mkh" style="margin-top:8px"><b class="grow">Jefe de equipo: ${esc(j.nombre)}</b>${incDots(j.inc)}</div>${bossBars(j, trueBoss(j, ts), seen)}

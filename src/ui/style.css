@@ -520,6 +520,12 @@ table.tv td.nm { max-width: 46vw; overflow: hidden; text-overflow: ellipsis; }
 .bandrow .bv { flex: none; width: 96px; text-align: right; }
 .swatch { width: 30px; height: 30px; min-height: 0; padding: 0; border: 2px solid transparent; }
 .swatch.on { border-color: #fff; box-shadow: 0 0 0 2px #000 inset; }
+/* escudo de los equipos propios (12.3) */
+svg.crest { flex: none; display: inline-block; vertical-align: middle; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .55)); }
+.crestpick { display: flex; gap: 10px; align-items: center; margin-top: 6px; }
+.crestbtn { min-height: 0; padding: 2px 4px; border: 2px solid transparent; background: rgba(0, 0, 0, .2); }
+.crestbtn.on { border-color: #fff; }
+.crestmark { display: inline-flex; align-items: center; justify-content: center; width: 28px; flex: none; }
 .budget { margin-top: 10px; padding: 8px; background: rgba(0, 0, 0, .2); border: 1px solid var(--line, #2c3440); }
 .budget.over { border-color: #ff5a50; }
 .budget.over .progress i { background: #ff5a50; }
