@@ -466,6 +466,21 @@ en voladizo) que siguen la curva, torres de las cámaras de tele y puentes de pu
 Singapur son ciudades: filas de edificios pegadas a la acera y manzanas detrás (pisos con contraventanas en Mónaco,
 torres de cristal en Singapur, con las ventanas encendidas de noche). Todo lo que va junto a la pista se ensancha con
 ella al alejar la cámara y se comprueba que no la pise a ninguna escala.
+Con calidad 2 o 3, y solo de cerca, hay más detalle (los escalones 0 y 1 no dibujan ni un triángulo más):
+- detrás de los cristales se ven habitaciones con fondo (paredes, suelo, techo, muebles y alguna cortina), oficinas en
+  las torres y salas en la hospitalidad de los boxes; de día con la luz de la ventana y de noche con la de la lámpara;
+- las torres tienen un vestíbulo acristalado de doble altura con marquesina, y unos tres de cada diez edificios de
+  Mónaco, soportales con arcos en la planta baja;
+- arriba, tejados a dos aguas de teja con chimeneas, azoteas con pretil, casetón y depósito, y en las torres
+  máquinas de clima, antenas y algún helipuerto; también en las manzanas lejanas;
+- la cubierta de las gradas cuelga de tirantes desde mástiles, con el frente y las correas a la vista, y las gradas
+  tienen pasillos de escalones cada 14 m;
+- los palcos de los boxes llevan una cristalera inclinada, con barandilla en la cubierta y en el balcón; la cabina de
+  la torre de control, cristales inclinados y antenas, y los puentes, barandillas.
+
+El hormigón de la zona de trabajo y del paddock va en losas con juntas, manchas de aceite y agua en las juntas cuando
+llueve; el muro del pit-lane, en piezas de 6 m con su junta, y los muros de los edificios, en paños con su tono y
+churretes.
 
 Cada equipo lleva su librea pintada en una textura: un dibujo propio a partir de sus colores, juntas y
 branquias de refrigeración y tres patrocinadores inventados con su isotipo (en los pontones, el alerón
@@ -497,7 +512,12 @@ La carrera se lee como en la tele:
   hacia el horizonte, entre los huecos de las bases se ven los costados de las de detrás, con el lado del sol más
   claro y en sombra donde otra nube le tapa el sol. Con lluvia la carrocería se llena de gotas (de cerca, con su
   reflejo; tardan en irse cuando para) y al cruzar un charco (en los badenes y a trozos cuando hay mucha agua) la
-  estela de agua salta más alta y más abierta.
+  estela de agua salta más alta y más abierta. La estela es bruma que gira, se estira y se deshilacha al envejecer,
+  con un chorro bajo detrás de cada rueda trasera; más densa con más agua y más velocidad, y sin pasar del blanco
+  apagado para que el resplandor no la convierta en luz.
+- **Lluvia de noche** (calidad 2 y 3): bajo los focos más cercanos se ve el cono de luz con las gotas cayendo, y los
+  halos de las farolas crecen. A las cámaras de tele (*Tele*, *Seguir*, *Pit-lane*, *Grúa* y *Helicóptero*) también
+  les caen algunas gotas en el objetivo.
 - La cámara *Tele* corta sola al coche que hace un trompo, se sale o se estrella.
 - **Rótulos de tele** sobre el 3D (se apagan en Ajustes): al acabar una vuelta de clasificación, sus tres sectores
   frente a los de la pole (morado, más rápido; verde, a menos de una décima); «Récord del circuito» si alguien baja de
@@ -510,7 +530,8 @@ La carrera se lee como en la tele:
 - Los bloqueos y trompos dejan huellas de goma, la hierba deja surcos y al volver de la grava queda gravilla en el
   asfalto. Todo se borra poco a poco.
 - En la parada, los mecánicos salen corriendo del garaje, trabajan (las pistolas, agachados) y vuelven. Sobre el morro
-  hay un semáforo que pasa a verde para soltar el coche.
+  hay un pórtico con una pértiga sobre el coche de la que cuelgan las mangueras de las cuatro pistolas, y un semáforo
+  con visera y tres ópticas con su halo: rojo mientras trabajan, ámbar un instante y verde para soltar el coche.
 - En libres y clasificación los coches se ven dentro de su garaje, sobre caballetes y con las mantas puestas, y entran y
   salen por el pit-lane. Los que abandonan por avería vuelven al garaje.
 - Tras un accidente quedan restos en la pista, llegan los comisarios y una grúa levanta el coche y lo deja detrás de la

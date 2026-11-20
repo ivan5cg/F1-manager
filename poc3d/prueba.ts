@@ -1,4 +1,4 @@
-// Página de prueba del 3D (no se sube): ?c=circuito&q=calidad&h=hora&v=vista&s=punto&storm=1&sc=1&pit=1
+// Página de prueba del 3D (no se sube): ?c=circuito&q=calidad&h=hora&v=vista&s=punto&storm=1&sc=1&pit=1&lluvia=3
 import teamsJson from "../data/equipos-2026.json";
 import { CIRCUITS } from "../src/ui/data";
 import { buildTrack } from "../src/sim/track";
@@ -11,6 +11,8 @@ const wk = new Weekend(newWeekend(1, def, TEAMS, 42), buildTrack(def), TEAMS, TE
 const sess: any = wk.build("RACE");
 for (let i = 0; i < +(P.get("n") ?? 1800); i++) sess.step();
 if (P.get("h")) sess.weather.clock = +P.get("h")! * 60;
+// lluvia=<mm/h>: llovizna en todo el circuito y la pista empapada (para ver la estela, los charcos y los halos)
+if (P.get("lluvia")) { sess.weather.drizzle = +P.get("lluvia")!; sess.weather.cloud = 0.9; sess.water.fill(0.65); sess.waterOff.fill(0.75); }
 // sc=1: coche de seguridad en pista (delante del líder, al que sigue la cámara)
 if (P.get("sc")) sess.flag = "sc";
 // pit=1: sigue hasta que un coche está parado en boxes (para ver a los mecánicos), y la cámara va con él
