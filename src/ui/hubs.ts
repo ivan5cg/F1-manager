@@ -15,7 +15,7 @@ import { SESSION_NAMES, SessionKind, ResultRow, isRaceKind, isQualiKind, Car, Se
 import { COMPOUNDS, DRY, ALL, setWear, Compound, TyreSet } from "../sim/tyres";
 import { stintProfile } from "../sim/strategy";
 import { setupEstimate, carSetup, proposedSetup, WET_SHIFT, SETUP_MIN, SETUP_MAX, type Setup } from "../sim/setup";
-import type { Track } from "../sim/track";
+import { msTimeAtGrip, type Track } from "../sim/track";
 import { SCENARIO_NAMES } from "../sim/weather";
 import { gpWhere } from "./grandPrix";
 import { GP_SLOT, hasSession, saveSeason, loadSeason, slotList, getActiveSlot, deleteSlot, exportSlot, checkImport, importInto, SLOTS, storageUse, installed, isSafariLike, markExported, exportDue, loadPrefs, savePrefs } from "./store";
@@ -503,9 +503,11 @@ export function setPills(sets: TyreSet[]): string {
 }
 
 /** Tabla «lo que saben tus ingenieros»: ritmo, caída y vida de cada compuesto, con su error. */
-export function knowledgeTable(st: WeekendState, track: Track, team: TeamDef, driver: DriverDef, trackT: number, airT: number): string {
+export function knowledgeTable(st: WeekendState, track: Track, team: TeamDef, driver: DriverDef, trackT: number, airT: number, rubber = 0.6): string {
   const k = st.knowledge[team.id];
-  const fakeSess = { track, weather: { trackT, airT }, lapRefRace: track.refLap, secPerGrip: (() => { let a = 0, b = 0; for (const m of track.ms) { a += m.tByGrip[12]; b += m.tByGrip[11]; } return (b - a) / 5; })() } as unknown as Session;
+  // un «Session» mínimo con lo que lee stintProfile (sin `rubber` salía NaN en toda la tabla)
+  const spg = (() => { let a = 0, b = 0; for (const m of track.ms) { a += msTimeAtGrip(m, 1); b += msTimeAtGrip(m, 0.99); } return b - a; })();
+  const fakeSess = { track, weather: { trackT, airT }, rubber, lapRefRace: track.refLap, secPerGrip: spg } as unknown as Session;
   const fakeCar = { id: 0, d: driver, wearMult: team.desgaste * (1.18 - driver.neumaticos * 0.002) } as unknown as Car;
   const kk = { ...k, profile: {} };
   const profM = stintProfile(fakeSess, fakeCar, kk, "M");

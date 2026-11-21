@@ -638,11 +638,11 @@ td.hcell svg.helmet { margin-right: 6px; }
 .bb.vsc { background: repeating-linear-gradient(-45deg, #ffe34d 0 18px, #f2c400 18px 36px); }
 .bb.red { background: linear-gradient(#ff4436, #b80d05); }
 .bb.green { background: linear-gradient(#3fd36b, #148a36); }
-.bb.chk { background: repeating-conic-gradient(#fff 0 25%, #111 0 50%) 0 0 / 22px 22px; }
-.bb.chk b, .bb.chk span { background: #111; color: #fff; padding: 2px 12px; }
-.bb.pole, .bb.fl { background: linear-gradient(#a34dff, #5d17b8); }
-.bb.fl { min-width: 60%; padding: 5px 22px 6px; }
-.bb.fl b { font-size: clamp(16px, 5vw, 22px); }
+.bb.cuadros { background: repeating-conic-gradient(#fff 0 25%, #111 0 50%) 0 0 / 22px 22px; }
+.bb.cuadros b, .bb.cuadros span { background: #111; color: #fff; padding: 2px 12px; }
+.bb.pole, .bb.vr { background: linear-gradient(#a34dff, #5d17b8); }
+.bb.vr { min-width: 60%; padding: 5px 22px 6px; }
+.bb.vr b { font-size: clamp(16px, 5vw, 22px); }
 .bb.pit { background: linear-gradient(#2b313b, #12161c); box-shadow: inset 0 -3px 0 var(--gold1), 0 6px 24px rgba(0, 0, 0, .55); }
 .bb.pit.slow { box-shadow: inset 0 -3px 0 #ff4436, 0 6px 24px rgba(0, 0, 0, .55); }
 @keyframes bbIn {

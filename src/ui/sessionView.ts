@@ -42,6 +42,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   const race = isRaceKind(kind);
   const quali = isQualiKind(kind);
   const prefs = loadPrefs();
+  sess.autoFight = prefs.pelea !== false;
   let speed = race ? prefs.velCarrera : prefs.velSesion;
   let paused = true;
   let mode: TowerMode = "int";
@@ -60,6 +61,8 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   let toastTimer = 0;
   let lastSave = performance.now();
   let started = !!snap; // la carrera no cuenta hasta la salida
+  /** En carrera, el neumático de salida de los rivales no se sabe hasta que se apagan los semáforos. */
+  const tyreSeen = (c: Car) => !race || started || c.player;
   /** Guarda la sesión a medias para poder retomarla si se cierra la app (un escenario no se guarda). */
   const persist = () => {
     if (scn || ended || skipping || !started || sess.finished) return;
@@ -363,13 +366,14 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       if (/Relanzada|Fin del coche de seguridad virtual|Se reanuda la sesión/.test(t)) return banner({ cls: "green", title: "Bandera verde", ms: 2200 });
       if (/Se reanuda la carrera/.test(t)) return banner({ cls: "sc", title: "Se reanuda", sub: "detrás del coche de seguridad", ms: 2600 });
       if ((m = t.match(/Empieza la (\S+)/))) return banner({ cls: "green", title: `Empieza la ${m[1]}`, ms: 2000 });
-      if (/^🏁 Bandera a cuadros/.test(t)) return banner({ cls: "chk", title: "Bandera a cuadros", sub: plain(t).replace(/^Bandera a cuadros ?/, ""), ms: 2600 });
+      if (/^🏁 Bandera a cuadros/.test(t)) return banner({ cls: "cuadros", title: "Bandera a cuadros", sub: plain(t).replace(/^Bandera a cuadros ?/, ""), ms: 2600 });
       if ((m = t.match(/POLE para (.+?) \((.+?)\) (\S+)/))) return banner({ cls: "pole", title: "Pole position", sub: `${m[1]} · ${m[3]}`, ms: 3400 });
       if ((m = t.match(/(\w+) descalificado/))) return banner({ cls: "red", title: `${m[1]} descalificado`, sub: "no ha usado dos compuestos", ms: 3000 });
     }
     if (e.kind === "pit" && (m = t.match(/Parada de (\w+): ([\d.]+) s/)) && e.carId !== undefined && sess.carById(e.carId).player) {
-      const secs = Number(m[2]);
-      banner({ cls: secs > 4 ? "pit slow" : "pit", title: `Parada · ${m[1]}`, sub: `${m[2].replace(".", ",")} s${secs > 4 ? " · problema en la parada" : ""}`, ms: 2200 });
+      const slow = (e.n ?? Number(m[2])) > 4; // `n`: lo que tardan los mecánicos, sin sanción ni morro
+      const why = /\(([^)]*sanción[^)]*)\)/.exec(t)?.[1];
+      banner({ cls: slow ? "pit slow" : "pit", title: `Parada · ${m[1]}`, sub: `${m[2].replace(".", ",")} s${slow ? " · problema en la parada" : why ? ` · ${why}` : ""}`, ms: 2200 });
     }
   }
   // vuelta rápida de la carrera: franja morada (como mucho una cada 40 s reales, salvo si es tuya)
@@ -383,7 +387,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     const now = performance.now();
     if (!c.player && now - lastFlBanner < 40000) return;
     lastFlBanner = now;
-    banner({ cls: "fl", title: "Vuelta rápida", sub: `${c.d.abrev} · ${fmtLap(sess.bestLap)}`, ms: 2000 });
+    banner({ cls: "vr", title: "Vuelta rápida", sub: `${c.d.abrev} · ${fmtLap(sess.bestLap)}`, ms: 2000 });
   }
 
   // ------------------------------------------------------------- rótulos de tele (3D)
@@ -813,7 +817,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     };
     const rowHtml = (c: Car) => {
       const pos = ord.indexOf(c) + 1;
-      const badge = c.loc === "out" ? `<span class="mt-st">OUT</span>` : c.loc === "pit" || c.loc === "lane_in" || c.loc === "lane_out" ? `<span class="mt-st pit">PIT</span>` : c.tyres ? tyreHtml(c.tyres.c) : "";
+      const badge = c.loc === "out" ? `<span class="mt-st">OUT</span>` : c.loc === "pit" || c.loc === "lane_in" || c.loc === "lane_out" ? `<span class="mt-st pit">PIT</span>` : c.tyres && tyreSeen(c) ? tyreHtml(c.tyres.c) : "";
       return `<button type="button" class="mtr${c.player ? " me" : ""}${selId === c.id ? " sel" : ""}" data-id="${c.id}"><b class="mt-p">${pos}</b><i class="mt-c" style="background:${c.team.color}"></i><span class="mt-n">${esc(c.d.abrev)}</span>${badge}<span class="mt-g mono">${gapTxt(c, pos)}</span></button>`;
     };
     const needSep = extras.some((c) => ord.indexOf(c) > 3);
@@ -1343,7 +1347,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     if (!c) { if (el.innerHTML) { el.innerHTML = ""; el.classList.remove("on"); } return; }
     const ord = sess.order();
     const pos = ord.indexOf(c) + 1;
-    const tyre = c.tyres && (race || c.loc !== "garage") ? `${tyreHtml(c.tyres.c)}<span class="mono">${c.tyres.laps}v</span>` : "";
+    const tyre = c.tyres && tyreSeen(c) && (race || c.loc !== "garage") ? `${tyreHtml(c.tyres.c)}<span class="mono">${c.tyres.laps}v</span>` : "";
     let info = "";
     if (c.loc === "out") info = `<span class="dim">Fuera</span>`;
     else if (race) {
@@ -1459,7 +1463,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     const gridPos = new Map<number, number>(race && started ? (sess.lapOrder[0] ?? []).map((id, k) => [id, k + 1] as [number, number]) : []);
     rows.forEach(({ car: c, gap, interval, lapsDown }, i) => {
       if (i === cutAt) html += `<div class="cut"></div>`;
-      const tyre = c.tyres && (race || c.loc !== "garage") ? tyreHtml(c.tyres.c) : "";
+      const tyre = c.tyres && tyreSeen(c) && (race || c.loc !== "garage") ? tyreHtml(c.tyres.c) : "";
       // pelea: a menos de un segundo del de delante, los dos en pista y en la misma vuelta
       const prev = rows[i - 1];
       const fight = race && started && prev && c.loc === "track" && prev.car.loc === "track" && prev.lapsDown === lapsDown && interval > 0 && interval < 1;
@@ -2331,7 +2335,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     const runs = weekendLongRuns(wk.st).concat(sess.longRuns.map((r) => ({ kind, r })));
     open(`<div class="row"><span class="tab">Datos del fin de semana</span><span class="grow"></span><button data-close>Cerrar</button></div>
       <h2>Lo que saben tus ingenieros</h2>
-      ${knowledgeTable(wk.st, track, team, me[0].d, sess.weather.trackT, sess.weather.airT)}
+      ${knowledgeTable(wk.st, track, team, me[0].d, sess.weather.trackT, sess.weather.airT, sess.rubber)}
       <div class="insheet">${longRunsPanel(runs, wk.playerTeam) || `<h2>Tandas largas</h2><div class="dim small">Todavía no hay tandas largas en seco.</div>`}</div>
       <h2>Juegos de neumáticos</h2>
       ${me.map((c) => `<div style="margin-bottom:6px"><b>${esc(c.d.nombre)}</b><div class="row wrap small" style="gap:4px;margin-top:3px">${setPills(c.e.sets)}</div></div>`).join("")}
@@ -2353,6 +2357,8 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       <div class="row" style="gap:4px;margin:8px 0"><button id="pall" class="grow">Todas</button><button id="pnone" class="grow">Ninguna</button></div>
       <h2>Retransmisión</h2>
       <label class="optrow"><input type="checkbox" id="plob" ${prefs.lobato !== false ? "checked" : ""}><span><b>Comentarios de Antonio Lobato</b><br><span class="small dim">Comenta adelantamientos, banderas, paradas, la pole y cómo va la carrera. Salen en la caja de la izquierda y en Radio.</span></span></label>
+      <h2>Carrera</h2>
+      <label class="optrow"><input type="checkbox" id="ppel" ${prefs.pelea !== false ? "checked" : ""}><span><b>Atacar solo en la pelea</b><br><span class="small dim">Con uno a menos de 0,7 s, tus pilotos suben el motor a Potencia y el ritmo a Atacar (si los llevabas en Normal y sobra gasolina), como hace la IA. Al alejarse vuelven a lo que tenías.</span></span></label>
       <label class="optrow"><input type="checkbox" id="prot" ${prefs.rotulos !== false ? "checked" : ""}><span><b>Rótulos de tele en 3D</b><br><span class="small dim">Sectores frente a la pole al acabar una vuelta de clasificación, récord del circuito, batallas, neumáticos de los cinco primeros y la radio de tus pilotos.</span></span></label>
       <h2>Sonido</h2>
       <label class="optrow"><input type="checkbox" id="psnd" ${prefs.sonido.sonido ? "checked" : ""}><span><b>Sonido</b><br><span class="small dim">Motores, público, lluvia, viento, paradas, semáforos y choques. Empieza al tocar la velocidad, el 3D o la salida.</span></span></label>
@@ -2376,6 +2382,8 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       lb.onchange = () => { prefs.lobato = lb.checked; savePrefs(prefs); lastLeft = ""; renderMessages(); };
       const pe = el.querySelector<HTMLInputElement>("#pexp")!;
       pe.onchange = () => { prefs.experta = pe.checked; savePrefs(prefs); lastLeft = ""; renderMessages(); };
+      const pp = el.querySelector<HTMLInputElement>("#ppel")!;
+      pp.onchange = () => { prefs.pelea = pp.checked; sess.autoFight = pp.checked; savePrefs(prefs); };
       const pr = el.querySelector<HTMLInputElement>("#prot")!;
       pr.onchange = () => { prefs.rotulos = pr.checked; savePrefs(prefs); };
       const ps = el.querySelector<HTMLInputElement>("#psnd")!;
@@ -2437,8 +2445,9 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
         <h2>Neumático de salida <span class="dim small" style="text-transform:none">· el % es la goma que queda</span></h2><div data-start="${i}">${setButtons(c, () => true, c.tyres?.id)}</div>
         <h2>Combustible</h2><div class="seg" data-fuel="${i}">${[[-1.2, "Muy justo"], [-0.5, "Justo"], [0, "Exacto"], [0.6, "Con margen"]].map(([v, n]) => `<button data-v="${v}" class="${Math.abs(sess.fuelMargin(c) - (v as number)) < 0.05 ? "on" : ""}">${n}</button>`).join("")}</div>
       </div></div>`).join("")}
-      <details class="fold"><summary>Parrilla completa · ${grid.length} coches y su neumático de salida</summary>
-        <table class="tv">${grid.map((c, i) => `<tr class="${c.player ? "me" : ""}"><td><span class="pos">${i + 1}</span></td><td><span class="teamdot" style="background:${c.team.color}"></span>${esc(c.d.nombre)}</td><td>${c.tyres ? tyreHtml(c.tyres.c) : ""}</td></tr>`).join("")}</table>
+      <details class="fold"><summary>Parrilla completa · ${grid.length} coches</summary>
+        <table class="tv">${grid.map((c, i) => `<tr class="${c.player ? "me" : ""}"><td><span class="pos">${i + 1}</span></td><td><span class="teamdot" style="background:${c.team.color}"></span>${esc(c.d.nombre)}</td><td>${c.player && c.tyres ? tyreHtml(c.tyres.c) : ""}</td></tr>`).join("")}</table>
+        <div class="small dim" style="padding:4px 2px">Con qué neumático sale cada rival no se sabe hasta que se apagan los semáforos.</div>
       </details>`;
     sheetOpen = true;
     // obligatoria: no se cierra tocando fuera ni con «atrás» (antes se podía cerrar sin dar la salida

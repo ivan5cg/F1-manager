@@ -234,7 +234,7 @@ export interface Car {
   engine: number;
   ers: number;
   pitRequest: string | null; // id del juego a montar
-  pit?: { noseChange: boolean; t: number; total: number; entryS: number; dist: number; stationary: number; setId: string; changed: boolean };
+  pit?: { noseChange: boolean; t: number; total: number; entryS: number; dist: number; stationary: number; setId: string; changed: boolean; pen?: number };
   lane?: { t: number; total: number }; // calle de boxes en libres/clasificación
   wing: number;
   floor: number;
@@ -313,6 +313,8 @@ export interface Car {
   pitOutT?: number;
   /** La IA se ha descolgado a propósito para enfriar neumáticos: hasta qué vuelta. */
   coolUntil?: number;
+  /** Lo que tenía elegido el jugador antes de que la pelea subiera motor y ritmo (se devuelve al acabarla). */
+  fightBoost?: { engine: number; push: number; setEngine: number; setPush: number };
   /** Coche de seguridad: doblado que tiene permiso para desdoblarse (adelanta al grupo y da la vuelta hasta la cola). */
   unlap?: boolean;
   /** Relanzada: cuándo (s de sesión) puede acelerar, al ver acelerar a los de delante. */
@@ -482,6 +484,8 @@ export class Session {
   bestLap = Infinity;
   longRuns: LongRun[] = []; // tandas largas de los libres
   autoPlayers = false; // carrera simulada hasta el final: la IA decide también por el jugador
+  /** Tus pilotos, en plena pelea (a menos de 0,7 s), suben solos el motor y el ritmo como hace la IA (Ajustes). */
+  autoFight = true;
   passCount = 0; // adelantamientos completados en pista (sin contar doblados ni los de boxes)
   passLap1 = 0; // de ellos, los de la primera vuelta
   /** Recuento de lo que ha pasado (solo para medir: scripts/realismo.ts). No cambia nada de la sesión. */
@@ -1605,6 +1609,7 @@ export class Session {
       // al simular hasta el final, el equipo también lleva a tus pilotos (con la estrategia elegida)
       if (ms === this.N - 3 && (!c.player || this.autoPlayers)) { aiDecide(this, c); aiModes(this, c, this.laps - this.lapsDone(c) - 1); }
       if (ms === this.N - 3 && c.player && !this.autoPlayers) this.playerAdvice(c);
+      if (c.player && !this.autoPlayers) this.playerFight(c);
     }
     aiErs(this, c);
     if (this.flag !== "green") return;
@@ -2397,6 +2402,34 @@ export class Session {
     }
   }
 
+  /**
+   * Tus pilotos en plena pelea: como la IA, a menos de 0,7 s del de delante (o con uno a 0,7 s detrás) suben el
+   * motor a Potencia y el ritmo a Atacar, si lo tenías en Normal y sobra combustible. Al acabar la pelea vuelve lo que
+   * tenías, salvo que lo hayas cambiado tú mientras tanto. La batería ya la lleva el equipo en automático.
+   */
+  private playerFight(c: Car) {
+    const b = c.fightBoost;
+    const left = this.laps - this.lapsDone(c) - 1;
+    const ahead = c.aheadId >= 0 ? this.carById(c.aheadId) : null;
+    const sameLap = !!ahead && ahead.loc === "track" && this.lapsDone(ahead) === this.lapsDone(c);
+    const gapA = sameLap ? c.followGap : 99, gapB = c.chased ?? 99;
+    const fuelOk = c.fuel / this.fuelLap(c) > left + 0.8;
+    const ok = this.autoFight && this.flag === "green" && c.loc === "track" && !c.fault && !c.pitRequest && fuelOk && !c.tyres?.punctured;
+    // con histéresis: entra a 0,7 s y no sale hasta 1,1 s
+    const fight = ok && (b ? gapA < 1.1 || gapB < 1.1 : gapA < 0.7 || gapB < 0.7);
+    if (fight && !b) {
+      if (c.engine !== 1 && c.push !== 2) return; // lo tenías en otra cosa a propósito: no se toca
+      const boost = { engine: c.engine, push: c.push, setEngine: c.engine === 1 ? 2 : c.engine, setPush: c.push === 2 && gapA < 0.7 ? 3 : c.push };
+      c.engine = boost.setEngine; c.push = boost.setPush;
+      c.fightBoost = boost;
+    } else if (!fight && b) {
+      // solo se devuelve lo que no hayas tocado durante la pelea
+      if (c.engine === b.setEngine) c.engine = b.engine;
+      if (c.push === b.setPush) c.push = b.push;
+      c.fightBoost = undefined;
+    }
+  }
+
   private isFlying(c: Car) { return c.run?.phase === "push" || c.run?.phase === "long"; }
 
   // ------------------------------------------------------------- boxes
@@ -2436,7 +2469,7 @@ export class Session {
     }
     const mate = this.cars.find((o) => o !== c && o.team === c.team && o.loc === "pit");
     const setId = c.pitRequest!;
-    c.pit = { noseChange, t: 0, total: tr.pit.laneLength / tr.pit.limit + stationary, entryS: entryAbs, dist: exitAbs - entryAbs, stationary, setId, changed: false };
+    c.pit = { noseChange, t: 0, total: tr.pit.laneLength / tr.pit.limit + stationary, entryS: entryAbs, dist: exitAbs - entryAbs, stationary, setId, changed: false, pen };
     if (mate && mate.pit) c.pit.total += Math.max(0, mate.pit.total - mate.pit.t - tr.pit.laneLength / tr.pit.limit / 2) + 0.5;
     c.loc = "pit";
     c.s = entryAbs;
@@ -2475,7 +2508,12 @@ export class Session {
           c.plan = { stints: [...past, ...planStrategy(this, c, c.e.knowledge, lap, set.c, set.laps, null).stints] };
         }
       }
-      if (c.player || p.stationary > 4) this.log({ kind: "pit", carId: c.id, text: `⏱️ Parada de ${c.d.abrev}: ${p.stationary.toFixed(1)} s${p.noseChange ? " (cambio de morro)" : p.stationary > 4 ? " — ¡problema en la parada!" : ""}`, code: "parada", n: p.stationary });
+      // `n` es lo que tardan los mecánicos: sin la sanción cumplida ni el cambio de morro (antes una parada con
+      // 5 s de sanción salía como «¡problema en la parada!»)
+      const pen = p.pen ?? 0;
+      const crew = p.stationary - pen - (p.noseChange ? NOSE_TIME : 0);
+      const extra = [pen > 0 ? `${pen} s de sanción` : "", p.noseChange ? "cambio de morro" : ""].filter(Boolean).join(" y ");
+      if (c.player || crew > 4) this.log({ kind: "pit", carId: c.id, text: `⏱️ Parada de ${c.d.abrev}: ${p.stationary.toFixed(1)} s${extra ? ` (${extra})` : ""}${crew > 4 ? " — ¡problema en la parada!" : ""}`, code: "parada", n: crew });
     }
     const newK = Math.floor(c.s / this.L) * this.N + this.msIndexAt(c.s);
     for (let k = c.msK + 1; k <= newK; k++) {
