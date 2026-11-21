@@ -402,6 +402,40 @@ export function ruleSatisfied(car: Car): boolean {
   return [...u].filter((c) => DRY.includes(c)).length >= 2;
 }
 
+/**
+ * Intermedios o de lluvia gastados: antes la IA no paraba nunca con ellos por desgaste y acababa pinchando (por
+ * encima del 96 %). Con el ritmo de desgaste de este stint se mira si llega a la meta; si no, para antes de que
+ * pinche, con el juego menos gastado que le quede del mismo tipo (aunque sea usado), el otro de agua, o slicks si
+ * ya no hay agua para tanto.
+ */
+function wetWearCall(sess: Session, car: Car, left: number, adviceOnly: boolean): string | null {
+  const t = car.tyres!;
+  const w = setWear(t);
+  const n = t.laps - car.stintL0;
+  const rate = n >= 2 ? Math.max(0.004, (w - car.stintW0) / n) : COMPOUNDS[t.c].wear;
+  // llega a meta sin pinchar (con algo de margen): no se toca
+  if (w + rate * left < 0.93) return null;
+  // aún le quedan vueltas: se para cuando entre en la zona de riesgo (o un poco antes, si gasta mucho)
+  if (w < 0.84 && w + rate * 2 < 0.92) return null;
+  const water = sess.avgWater();
+  const alt: Compound = t.c === "I" ? "W" : "I";
+  const okFor = (c: Compound) => (c === "W" ? water > WET.si : c === "I" ? water > WET.si * 0.5 && water < WET.iw * 1.4 : water < WET.si * 1.2);
+  const cands: Compound[] = [t.c, alt, "M", "H", "S"];
+  let set: TyreSet | undefined;
+  for (const c of cands) {
+    if (!okFor(c) && c !== t.c) continue;
+    const s = sess.bestSetFor(car, c);
+    // que el cambio merezca la pena: un juego con bastante más goma que el que lleva
+    if (s && setWear(s) < Math.min(0.7, w - 0.2)) { set = s; break; }
+  }
+  if (!set) return null;
+  if (adviceOnly) { car.adviceWhy = "los neumáticos de agua están al límite: si seguimos, pinchamos"; return set.id; }
+  car.pitRequest = set.id;
+  car.pitWhy = `desgaste agua v${sess.lapsDone(car) + 1} ${t.c}${t.laps}→${set.c}`;
+  if (DRY.includes(set.c)) car.plan = { stints: [...car.plan.stints.slice(0, car.stops + 1), { c: set.c, endLap: sess.laps }] };
+  return set.id;
+}
+
 /** Decisión de la IA al final de la vuelta. Devuelve el juego si para. */
 export function aiDecide(sess: Session, car: Car, adviceOnly = false): string | null {
   if (car.loc !== "track" || sess.chequered || !car.tyres) return null;
@@ -422,7 +456,7 @@ export function aiDecide(sess: Session, car: Car, adviceOnly = false): string | 
     if (!adviceOnly && DRY.includes(wc)) car.plan = { stints: [...car.plan.stints.slice(0, car.stops + 1), { c: wc, endLap: total }] };
     return decideC(wc);
   }
-  if (!DRY.includes(car.tyres.c)) return null;
+  if (!DRY.includes(car.tyres.c)) return wetWearCall(sess, car, left, adviceOnly);
   if (left < 2) return null;
 
   const k = car.e.knowledge;

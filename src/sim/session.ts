@@ -234,7 +234,7 @@ export interface Car {
   engine: number;
   ers: number;
   pitRequest: string | null; // id del juego a montar
-  pit?: { noseChange: boolean; t: number; total: number; entryS: number; dist: number; stationary: number; setId: string; changed: boolean };
+  pit?: { noseChange: boolean; t: number; total: number; entryS: number; dist: number; stationary: number; setId: string; changed: boolean; pen?: number };
   lane?: { t: number; total: number }; // calle de boxes en libres/clasificación
   wing: number;
   floor: number;
@@ -2436,7 +2436,7 @@ export class Session {
     }
     const mate = this.cars.find((o) => o !== c && o.team === c.team && o.loc === "pit");
     const setId = c.pitRequest!;
-    c.pit = { noseChange, t: 0, total: tr.pit.laneLength / tr.pit.limit + stationary, entryS: entryAbs, dist: exitAbs - entryAbs, stationary, setId, changed: false };
+    c.pit = { noseChange, t: 0, total: tr.pit.laneLength / tr.pit.limit + stationary, entryS: entryAbs, dist: exitAbs - entryAbs, stationary, setId, changed: false, pen };
     if (mate && mate.pit) c.pit.total += Math.max(0, mate.pit.total - mate.pit.t - tr.pit.laneLength / tr.pit.limit / 2) + 0.5;
     c.loc = "pit";
     c.s = entryAbs;
@@ -2475,7 +2475,12 @@ export class Session {
           c.plan = { stints: [...past, ...planStrategy(this, c, c.e.knowledge, lap, set.c, set.laps, null).stints] };
         }
       }
-      if (c.player || p.stationary > 4) this.log({ kind: "pit", carId: c.id, text: `⏱️ Parada de ${c.d.abrev}: ${p.stationary.toFixed(1)} s${p.noseChange ? " (cambio de morro)" : p.stationary > 4 ? " — ¡problema en la parada!" : ""}`, code: "parada", n: p.stationary });
+      // `n` es lo que tardan los mecánicos: sin la sanción cumplida ni el cambio de morro (antes una parada con
+      // 5 s de sanción salía como «¡problema en la parada!»)
+      const pen = p.pen ?? 0;
+      const crew = p.stationary - pen - (p.noseChange ? NOSE_TIME : 0);
+      const extra = [pen > 0 ? `${pen} s de sanción` : "", p.noseChange ? "cambio de morro" : ""].filter(Boolean).join(" y ");
+      if (c.player || crew > 4) this.log({ kind: "pit", carId: c.id, text: `⏱️ Parada de ${c.d.abrev}: ${p.stationary.toFixed(1)} s${extra ? ` (${extra})` : ""}${crew > 4 ? " — ¡problema en la parada!" : ""}`, code: "parada", n: crew });
     }
     const newK = Math.floor(c.s / this.L) * this.N + this.msIndexAt(c.s);
     for (let k = c.msK + 1; k <= newK; k++) {
