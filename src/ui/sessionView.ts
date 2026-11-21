@@ -42,6 +42,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   const race = isRaceKind(kind);
   const quali = isQualiKind(kind);
   const prefs = loadPrefs();
+  sess.autoFight = prefs.pelea !== false;
   let speed = race ? prefs.velCarrera : prefs.velSesion;
   let paused = true;
   let mode: TowerMode = "int";
@@ -2356,6 +2357,8 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       <div class="row" style="gap:4px;margin:8px 0"><button id="pall" class="grow">Todas</button><button id="pnone" class="grow">Ninguna</button></div>
       <h2>Retransmisión</h2>
       <label class="optrow"><input type="checkbox" id="plob" ${prefs.lobato !== false ? "checked" : ""}><span><b>Comentarios de Antonio Lobato</b><br><span class="small dim">Comenta adelantamientos, banderas, paradas, la pole y cómo va la carrera. Salen en la caja de la izquierda y en Radio.</span></span></label>
+      <h2>Carrera</h2>
+      <label class="optrow"><input type="checkbox" id="ppel" ${prefs.pelea !== false ? "checked" : ""}><span><b>Atacar solo en la pelea</b><br><span class="small dim">Con uno a menos de 0,7 s, tus pilotos suben el motor a Potencia y el ritmo a Atacar (si los llevabas en Normal y sobra gasolina), como hace la IA. Al alejarse vuelven a lo que tenías.</span></span></label>
       <label class="optrow"><input type="checkbox" id="prot" ${prefs.rotulos !== false ? "checked" : ""}><span><b>Rótulos de tele en 3D</b><br><span class="small dim">Sectores frente a la pole al acabar una vuelta de clasificación, récord del circuito, batallas, neumáticos de los cinco primeros y la radio de tus pilotos.</span></span></label>
       <h2>Sonido</h2>
       <label class="optrow"><input type="checkbox" id="psnd" ${prefs.sonido.sonido ? "checked" : ""}><span><b>Sonido</b><br><span class="small dim">Motores, público, lluvia, viento, paradas, semáforos y choques. Empieza al tocar la velocidad, el 3D o la salida.</span></span></label>
@@ -2379,6 +2382,8 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       lb.onchange = () => { prefs.lobato = lb.checked; savePrefs(prefs); lastLeft = ""; renderMessages(); };
       const pe = el.querySelector<HTMLInputElement>("#pexp")!;
       pe.onchange = () => { prefs.experta = pe.checked; savePrefs(prefs); lastLeft = ""; renderMessages(); };
+      const pp = el.querySelector<HTMLInputElement>("#ppel")!;
+      pp.onchange = () => { prefs.pelea = pp.checked; sess.autoFight = pp.checked; savePrefs(prefs); };
       const pr = el.querySelector<HTMLInputElement>("#prot")!;
       pr.onchange = () => { prefs.rotulos = pr.checked; savePrefs(prefs); };
       const ps = el.querySelector<HTMLInputElement>("#psnd")!;

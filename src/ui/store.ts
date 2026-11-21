@@ -238,6 +238,8 @@ export interface Prefs {
   experta?: boolean;
   /** Rótulos de tele sobre el mapa 3D: sectores, récords, batallas, neumáticos y radio (por defecto, sí). */
   rotulos?: boolean;
+  /** Tus pilotos suben motor y ritmo solos en plena pelea (por defecto, sí). */
+  pelea?: boolean;
   /** Medidor de rendimiento del mapa 3D (fps, calidad, triángulos). */
   rendimiento3d?: boolean;
   /** Calidad del mapa 3D fijada a mano (0 a 3); sin ella, automática. */
@@ -280,6 +282,7 @@ export function loadPrefs(): Prefs {
       if (o.experta === false) p.experta = false;
       if (o.rendimiento3d === true) p.rendimiento3d = true;
       if (o.rotulos === false) p.rotulos = false;
+      if (o.pelea === false) p.pelea = false;
       if ([0, 1, 2, 3].includes(o.calidad3d as number)) p.calidad3d = o.calidad3d;
       if (o.ahorro3d === true) p.ahorro3d = true;
       if (o.autoTv === false) p.autoTv = false;
