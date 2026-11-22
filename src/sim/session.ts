@@ -26,7 +26,7 @@ const WATER_DRAG = 12;
 /** Aire sucio: pérdida máxima de agarre pegado a otro coche, en curvas que dependen de la carga
  * aerodinámica (en una chicane lenta casi no se nota; en una curva rápida, mucho). Se diluye
  * deprisa con la distancia: a 1 s ya es poca y a 1,6 s ninguna. */
-const DIRTY_AIR = 0.12;
+const DIRTY_AIR = 0.135;
 const dirtyAir = (gap: number) => (gap < 1.6 ? Math.pow(1 - gap / 1.6, 1.5) : 0);
 /** Rebufo: % de resistencia que se ahorra detrás de otro coche en recta; dura más que el aire sucio. */
 const TOW = 16;
@@ -106,6 +106,24 @@ const rivals = (a: Car, b: Car) => RIVALS.some(([x, y]) => (a.d.abrev === x && b
 const LAT_CLOSE = 5.6 * 1.3, LAT_SIDE = 0.4, LAT_YIELD = 0.3, LAT_TAU = 0.7, LAT_MAX = 0.82;
 /** Segundos de antelación con los que se aparta según lo deprisa que se acerca, y lo deprisa que se mueve si va pegado. */
 const LAT_LOOK = 0.8, LAT_TAU_QUICK = 0.25;
+/**
+ * Estela del de delante según el lado (fase 2): a cuántos metros de su eje queda e^-1 del aire sucio (WAKE_DIRTY) y del
+ * rebufo (WAKE_TOW, que es más ancho). Justo detrás se lleva todo; a un coche de lado, bastante menos.
+ */
+const WAKE_DIRTY = 3.5, WAKE_TOW = 4.5;
+const wake = (dl: number, w: number) => Math.exp(-((dl / w) ** 2));
+/**
+ * Fuera de la trazada: fracción de agarre que se pierde en una curva (con su sensibilidad al agarre) yendo por el borde
+ * de la pista, en lugar de por la trazada; crece con el cuadrado de lo que se aparta. Con la pista engomada pesa más
+ * (fuera de la trazada no hay goma y sí gravilla de neumático).
+ */
+const OFFLINE_GRIP = 0.035;
+/**
+ * Respirar aire limpio: el que va a menos de BREATHE_GAP s de otro, al llegar a una curva rápida que depende de la carga
+ * (aero · sensibilidad al agarre > BREATHE_MIN, unos 50 m por delante), se abre LAT_BREATHE (fracción de la media
+ * anchura) hacia el centro de la pista. Pierde algo de trazada y gana aire.
+ */
+const BREATHE_GAP = 1.0, BREATHE_MIN = 0.25, LAT_BREATHE = 0.25, BREATHE_AHEAD = 50;
 /** Ventaja de más (s/vuelta) que necesita el que ataca si el de delante cierra la puerta. */
 const DEFEND_T = 0.35;
 /**
@@ -271,6 +289,10 @@ export interface Car {
   latWant?: number;
   /** Pegado a otro en este paso: se aparta más deprisa. */
   latQuick?: boolean;
+  /** Separación lateral (m) con el de delante (`aheadId`): lo que se sale de su estela. */
+  aheadDl?: number;
+  /** Lo que va fuera de la trazada, como fracción de la media anchura: cuesta agarre en curva. */
+  offLine?: number;
   cross: number[];
   lapTimes: number[];
   lapStart: number;
@@ -1405,8 +1427,11 @@ export class Session {
     let grip = setGrip(tyres, water) * c.pace * (1 + CONF_PACE * (c.conf ?? 0)) * (c.moral === undefined ? 1 : 1 + MORAL_PACE * clamp((c.moral - 60) / 40, -1.5, 1)) * wetSkill * PUSH_GRIP[c.push] * (1 + 0.018 * this.rubber) * (1 - c.wing - c.floor);
     const su = this.setupAt(c, m, water);
     if (su) grip *= 1 + SETUP_GRIP.a * su.ea * m.aero - SETUP_GRIP.r * su.er * (m.aero - this.setupK!.aeroMean);
-    // en paralelo (adelantando) ya no va en la estela
-    if (c.aheadId >= 0 && c.grant !== c.aheadId) grip *= 1 - DIRTY_AIR * m.aero * m.cornerSens * dirtyAir(c.followGap) * (su ? 1 + 0.06 * su.ea : 1);
+    // fuera de la trazada se agarra menos (sin goma y con gravilla de neumático)
+    const off = c.offLine ?? 0;
+    if (off > 0) grip *= 1 - OFFLINE_GRIP * m.cornerSens * off * off * (0.6 + 0.4 * this.rubber);
+    // en paralelo (adelantando) ya no va en la estela; apartado a un lado, solo en parte
+    if (c.aheadId >= 0 && c.grant !== c.aheadId) grip *= 1 - DIRTY_AIR * m.aero * m.cornerSens * dirtyAir(c.followGap) * wake(c.aheadDl ?? 0, WAKE_DIRTY) * (su ? 1 + 0.06 * su.ea : 1);
     // viento: de cara frena en recta pero da carga en curva; de cola, al revés
     const air = this.windAir[m.i];
     grip *= 1 + 0.5 * m.aero * m.cornerSens * air;
@@ -1418,7 +1443,7 @@ export class Session {
     if (c.fault && (c.fault.what === "motor" || c.fault.what === "unidad de potencia" || c.fault.what === "MGU-K" || c.fault.what === "batería")) power -= 1.2 * c.fault.lvl;
     if (c.drs && m.drs) power += MO_POWER;
     let dragCut = -c.team.resistencia - WATER_DRAG * Math.min(3, water);
-    if (c.aheadId >= 0) dragCut += tow(c.followGap) * m.throttle;
+    if (c.aheadId >= 0) dragCut += tow(c.followGap) * wake(c.aheadDl ?? 0, WAKE_TOW) * m.throttle;
     dragCut -= 100 * air;
     if (su) dragCut -= this.setupK!.dragPerA * su.ea;
     t -= scale * (m.dPower * power + m.dDrag * dragCut);
@@ -1467,7 +1492,8 @@ export class Session {
     const pos = ((c.s % L) + L) % L;
     const msI = this.msIndexAt(c.s);
     const m = this.track.ms[msI];
-    const water = this.water[m.i];
+    // fuera de la trazada se pisa el agua que no han apartado los demás (con la línea seca abierta, bastante más)
+    const water = this.water[m.i] + Math.min(1, c.offLine ?? 0) * Math.max(0, this.waterOff[m.i] - this.water[m.i]);
     const { t } = this.msTime(c, m, water);
     const pi = Math.min(this.track.vref.length - 1, Math.floor(pos / this.track.ds));
     const ph = this.phaseScale(c);
@@ -1527,11 +1553,12 @@ export class Session {
     const relE = (e: number) => (e / this.tRef[m.i]) * this.lapRefRace * fuelK;
     const slow = this.flag !== "green" ? 0.35 : ph.energy;
     // en aire sucio el morro pierde carga: el tren delantero desliza (subviraje), se recalienta y se rasga
-    const dirty = c.aheadId >= 0 ? dirtyAir(c.followGap) * m.aero * m.cornerSens * slow : 0;
+    const wk = c.aheadId >= 0 ? wake(c.aheadDl ?? 0, WAKE_DIRTY) : 0;
+    const dirty = c.aheadId >= 0 ? dirtyAir(c.followGap) * wk * m.aero * m.cornerSens * slow : 0;
     const tyres = c.tyres!;
     updateSet(tyres, {
       trackT: this.weather.trackT, airT: this.weather.airT, water,
-      eF: relE(m.energyF) * slow * (c.followGap < 1.2 ? 1 + 0.12 * (1 - c.followGap / 1.2) * m.cornerSens : 1),
+      eF: relE(m.energyF) * slow * (c.followGap < 1.2 ? 1 + 0.12 * (1 - c.followGap / 1.2) * m.cornerSens * wk : 1),
       eR: relE(m.energyR) * slow,
       push: PUSH_ENERGY[c.push], carWear: c.wearMult * this.setupWear(c, m, water), abrasiveness: this.track.abrasiveness,
       rubber: this.rubber, slideF: 2 * dirty, slideR: 0.5 * dirty, rough: driverRough(c.d.neumaticos),
@@ -2298,8 +2325,8 @@ export class Session {
     if (m.overtake > 0) extra = (1 - m.overtake) * PASS_ZONE;
     else for (const x of this.track.ms) if (x.cornerSens > m.cornerSens) m = x;
     const prev = this.track.ms[(m.i - 1 + this.N) % this.N];
-    const keep = (x: Car) => ({ fg: x.followGap, ah: x.aheadId, drs: x.drs, n: x.noise });
-    const put = (x: Car, k: { fg: number; ah: number; drs: boolean; n: number }) => { x.followGap = k.fg; x.aheadId = k.ah; x.drs = k.drs; x.noise = k.n; };
+    const keep = (x: Car) => ({ fg: x.followGap, ah: x.aheadId, drs: x.drs, n: x.noise, dl: x.aheadDl, off: x.offLine });
+    const put = (x: Car, k: { fg: number; ah: number; drs: boolean; n: number; dl?: number; off?: number }) => { x.followGap = k.fg; x.aheadId = k.ah; x.drs = k.drs; x.noise = k.n; x.aheadDl = k.dl; x.offLine = k.off; };
     const kc = keep(c), ka = keep(a);
     const moOn = this.flag === "green" && this.leaderLap + 1 >= this.drsEnabledFromLap && this.avgWater() < 0.35;
     c.noise = 0; a.noise = 0;
@@ -2307,7 +2334,7 @@ export class Session {
     const water = this.water[m.i];
     const grip = clamp((this.msTime(c, m, water + 0.6 * Math.max(0, this.waterOff[m.i] - water)).grip / this.msTime(a, m, water).grip - 1) * 100 * this.secPerGrip, -3, 5);
     // la recta: él pegado al otro; el de delante, como vaya ahora (si va en tren también lleva el modo adelantamiento)
-    c.followGap = 0.3; c.aheadId = a.id; c.drs = moOn && prev.drs;
+    c.followGap = 0.3; c.aheadId = a.id; c.drs = moOn && prev.drs; c.aheadDl = 0; c.offLine = 0;
     a.followGap = ka.fg; a.drs = a.drsEligible && prev.drs;
     const straight = this.msTime(a, prev, this.water[prev.i]).t - this.msTime(c, prev, this.water[prev.i]).t;
     put(c, kc); put(a, ka);
@@ -2373,6 +2400,8 @@ export class Session {
     const on = this.onTrack;
     for (const c of this.cars) c.latWant = 0;
     const n = on.length;
+    // el que sigue de cerca se abre en las curvas rápidas para respirar aire limpio
+    for (const c of on) if (c.aheadId >= 0) c.latWant = this.breatheWant(c);
     for (let i = 0; i < n; i++) {
       const me = on[i], front = on[(i - 1 + n) % n];
       if (me === front) continue;
@@ -2400,7 +2429,29 @@ export class Session {
       // apartado de la trazada, ya no la sigue del todo
       const nrm = clamp(tr.line[pi] * (1 - Math.min(1, Math.abs(off) / 0.3) * 0.65) + off, -LAT_MAX, LAT_MAX);
       c.lat = nrm * tr.wReal * tr.wr[pi];
+      c.offLine = Math.abs(nrm - tr.line[pi]);
     }
+    // lo que se sale cada uno de la estela del de delante (el mismo que `aheadId`)
+    for (let i = 0; i < n; i++) {
+      const me = on[i], front = on[(i - 1 + n) % n];
+      me.aheadDl = me === front ? 99 : Math.abs((me.lat ?? 0) - (front.lat ?? 0));
+    }
+  }
+
+  /**
+   * Lo que se quiere abrir (fracción de la media anchura, con signo) el que sigue a otro de cerca: en una curva rápida
+   * que depende de la carga, hacia el centro de la pista para salirse algo de su estela. Si no, 0.
+   */
+  breatheWant(c: Car, m?: Minisector): number {
+    if (c.followGap >= BREATHE_GAP || this.flag !== "green") return 0;
+    const tr = this.track, L = this.L;
+    const at = ((((c.s + BREATHE_AHEAD) % L) + L) % L);
+    const mm = m ?? tr.ms[this.msIndexAt(at)];
+    if (mm.aero * mm.cornerSens < BREATHE_MIN) return 0;
+    const pi = Math.min(tr.line.length - 1, Math.floor((m ? (mm.s0 + mm.s1) / 2 : at) / tr.ds));
+    // hacia el centro: al lado contrario de donde va la trazada (si va por el centro, según el coche)
+    const ln = tr.line[pi];
+    return (Math.abs(ln) > 0.05 ? -Math.sign(ln) : c.id & 1 ? 1 : -1) * LAT_BREATHE;
   }
 
   /** Coches en pista ordenados del primero al último en el trazado (lo deja interactions() en cada paso). */
