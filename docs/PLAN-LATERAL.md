@@ -384,10 +384,35 @@ un paso sin que haya habido toque (es una prueba barata de que la geometría fun
     dispersión de los adelantamientos con la semilla 101) ya lo estaba antes.
   - Tiempo por paso: igual que antes, con el lado hacia el que se abre precalculado por circuito.
 
-### Fase 3 · Adelantar y defender como maniobras · cambia resultados
-- §4.2 y §4.3. `PASS_RESOLVE` ajustada por circuito con `realismo.ts`.
-- El muro (`passOutlook`) sigue dando la misma probabilidad: ahora es la de que la maniobra salga.
-- **Comprobación:** adelantamientos por circuito dentro de su objetivo; métricas nuevas de §8.
+### Fase 3 · Adelantar y defender como maniobras · cambia resultados · ✅ Hecha
+- **Lo que decide sigue igual:** la cuenta de `overtakeCheck` (ventaja, umbral y tiradas). Por eso no hizo falta
+  `PASS_RESOLVE`: la frecuencia no se mueve. Lo nuevo es que cada desenlace es una maniobra en la pista
+  (`Car.maneuver`, `startManeuver`):
+  - **Adelanta** o **no pelea**: el que ataca se pone a un lado (`MV_SIDE`) y el de delante se aparta hacia el otro
+    (`MV_YIELD`) o tapa el interior (`MV_COVER`).
+  - **Intento fallido visible**: se mete y a los `MV_FAIL_T` s vuelve detrás.
+- **El lado:** el interior de la curva siguiente (`Track.inside`, curvatura de los próximos 180 m). Va por fuera si el
+  de delante cierra la puerta (`fightMode` = defend) o si ya iba por el interior.
+- **En paralelo de verdad:** al que le están adelantando, el tiempo que pierde (`delay`, el mismo que antes) se le
+  reparte más (`MV_DELAY_RATE` = 0,1 de su velocidad en lugar de 0,6). Antes se quedaba casi parado medio segundo y el
+  otro le pasaba como si nada.
+- **Mensajes:** el adelantamiento dice «por dentro» o «por fuera».
+- **Lo que se ha dejado:** el «solo un cambio de dirección» y la culpa según quién se movió van con los toques (fase 4).
+  «Duro» sigue siendo de números (más ventaja y más toques); que sea frenar y cerrar más tarde, también en la fase 4.
+- **Comprobación** (`realismo.ts --carreras=8 --rapido`, 25 circuitos, 200 carreras por semilla, fase 2 → fase 3):
+
+  | | Semilla 1 | Semilla 101 |
+  |---|---|---|
+  | Adelantamientos / objetivo | 0,94 → 0,93 | 1,23 → 1,21 |
+  | Por fuera | 14 % | 14 % |
+  | En paralelo por adelantamiento | 0,7 s | 0,8 s |
+  | Uno dentro de otro, por carrera | 1,8 s | 2,8 s |
+  | Toques por carrera | 0,8 → 0,7 | 1,0 → 1,0 |
+  | Sanciones por carrera | 1,4 → 1,3 | 1,5 → 1,5 |
+  | Paradas medias | 1,50 → 1,52 | 1,69 → 1,70 |
+
+  - Tiempo por paso: un 7 % más (dentro del presupuesto).
+  - Captura del 3D de una maniobra por dentro en Silverstone, con `poc3d/prueba.html`.
 
 ### Fase 4 · Toques, salidas y vuelta 1 · cambia resultados
 - §4.4, §4.5 y §4.6. Se quitan los multiplicadores de la vuelta 1 que ya sobren.
