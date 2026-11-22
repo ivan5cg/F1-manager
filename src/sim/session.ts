@@ -130,6 +130,15 @@ const BREATHE_GAP = 1.0, BREATHE_MIN = 0.25, LAT_BREATHE = 0.25, BREATHE_AHEAD =
  * 101, 400 carreras).
  */
 const PASS_LAT = 0.05;
+/**
+ * Adelantar como maniobra (fase 3). El que ataca se pone a un lado (MV_SIDE, fracción de la media anchura): por el
+ * interior de la curva o, si el de delante le cierra el interior, por fuera. El de delante se aparta un poco hacia el
+ * otro lado (MV_YIELD) o tapa el interior (MV_COVER). Si el intento no sale, a los MV_FAIL_T s el que ataca vuelve
+ * detrás; la maniobra se da por acabada a los MV_MAX_T s o cuando uno le saca MV_CLEAR m al otro.
+ */
+const MV_SIDE = 0.55, MV_YIELD = 0.3, MV_COVER = 0.5, MV_FAIL_T = 1.4, MV_MAX_T = 6, MV_CLEAR = 9;
+/** Lo deprisa que pierde su tiempo (fracción de la velocidad) el que está siendo adelantado: el resto, 0,6. */
+const MV_DELAY_RATE = 0.1;
 /** Ventaja de más (s/vuelta) que necesita el que ataca si el de delante cierra la puerta. */
 const DEFEND_T = 0.35;
 /**
@@ -299,6 +308,15 @@ export interface Car {
   aheadDl?: number;
   /** Lo que va fuera de la trazada, como fracción de la media anchura: cuesta agarre en curva. */
   offLine?: number;
+  /**
+   * Adelantamiento en marcha (lo lleva el que ataca): a quién, por qué lado (+1 derecha), si va por fuera, si sale
+   * (`pass`), si el otro le cierra el interior (`cover`) y cuándo empezó.
+   */
+  maneuver?: { a: number; side: number; outside: boolean; pass: boolean; cover: boolean; t0: number };
+  /** Metido en una maniobra en este paso (como atacante o como defensor): no se aparta por su cuenta. */
+  inMv?: boolean;
+  /** Le están adelantando en una maniobra (el tiempo que pierde se reparte más). */
+  passedIn?: boolean;
   cross: number[];
   lapTimes: number[];
   lapStart: number;
@@ -346,7 +364,7 @@ export interface Car {
   secLast: number[]; // sectores de la última vuelta
   secBest: number[]; // mejores sectores personales
   lastLapValid: boolean;
-  passLog?: { a: number; until: number }; // adelantamiento en curso (se anuncia al completarse)
+  passLog?: { a: number; until: number; outside?: boolean }; // adelantamiento en curso (se anuncia al completarse)
   passedBy?: { id: number; t: number }; // quién le acaba de pasar: sin inercia para devolvérsela en la siguiente frenada
   bestTyre?: Compound; // neumático de la mejor vuelta
   bestTyreByPart: Compound[]; // en clasificación, por parte
@@ -548,7 +566,7 @@ export class Session {
   passCount = 0; // adelantamientos completados en pista (sin contar doblados ni los de boxes)
   passLap1 = 0; // de ellos, los de la primera vuelta
   /** Recuento de lo que ha pasado (solo para medir: scripts/realismo.ts). No cambia nada de la sesión. */
-  stats = { sc: 0, vsc: 0, red: 0, contacts: 0, offs: 0, retire: 0, pens: 0 };
+  stats = { sc: 0, vsc: 0, red: 0, contacts: 0, offs: 0, retire: 0, pens: 0, passIn: 0, passOut: 0, sideBySide: 0, overlap: 0 };
   /** Rivalidades de la temporada por pareja («id-id», el menor primero): intensidad de 0 a 1. */
   rivalK: Record<string, number> = {};
   /** Lo que ha pasado entre cada pareja en esta sesión (para las rivalidades de la temporada): toques y adelantamientos. */
@@ -1544,7 +1562,8 @@ export class Session {
     if (c.slowPuncture || c.tyres!.punctured) v = Math.min(v, 28);
     let move = v * dt;
     if (c.delay > 0) {
-      const lose = Math.min(c.delay, dt * 0.6);
+      // al que le están adelantando en una maniobra, el tiempo que pierde se le reparte más (van un rato en paralelo)
+      const lose = Math.min(c.delay, dt * (c.passedIn ? MV_DELAY_RATE : 0.6));
       c.delay -= lose;
       move *= 1 - lose / dt;
     }
@@ -2281,7 +2300,8 @@ export class Session {
     const mode = this.fightMode(a);
     if (mode === "yield" && adv > 0 && !lap1) {
       this.grantPass(c, a, this.rng.range(0.15, 0.3));
-      c.passLog = { a: a.id, until: this.t + 10 };
+      const outside = this.startManeuver(c, a, true);
+      c.passLog = { a: a.id, until: this.t + 10, outside };
       a.passedBy = { id: c.id, t: this.t };
       c.stuck = undefined;
       return;
@@ -2303,6 +2323,7 @@ export class Session {
       // intento fallido: el de delante tapa el hueco y los dos pierden algo; a veces el que ataca se pasa de frenada
       if (real && this.rng.chance(0.6)) {
         c.lastTry = this.t;
+        this.startManeuver(c, a, false);
         a.delay += this.rng.range(0.03, 0.18);
         c.delay += this.rng.range(0.05, 0.25);
         if (this.rng.chance(0.05 * (0.5 + c.d.agresividad / 100) * PUSH_ERR[c.push] / 1.7 * (hardC ? 1.5 : 1))) {
@@ -2317,7 +2338,8 @@ export class Session {
     }
     // pasa: el de delante pierde lo justo para que el otro salga por delante de la frenada
     this.grantPass(c, a, Math.max(this.rng.range(0.1, 0.3), c.followGap + this.rng.range(0.04, 0.14)));
-    c.passLog = { a: a.id, until: this.t + 10 };
+    const outside = this.startManeuver(c, a, true);
+    c.passLog = { a: a.id, until: this.t + 10, outside };
     a.passedBy = { id: c.id, t: this.t };
     c.stuck = undefined;
   }
@@ -2351,6 +2373,28 @@ export class Session {
     const need = this.passT - PASS_LAT + extra + (mode === "defend" ? DEFEND_T : 0) + (mode === "yield" ? 0 : RIVAL_DEF * this.rivalOf(c, a) + (this.hard(a) ? RISK_DEF : 0));
     if (mode === "yield" && adv > 0) return { adv, need, p: 1 };
     return { adv, need, p: 1 / (1 + Math.exp(-(adv - need) / PASS_W)) };
+  }
+
+  /**
+   * Empieza la maniobra de adelantamiento (fase 3): el que ataca se tira por el interior de la próxima curva; si el de
+   * delante defiende (cierra la puerta), le tapa el interior y el ataque va por fuera. Si la curva no está clara, por
+   * donde ya va cada uno. Devuelve si va por fuera.
+   */
+  private startManeuver(c: Car, a: Car, pass: boolean): boolean {
+    const tr = this.track, L = this.L;
+    const pos = ((c.s % L) + L) % L;
+    let inside: number = tr.inside[Math.min(tr.inside.length - 1, Math.floor(pos / tr.ds))];
+    if (!inside) { const dl = (c.lat ?? 0) - (a.lat ?? 0); inside = Math.abs(dl) > 0.3 ? Math.sign(dl) : c.id & 1 ? 1 : -1; }
+    const cover = this.fightMode(a) === "defend";
+    // por fuera si le cierra la puerta o si el de delante ya va por el interior (a más de un coche del lado de dentro)
+    const halfW = tr.wReal * tr.wr[Math.min(tr.wr.length - 1, Math.floor(pos / tr.ds))];
+    const inOccupied = ((a.lat ?? 0) - (c.lat ?? 0)) * inside > 1.0 && (a.lat ?? 0) * inside > 0.25 * halfW;
+    const outside = cover || inOccupied;
+    const side = outside ? -inside : inside;
+    // si ya estaba en una maniobra con él por un lado, sigue por ese (no se cambia de lado a mitad)
+    const prev = c.maneuver && c.maneuver.a === a.id ? c.maneuver : undefined;
+    c.maneuver = { a: a.id, side: prev ? prev.side : side, outside: prev ? prev.outside : outside, pass, cover, t0: prev ? prev.t0 : this.t };
+    return c.maneuver.outside;
   }
 
   /** Permiso para pasar: el de delante cede (pierde algo de tiempo) y el otro pasa por velocidad. */
@@ -2409,10 +2453,30 @@ export class Session {
     for (const c of this.cars) c.latWant = 0;
     const n = on.length;
     // el que sigue de cerca se abre en las curvas rápidas para respirar aire limpio
+    for (const c of this.cars) { c.inMv = false; c.passedIn = false; }
     for (const c of on) if (c.aheadId >= 0) c.latWant = this.breatheWant(c);
+    // adelantamientos en marcha: cada uno a su lado, deprisa
+    for (const c of on) {
+      const mv = c.maneuver;
+      if (!mv) continue;
+      const a = this.carById(mv.a);
+      let rel = posOf(c) - posOf(a);
+      if (rel > L / 2) rel -= L; else if (rel < -L / 2) rel += L;
+      const age = this.t - mv.t0;
+      const done = a.loc !== "track" || this.flag !== "green" || age > MV_MAX_T || (mv.pass ? rel > MV_CLEAR : age > MV_FAIL_T && rel < -MV_CLEAR);
+      if (done) { c.maneuver = undefined; continue; }
+      // el intento que no sale: se mete, no le da y vuelve detrás
+      const back = !mv.pass && age > MV_FAIL_T;
+      c.latWant = back ? 0 : mv.side * MV_SIDE;
+      a.latWant = back ? 0 : -mv.side * (mv.cover ? MV_COVER : MV_YIELD);
+      c.latQuick = a.latQuick = true;
+      c.inMv = a.inMv = true;
+      if (mv.pass) a.passedIn = true;
+      if (Math.abs(rel) < 5.6) this.stats.sideBySide += dt;
+    }
     for (let i = 0; i < n; i++) {
       const me = on[i], front = on[(i - 1 + n) % n];
-      if (me === front) continue;
+      if (me === front || me.inMv) continue;
       let gap = posOf(front) - posOf(me);
       if (gap < 0) gap += L;
       // se aparta antes cuanto más deprisa se le echa encima (así no lo atraviesa al pasarle)
@@ -2440,9 +2504,12 @@ export class Session {
       c.offLine = Math.abs(nrm - tr.line[pi]);
     }
     // lo que se sale cada uno de la estela del de delante (el mismo que `aheadId`)
+    const count = this.flag === "green" && this.t - this.launchT > 20;
     for (let i = 0; i < n; i++) {
       const me = on[i], front = on[(i - 1 + n) % n];
       me.aheadDl = me === front ? 99 : Math.abs((me.lat ?? 0) - (front.lat ?? 0));
+      // dos coches metidos uno en otro (a lo largo y a lo ancho): no debería pasar
+      if (count && me !== front && me.aheadDl < 1.8) { let g = posOf(front) - posOf(me); if (g < 0) g += L; if (g < 4.5) this.stats.overlap += dt; }
     }
   }
 
@@ -2562,7 +2629,9 @@ export class Session {
         if (this.leaderLap < 1) this.passLap1++;
         this.duel(c, a).passes++;
         const pos = this.order().indexOf(c) + 1;
-        if (c.player || a.player || pos <= 3) this.log({ kind: "info", text: `⚔️ ${c.d.abrev} adelanta a ${a.d.abrev} por la P${pos}`, carId: c.id, code: "adelanta", other: a.id, n: pos });
+        const how = c.passLog.outside === undefined ? "" : c.passLog.outside ? " por fuera" : " por dentro";
+        if (c.passLog.outside !== undefined) { if (c.passLog.outside) this.stats.passOut++; else this.stats.passIn++; }
+        if (c.player || a.player || pos <= 3) this.log({ kind: "info", text: `⚔️ ${c.d.abrev} adelanta a ${a.d.abrev}${how} por la P${pos}`, carId: c.id, code: "adelanta", other: a.id, n: pos });
         c.conf = clamp((c.conf ?? 0) + 0.12, -1, 1);
         a.conf = clamp((a.conf ?? 0) - 0.05, -1, 1);
         c.passLog = undefined;
