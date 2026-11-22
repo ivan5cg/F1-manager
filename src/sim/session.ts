@@ -101,6 +101,16 @@ const pairKey = (a: number, b: number) => (a < b ? `${a}-${b}` : `${b}-${a}`);
 const rivals = (a: Car, b: Car) => RIVALS.some(([x, y]) => (a.d.abrev === x && b.d.abrev === y) || (a.d.abrev === y && b.d.abrev === x));
 /** Ventaja de más (s/vuelta) que necesita el que ataca si el de delante cierra la puerta. */
 const DEFEND_T = 0.35;
+/**
+ * Riesgo en la pelea (orden del muro, solo tus pilotos; la IA y el automático van siempre en limpio). En duro:
+ *  - atacando, frena más tarde y se tira con menos hueco: RISK_ADV s/vuelta más de ventaja y vuelve a intentarlo antes
+ *    (RISK_RETRY s en vez de 6);
+ *  - defendiendo, cierra más tarde y cede menos: el que ataca necesita RISK_DEF s/vuelta más;
+ *  - a cambio, cada piloto en duro multiplica la probabilidad de toque por RISK_CONTACT, se pasa de frenada más a
+ *    menudo y, si hay toque, los comisarios le echan la culpa más a menudo (RISK_BLAME).
+ */
+const RISK_ADV = 0.15, RISK_DEF = 0.12, RISK_CONTACT = 1.8, RISK_RETRY = 4, RISK_BLAME = 0.12;
+export const RISK_NAMES = ["Limpio", "Duro"];
 // Moral (temporada, 0 a 100; 60 es lo normal): un poco de ritmo arriba o abajo, y con ella baja algunos no obedecen.
 const MORAL_PACE = 0.0012; // agarre por cada 40 puntos de moral sobre 60
 // cuánto le cuesta obedecer con la moral por los suelos, según su carácter
@@ -329,6 +339,8 @@ export interface Car {
   nose?: "auto" | "yes" | "no";
   /** Cómo se defiende del que le ataca: auto (lo decide el equipo), defender (cierra la puerta) o no pelear. */
   fight?: "auto" | "defend" | "yield";
+  /** Riesgo en la pelea: limpio (lo normal) o duro (más eficaz, pero más toques y más sanciones). Solo tus pilotos. */
+  risk?: "limpio" | "duro";
   /** Parada: 0 segura, 1 normal, 2 rápida (más corta, pero con más riesgo de que salga mal o de salida insegura). */
   pitMode?: number;
   /** Cuándo se pidió la parada que tiene pendiente (s de sesión): el piloto necesita unos segundos para reaccionar. */
@@ -1032,6 +1044,11 @@ export class Session {
    * Cómo se defiende c: lo que pida el jugador o, en automático, lo que haría el equipo: cerrar la puerta en las
    * últimas vueltas cuando hay puntos en juego, y si no, defenderse sin más (lo normal).
    */
+  /** Pelea en duro: solo tus pilotos con la orden dada (en automático, el equipo va en limpio). */
+  hard(c: Car): boolean {
+    return c.player && !this.autoPlayers && c.risk === "duro";
+  }
+
   fightMode(c: Car): "normal" | "defend" | "yield" {
     const f = c.player && !this.autoPlayers ? c.fight ?? "auto" : "auto";
     if (f !== "auto") return f;
@@ -1100,7 +1117,7 @@ export class Session {
         this.log({ kind: "control", carId: c.id, text: `⚖️ Toque entre ${c.d.abrev} y ${a.d.abrev}: sin sanción, incidente de carrera`, important: c.player || a.player, code: "sinSancion", other: a.id });
         continue;
       }
-      const blameC = clamp(0.62 + (c.d.agresividad - a.d.agresividad) / 120, 0.3, 0.9);
+      const blameC = clamp(0.62 + (c.d.agresividad - a.d.agresividad) / 120 + (this.hard(c) ? RISK_BLAME : 0) - (this.hard(a) ? RISK_BLAME : 0), 0.3, 0.9);
       const who = this.rng.chance(blameC) ? c : a, other = who === c ? a : c;
       if (who.loc === "out" || who.loc === "fin") continue;
       this.penalize(who, p.sev >= 0.6 ? 10 : 5, `provocar un toque con ${other.d.abrev}`, "toque");
@@ -2202,7 +2219,8 @@ export class Session {
     const onStraight = (x: Car) => { const d = x.drs; x.drs = x.drsEligible && prev.drs; const t = this.msTime(x, prev, this.water[prev.i]).t; x.drs = d; return t; };
     const straight = onStraight(a) - onStraight(c);
     const skill = (c.d.ataque - a.d.defensa) / 100;
-    const adv = grip + PASS_KS * straight + skill;
+    const hardC = this.hard(c), hardA = this.hard(a);
+    const adv = grip + PASS_KS * straight + skill + (hardC ? RISK_ADV : 0);
     const near = clamp((PASS_REACH - c.followGap) / (PASS_REACH - 0.2), 0.25, 1);
     // el de delante puede no pelear (deja pasar al que va más rápido) o cerrar la puerta (cuesta tiempo y gomas)
     const mode = this.fightMode(a);
@@ -2219,11 +2237,11 @@ export class Session {
       a.tyres!.F.tSurf += this.rng.range(2, 5);
       a.tyres!.F.wear = Math.min(1, a.tyres!.F.wear + 0.0004);
     }
-    const will = 1 / (1 + Math.exp(-(adv - this.passT - extra - (defend ? DEFEND_T : 0) - (mode === "yield" ? 0 : RIVAL_DEF * this.rivalOf(c, a))) / PASS_W));
-    const real = will > 0.1 && this.t - (c.lastTry ?? -99) > 6;
+    const will = 1 / (1 + Math.exp(-(adv - this.passT - extra - (defend ? DEFEND_T : 0) - (mode === "yield" ? 0 : RIVAL_DEF * this.rivalOf(c, a) + (hardA ? RISK_DEF : 0))) / PASS_W));
+    const real = will > 0.1 && this.t - (c.lastTry ?? -99) > (hardC ? RISK_RETRY : 6);
     // se tocan sobre todo cuando el intento es de verdad y los dos son de no levantar
     if (real || will > 0.5) {
-      const contactP = 0.004 * (0.5 + c.d.agresividad / 100) * (0.5 + a.d.agresividad / 120) * (lap1 ? 2.2 : 1) * (1 + Math.min(1, wAtt) * 1.5) * (1.4 - will) * (defend ? 1.4 : 1) * (rivals(c, a) ? 1.7 : 1) * (1 + RIVAL_CONTACT * this.rivalOf(c, a));
+      const contactP = 0.004 * (0.5 + c.d.agresividad / 100) * (0.5 + a.d.agresividad / 120) * (lap1 ? 2.2 : 1) * (1 + Math.min(1, wAtt) * 1.5) * (1.4 - will) * (defend ? 1.4 : 1) * (rivals(c, a) ? 1.7 : 1) * (1 + RIVAL_CONTACT * this.rivalOf(c, a)) * (hardC ? RISK_CONTACT : 1) * (hardA && mode !== "yield" ? RISK_CONTACT : 1);
       if (this.rng.chance(contactP)) { c.lastTry = this.t; this.duel(c, a).touch++; return this.contact(c, a); }
     }
     if (!this.rng.chance(Math.min(0.92, near * will))) {
@@ -2232,7 +2250,7 @@ export class Session {
         c.lastTry = this.t;
         a.delay += this.rng.range(0.03, 0.18);
         c.delay += this.rng.range(0.05, 0.25);
-        if (this.rng.chance(0.05 * (0.5 + c.d.agresividad / 100) * PUSH_ERR[c.push] / 1.7)) {
+        if (this.rng.chance(0.05 * (0.5 + c.d.agresividad / 100) * PUSH_ERR[c.push] / 1.7 * (hardC ? 1.5 : 1))) {
           c.fx = { k: "lock", t: this.t };
           c.delay += this.rng.range(0.4, 1.1);
           c.tyres!.flatSpot = Math.min(1, c.tyres!.flatSpot + this.rng.range(0.2, 0.6));
@@ -2273,9 +2291,9 @@ export class Session {
     a.followGap = ka.fg; a.drs = a.drsEligible && prev.drs;
     const straight = this.msTime(a, prev, this.water[prev.i]).t - this.msTime(c, prev, this.water[prev.i]).t;
     put(c, kc); put(a, ka);
-    const adv = grip + PASS_KS * straight + (c.d.ataque - a.d.defensa) / 100;
+    const adv = grip + PASS_KS * straight + (c.d.ataque - a.d.defensa) / 100 + (this.hard(c) ? RISK_ADV : 0);
     const mode = this.fightMode(a);
-    const need = this.passT + extra + (mode === "defend" ? DEFEND_T : 0) + (mode === "yield" ? 0 : RIVAL_DEF * this.rivalOf(c, a));
+    const need = this.passT + extra + (mode === "defend" ? DEFEND_T : 0) + (mode === "yield" ? 0 : RIVAL_DEF * this.rivalOf(c, a) + (this.hard(a) ? RISK_DEF : 0));
     if (mode === "yield" && adv > 0) return { adv, need, p: 1 };
     return { adv, need, p: 1 / (1 + Math.exp(-(adv - need) / PASS_W)) };
   }

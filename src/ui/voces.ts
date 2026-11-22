@@ -1,7 +1,7 @@
 // La radio de los pilotos con personalidad: cada piloto tiene un carácter y habla a su manera cuando pasa algo
 // (adelanta, le adelantan, se toca, trompea, la parada sale mal, gana...). Y, de vez en cuando, una radio mítica de
 // verdad, si se da una situación parecida y el que la dijo está en pista. También contestan a las órdenes del muro
-// (`responde`): parar, apretar, ahorrar, dejar pasar, defender o no pelear. Solo interfaz, como Lobato: usa Math.random,
+// (`responde`): parar, apretar, ahorrar, dejar pasar, defender o no pelear, pelear en duro o en limpio. Solo interfaz, como Lobato: usa Math.random,
 // no el generador de la sesión, así que no cambia ningún resultado.
 //
 // Reacciona al código de cada suceso (RaceEvent.code), no al texto. Los mensajes en los que la simulación ya hace
@@ -329,13 +329,14 @@ const M: Record<string, Mitica> = {
 };
 
 /** Órdenes del muro a las que contesta el piloto (8.1). Solo texto: siempre obedece. */
-export type Orden = "box" | "anula" | "apretar" | "ahorrar" | "dejarPasar" | "defender" | "noPelear";
+export type Orden = "box" | "anula" | "apretar" | "ahorrar" | "dejarPasar" | "defender" | "noPelear" | "duro" | "limpio";
 /** Cada orden, con su variante a disgusto (gomas nuevas, rival a tiro, más rápido que el compañero...). */
 type Resp = "box" | "boxPronto" | "anula" | "apretar" | "apretarSinGomas" | "ahorrar" | "ahorrarConRival" | "dejarPasar"
-  | "dejarPasarMasRapido" | "defender" | "noPelear" | "noPelearConRival";
+  | "dejarPasarMasRapido" | "defender" | "noPelear" | "noPelearConRival" | "duro" | "limpio" | "limpioConRival";
 /** Las variantes a disgusto: si su carácter no tiene frase propia, contesta con la normal. */
 const A_DISGUSTO: Partial<Record<Resp, Resp>> = {
   boxPronto: "box", apretarSinGomas: "apretar", ahorrarConRival: "ahorrar", dejarPasarMasRapido: "dejarPasar", noPelearConRival: "noPelear",
+  limpioConRival: "limpio",
 };
 // {r}: el rival o el compañero (apellido).
 const RESPUESTAS: Record<Resp, Partial<Record<Caracter, string[]>> & { _?: string[] }> = {
@@ -434,6 +435,32 @@ const RESPUESTAS: Record<Resp, Partial<Record<Caracter, string[]>> & { _?: strin
     socarron: ["Cedo el paso con elegancia.", "Vale, que pase. Ya nos veremos más adelante."],
     novato: ["Recibido. ¿Le dejo pasar si se acerca?", "Vale, sin tocar a nadie."],
     autocritico: ["Entendido. No quiero otro error.", "Recibido. Mejor no arriesgar."],
+  },
+  duro: {
+    _: ["Recibido, sin regalar nada.", "Entendido, a cara de perro."],
+    calmado: ["Recibido. Freno más tarde.", "Ok, sin dejar hueco."],
+    quejica: ["Vale, pero si nos tocamos no es culpa mía.", "Duro... y luego los comisarios me la cargan a mí."],
+    volcanico: ["¡Por fin! ¡Ahora sí!", "¡Eso es lo que quería oír!"],
+    cerebral: ["Entendido. Arriesgo en la frenada, no en la salida.", "Recibido. ¿Cuántas sanciones nos podemos permitir?"],
+    socarron: ["Me pongo los codos. Ya veréis.", "Vale. Que se aparten, que voy."],
+    novato: ["¿Duro? Vale... lo intento sin tocarle.", "¡Recibido! ¿Cuánto de duro?"],
+    autocritico: ["Recibido. Pero no quiero otro toque como el de antes.", "Vale. Esta vez sin pasarme."],
+  },
+  limpio: {
+    _: ["Recibido, limpio.", "Entendido, sin riesgos en la pelea."],
+    calmado: ["Recibido. Carrera limpia.", "Ok, sin tocar a nadie."],
+    quejica: ["Vale, limpio. Ya veremos si los demás también.", "Limpio, limpio... Bueno."],
+    volcanico: ["¿Limpio? ...Vale, vale.", "Me cuesta, pero vale."],
+    cerebral: ["Entendido. Una sanción ahora nos cuesta más que la posición.", "Recibido. Paciencia."],
+    socarron: ["Limpio como una patena.", "Vale. Hoy hago de caballero."],
+    novato: ["¡Vale! Mejor así.", "Recibido. Sin tocar a nadie."],
+    autocritico: ["Entendido. Mejor no arriesgar.", "Recibido. Nada de errores."],
+  },
+  limpioConRival: {
+    quejica: ["¿Limpio con {r} pegado? Él no va a ir limpio.", "¿Ahora? ¿Con {r} ahí? Increíble."],
+    volcanico: ["¿¡Limpio con {r}!? ¡Él no lo hace! ...Vale.", "¡Con {r} no se puede ir limpio!"],
+    socarron: ["Limpio con {r}. A ver si se entera él también.", "Vale. Le mando a {r} una tarjeta de visita."],
+    cerebral: ["Con {r} a menos de un segundo, limpio es más difícil. Pero vale."],
   },
   noPelearConRival: {
     quejica: ["¿Dejar pasar a {r} así? Increíble.", "¿Me quedo mirando mientras me pasa {r}? Vale."],
@@ -662,6 +689,7 @@ export function createVoces(sess: Session) {
     else if (orden === "ahorrar" && ahead) { r = "ahorrarConRival"; other = ahead; }
     else if (orden === "dejarPasar") { other = mate; if (mate && last(c) < last(mate) - 0.15) r = "dejarPasarMasRapido"; }
     else if (orden === "noPelear" && behind) { r = "noPelearConRival"; other = behind; }
+    else if (orden === "limpio" && (ahead || behind)) { r = "limpioConRival"; other = ahead ?? behind; }
     const car = caracterOf(c.d.nombre);
     const base = A_DISGUSTO[r];
     const bank = RESPUESTAS[r][car] ?? (base ? undefined : RESPUESTAS[r]._) ?? (base && (RESPUESTAS[base][car] ?? RESPUESTAS[base]._));
