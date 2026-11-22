@@ -124,6 +124,12 @@ const OFFLINE_GRIP = 0.035;
  * anchura) hacia el centro de la pista. Pierde algo de trazada y gana aire.
  */
 const BREATHE_GAP = 1.0, BREATHE_MIN = 0.25, LAT_BREATHE = 0.25, BREATHE_AHEAD = 50;
+/**
+ * Lo que se rebaja el umbral de adelantamiento de cada circuito (s/vuelta) para que, con la estela según el lado y el
+ * coste de salirse de la trazada, se adelante lo mismo que antes (sin esto, un ~4,5 % menos: realismo.ts, semillas 1 y
+ * 101, 400 carreras).
+ */
+const PASS_LAT = 0.05;
 /** Ventaja de más (s/vuelta) que necesita el que ataca si el de delante cierra la puerta. */
 const DEFEND_T = 0.35;
 /**
@@ -2286,7 +2292,7 @@ export class Session {
       a.tyres!.F.tSurf += this.rng.range(2, 5);
       a.tyres!.F.wear = Math.min(1, a.tyres!.F.wear + 0.0004);
     }
-    const will = 1 / (1 + Math.exp(-(adv - this.passT - extra - (defend ? DEFEND_T : 0) - (mode === "yield" ? 0 : RIVAL_DEF * this.rivalOf(c, a) + (hardA ? RISK_DEF : 0))) / PASS_W));
+    const will = 1 / (1 + Math.exp(-(adv - (this.passT - PASS_LAT) - extra - (defend ? DEFEND_T : 0) - (mode === "yield" ? 0 : RIVAL_DEF * this.rivalOf(c, a) + (hardA ? RISK_DEF : 0))) / PASS_W));
     const real = will > 0.1 && this.t - (c.lastTry ?? -99) > (hardC ? RISK_RETRY : 6);
     // se tocan sobre todo cuando el intento es de verdad y los dos son de no levantar
     if (real || will > 0.5) {
@@ -2342,7 +2348,7 @@ export class Session {
     put(c, kc); put(a, ka);
     const adv = grip + PASS_KS * straight + (c.d.ataque - a.d.defensa) / 100 + (this.hard(c) ? RISK_ADV : 0);
     const mode = this.fightMode(a);
-    const need = this.passT + extra + (mode === "defend" ? DEFEND_T : 0) + (mode === "yield" ? 0 : RIVAL_DEF * this.rivalOf(c, a) + (this.hard(a) ? RISK_DEF : 0));
+    const need = this.passT - PASS_LAT + extra + (mode === "defend" ? DEFEND_T : 0) + (mode === "yield" ? 0 : RIVAL_DEF * this.rivalOf(c, a) + (this.hard(a) ? RISK_DEF : 0));
     if (mode === "yield" && adv > 0) return { adv, need, p: 1 };
     return { adv, need, p: 1 / (1 + Math.exp(-(adv - need) / PASS_W)) };
   }
