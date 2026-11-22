@@ -55,6 +55,52 @@ export interface Track {
   pit: { entry: number; exit: number; laneLength: number; limit: number };
   abrasiveness: number;
   refLap: number;
+  /** Urbano (Mónaco, Singapur, Bakú, Las Vegas): sin escapatorias y, sin anchura real, más estrecho. */
+  street: boolean;
+  /** Media anchura media de la pista (m). */
+  wReal: number;
+  /** Anchura en cada punto `ds`, como proporción de la media (media anchura = wReal · wr). */
+  wr: Float32Array;
+  /**
+   * Trazada ideal en cada punto `ds`, como fracción de la media anchura de ese punto (positivo: a la derecha en el
+   * sentido de la marcha). Por fuera antes y después de la curva, por dentro en el vértice.
+   */
+  line: Float32Array;
+}
+
+/** Media móvil circular (ventana de 2·win + 1 puntos). */
+function blurLap(src: ArrayLike<number>, win: number, n: number): Float32Array {
+  const out = new Float32Array(n);
+  const at = (k: number) => src[((k % n) + n) % n];
+  let acc = 0;
+  for (let k = -win; k <= win; k++) acc += at(k);
+  for (let i = 0; i < n; i++) { out[i] = acc / (2 * win + 1); acc += at(i + win + 1) - at(i - win); }
+  return out;
+}
+
+/** Trazada ideal a partir de la curvatura (curvatura > 0 = a izquierdas): ver `Track.line`. */
+function racingLine(curv: Float64Array, ds: number): Float32Array {
+  const n = curv.length;
+  const nk = new Float32Array(n);
+  for (let i = 0; i < n; i++) nk[i] = Math.tanh(curv[i] / 0.011);
+  const narrow = blurLap(nk, Math.round(24 / ds), n), wide = blurLap(blurLap(nk, Math.round(110 / ds), n), Math.round(110 / ds), n);
+  let line = new Float32Array(n);
+  for (let i = 0; i < n; i++) line[i] = -0.6 * Math.max(-1, Math.min(1, 1.7 * narrow[i] - 1.9 * wide[i]));
+  line = blurLap(blurLap(line, Math.round(18 / ds), n), Math.round(18 / ds), n);
+  return line;
+}
+
+/** Anchura de la pista: la real por punto (campo «ancho», 256 muestras por vuelta) o, si no hay, la de por defecto. */
+function widthProfile(def: any, n: number, ds: number, street: boolean): { wReal: number; wr: Float32Array } {
+  const an: number[] | undefined = def.ancho;
+  let wr = new Float32Array(n).fill(1), wReal = street ? 5 : 6.5;
+  if (an) {
+    const lerpLap = (a: number[], f: number) => { const x = f * a.length, i0 = Math.floor(x); return a[i0 % a.length] + (a[(i0 + 1) % a.length] - a[i0 % a.length]) * (x - i0); };
+    wReal = an.reduce((a, b) => a + b, 0) / an.length / 2;
+    for (let i = 0; i < n; i++) wr[i] = Math.max(0.65, Math.min(1.6, lerpLap(an, i / n) / 2 / wReal));
+    wr = blurLap(wr, Math.round(20 / ds), n);
+  }
+  return { wReal, wr };
 }
 
 export const GRIP_GRID = [0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1.0, 1.05, 1.1];
@@ -341,6 +387,8 @@ export function buildTrack(def: any): Track {
     if (s >= length - def.boxes.entrada || s < def.boxes.salida) tPortion += base.dt[i];
   }
   const laneLength = (def.boxes.perdida - 2.4 - 1.0 + tPortion) * pitLim;
+  const street = !!def.urbano;
+  const { wReal, wr } = widthProfile(def, n, ds, street);
   return {
     id: def.id,
     car,
@@ -357,6 +405,8 @@ export function buildTrack(def: any): Track {
     pit: { entry: length - def.boxes.entrada, exit: def.boxes.salida, laneLength, limit: pitLim },
     abrasiveness: def.abrasividad,
     refLap: base.time,
+    street, wReal, wr,
+    line: racingLine(curv, ds),
   };
 }
 

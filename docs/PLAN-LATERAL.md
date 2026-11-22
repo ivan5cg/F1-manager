@@ -322,13 +322,26 @@ un paso sin que haya habido toque (es una prueba barata de que la geometría fun
 
 ## 9. Fases (un PR cada una)
 
-### Fase 1 · La pista a lo ancho y la trazada · no cambia resultados
-- `halfW`, `line`, `inside`, `runoff` en `track.ts`. El 3D usa estos en vez de los suyos.
-- `lat`, `latV`, `latWant` en `Car`, con el muelle, y el piloto en la trazada y apartándose solo cuando lo pide el
-  dibujo de hoy (el de detrás a un lado si está a menos de 1,3 largos). Todo con `latRng`.
-- El 3D lee `c.lat` y se borra la separación inventada.
-- **Comprobación:** `finde.ts silverstone 42 --resumen` igual que antes (salvo la línea de tiempo de cálculo);
-  `tiempos.ts` dentro del presupuesto; capturas del 3D con `poc3d/prueba.html`.
+### Fase 1 · La pista a lo ancho y la trazada · no cambia resultados · ✅ Hecha
+- **`track.ts`:** `line` (trazada, fracción de la media anchura), `wr` y `wReal` (anchura) y `street`. Es la misma
+  fórmula que tenía el 3D, que ahora los lee de aquí. `inside` y `runoff` se dejan para las fases 3 y 4, que son las
+  que los usan.
+- **`Car`:** `lat` (metros desde el centro), `latOff` (lo que se aparta de la trazada) y `latWant` (adónde quiere
+  apartarse). Los calcula `lateral()` en cada paso, después de `interactions()` y con su mismo orden de coches.
+  - Hace lo que hacía el dibujo (el de detrás se aparta si está a menos de 1,3 largos y el de delante cede un poco),
+    con tres mejoras para que no se atraviesen: se aparta antes cuanto más deprisa se acerca (`LAT_LOOK`), elige el
+    lado por donde ya va cada uno (así no cambian de lado a mitad de un adelantamiento) y, pegados, se mueve más
+    deprisa (`LAT_TAU_QUICK`).
+  - Sin azar, así que no hizo falta `latRng`. Tampoco `latV`: en esta fase basta con acercarse poco a poco al
+    objetivo.
+- **El 3D** interpola `latOff` como la distancia y se borra la separación inventada.
+- **Comprobación:**
+  - `finde.ts silverstone 42` y `monaco 7` idénticos.
+  - `tiempos.ts`: la diferencia con antes está dentro del ruido de la medida (±8 % entre ejecuciones).
+  - De los pares de coches a menos de 5 m (Silverstone), quedan separados a lo ancho más de un coche el **89 %**,
+    frente al 66 % de la separación que hacía el dibujo.
+  - Captura del 3D en paralelo con `poc3d/prueba.html`. La página de prueba deja ahora la sesión en
+    `window.__sess` para buscar momentos así.
 
 ### Fase 2 · Aire sucio, rebufo y trazada · cambia resultados
 - §3.5 y §4.1. El que sigue se abre en las curvas rápidas.

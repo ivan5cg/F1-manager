@@ -40,7 +40,7 @@ void (async () => {
   let last = performance.now();
   function loop(now: number) { m.draw(Math.min(0.1, (now - last) / 1000), now); last = now; if (++n === +(P.get("f") ?? 40)) { (window as any).__done = { ...debug.info, props: debug.props, ms: Math.round(performance.now() - t0) }; return; } requestAnimationFrame(loop); }
   requestAnimationFrame(loop);
-  (window as any).__m = m; (window as any).__dbg = debug;
+  (window as any).__m = m; (window as any).__dbg = debug; (window as any).__sess = sess;
   (window as any).__desglose = () => {
     const out: any[] = [];
     debug.scene.traverse((o: any) => {

@@ -264,7 +264,7 @@ function startQuality() {
   return q0;
 }
 let T, camMode = "circuito", q = startQuality(), prScale = 1;
-const prevS = new Map(), prevV = new Map(), labels = new Map();
+const prevS = new Map(), prevV = new Map(), prevL = new Map(), labels = new Map();
 
 // ------------------------------------------------------------------ escena
 const glc = opt.canvas;
@@ -1327,22 +1327,15 @@ function buildTrackData(tr, id, envData) {
   // trazada: por fuera antes y después de la curva, por dentro en el vértice (curvatura > 0 = a izquierdas)
   const nk = new Float32Array(n);
   for (let i = 0; i < n; i++) nk[i] = Math.tanh(tr.curv[i] / 0.011);
-  const narrow = blur(nk, Math.round(24 / ds), n), wide = blur(blur(nk, Math.round(110 / ds), n), Math.round(110 / ds), n);
-  let line = new Float32Array(n);
-  for (let i = 0; i < n; i++) line[i] = -0.6 * clamp(1.7 * narrow[i] - 1.9 * wide[i], -1, 1);
-  line = blur(blur(line, Math.round(18 / ds), n), Math.round(18 / ds), n);
+  const wide = blur(blur(nk, Math.round(110 / ds), n), Math.round(110 / ds), n);
+  // la trazada y la anchura las calcula la simulación (track.ts): los coches van donde ella dice
+  const line = tr.line;
   // escapatorias: metros de grava por fuera de las curvas (izquierda y derecha)
   // urbanos: los que marcan urbano o traen entorno urbano (Mónaco, Singapur, Bakú, Las Vegas)
   const street = !!(tr.def.urbano ?? (en && en.tipo !== "semiurbano"));
-  // anchura real por punto (campo «ancho»), como proporción de la media
-  const an = tr.def.ancho;
-  let wr = new Float32Array(n).fill(1), wReal = street ? 5 : 6.5;
-  if (an) {
-    wReal = an.reduce((a, b) => a + b, 0) / an.length / 2;
-    for (let i = 0; i < n; i++) wr[i] = clamp(lerpLap(an, i / n) / 2 / wReal, 0.65, 1.6);
-    wr = blur(wr, Math.round(20 / ds), n);
-  }
-  W_REAL = wReal;
+  // anchura real por punto (campo «ancho»), como proporción de la media: también de la simulación
+  const wr = tr.wr;
+  W_REAL = tr.wReal;
   const PS = tr.def.boxes.lado === "izquierda" ? -1 : 1; // lado de los boxes: +1 derecha
   const absk = new Float32Array(n);
   for (let i = 0; i < n; i++) absk[i] = wide[i];
@@ -3366,9 +3359,12 @@ function updatePoses(dtReal) {
     const lane = c.loc === "lane_out" || c.loc === "lane_in", fin = c.loc === "fin" && isFinite(c.finishT);
     if (!visible(c) && !wreck && !inGarage && !lane && !fin) { pose.delete(c.id); continue; }
     let p = pose.get(c.id);
-    if (!p) { p = mkS(); p.c = c; p.lat = 0; p.want = 0; p.box = 0; p.acc = 0; p.roll = 0; pose.set(c.id, p); }
+    if (!p) { p = mkS(); p.c = c; p.lat = 0; p.box = 0; p.acc = 0; p.roll = 0; pose.set(c.id, p); }
     const p0 = prevS.get(c.id), jump = p0 === undefined || Math.abs(c.s - p0) > 40;
     p.s = jump ? c.s : p0 + (c.s - p0) * alpha;
+    // lo que se aparta de la trazada: de la simulación (Car.latOff), interpolado como la distancia
+    const l0 = prevL.get(c.id), lNow = c.latOff ?? 0;
+    p.lat = jump || l0 === undefined ? lNow : l0 + (lNow - l0) * alpha;
     let boxT = 0;
     p.pf = -1;
     if (c.loc === "pit" && c.pit) {
@@ -3417,24 +3413,12 @@ function updatePoses(dtReal) {
       p.fxK = fx.k; p.fxTau = tau; p.fxDur = fxDur(fx);
       if (fx.k === "crash") p.s = c.s + 24 * (1 - Math.exp(-tau / 0.45));
     }
-    p.boxT = boxT; p.want = 0; p.tn = tNow;
+    p.boxT = boxT; p.tn = tNow;
     list.push(p);
   }
-  const L = T.L, W = curW, carLen = 5.6 * carK(W);
-  list.sort((a, b) => mod(b.s, L) - mod(a.s, L));
-  for (let i = 0; i < list.length; i++) {
-    const me = list[i], front = list[(i - 1 + list.length) % list.length];
-    if (me === front || me.c.loc !== "track" || front.c.loc !== "track") continue;
-    if (mod(front.s - me.s, L) < carLen * 1.3) {
-      const sgn = front.want > 0 ? -1 : front.want < 0 ? 1 : (me.c.id & 1 ? 1 : -1);
-      if (front.want === 0) front.want = -sgn * 0.3;
-      me.want = sgn * 0.4;
-    }
-  }
-  const simDt = dtReal * (isPaused() ? 0 : Math.min(8, curSpeed())), k1 = 1 - Math.exp(-simDt / 0.7), k2 = 1 - Math.exp(-simDt / 0.2);
+  const simDt = dtReal * (isPaused() ? 0 : Math.min(8, curSpeed())), k2 = 1 - Math.exp(-simDt / 0.2);
   for (const p of list) {
     const c = p.c;
-    p.lat += (p.want - p.lat) * k1;
     p.box += (p.boxT - p.box) * (1 - Math.exp(-dtReal * 6));
     const v0 = prevV.get(c.id), acc = v0 === undefined || c.loc !== "track" ? 0 : (c.v - v0) / sess.dt;
     p.acc += (clamp(acc, -55, 20) - p.acc) * k2;
@@ -4369,7 +4353,7 @@ function draw3d(dt, now) {
 
 // ------------------------------------------------------------------ arranque y lo que se ofrece fuera
 T = buildTrackData(track, track.id, opt.env);
-const remember = () => { for (const c of sess.cars) { prevS.set(c.id, c.s); prevV.set(c.id, c.v); } };
+const remember = () => { for (const c of sess.cars) { prevS.set(c.id, c.s); prevV.set(c.id, c.v); prevL.set(c.id, c.latOff ?? 0); } };
 remember();
 buildWorld();
 for (const c of sess.cars) {
