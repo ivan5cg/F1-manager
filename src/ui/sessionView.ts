@@ -5,7 +5,7 @@ import { puLife } from "../sim/powerunit";
 import { knowledgeTable, longRunsPanel, weekendLongRuns, setPills } from "./hubs";
 import { runToEnd } from "./simulate";
 import { Weekend } from "../sim/weekend";
-import { Session, Car, RaceEvent, SESSION_NAMES, SessionKind, isRaceKind, isQualiKind, PUSH_NAMES, ENGINE_NAMES, ERS_NAMES, SOC_MAX, fmtMinSec, GRAIN_WORDS, PIT_MODE_NAMES } from "../sim/session";
+import { Session, Car, RaceEvent, SESSION_NAMES, SessionKind, isRaceKind, isQualiKind, PUSH_NAMES, ENGINE_NAMES, ERS_NAMES, SOC_MAX, fmtMinSec, GRAIN_WORDS, PIT_MODE_NAMES, RISK_NAMES } from "../sim/session";
 import { COMPOUNDS, Compound, DRY, ALL, setWear, TyreSet, WET } from "../sim/tyres";
 import { rainAt, forecast, RadarFrame, windNow } from "../sim/weather";
 import { renderField, colorize, terrain, RADAR_STEPS, fmtHour } from "./radar";
@@ -1925,7 +1925,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
         <div class="pc-h"><span class="teamdot" style="background:${c.team.color}"></span><b class="nm">${esc(shortName(c.d.nombre))}</b>${c.moral !== undefined ? `<span title="Moral: ${moralLabel(c.moral).text} (${Math.round(c.moral)})">${moralLabel(c.moral).icon}</span>` : ""}${t ? `${tyreHtml(t.c)}<span class="dim">${t.laps} v · ${sp!.opt - sp!.window}–${sp!.opt + sp!.window}°</span>` : `<span class="dim">en el garaje</span>`}${c.wing > 0 ? `<span class="yellow" title="Lo que cuesta por vuelta">alerón −${sess.wingLoss(c).toFixed(1)} s</span>` : ""}${race && c.fault ? `<span class="redt" title="Motor en Ahorro y ritmo bajo para que aguante">⚠️ ${esc(c.fault.what)} ${Math.round(c.fault.lvl * 100)} %</span>` : ""}${c.floor > 0 ? `<span class="redt" title="No se puede arreglar en boxes">fondo −${(c.floor * 100 * sess.secPerGrip).toFixed(1)} s</span>` : ""}${race && c.penS ? `<span class="redt" title="Se cumple en la próxima parada o se suma al final">+${c.penS} s</span>` : ""}${race && (c.tlStrikes ?? 0) >= 3 ? `<span class="dim" title="Bandera blanca y negra: límites de pista">🏁 ${c.tlStrikes}</span>` : ""}${race ? `<button data-let="${idx}" title="Dejar pasar al compañero">Dejar pasar</button>` : ""}</div>
         ${t ? `<div class="pc-t">${axle("Del.", t.F, 0)}${axle("Tras.", t.R, 1)}</div>` : ""}
         <div class="pc-s">${cell("Última", fmtLap(c.lapTimes[c.lapTimes.length - 1]))}${cell("Mejor", fmtLap(c.best))}${t ? cell("Posible", fmtLap(sess.estLap(c))) : ""}${cell("Combust.", `${c.fuel.toFixed(1)} kg${race ? ` <small>${fuelDelta >= 0 ? "+" : ""}${fuelDelta.toFixed(1)} v</small>` : ""}`)}${sess.ersLabel ? cell(sess.ersLabel, `${Math.round((c.soc / SOC_MAX) * 100)} %`) : ""}${c.e.pu ? cell("Motor", `${Math.round(puLife(c.e.pu.km0 + c.puKm) * 100)} % vida`) : ""}${race ? cell("Plan", plan || "—", !c.e.pu) : ""}</div>
-        ${race ? `<div class="pc-c">${seg("push", "Ritmo", PUSH_NAMES, c.push)}${seg("engine", "Motor", ENGINE_NAMES, c.engine)}${sess.ersLabel ? seg("ers", sess.ersLabel, ERS_SHORT, c.ers, c.autoErs) : ""}${seg("fight", "Pelea", ["Defender", "No pelear"], c.fight === "yield" ? 1 : 0, (c.fight ?? "auto") === "auto")}${c.wing > 0 ? seg("nose", "Morro", ["Cambiar", "Dejar"], c.nose === "no" ? 1 : 0, (c.nose ?? "auto") === "auto") : ""}</div>` : ""}
+        ${race ? `<div class="pc-c">${seg("push", "Ritmo", PUSH_NAMES, c.push)}${seg("engine", "Motor", ENGINE_NAMES, c.engine)}${sess.ersLabel ? seg("ers", sess.ersLabel, ERS_SHORT, c.ers, c.autoErs) : ""}${seg("fight", "Pelea", ["Defender", "No pelear"], c.fight === "yield" ? 1 : 0, (c.fight ?? "auto") === "auto")}${seg("risk", "Riesgo", RISK_NAMES, c.risk === "duro" ? 1 : 0)}${c.wing > 0 ? seg("nose", "Morro", ["Cambiar", "Dejar"], c.nose === "no" ? 1 : 0, (c.nose ?? "auto") === "auto") : ""}</div>` : ""}
       </div>`;
     };
     const body = () => mine().map(card).join("");
@@ -1957,6 +1957,11 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
           const was = c.fight ?? "auto";
           c.fight = b.dataset.v === "auto" ? "auto" : b.dataset.v === "0" ? "defend" : "yield";
           if (c.fight !== was && c.fight !== "auto") ordenRadio(c, c.fight === "defend" ? "defender" : "noPelear");
+        }
+        if (k === "risk") {
+          const was = c.risk ?? "limpio";
+          c.risk = b.dataset.v === "1" ? "duro" : "limpio";
+          if (c.risk !== was) ordenRadio(c, c.risk);
         }
         if (k === "nose") c.nose = b.dataset.v === "auto" ? "auto" : b.dataset.v === "0" ? "yes" : "no";
         pb.innerHTML = body();
@@ -2102,8 +2107,8 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
         const good = k === "attack" ? out.p >= 0.3 : out.p < 0.3;
         const adv = `${out.adv >= 0 ? "+" : "−"}${Math.abs(out.adv).toFixed(1)} s/v`;
         return k === "attack"
-          ? `<div class="mw-uc"><span class="tab">En pista</span> Pasar a <b>${o.d.abrev}</b> (a ${gap.toFixed(1)} s): ventaja <b>${adv}</b> llegando pegado; aquí hacen falta ~${out.need.toFixed(1)} · <span class="${good ? "green" : "redt"}">${word}</span></div>`
-          : `<div class="mw-uc"><span class="tab">En pista</span> <b>${o.d.abrev}</b> (a ${gap.toFixed(1)} s detrás) tiene <b>${adv}</b> sobre ti; hacen falta ~${out.need.toFixed(1)}${sess.fightMode(c) === "defend" ? " (cerrando la puerta)" : sess.fightMode(c) === "yield" ? " (no peleas: le dejas pasar)" : ""} · <span class="${good ? "green" : "redt"}">${out.p < 0.08 ? "aguantas sin problema" : out.p < 0.3 ? "puedes aguantarle" : out.p < 0.6 ? "te puede pasar" : "te va a pasar"}</span></div>`;
+          ? `<div class="mw-uc"><span class="tab">En pista</span> Pasar a <b>${o.d.abrev}</b> (a ${gap.toFixed(1)} s): ventaja <b>${adv}</b> llegando pegado${sess.hard(c) ? " (en duro)" : ""}; aquí hacen falta ~${out.need.toFixed(1)} · <span class="${good ? "green" : "redt"}">${word}</span></div>`
+          : `<div class="mw-uc"><span class="tab">En pista</span> <b>${o.d.abrev}</b> (a ${gap.toFixed(1)} s detrás) tiene <b>${adv}</b> sobre ti; hacen falta ~${out.need.toFixed(1)}${sess.fightMode(c) === "defend" ? " (cerrando la puerta)" : sess.fightMode(c) === "yield" ? " (no peleas: le dejas pasar)" : ""}${sess.hard(c) && sess.fightMode(c) !== "yield" ? " (en duro)" : ""} · <span class="${good ? "green" : "redt"}">${out.p < 0.08 ? "aguantas sin problema" : out.p < 0.3 ? "puedes aguantarle" : out.p < 0.6 ? "te puede pasar" : "te va a pasar"}</span></div>`;
       };
       const req = c.pitRequest ? c.e.sets.find((x) => x.id === c.pitRequest) : null;
       return `<div class="panel" style="margin:6px 0"><div class="hd"><span class="t"><span class="teamdot" style="background:${c.team.color}"></span>${esc(c.d.nombre)} · P${sess.order().indexOf(c) + 1}</span>${c.tyres ? `${tyreHtml(c.tyres.c)}<span class="small dim">${c.tyres.laps} v</span>` : ""}</div><div class="bd">

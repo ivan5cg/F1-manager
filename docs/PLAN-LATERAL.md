@@ -54,6 +54,10 @@ avance a lo largo de la pista sigue siendo el de ahora, por minisectores y ya ca
 6. **Decidido: adelantar sigue siendo igual de frecuente.** El número de adelantamientos de cada circuito no cambia
    con este plan: la fase 3 ajusta `PASS_RESOLVE` para que la media por circuito quede como ahora (dentro de lo que pide
    `realismo.ts`). Si más adelante se quiere cambiar, será una tarea aparte.
+7. **Decidido: lo que manda el jugador.** Las órdenes de pelea que ya existen (defender, no pelear, dejar pasar) más
+   una nueva, el **riesgo en la pelea** (limpio o duro), que **ya está hecha sobre el motor de ahora** (`hard`,
+   `RISK_*` en `session.ts`). Con la posición lateral, «duro» pasará a ser frenar más tarde, cerrar más tarde y ceder
+   menos en paralelo (§4.2-4.4), y no solo unas constantes. Nada de órdenes por curva: eso sería pilotar desde el muro.
 
 ---
 
