@@ -415,6 +415,14 @@ Antes la dificultad del circuito recortaba la probabilidad por arriba: con dos s
 **Aire sucio y rebufo.**
 - **Aire sucio:** detrás de otro coche se pierde carga aerodinámica. Pesa en las curvas rápidas, donde el agarre depende de ella, y apenas en una chicane lenta. Se diluye deprisa: a 1 s ya es poco y a 1,6 s nada.
 - **Rebufo:** en recta ahorra resistencia y dura más; aún se nota a 1,5-2 s.
+- **Según el lado:** las dos cosas dependen también de lo que se aparte uno de la estela del otro. Justo detrás se lleva
+  todo; a un coche de lado, bastante menos (la estela que da rebufo es más ancha que la que quita carga). Por eso el que
+  sigue a otro a menos de 1 s **se abre un poco en las curvas rápidas** para respirar aire limpio, y en la recta vuelve
+  detrás a por el rebufo.
+- **Fuera de la trazada** se agarra menos en curva (no hay goma y sí gravilla de neumático, más con la pista
+  engomada) y, con la pista mojándose o secándose, se pisa el agua que no han apartado los demás. Abrirse para
+  respirar compensa hasta más o menos 1 s detrás; más lejos cuesta más de lo que da. `npx tsx scripts/aire.ts` dice
+  lo que se pierde por vuelta a 0,3, 0,5, 0,8 y 1,2 s de otro coche en cada circuito.
 
 Cada circuito tiene su balance. En Monza ir a rebufo compensa; en Silverstone o Interlagos es mejor el aire limpio, salvo con mucho hueco.
 
