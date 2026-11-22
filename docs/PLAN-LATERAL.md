@@ -362,16 +362,27 @@ un paso sin que haya habido toque (es una prueba barata de que la geometría fun
   | Ahora | 0,400 | 0,338 | 0,225 | 0,059 |
 
 - **Lo que hizo falta para que adelantar siga igual de frecuente:**
-  - Con lo anterior los adelantamientos bajaban del 0,92 al 0,85 del objetivo: el que ataca llegaba a la recta abierto
-    de la curva anterior (menos rebufo) y con el agarre de fuera de la trazada en la frenada.
-  - En `overtakeCheck`, ahora el que ataca hace la recta en la estela y los dos frenan por la trazada, como ya suponía
-    `passOutlook`. Con eso, 0,91.
-- **Comprobación** (`realismo.ts --carreras=8 --rapido`, 25 circuitos, antes → ahora):
-  - Coche de seguridad 57 → 58 %, toques 0,8 → 0,8, sanciones 1,3 → 1,3, paradas 1,50 → 1,55, adelantamientos
-    0,92 → 0,91 del objetivo y dispersión 0,32 → 0,32.
-  - Las dos métricas fuera de margen (gana el de la pole y gana alguien desde P4 o más atrás) ya lo estaban antes: es lo
-    que avisa `--rapido`.
-  - Tiempo por paso: igual que antes.
+  - Con lo anterior, los adelantamientos bajaban del 0,92 al 0,85 del objetivo: el que ataca llegaba a la recta abierto
+    de la curva anterior (menos rebufo) y con el agarre de fuera de la trazada en la frenada. En `overtakeCheck`, ahora
+    el que ataca hace la recta en la estela y los dos frenan por la trazada, como ya suponía `passOutlook`.
+  - Aun así quedaba un ~4,5 % menos (semillas 1 y 101, 400 carreras). `PASS_LAT` = 0,05 s/vuelta rebaja el umbral de
+    todos los circuitos, y también lo que el Muro dice que hace falta.
+- **Comprobación** (`realismo.ts --carreras=8 --rapido`, 25 circuitos, 200 carreras por semilla, antes → ahora):
+
+  | | Semilla 1 | Semilla 101 |
+  |---|---|---|
+  | Adelantamientos / objetivo | 0,92 → 0,94 | 1,21 → 1,23 |
+  | Coche de seguridad | 57 → 55 % | 57 → 59 % |
+  | Bandera roja | 6 → 10 % | 2 → 7 % |
+  | Toques por carrera | 0,8 → 0,8 | 1,0 → 1,0 |
+  | Sanciones por carrera | 1,3 → 1,4 | 1,6 → 1,5 |
+  | Paradas medias | 1,50 → 1,50 | 1,69 → 1,69 |
+
+  - Las banderas rojas son pocas (de 4 a 20 por cada 200 carreras) y bailan mucho entre pasadas: con un código casi
+    igual salieron un 1 % y un 6 %. Nada de esta fase toca los accidentes.
+  - Lo que estaba fuera de margen (gana el de la pole y gana alguien desde P4 o más atrás, por `--rapido`, y la
+    dispersión de los adelantamientos con la semilla 101) ya lo estaba antes.
+  - Tiempo por paso: igual que antes, con el lado hacia el que se abre precalculado por circuito.
 
 ### Fase 3 · Adelantar y defender como maniobras · cambia resultados
 - §4.2 y §4.3. `PASS_RESOLVE` ajustada por circuito con `realismo.ts`.
