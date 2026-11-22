@@ -51,6 +51,9 @@ avance a lo largo de la pista sigue siendo el de ahora, por minisectores y ya ca
 5. **La calibración que ya hay manda:** el número de adelantamientos por circuito, los toques, las salidas de pista y
    las neutralizaciones deben seguir dentro de los márgenes de `scripts/realismo.ts`. Lo lateral decide *cómo* y
    *quién*, no *cuántos*.
+6. **Decidido: adelantar sigue siendo igual de frecuente.** El número de adelantamientos de cada circuito no cambia
+   con este plan: la fase 3 ajusta `PASS_RESOLVE` para que la media por circuito quede como ahora (dentro de lo que pide
+   `realismo.ts`). Si más adelante se quiere cambiar, será una tarea aparte.
 
 ---
 
