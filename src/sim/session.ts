@@ -2257,13 +2257,15 @@ export class Session {
     // el que ataca sale de la trazada: si se ha abierto línea seca, pisa más agua
     const wAtt = water + 0.6 * Math.max(0, this.waterOff[m.i] - water);
     // agarre de cada uno en aire limpio (el aire sucio ya ha hecho su trabajo: no dejarle acercarse)
-    const clean = (x: Car, w: number) => { const fg = x.followGap; x.followGap = 99; const g = this.msTime(x, m, w).grip; x.followGap = fg; return g; };
+    // (los dos por la trazada: abrirse o no en la curva anterior no cambia lo que agarran en la frenada)
+    const clean = (x: Car, w: number) => { const fg = x.followGap, o = x.offLine; x.followGap = 99; x.offLine = 0; const g = this.msTime(x, m, w).grip; x.followGap = fg; x.offLine = o; return g; };
     // (en la primera vuelta van en grupo y con las gomas a medio calentar: la diferencia de agarre cuenta la mitad)
     const grip = clamp((clean(c, wAtt) / clean(a, water) - 1) * 100 * this.secPerGrip, -3, 5) * (lap1 ? 0.5 : 1);
     // la recta anterior, cada uno con lo que llevaba: rebufo, modo adelantamiento (también el de delante si va en tren),
     // batería, motor, resistencia y peso
     const prev = this.track.ms[(m.i - 1 + this.N) % this.N];
-    const onStraight = (x: Car) => { const d = x.drs; x.drs = x.drsEligible && prev.drs; const t = this.msTime(x, prev, this.water[prev.i]).t; x.drs = d; return t; };
+    // (el que va a atacar se mete detrás en la recta a por el rebufo, aunque viniera abierto de la curva anterior)
+    const onStraight = (x: Car) => { const d = x.drs, dl = x.aheadDl, o = x.offLine; x.drs = x.drsEligible && prev.drs; if (x === c) { x.aheadDl = 0; x.offLine = 0; } const t = this.msTime(x, prev, this.water[prev.i]).t; x.drs = d; x.aheadDl = dl; x.offLine = o; return t; };
     const straight = onStraight(a) - onStraight(c);
     const skill = (c.d.ataque - a.d.defensa) / 100;
     const hardC = this.hard(c), hardA = this.hard(a);
