@@ -446,6 +446,11 @@ En la sesión, el botón **3D** del mapa cambia el mapa de siempre por una vista
 
 En 3D, tocar el botón **Cámara** abre un menú rápido con las ocho vistas —*Circuito*, *Seguir*, *Tele*, *A bordo*, *Helicóptero* (alto, detrás y a un lado del coche seguido, con zoom suave y deriva lenta), *Pit-lane* (fija en el muro frente a su garaje mientras está en boxes; si no, le sigue de cerca), *Alerón trasero* (a bordo mirando hacia atrás) y *Grúa de meta* (de lado y en alto sobre la recta de meta)— además del interruptor **Auto-TV** (activo por defecto), con el que la cámara *Tele* realiza automáticamente la salida desde la grúa, corta al *Pit-lane* en las paradas de tus pilotos y busca incidentes y batallas cercanas respetando varios segundos cada plano. En *Circuito* y *Seguir* puedes orbitar arrastrando el dedo (o el ratón), acercar o alejar con pellizco (o rueda) y volver al encuadre automático con doble toque.
 
+**Cada coche va donde la simulación dice también a lo ancho:** por la trazada (por fuera antes de la curva, por
+dentro en el vértice) y, cuando se le echa encima a otro, se aparta a un lado y el de delante cede un poco hacia el
+otro. Lo decide la simulación (`Car.lat`, ver `docs/PLAN-LATERAL.md`) y el 3D solo lo dibuja. Por ahora no cambia
+nada de la carrera.
+
 El botón de ampliar abre el 3D sobre la clasificación junto a una mini-torre flotante (Top 3 y tus dos pilotos) y botones rápidos de pausa y box; en ese modo, un toque en el fondo oculta o recupera toda la interfaz flotante sobre la pista.
 
 La luz es física (three.js, materiales PBR): el sol da la luz directa y las sombras, y los reflejos

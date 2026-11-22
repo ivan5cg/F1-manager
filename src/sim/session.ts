@@ -99,6 +99,13 @@ const FORMATION_GAIN: Partial<Record<Compound, number>> = { S: 17, M: 13, H: 9, 
 const RIVALS = [["VER", "NOR"], ["VER", "HAM"], ["VER", "RUS"], ["VER", "LEC"], ["NOR", "PIA"], ["ALO", "HAM"], ["LEC", "SAI"], ["GAS", "OCO"], ["STR", "ALO"]];
 const pairKey = (a: number, b: number) => (a < b ? `${a}-${b}` : `${b}-${a}`);
 const rivals = (a: Car, b: Car) => RIVALS.some(([x, y]) => (a.d.abrev === x && b.d.abrev === y) || (a.d.abrev === y && b.d.abrev === x));
+/**
+ * Posición lateral (fase 1): a cuántos metros del de delante se aparta uno (1,3 coches), cuánto (fracción de la media
+ * anchura) se aparta él y cuánto cede el de delante, lo deprisa que se mueve (s) y hasta dónde puede llegar.
+ */
+const LAT_CLOSE = 5.6 * 1.3, LAT_SIDE = 0.4, LAT_YIELD = 0.3, LAT_TAU = 0.7, LAT_MAX = 0.82;
+/** Segundos de antelación con los que se aparta según lo deprisa que se acerca, y lo deprisa que se mueve si va pegado. */
+const LAT_LOOK = 0.8, LAT_TAU_QUICK = 0.25;
 /** Ventaja de más (s/vuelta) que necesita el que ataca si el de delante cierra la puerta. */
 const DEFEND_T = 0.35;
 /**
@@ -252,6 +259,18 @@ export interface Car {
   /** Solo para dibujar (mapa 3D): el último percance y cuándo fue (segundos de sesión). No cambia nada de la carrera. */
   fx?: { k: "spin" | "off" | "lock" | "crash"; t: number; loss?: number };
   msK: number;
+  /**
+   * Posición lateral (plan lateral, fase 1): metros desde el centro de la pista (positivo a la derecha en el sentido de
+   * la marcha). Sale de la trazada y de `latOff`, lo que se aparta de ella. Por ahora no cambia nada de la carrera: es
+   * lo que dibuja el 3D. Fuera de la pista (boxes, garaje) no significa nada.
+   */
+  lat?: number;
+  /** Lo que se aparta de la trazada, como fracción de la media anchura (se acerca poco a poco a `latWant`). */
+  latOff?: number;
+  /** Adónde quiere apartarse ahora (fracción de la media anchura): lo decide `lateral()` en cada paso. */
+  latWant?: number;
+  /** Pegado a otro en este paso: se aparta más deprisa. */
+  latQuick?: boolean;
   cross: number[];
   lapTimes: number[];
   lapStart: number;
@@ -630,7 +649,7 @@ export class Session {
         tyres: null, usedCompounds: new Set(), stops: 0,
         fuel: 20, soc: SOC_MAX * 0.95,
         push: 2, engine: 1, ers: 1, pitRequest: null,
-        wing: 0, floor: 0, delay: 0, msK: -1, cross: [], lapTimes: [], lapStart: 0, best: Infinity, bestByPart: [], lapValid: true,
+        wing: 0, floor: 0, delay: 0, msK: -1, lat: 0, latOff: 0, latWant: 0, cross: [], lapTimes: [], lapStart: 0, best: Infinity, bestByPart: [], lapValid: true,
         noise: 0, followGap: 99, aheadId: -1, drs: false, drsEligible: false,
         grant: -1, grantUntil: 0, finishT: 0, plan: { stints: [] }, lastPitLap: -1,
         pace: 1 + (d.ritmo - 85) * 0.0007 + team.agarre / 180,
@@ -930,6 +949,7 @@ export class Session {
       if (c.e.pu && c.s > s0) c.puKm += ((c.s - s0) / 1000) * PU_WEAR[c.engine];
     }
     this.interactions();
+    this.lateral(dt);
     if (!isRaceKind(this.kind)) this.sessionTick();
 
     if (isRaceKind(this.kind) && this.cars.every((c) => c.loc === "fin" || c.loc === "out")) {
@@ -2340,12 +2360,59 @@ export class Session {
     }
   }
 
+  /**
+   * Posición lateral (plan lateral, fase 1; ver docs/PLAN-LATERAL.md). Cada coche va por la trazada y, si se le echa
+   * encima el de delante (a menos de LAT_CLOSE m), se aparta a un lado para no meterse en él: el de delante cede un poco
+   * hacia el otro. Se acerca a lo que quiere poco a poco (LAT_TAU s). Sin azar y sin tocar nada más: los resultados son
+   * los mismos que sin esto.
+   */
+  private lateral(dt: number) {
+    const L = this.L, tr = this.track;
+    const posOf = (c: Car) => ((c.s % L) + L) % L;
+    // los coches en pista, ya ordenados por interactions() (los de detrás de la línea en la parrilla, aparte)
+    const on = this.onTrack;
+    for (const c of this.cars) c.latWant = 0;
+    const n = on.length;
+    for (let i = 0; i < n; i++) {
+      const me = on[i], front = on[(i - 1 + n) % n];
+      if (me === front) continue;
+      let gap = posOf(front) - posOf(me);
+      if (gap < 0) gap += L;
+      // se aparta antes cuanto más deprisa se le echa encima (así no lo atraviesa al pasarle)
+      if (gap < LAT_CLOSE + Math.max(0, me.v - front.v) * LAT_LOOK) {
+        // hacia el lado contrario al que ya se aparta el de delante; si no se aparta, por donde ya va cada uno (así no
+        // cambian de lado a mitad de un adelantamiento) y, si van en la misma línea, según el coche
+        const dl = (me.lat ?? 0) - (front.lat ?? 0);
+        const sgn = front.latWant! > 0 ? -1 : front.latWant! < 0 ? 1 : Math.abs(dl) > 0.3 ? Math.sign(dl) : (me.id & 1 ? 1 : -1);
+        if (front.latWant === 0) front.latWant = -sgn * LAT_YIELD;
+        me.latWant = sgn * LAT_SIDE;
+        // pegados (morro con caja de cambios o ya en paralelo): se apartan más deprisa
+        if (gap < 5.6) { me.latQuick = true; front.latQuick = true; }
+      }
+    }
+    const k = 1 - Math.exp(-dt / LAT_TAU), kq = 1 - Math.exp(-dt / LAT_TAU_QUICK);
+    for (const c of this.cars) {
+      const off = (c.latOff ?? 0) + (c.latWant! - (c.latOff ?? 0)) * (c.latQuick ? kq : k);
+      c.latQuick = false;
+      c.latOff = off;
+      if (c.loc !== "track") continue;
+      const pi = Math.min(tr.line.length - 1, Math.floor(posOf(c) / tr.ds));
+      // apartado de la trazada, ya no la sigue del todo
+      const nrm = clamp(tr.line[pi] * (1 - Math.min(1, Math.abs(off) / 0.3) * 0.65) + off, -LAT_MAX, LAT_MAX);
+      c.lat = nrm * tr.wReal * tr.wr[pi];
+    }
+  }
+
+  /** Coches en pista ordenados del primero al último en el trazado (lo deja interactions() en cada paso). */
+  private onTrack: Car[] = [];
+
   /** Orden físico en pista, aire sucio y tapones. */
   private interactions() {
     const L = this.L;
     const on = this.cars.filter((c) => c.loc === "track" && c.s > -200);
     const posOf = (c: Car) => ((c.s % L) + L) % L;
     on.sort((a, b) => posOf(b) - posOf(a));
+    this.onTrack = on;
     const n = on.length;
     const race = isRaceKind(this.kind);
     for (const c of on) c.chased = 99;
