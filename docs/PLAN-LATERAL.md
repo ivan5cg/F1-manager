@@ -343,10 +343,35 @@ un paso sin que haya habido toque (es una prueba barata de que la geometría fun
   - Captura del 3D en paralelo con `poc3d/prueba.html`. La página de prueba deja ahora la sesión en
     `window.__sess` para buscar momentos así.
 
-### Fase 2 · Aire sucio, rebufo y trazada · cambia resultados
-- §3.5 y §4.1. El que sigue se abre en las curvas rápidas.
-- Recalibrar para que la pérdida siguiendo a otro coche quede como antes.
-- **Comprobación:** `realismo.ts` dentro de márgenes en todos los circuitos.
+### Fase 2 · Aire sucio, rebufo y trazada · cambia resultados · ✅ Hecha
+- **Estela según el lado:** el aire sucio y el rebufo se multiplican por `exp(−(dl/w)²)`, con `dl` la separación
+  lateral con el de delante (`Car.aheadDl`, de `lateral()`). La estela que quita carga mide `WAKE_DIRTY` = 3,5 m y la
+  del rebufo, `WAKE_TOW` = 4,5 m. Son más anchas que los 1,4 y 2,5 m del borrador: con esos, abrirse quitaba casi
+  todo el aire sucio. Lo mismo en el trabajo extra del delantero (graining en aire sucio).
+- **Fuera de la trazada** (`Car.offLine`, fracción de la media anchura): agarre `× (1 − OFFLINE_GRIP · sensibilidad ·
+  off² · (0,6 + 0,4 · goma))`, con `OFFLINE_GRIP` = 0,035, y el agua de fuera de la trazada (`waterOff`) en proporción.
+- **Respirar:** a menos de `BREATHE_GAP` = 1 s de otro, en las curvas de `aero · sensibilidad` ≥ 0,25 (más o menos
+  el cuarto más rápido), se abre `LAT_BREATHE` = 0,25 hacia el centro. Se precalcula por circuito (`breatheSide`).
+  Con 1,3 s se probó y sale peor: a 1,2 s abrirse cuesta más de lo que da.
+- **Recalibrado:** `DIRTY_AIR` pasa de 0,12 a 0,135, para que lo que se pierde siguiendo a otro coche quede como antes
+  (`scripts/aire.ts`, media de los 25 circuitos, en s/vuelta):
+
+  | Detrás a | 0,3 s | 0,5 s | 0,8 s | 1,2 s |
+  |---|---|---|---|---|
+  | Antes | 0,415 | 0,339 | 0,208 | 0,042 |
+  | Ahora | 0,400 | 0,338 | 0,225 | 0,059 |
+
+- **Lo que hizo falta para que adelantar siga igual de frecuente:**
+  - Con lo anterior los adelantamientos bajaban del 0,92 al 0,85 del objetivo: el que ataca llegaba a la recta abierto
+    de la curva anterior (menos rebufo) y con el agarre de fuera de la trazada en la frenada.
+  - En `overtakeCheck`, ahora el que ataca hace la recta en la estela y los dos frenan por la trazada, como ya suponía
+    `passOutlook`. Con eso, 0,91.
+- **Comprobación** (`realismo.ts --carreras=8 --rapido`, 25 circuitos, antes → ahora):
+  - Coche de seguridad 57 → 58 %, toques 0,8 → 0,8, sanciones 1,3 → 1,3, paradas 1,50 → 1,55, adelantamientos
+    0,92 → 0,91 del objetivo y dispersión 0,32 → 0,32.
+  - Las dos métricas fuera de margen (gana el de la pole y gana alguien desde P4 o más atrás) ya lo estaban antes: es lo
+    que avisa `--rapido`.
+  - Tiempo por paso: igual que antes.
 
 ### Fase 3 · Adelantar y defender como maniobras · cambia resultados
 - §4.2 y §4.3. `PASS_RESOLVE` ajustada por circuito con `realismo.ts`.

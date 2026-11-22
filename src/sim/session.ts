@@ -2446,15 +2446,39 @@ export class Session {
    */
   breatheWant(c: Car, m?: Minisector): number {
     if (c.followGap >= BREATHE_GAP || this.flag !== "green") return 0;
-    const tr = this.track, L = this.L;
-    const at = ((((c.s + BREATHE_AHEAD) % L) + L) % L);
-    const mm = m ?? tr.ms[this.msIndexAt(at)];
-    if (mm.aero * mm.cornerSens < BREATHE_MIN) return 0;
-    const pi = Math.min(tr.line.length - 1, Math.floor((m ? (mm.s0 + mm.s1) / 2 : at) / tr.ds));
-    // hacia el centro: al lado contrario de donde va la trazada (si va por el centro, según el coche)
-    const ln = tr.line[pi];
-    return (Math.abs(ln) > 0.05 ? -Math.sign(ln) : c.id & 1 ? 1 : -1) * LAT_BREATHE;
+    const tr = this.track;
+    let side: number;
+    if (m) {
+      // (para scripts/aire.ts: en ese mismo minisector)
+      if (m.aero * m.cornerSens < BREATHE_MIN) return 0;
+      const ln = tr.line[Math.min(tr.line.length - 1, Math.floor((m.s0 + m.s1) / 2 / tr.ds))];
+      side = Math.abs(ln) > 0.05 ? -Math.sign(ln) : 2;
+    } else {
+      const L = this.L, pos = ((c.s % L) + L) % L;
+      side = this.breatheSide()[Math.min(tr.line.length - 1, Math.floor(pos / tr.ds))];
+      if (!side) return 0;
+    }
+    return (side === 2 ? (c.id & 1 ? 1 : -1) : side) * LAT_BREATHE;
   }
+
+  /**
+   * Para cada punto de la pista: hacia dónde se abre el que sigue a otro al llegar ahí (la curva rápida BREATHE_AHEAD m
+   * por delante): 0 no se abre, ±1 hacia ese lado (el centro, contrario a la trazada), 2 la trazada va por el centro
+   * (cada uno a un lado). Se calcula una vez por circuito.
+   */
+  private breatheMap?: Int8Array;
+  private breatheSide(): Int8Array {
+    if (this.breatheMap) return this.breatheMap;
+    const tr = this.track, n = tr.line.length, out = new Int8Array(n);
+    for (let i = 0; i < n; i++) {
+      const j = (i + Math.round(BREATHE_AHEAD / tr.ds)) % n;
+      const mm = tr.ms[tr.msOfPoint[Math.min(tr.msOfPoint.length - 1, j)]];
+      if (mm.aero * mm.cornerSens < BREATHE_MIN) continue;
+      out[i] = Math.abs(tr.line[j]) > 0.05 ? -Math.sign(tr.line[j]) : 2;
+    }
+    return (this.breatheMap = out);
+  }
+
 
   /** Coches en pista ordenados del primero al último en el trazado (lo deja interactions() en cada paso). */
   private onTrack: Car[] = [];
