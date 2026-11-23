@@ -502,7 +502,7 @@ const U = {
 // Biomas del terreno y arbolado por circuito (sin archivos externos)
 const BIOME_OF = {
   bahrein: "desierto", lusail: "desierto", yasmarina: "desierto", lasvegas: "desierto",
-  barcelona: "seco", madrid: "seco", austin: "seco", hungaroring: "seco", mexico: "seco", "sierra-norte": "seco", baku: "seco",
+  barcelona: "seco", madrid: "seco", austin: "seco", hungaroring: "seco", mexico: "seco", baku: "seco",
   zandvoort: "dunas",
   sepang: "tropical", interlagos: "tropical", miami: "tropical", melbourne: "tropical", singapur: "tropical", shanghai: "tropical",
   monaco: "mediterraneo",

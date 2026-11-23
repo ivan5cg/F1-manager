@@ -71,6 +71,22 @@ export interface Track {
    * −1 izquierda, 0 si no hay curva que valga (recta larga). Es por donde se tira el que adelanta.
    */
   inside: Int8Array;
+  /**
+   * Escapatoria por fuera de la curva en cada punto (m de grava o asfalto antes de las barreras): la misma que dibuja el
+   * 3D. En los urbanos, 0 (muro). Decide en qué acaba un error: aquí un susto, allí el fondo roto o las barreras.
+   */
+  runoff: Float32Array;
+}
+
+function runoffProfile(curv: Float64Array, ds: number, street: boolean): Float32Array {
+  const n = curv.length, out = new Float32Array(n);
+  if (street) return out;
+  const nk = new Float32Array(n);
+  for (let i = 0; i < n; i++) nk[i] = Math.tanh(curv[i] / 0.011);
+  const wide = blurLap(blurLap(nk, Math.round(110 / ds), n), Math.round(110 / ds), n);
+  const sw = blurLap(wide, Math.round(40 / ds), n);
+  for (let i = 0; i < n; i++) out[i] = Math.max(0, Math.min(26, (Math.abs(sw[i]) - 0.1) * 60));
+  return out;
 }
 
 const INSIDE_AHEAD = 180;
@@ -425,6 +441,7 @@ export function buildTrack(def: any): Track {
     street, wReal, wr,
     line: racingLine(curv, ds),
     inside: insideSide(curv, ds),
+    runoff: runoffProfile(curv, ds, street),
   };
 }
 

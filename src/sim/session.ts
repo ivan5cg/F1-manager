@@ -66,6 +66,26 @@ const CAR_DRY = 0.0035;
 const ENGINE_FAIL = [0.6, 1, 2.2];
 /** De los errores en curva, cuántos acaban contra las barreras (en seco). */
 const CRASH_P = 0.11;
+/**
+ * Escapatoria (fase 4): el error acaba contra las barreras más a menudo sin escapatoria (urbanos, muro) y menos con
+ * mucha: × (1,5 − escapatoria/26) / RUNOFF_NORM, que de media en los sitios donde se cometen los errores es 1 (así
+ * hay los mismos accidentes en total, repartidos según el circuito). En la grava (más de 8 m) el fondo se rompe más a
+ * menudo (× 1,5) y sin escapatoria (menos de 3 m), menos (× 0,55): de media, igual.
+ */
+const RUNOFF_NORM = 1.2;
+/** Al salirse de pista: hasta dónde se va por fuera (fracción de la media anchura; 1 es el borde) y cuánto tarda. */
+const OFF_WIDE = 1.35, OFF_T = 2.5;
+/**
+ * Toques (fase 4). La tirada de siempre decide que habrá toque; desde ahí, el que se mete en el sitio del otro (el que
+ * ataca o, si cierra la puerta tarde, el que defiende) va hacia él hasta que se tocan de verdad (a lo largo y a lo
+ * ancho). Si en TOUCH_T s no llegan a juntarse, se tocan igual. Lo fuerte que es sale de la velocidad con la que se
+ * juntan (TOUCH_KL por m/s a lo ancho y TOUCH_KS a lo largo), centrado en TOUCH_MEAN para que el reparto de
+ * consecuencias (alerón, pinchazo, largos, accidente) quede de media como antes.
+ */
+const TOUCH_T = 2.5, TOUCH_KL = 0.12, TOUCH_KS = 0.03, TOUCH_MEAN = 0.4, TOUCH_SHIFT = 0.35;
+const CAR_LEN = 5.6, CAR_W = 1.9;
+/** Salida (fase 4): a qué distancia del centro va cada fila de la parrilla (fracción de la media anchura). */
+const GRID_SIDE = 0.45;
 /** Probabilidad de pisar fuera de los límites en cada curva rápida de carrera (al ritmo normal). */
 const TL_P = 0.0011;
 /** Probabilidad de dañar el fondo en un bordillo por cada paso de altura por debajo de lo que pide el circuito. */
@@ -312,11 +332,17 @@ export interface Car {
    * Adelantamiento en marcha (lo lleva el que ataca): a quién, por qué lado (+1 derecha), si va por fuera, si sale
    * (`pass`), si el otro le cierra el interior (`cover`) y cuándo empezó.
    */
-  maneuver?: { a: number; side: number; outside: boolean; pass: boolean; cover: boolean; t0: number };
+  maneuver?: { a: number; side: number; outside: boolean; pass: boolean; cover: boolean; t0: number; touch?: { byDef: boolean } };
   /** Metido en una maniobra en este paso (como atacante o como defensor): no se aparta por su cuenta. */
   inMv?: boolean;
   /** Le están adelantando en una maniobra (el tiempo que pierde se reparte más). */
   passedIn?: boolean;
+  /** Se ha salido de pista: hacia qué lado (+1 derecha) se va largo y hasta cuándo. */
+  offWide?: { side: number; until: number };
+  /** Velocidad lateral (m/s, positivo a la derecha). */
+  latV?: number;
+  /** Lado de su casilla en la parrilla (+1 derecha). */
+  gridSide?: number;
   cross: number[];
   lapTimes: number[];
   lapStart: number;
@@ -522,7 +548,7 @@ export class Session {
   /** Relanzada: a cuántos metros de la meta acelera el líder y cuándo lo ha hecho (s de sesión). */
   scGo: { at: number; t: number | null } | null = null;
   /** Toques que investigan los comisarios: cuándo deciden, quién atacaba, a quién, lo grave que fue y si era la salida. */
-  probes: { at: number; c: number; a: number; sev: number; lap1: boolean }[] = [];
+  probes: { at: number; c: number; a: number; sev: number; lap1: boolean; byDef?: boolean }[] = [];
   /** Banderas amarillas por zona: minisector, hasta cuándo (s de sesión) y si es doble. */
   yellows: { ms: number; until: number; double: boolean }[] = [];
   /** Salida parada tras una bandera roja: la parrilla espera los semáforos, y cuándo se apagaron (s de sesión). */
@@ -566,7 +592,7 @@ export class Session {
   passCount = 0; // adelantamientos completados en pista (sin contar doblados ni los de boxes)
   passLap1 = 0; // de ellos, los de la primera vuelta
   /** Recuento de lo que ha pasado (solo para medir: scripts/realismo.ts). No cambia nada de la sesión. */
-  stats = { sc: 0, vsc: 0, red: 0, contacts: 0, offs: 0, retire: 0, pens: 0, passIn: 0, passOut: 0, sideBySide: 0, overlap: 0 };
+  stats = { sc: 0, vsc: 0, red: 0, contacts: 0, offs: 0, retire: 0, pens: 0, passIn: 0, passOut: 0, sideBySide: 0, overlap: 0, touchGeo: 0, touchSev: 0, touchStart: 0 };
   /** Rivalidades de la temporada por pareja («id-id», el menor primero): intensidad de 0 a 1. */
   rivalK: Record<string, number> = {};
   /** Lo que ha pasado entre cada pareja en esta sesión (para las rivalidades de la temporada): toques y adelantamientos. */
@@ -766,6 +792,7 @@ export class Session {
       c.loc = "track";
       c.gridS = -12 - i * 8;
       c.s = c.gridS;
+      this.gridSlot(c, i);
       c.fuel = this.fuelLap(c) * this.laps * this.rng.range(0.985, 1.01) + 0.8;
       if (c.player) c.fuel = this.fuelLap(c) * this.laps + 0.5;
       this.rollLaunch(c);
@@ -1183,7 +1210,8 @@ export class Session {
         this.log({ kind: "control", carId: c.id, text: `⚖️ Toque entre ${c.d.abrev} y ${a.d.abrev}: sin sanción, incidente de carrera`, important: c.player || a.player, code: "sinSancion", other: a.id });
         continue;
       }
-      const blameC = clamp(0.62 + (c.d.agresividad - a.d.agresividad) / 120 + (this.hard(c) ? RISK_BLAME : 0) - (this.hard(a) ? RISK_BLAME : 0), 0.3, 0.9);
+      // la culpa suele ser del que se mete en el sitio del otro: el que ataca o el que cierra la puerta tarde
+      const blameC = clamp((p.byDef ? 0.3 : 0.62) + (c.d.agresividad - a.d.agresividad) / 120 + (this.hard(c) ? RISK_BLAME : 0) - (this.hard(a) ? RISK_BLAME : 0), 0.1, 0.9);
       const who = this.rng.chance(blameC) ? c : a, other = who === c ? a : c;
       if (who.loc === "out" || who.loc === "fin") continue;
       this.penalize(who, p.sev >= 0.6 ? 10 : 5, `provocar un toque con ${other.d.abrev}`, "toque");
@@ -1231,7 +1259,7 @@ export class Session {
     this.drsEnabledFromLap = lap + 3;
     this.restartHold = true;
     this.startHold = 0;
-    for (const c of ord) { c.gridS = c.s; c.v = 0; c.delay = 0; this.rollLaunch(c); this.formationLap(c); }
+    ord.forEach((c, i) => { c.gridS = c.s; c.v = 0; c.delay = 0; this.rollLaunch(c); this.formationLap(c); this.gridSlot(c, i); });
     this.log({ kind: "control", text: `🚦 La carrera se reanuda con salida parada, en el orden de carrera. Quedan ${this.laps - lap} vueltas.`, important: true, pause: true, code: "salidaParada" });
   }
 
@@ -2203,7 +2231,8 @@ export class Session {
     }
     if (!this.rng.chance(p * m.cornerSens * 2)) return;
     const r = this.rng.next();
-    const crashP = CRASH_P + 0.06 * Math.min(1, water);
+    const ro = this.runoffAt(c);
+    const crashP = (CRASH_P + 0.06 * Math.min(1, water)) * (1.5 - Math.min(26, ro) / 26) / RUNOFF_NORM;
     if (r < crashP) {
       c.fx = { k: "crash", t: this.t };
       this.retire(c, "accidente", 0.7);
@@ -2213,13 +2242,15 @@ export class Session {
       c.lapValid = false;
       let dmg = "";
       if (this.rng.chance(0.15)) { c.wing += this.rng.range(0.008, 0.03); dmg = " y daña el alerón"; }
-      else if (this.rng.chance(0.25)) { this.damageFloor(c, this.rng.range(0.002, 0.008), "por la grava"); dmg = " y daña el fondo"; }
+      else if (this.rng.chance(0.25 * (ro > 8 ? 1.5 : ro < 3 ? 0.55 : 1))) { this.damageFloor(c, this.rng.range(0.002, 0.008), "por la grava"); dmg = " y daña el fondo"; }
       // los que más tiempo pierden son los que han trompeado (solo cambia el texto y el dibujo)
       const spin = loss > 3.6;
       this.stats.offs++;
       // tras un error, unos se vienen abajo más que otros
       this.shake(c, 0.15 + (95 - c.d.regularidad) / 80 + (spin ? 0.1 : 0));
       c.fx = { k: spin ? "spin" : "off", t: this.t, loss };
+      // se va de verdad por fuera de la curva (y vuelve): lo que hace la posición lateral
+      c.offWide = { side: this.outsideAt(c), until: this.t + Math.min(OFF_T, 0.6 * loss) };
       // el trompo deja amarilla doble un rato (en clasificación, vuelta estropeada al que pase); la salida, simple
       this.yellows.push({ ms: m.i, until: this.t + this.rng.range(15, 35), double: spin });
       if (!isRaceKind(this.kind)) this.log({ kind: "control", text: `⚠️ Bandera amarilla${spin ? " doble" : ""} en el sector ${m.sector + 1}: ${spin ? "trompo" : "salida de pista"} de ${c.d.abrev}`, code: "banderaAmarilla" });
@@ -2317,7 +2348,7 @@ export class Session {
     // se tocan sobre todo cuando el intento es de verdad y los dos son de no levantar
     if (real || will > 0.5) {
       const contactP = 0.004 * (0.5 + c.d.agresividad / 100) * (0.5 + a.d.agresividad / 120) * (lap1 ? 2.2 : 1) * (1 + Math.min(1, wAtt) * 1.5) * (1.4 - will) * (defend ? 1.4 : 1) * (rivals(c, a) ? 1.7 : 1) * (1 + RIVAL_CONTACT * this.rivalOf(c, a)) * (hardC ? RISK_CONTACT : 1) * (hardA && mode !== "yield" ? RISK_CONTACT : 1);
-      if (this.rng.chance(contactP)) { c.lastTry = this.t; this.duel(c, a).touch++; return this.contact(c, a); }
+      if (this.rng.chance(contactP)) { c.lastTry = this.t; this.duel(c, a).touch++; return this.startTouch(c, a); }
     }
     if (!this.rng.chance(Math.min(0.92, near * will))) {
       // intento fallido: el de delante tapa el hueco y los dos pierden algo; a veces el que ataca se pasa de frenada
@@ -2393,7 +2424,7 @@ export class Session {
     const side = outside ? -inside : inside;
     // si ya estaba en una maniobra con él por un lado, sigue por ese (no se cambia de lado a mitad)
     const prev = c.maneuver && c.maneuver.a === a.id ? c.maneuver : undefined;
-    c.maneuver = { a: a.id, side: prev ? prev.side : side, outside: prev ? prev.outside : outside, pass, cover, t0: prev ? prev.t0 : this.t };
+    c.maneuver = { a: a.id, side: prev ? prev.side : side, outside: prev ? prev.outside : outside, pass, cover, t0: prev ? prev.t0 : this.t, touch: prev?.touch };
     return c.maneuver.outside;
   }
 
@@ -2407,11 +2438,35 @@ export class Session {
     a.delay = Math.max(a.delay, lossA);
   }
 
-  private contact(c: Car, a: Car) {
+  /**
+   * Habrá toque (fase 4): el que ataca se tira y el que se mete en el sitio del otro va hacia él. Cierra tarde la puerta
+   * el que defiende si la estaba cerrando y es más agresivo (más aún en duro); si no, es el que ataca.
+   */
+  private startTouch(c: Car, a: Car) {
+    this.stats.touchStart++;
+    this.startManeuver(c, a, false);
+    const pushC = c.d.agresividad + (this.hard(c) ? 25 : 0), pushA = a.d.agresividad + (this.hard(a) ? 25 : 0);
+    c.maneuver!.touch = { byDef: c.maneuver!.cover && pushA > pushC };
+    c.maneuver!.t0 = this.t;
+    // el de delante frena un pelo antes de la cuenta (o el otro tarde): lo justo para que el que ataca le alcance
+    const L = this.L;
+    let gap = (((a.s - c.s) % L) + L) % L;
+    if (gap > L / 2) gap = 0;
+    a.delay = Math.max(a.delay, Math.max(0, gap - CAR_LEN * 0.5) / Math.max(20, a.v));
+  }
+
+  /** Gravedad (0 a 1) de un toque entre c y a según lo deprisa que se juntan. */
+  private touchSeverity(c: Car, a: Car): number {
+    return clamp(TOUCH_KL * Math.abs((c.latV ?? 0) - (a.latV ?? 0)) + TOUCH_KS * Math.abs(c.v - a.v), 0, 1);
+  }
+
+  private contact(c: Car, a: Car, sev = TOUCH_MEAN, byDef = false) {
     this.stats.contacts++;
-    const r = this.rng.next();
+    this.stats.touchSev += sev;
+    // lo fuerte que ha sido mueve la tirada hacia las consecuencias peores o más leves (de media, igual que antes)
+    const r = clamp(this.rng.next() + TOUCH_SHIFT * (sev - TOUCH_MEAN), 0, 0.999);
     // los comisarios lo miran y deciden en un par de vueltas (lo grave que fue: alerón, pinchazo, se van largos, accidente)
-    this.probes.push({ at: this.t + this.rng.range(60, 200), c: c.id, a: a.id, sev: r < 0.4 ? 0.3 : r < 0.62 ? 0.6 : r < 0.93 ? 0.3 : 0.9, lap1: this.lapsDone(c) === 0 });
+    this.probes.push({ at: this.t + this.rng.range(60, 200), c: c.id, a: a.id, sev: r < 0.4 ? 0.3 : r < 0.62 ? 0.6 : r < 0.93 ? 0.3 : 0.9, lap1: this.lapsDone(c) === 0, byDef });
     this.log({ kind: "control", carId: c.id, text: `🔍 Los comisarios investigan el toque entre ${c.d.abrev} y ${a.d.abrev}`, important: c.player || a.player });
     if (r < 0.4) {
       c.wing += this.rng.range(0.01, 0.035);
@@ -2463,6 +2518,23 @@ export class Session {
       let rel = posOf(c) - posOf(a);
       if (rel > L / 2) rel -= L; else if (rel < -L / 2) rel += L;
       const age = this.t - mv.t0;
+      if (mv.touch) {
+        // el que se mete va a por el sitio del otro hasta que se tocan (o se acaba el tiempo, o cambia la bandera)
+        const byDef = mv.touch.byDef, mover = byDef ? a : c, other = byDef ? c : a;
+        const touching = Math.abs(rel) < CAR_LEN && Math.abs((c.lat ?? 0) - (a.lat ?? 0)) < CAR_W;
+        if (a.loc !== "track") { c.maneuver = undefined; continue; }
+        if (touching || age > TOUCH_T || this.flag !== "green") {
+          c.maneuver = undefined;
+          if (touching) this.stats.touchGeo++;
+          this.contact(c, a, touching ? this.touchSeverity(c, a) : TOUCH_MEAN, byDef);
+          continue;
+        }
+        c.latWant = mv.side * MV_SIDE; a.latWant = -mv.side * (mv.cover ? MV_COVER : MV_YIELD);
+        mover.latWant = other.latOff ?? 0;
+        c.latQuick = a.latQuick = true;
+        c.inMv = a.inMv = true;
+        continue;
+      }
       const done = a.loc !== "track" || this.flag !== "green" || age > MV_MAX_T || (mv.pass ? rel > MV_CLEAR : age > MV_FAIL_T && rel < -MV_CLEAR);
       if (done) { c.maneuver = undefined; continue; }
       // el intento que no sale: se mete, no le da y vuelve detrás
@@ -2473,6 +2545,14 @@ export class Session {
       c.inMv = a.inMv = true;
       if (mv.pass) a.passedIn = true;
       if (Math.abs(rel) < 5.6) this.stats.sideBySide += dt;
+    }
+    // salida: hasta la primera frenada cada uno sigue por su lado de la parrilla
+    if (isRaceKind(this.kind)) for (const c of on) if (c.gridSide && this.launching(c, 330)) c.latWant = c.gridSide * GRID_SIDE;
+    // salidas de pista: se va largo por fuera y vuelve
+    for (const c of on) {
+      if (!c.offWide) continue;
+      if (this.t > c.offWide.until || c.delay <= 0.05) { c.offWide = undefined; continue; }
+      c.latWant = c.offWide.side * OFF_WIDE; c.latQuick = true; c.inMv = true;
     }
     for (let i = 0; i < n; i++) {
       const me = on[i], front = on[(i - 1 + n) % n];
@@ -2499,9 +2579,15 @@ export class Session {
       if (c.loc !== "track") continue;
       const pi = Math.min(tr.line.length - 1, Math.floor(posOf(c) / tr.ds));
       // apartado de la trazada, ya no la sigue del todo
-      const nrm = clamp(tr.line[pi] * (1 - Math.min(1, Math.abs(off) / 0.3) * 0.65) + off, -LAT_MAX, LAT_MAX);
+      // (fuera de pista, más allá del borde)
+      const lim = c.offWide ? OFF_WIDE : LAT_MAX;
+      const nrm = clamp(tr.line[pi] * (1 - Math.min(1, Math.abs(off) / 0.3) * 0.65) + off, -lim, lim);
+      // velocidad lateral (m/s): de ella sale lo fuerte que es un toque
+      const latPrev = c.lat ?? 0;
       c.lat = nrm * tr.wReal * tr.wr[pi];
-      c.offLine = Math.abs(nrm - tr.line[pi]);
+      c.latV = (c.lat - latPrev) / dt;
+      // (el que se ha salido ya paga su salida con el tiempo perdido)
+      c.offLine = c.offWide ? 0 : Math.abs(nrm - tr.line[pi]);
     }
     // lo que se sale cada uno de la estela del de delante (el mismo que `aheadId`)
     const count = this.flag === "green" && this.t - this.launchT > 20;
@@ -2552,6 +2638,28 @@ export class Session {
     return (this.breatheMap = out);
   }
 
+
+  /**
+   * Casilla de salida a lo ancho (fase 4): la parrilla va en dos filas, la pole del lado del interior de la primera
+   * curva. El coche sale ya en su lado y lo mantiene hasta la primera frenada.
+   */
+  private gridSlot(c: Car, i: number) {
+    const pole = this.track.inside[0] || 1;
+    c.gridSide = (i % 2 === 0 ? 1 : -1) * pole;
+    c.latOff = c.latWant = c.gridSide * GRID_SIDE;
+  }
+
+  /** Escapatoria (m) por fuera de la curva donde está el coche. */
+  private runoffAt(c: Car): number {
+    const tr = this.track, L = this.L, pos = ((c.s % L) + L) % L;
+    return tr.runoff[Math.min(tr.runoff.length - 1, Math.floor(pos / tr.ds))];
+  }
+  /** El lado de fuera de la curva donde está el coche (+1 derecha): el contrario al interior. */
+  private outsideAt(c: Car): number {
+    const tr = this.track, L = this.L, pos = ((c.s % L) + L) % L;
+    const ins = tr.inside[Math.min(tr.inside.length - 1, Math.floor(pos / tr.ds))];
+    return ins ? -ins : (c.lat ?? 0) >= 0 ? 1 : -1;
+  }
 
   /** Coches en pista ordenados del primero al último en el trazado (lo deja interactions() en cada paso). */
   private onTrack: Car[] = [];
@@ -2608,7 +2716,8 @@ export class Session {
         this.grantPass(b, a, 0);
         continue;
       }
-      if (gapM < minGap && !(b.grant === a.id && this.t < b.grantUntil)) {
+      // (un toque en marcha: le deja llegar hasta tocarle)
+      if (gapM < minGap && !(b.grant === a.id && this.t < b.grantUntil) && !(b.maneuver?.touch && b.maneuver.a === a.id && gapM > 0.5)) {
         if (!race && this.isFlying(b) === this.isFlying(a) && (b.v > a.v * 1.05 || a.run?.phase === "in")) { this.grantPass(b, a, 0.1); continue; }
         const back = minGap - gapM;
         b.s -= back;

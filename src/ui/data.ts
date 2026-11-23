@@ -3,7 +3,6 @@ import cal from "../../data/calendario.json";
 import silverstone from "../../data/circuitos/silverstone.json";
 import spa from "../../data/circuitos/spa.json";
 import monza from "../../data/circuitos/monza.json";
-import sierra from "../../data/circuitos/sierra-norte.json";
 import interlagos from "../../data/circuitos/interlagos.json";
 import suzuka from "../../data/circuitos/suzuka.json";
 import monaco from "../../data/circuitos/monaco.json";
@@ -39,7 +38,7 @@ export const MARKET = market as unknown as Market;
 export let TEAMS: TeamDef[] = BASE_TEAMS;
 /** Quién ha tenido que cubrir a quién por tus fichajes. */
 export let GRID_CHANGES: GridChange[] = [];
-export const CIRCUITS: Record<string, any> = { silverstone, spa, monza, "sierra-norte": sierra, interlagos, suzuka, monaco, singapur, bahrein, sepang, melbourne, shanghai, miami, montreal, barcelona, spielberg, hungaroring, zandvoort, madrid, baku, austin, mexico, lasvegas, lusail, yasmarina };
+export const CIRCUITS: Record<string, any> = { silverstone, spa, monza, interlagos, suzuka, monaco, singapur, bahrein, sepang, melbourne, shanghai, miami, montreal, barcelona, spielberg, hungaroring, zandvoort, madrid, baku, austin, mexico, lasvegas, lusail, yasmarina };
 /** Calendario corto (el de siempre, 9 carreras): el de las temporadas nuevas si no se elige el completo. */
 export const ROUNDS: string[] = cal.rondas;
 type CalEntry = string | { id: string; formato?: "normal" | "sprint" };
@@ -51,9 +50,12 @@ export const CALENDARS: Record<"corta" | "completa", { ids: string[]; formatos: 
     formatos: Object.fromEntries((cal.completa as CalEntry[]).filter((e): e is { id: string; formato: "normal" | "sprint" } => typeof e !== "string" && !!e.formato).map((e) => [e.id, e.formato])),
   },
 };
-/** Calendario de una temporada: las empezadas antes de ampliar el calendario siguen con el suyo de 5 carreras. */
+/**
+ * Calendario de una temporada: las empezadas antes de ampliar el calendario siguen con el suyo (las primeras, de 4
+ * carreras). Se quitan los circuitos que ya no están en el juego (Sierra Norte, el ficticio de las primeras versiones).
+ */
 export function calendarOf(s: { calendar?: string[] } | null | undefined): string[] {
-  return s?.calendar ?? (s ? cal.rondasV1 : cal.rondas);
+  return (s?.calendar ?? (s ? cal.rondasV1 : cal.rondas)).filter((id) => id in CIRCUITS);
 }
 /** Datos de un circuito tal como corre en esa temporada (el formato puede no ser el suyo). */
 export function circuitOf(s: { formatos?: Record<string, string> } | null | undefined, id: string): any {
