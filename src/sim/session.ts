@@ -175,6 +175,14 @@ const PARALLEL_T = 1.0;
  * y los comisarios lo investigan: sanción de 5 s en MOVE2_PEN de los casos; si no, advertencia.
  */
 const MOVE2_P = 0.06, MOVE2_HARD = 2.5, MOVE2_AT = 0.35, MOVE2_TO = 0.15, MOVE2_LIFT = 0.3, MOVE2_PEN = 0.45;
+/**
+ * «Duro» en la pista. El que ataca en duro se pone más pegado al otro (MV_SIDE_HARD en lugar de MV_SIDE); el que
+ * defiende en duro cede menos sitio (MV_YIELD_HARD) o, si tapa el interior, lo tapa más tarde (COVER_LATE s después)
+ * y más cerrado (MV_COVER_HARD). Con dos coches en paralelo a menos de SQUEEZE_GAP m (de centro a centro) pueden
+ * rozarse: SQUEEZE_K toques por segundo con los coches juntos del todo, menos cuanto más hueco. De ahí salen los
+ * toques de más del duro (antes eran un × 1,8 a ojo).
+ */
+const MV_SIDE_HARD = 0.3, MV_YIELD_HARD = 0.15, MV_COVER_HARD = 0.62, COVER_LATE = 0.3, SQUEEZE_GAP = 2.9, SQUEEZE_K = 0.5;
 /** Ventaja de más (s/vuelta) que necesita el que ataca si el de delante cierra la puerta. */
 const DEFEND_T = 0.35;
 /**
@@ -182,10 +190,10 @@ const DEFEND_T = 0.35;
  *  - atacando, frena más tarde y se tira con menos hueco: RISK_ADV s/vuelta más de ventaja y vuelve a intentarlo antes
  *    (RISK_RETRY s en vez de 6);
  *  - defendiendo, cierra más tarde y cede menos: el que ataca necesita RISK_DEF s/vuelta más;
- *  - a cambio, cada piloto en duro multiplica la probabilidad de toque por RISK_CONTACT, se pasa de frenada más a
+ *  - a cambio, en la pista va más pegado al otro (ver MV_SIDE_HARD y SQUEEZE_K: de ahí salen más toques), se pasa de frenada más a
  *    menudo y, si hay toque, los comisarios le echan la culpa más a menudo (RISK_BLAME).
  */
-const RISK_ADV = 0.15, RISK_DEF = 0.12, RISK_CONTACT = 1.8, RISK_RETRY = 4, RISK_BLAME = 0.12;
+const RISK_ADV = 0.15, RISK_DEF = 0.12, RISK_RETRY = 4, RISK_BLAME = 0.12;
 export const RISK_NAMES = ["Limpio", "Duro"];
 // Moral (temporada, 0 a 100; 60 es lo normal): un poco de ritmo arriba o abajo, y con ella baja algunos no obedecen.
 const MORAL_PACE = 0.0012; // agarre por cada 40 puntos de moral sobre 60
@@ -617,7 +625,7 @@ export class Session {
   passCount = 0; // adelantamientos completados en pista (sin contar doblados ni los de boxes)
   passLap1 = 0; // de ellos, los de la primera vuelta
   /** Recuento de lo que ha pasado (solo para medir: scripts/realismo.ts). No cambia nada de la sesión. */
-  stats = { sc: 0, vsc: 0, red: 0, contacts: 0, offs: 0, retire: 0, pens: 0, passIn: 0, passOut: 0, sideBySide: 0, overlap: 0, touchGeo: 0, touchSev: 0, touchStart: 0, move2: 0 };
+  stats = { sc: 0, vsc: 0, red: 0, contacts: 0, offs: 0, retire: 0, pens: 0, passIn: 0, passOut: 0, sideBySide: 0, overlap: 0, touchGeo: 0, touchSev: 0, touchStart: 0, move2: 0, squeeze: 0 };
   /** Rivalidades de la temporada por pareja («id-id», el menor primero): intensidad de 0 a 1. */
   rivalK: Record<string, number> = {};
   /** Lo que ha pasado entre cada pareja en esta sesión (para las rivalidades de la temporada): toques y adelantamientos. */
@@ -2383,7 +2391,7 @@ export class Session {
     const real = will > 0.1 && this.t - (c.lastTry ?? -99) > (hardC ? RISK_RETRY : 6);
     // se tocan sobre todo cuando el intento es de verdad y los dos son de no levantar
     if (real || will > 0.5) {
-      const contactP = 0.004 * (0.5 + c.d.agresividad / 100) * (0.5 + a.d.agresividad / 120) * (lap1 ? 2.2 : 1) * (1 + Math.min(1, wAtt) * 1.5) * (1.4 - will) * (defend ? 1.4 : 1) * (rivals(c, a) ? 1.7 : 1) * (1 + RIVAL_CONTACT * this.rivalOf(c, a)) * (hardC ? RISK_CONTACT : 1) * (hardA && mode !== "yield" ? RISK_CONTACT : 1);
+      const contactP = 0.004 * (0.5 + c.d.agresividad / 100) * (0.5 + a.d.agresividad / 120) * (lap1 ? 2.2 : 1) * (1 + Math.min(1, wAtt) * 1.5) * (1.4 - will) * (defend ? 1.4 : 1) * (rivals(c, a) ? 1.7 : 1) * (1 + RIVAL_CONTACT * this.rivalOf(c, a)) ;
       if (this.rng.chance(contactP)) { c.lastTry = this.t; this.duel(c, a).touch++; return this.startTouch(c, a); }
     }
     if (!this.rng.chance(Math.min(0.92, near * will))) {
@@ -2591,8 +2599,11 @@ export class Session {
       if (done) { c.maneuver = undefined; continue; }
       // el intento que no sale: se mete, no le da y vuelve detrás
       const back = !mv.pass && age > MV_FAIL_T;
-      c.latWant = back ? 0 : mv.side * (mv.blue ? BLUE_ON : MV_SIDE);
-      a.latWant = back ? 0 : -mv.side * (mv.blue ? BLUE_OFF : mv.cover ? MV_COVER : MV_YIELD);
+      const hc = this.hard(c), ha = this.hard(a);
+      c.latWant = back ? 0 : mv.side * (mv.blue ? BLUE_ON : hc ? MV_SIDE_HARD : MV_SIDE);
+      // (en duro, el que tapa el interior espera a cerrarlo hasta tener al otro encima, y lo cierra más)
+      const coverNow = mv.cover && (!ha || age > COVER_LATE);
+      a.latWant = back ? 0 : -mv.side * (mv.blue ? BLUE_OFF : coverNow ? (ha ? MV_COVER_HARD : MV_COVER) : mv.cover ? 0 : ha ? MV_YIELD_HARD : MV_YIELD);
       // se mueve otra vez en la frenada, hacia donde va el otro: el que ataca levanta y lo investigan
       if (mv.weave && age > MOVE2_AT && !back) {
         a.latWant = mv.side * MOVE2_TO;
@@ -2607,6 +2618,14 @@ export class Session {
       c.latQuick = a.latQuick = true;
       c.inMv = a.inMv = true;
       if (mv.pass) a.passedIn = true;
+      // en paralelo y muy juntos: se pueden rozar (sobre todo con alguno en duro)
+      const gapLat = Math.abs((c.lat ?? 0) - (a.lat ?? 0));
+      if (!mv.blue && !back && Math.abs(rel) < CAR_LEN && gapLat < SQUEEZE_GAP && this.flag === "green" && this.rng.chance(SQUEEZE_K * (1 - gapLat / SQUEEZE_GAP) * dt)) {
+        c.maneuver = undefined;
+        this.stats.squeeze++;
+        this.contact(c, a, this.touchSeverity(c, a), ha && mv.cover && !hc);
+        continue;
+      }
       if (Math.abs(rel) < 5.6) {
         this.stats.sideBySide += dt;
         // rueda con rueda un buen rato: se cuenta (tus pilotos o los de cabeza)
