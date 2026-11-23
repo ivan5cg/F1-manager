@@ -464,6 +464,19 @@ un paso sin que haya habido toque (es una prueba barata de que la geometría fun
   desdoblan pasan por un lado (`UNLAP_SIDE`).
 - **Lluvia:** el agua fuera de la trazada ya se pisa desde la fase 2. La trazada de mojado (por fuera del vértice)
   se queda sin hacer: no cambia nada que se vea desde el muro.
+- **Comprobación** (`realismo.ts --carreras=8 --rapido`, 24 circuitos, 200 carreras por semilla, fase 4 → fase 5):
+
+  | | Semilla 1 | Semilla 101 |
+  |---|---|---|
+  | Coche de seguridad | 63 → 58 % | 59 → 49 % |
+  | Neutralizadas (SC o VSC) | 81 → 78 % | 79 → 78 % |
+  | Toques por carrera | 0,7 → 0,8 | 1,1 → 1,0 |
+  | Doblados por carrera | 2,0 → 1,7 | 2,0 → 2,6 |
+  | Adelantamientos / objetivo | 0,92 → 0,92 | 1,23 → 1,19 |
+  | Uno dentro de otro, por carrera | 1,9 → 1,6 s | 2,5 → 2,1 s |
+
+  - Lo demás igual. Lo que sube en una semilla baja en la otra: es ruido.
+  - Tiempo por paso: igual que antes (entre 104 y 128 µs en las dos versiones).
 
 ### Fase 6 · Radio, Lobato y README
 - Mensajes nuevos con código propio: «se tira por dentro», «por fuera», «rueda con rueda», «le cierra la puerta»,
