@@ -58,7 +58,7 @@ Calendario corto:
 | 8 | Singapur (de noche) | Marina Bay | 11 de octubre | **Sprint** |
 | 9 | São Paulo | Interlagos | 8 de noviembre | **Sprint** |
 
-En la realidad, en 2026 el GP de Baréin no se corrió en Sakhir: se trasladó a Sepang el 4 de octubre. Aquí hay las dos carreras. Las temporadas empezadas antes de cambiar el calendario siguen con el suyo (5 u 8 carreras, con el circuito ficticio de Sierra Norte).
+En la realidad, en 2026 el GP de Baréin no se corrió en Sakhir: se trasladó a Sepang el 4 de octubre. Aquí hay las dos carreras. Las temporadas empezadas antes de cambiar el calendario siguen con el suyo (4 u 8 carreras; el circuito ficticio de Sierra Norte que tenían ya no está en el juego).
 
 - **Formato normal:** Libres 1, Libres 2, Libres 3, Clasificación (Q1 18', Q2 15', Q3 12'; caen 6 y 6; con tu equipo hay 24 coches y en Q1 caen 7) y Carrera.
 - **Formato sprint:** Libres 1, Clasificación sprint (SQ1 12', SQ2 10', SQ3 8'; medios en SQ1 y SQ2, blandos en SQ3), Sprint (unos 100 km: 21 vueltas en Singapur, 24 en Interlagos, 19 en Shanghái y Miami, 23 en Montreal, 17 en Silverstone y 24 en Zandvoort), Clasificación y Carrera.
@@ -159,7 +159,7 @@ En la realidad, en 2026 el GP de Baréin no se corrió en Sakhir: se trasladó a
 Desde el inicio, «Gran premio suelto»: un solo fin de semana, sin temporada. Eliges:
 
 - **Equipo:** uno de los 11 de 2026, con sus dos pilotos y su coche tal cual.
-- **Circuito:** cualquiera de los 25 del juego (incluido el ficticio Sierra Norte). En Silverstone e Interlagos se
+- **Circuito:** cualquiera de los 24 del juego. En Silverstone e Interlagos se
   puede elegir también el formato (normal o sprint); el resto corre con el suyo.
 - **Tiempo:** el clima del circuito en su fecha, estable (casi seguro en seco), chubascos los tres días o lluvia casi
   todo el fin de semana.

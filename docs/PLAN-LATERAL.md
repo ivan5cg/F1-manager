@@ -81,9 +81,9 @@ Anchura de cada circuito (noviembre de 2026):
 - **Medida (19):** los 17 con trazado de TUMFTM (`relieve.py`) más Melbourne y Yas Marina, con TUM encajado sobre el
   trazado del juego (`scripts/anchos.py`; en Yas Marina, TUM es el trazado anterior a 2021 y el 27 % de la vuelta va
   con la mediana).
-- **Constante, por defecto (8):** Bakú, Las Vegas, Lusail, Madrid, Miami, Mónaco y Singapur, pendientes de
-  `scripts/anchos_osm.py` (OpenStreetMap; desde el entorno en la nube no se llega a overpass-api.de), y Sierra Norte,
-  que es inventado. Funcionan con el valor por defecto; conviene tenerlos antes de la fase 4.
+- **Constante, por defecto (7):** Bakú, Las Vegas, Lusail, Madrid, Miami, Mónaco y Singapur, pendientes de
+  `scripts/anchos_osm.py` (OpenStreetMap; desde el entorno en la nube no se llega a overpass-api.de). Funcionan con el
+  valor por defecto. (Sierra Norte, el ficticio, ya no está en el juego.)
 
 ### 3.2 Estado nuevo del coche (`Car`)
 
