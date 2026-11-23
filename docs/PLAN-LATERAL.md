@@ -478,10 +478,25 @@ un paso sin que haya habido toque (es una prueba barata de que la geometría fun
   - Lo demás igual. Lo que sube en una semilla baja en la otra: es ruido.
   - Tiempo por paso: igual que antes (entre 104 y 128 µs en las dos versiones).
 
-### Fase 6 · Radio, Lobato y README
-- Mensajes nuevos con código propio: «se tira por dentro», «por fuera», «rueda con rueda», «le cierra la puerta»,
-  «se mueve en la frenada». Lobato y la radio reaccionan a ellos (`lobato.ts` y `voces.ts` ya funcionan por código).
-- README: apartado «El modelo» al día.
+### Fase 6 · Radio, Lobato y README · no cambia resultados · ✅ Hecha
+- **Mensajes nuevos de la simulación** (sin azar nuevo: `finde.ts silverstone 42`, idéntico a la fase 5):
+  - `adelanta` lleva `lado` («dentro» o «fuera») y el texto lo dice.
+  - `toque` y la sanción por toque llevan `cierra`: el id del que cerró la puerta tarde. La sanción dice entonces
+    «cerrar la puerta tarde».
+  - `paralelo`: dos coches rueda con rueda más de `PARALLEL_T` = 1 s (tus pilotos o los seis primeros).
+  - `cierra`: el de delante tapa el interior (tus pilotos o los cinco primeros), una vez por pelea.
+- **Lobato** (`lobato.ts`) comenta los adelantamientos por fuera, las peleas rueda con rueda, las defensas y los toques
+  y sanciones por cerrar tarde.
+- **La radio de tus pilotos** (`voces.ts`) tiene seis situaciones nuevas, cada una a su manera según el carácter:
+  adelantar por fuera, ir a su lado, cerrar la puerta, que se la cierren, tocarse habiendo cerrado tarde y que se la
+  cierren encima.
+- Probado con `scripts/lobato.ts` y `scripts/radio.ts` en Monza: salen las frases nuevas.
+
+### Lo que queda (noviembre de 2026)
+- «Duro» como frenar y cerrar más tarde de verdad (hoy son números: más ventaja, más toques, más culpa).
+- La regla de un solo cambio de dirección al defender («moverse en la frenada»).
+- La trazada de mojado (por fuera del vértice).
+- La anchura real de Bakú, Las Vegas, Lusail, Madrid, Miami, Mónaco y Singapur (`scripts/anchos_osm.py`).
 
 ---
 

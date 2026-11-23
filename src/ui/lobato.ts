@@ -117,7 +117,9 @@ export function createLobato(sess: Session, gp: string, memo?: WeekendState["mem
         if (!c) return null;
         const s = e.n ?? 5;
         return say(e.motivo === "toque"
-          ? pick([`¡Sanción para ${sur(c)}! ${s} segundos por el toque. Los comisarios no perdonan.`, `${s} segundos a ${sur(c)}. Lo han visto culpable, y con razón.`])
+          ? e.cierra !== undefined
+            ? pick([`¡${s} segundos a ${sur(c)} por cerrar la puerta tarde! Eso no se hace, moverse en la frenada.`, `Sanción para ${sur(c)}: ${s} segundos. Los comisarios dicen que cerró demasiado tarde.`])
+            : pick([`¡Sanción para ${sur(c)}! ${s} segundos por el toque. Los comisarios no perdonan.`, `${s} segundos a ${sur(c)}. Lo han visto culpable, y con razón.`])
           : e.motivo === "limites" ? pick([`¡${s} segundos a ${sur(c)} por los límites de pista! Ya se lo habían avisado con la blanca y negra.`, `Sanción para ${sur(c)}: los límites de pista. Se veía venir.`])
           : e.motivo === "insegura" ? `¡${s} segundos a ${sur(c)} por salida insegura! Le han soltado encima de otro coche.`
           : `Sanción para ${sur(c)}: ${s} segundos. Eso le cuesta caro.`, true);
@@ -156,6 +158,10 @@ export function createLobato(sess: Session, gp: string, memo?: WeekendState["mem
         if (pos === 1 && race) return say(spanish(a)
           ? pick([`¡¡${nm(a).toUpperCase()} AL FRENTE!! ¡Pasa a ${sur(b)} y es el nuevo líder! ¡Vamos, vamos!`, `¡Lo ha hecho! ¡${nm(a)} adelanta a ${sur(b)} y lidera el Gran Premio!`])
           : pick([`¡Cambio de líder! ¡${sur(a)} pasa a ${sur(b)} y se pone primero!`, `¡Atención, atención! ¡${sur(a)} es el nuevo líder de la carrera!`, `¡Adelantamiento por el liderato! ${sur(a)} se va por delante de ${sur(b)}.`]), true);
+        // por fuera: de los que se recuerdan
+        if (e.lado === "fuera" && (pos <= 6 || a.player || b.player || spanish(a))) return say(spanish(a)
+          ? pick([`¡¡POR FUERA!! ¡${nm(a).toUpperCase()} POR FUERA! ¡Le pasa a ${sur(b)} por fuera, qué valor!`, `¡Por fuera, ${nm(a)}, por fuera! ¡Eso es un adelantamiento de los de antes! ${pos}º.`])
+          : pick([`¡Por fuera! ¡${sur(a)} le pasa a ${sur(b)} por fuera! Esto no se ve todos los días. ${pos}º.`, `¡Qué maniobra! ${sur(b)} le cierra el interior y ${sur(a)} se va por fuera... ¡y lo pasa!`, `¡Por el exterior! ${sur(a)} aguanta la curva por fuera y se lleva la posición de ${sur(b)}.`]), true);
         if (spanish(a)) return say(pick([`¡Vamos, ${nm(a)}! ¡Se merienda a ${sur(b)}! Ya es ${pos}º.`, `¡Qué maniobra de ${nm(a)}! Pasa a ${sur(b)} y sube a la ${pos}ª posición.`]));
         if (spanish(b)) return say(pick([`¡Ay, no! ${sur(a)} le pasa a ${nm(b)}. Pierde la ${pos}ª posición.`, `${nm(b)} no ha podido defenderse de ${sur(a)}. Qué pena.`]));
         if (pos <= 3 || a.player || b.player) return say(pick([
@@ -177,7 +183,29 @@ export function createLobato(sess: Session, gp: string, memo?: WeekendState["mem
           `¡Otra vez estos dos! ¡${sur(c)} y ${sur(o)} se tocan de nuevo! Esto ya es personal.`,
           `¡No me lo puedo creer! ¡${sur(c)} y ${sur(o)}, otra vez juntos y otra vez contacto!`,
         ]), true);
+        // el de delante cerró tarde la puerta
+        if (e.cierra !== undefined) return say(pick([`¡Le ha cerrado la puerta tarde! ¡Contacto entre ${sur(c)} y ${sur(o)}!`, `¡Uy! Ese cierre ha sido muy tarde... ¡se tocan ${sur(c)} y ${sur(o)}! Los comisarios lo van a mirar.`, `¡Ha movido el coche en la frenada y se tocan! ${sur(c)} y ${sur(o)}, ¡qué peligro!`]), true);
         return say(pick([`¡Contacto entre ${sur(c)} y ${sur(o)}! ¡Uy, uy, uy!`, `¡Se tocan ${sur(c)} y ${sur(o)}! A ver qué dicen los comisarios.`, `¡Toque! ${sur(c)} y ${sur(o)} se han rozado. Esto ha dolido.`]), true);
+      case "paralelo": {
+        if (!c || !o || !race) return null;
+        const pos = e.n ?? 9;
+        if (spanish(c) || spanish(o)) {
+          const es = spanish(c) ? c : o, otro = es === c ? o : c;
+          return say(pick([`¡${nm(es)} rueda con rueda con ${sur(otro)}! ¡Aguanta, aguanta!`, `¡Lado a lado ${nm(es)} y ${sur(otro)}! ¡Que no levante nadie!`]), true);
+        }
+        return say(pick([
+          `¡Rueda con rueda ${sur(c)} y ${sur(o)}! ¡Ninguno levanta!`,
+          `¡Lado a lado por la ${pos}ª posición! ${sur(c)} y ${sur(o)}, ¡qué pelea!`,
+          `¡Van en paralelo ${sur(c)} y ${sur(o)}! A ver quién frena más tarde...`,
+        ]));
+      }
+      case "cierra": {
+        // c: el que defiende; o: el que ataca
+        if (!c || !o || !race || Math.random() < 0.4) return null;
+        return say(spanish(c)
+          ? pick([`¡Cierra la puerta ${nm(c)}! ¡Por dentro no pasa nadie!`, `¡Muy bien defendido, ${nm(c)}! Le tapa el interior a ${sur(o)}.`])
+          : pick([`${sur(c)} cierra la puerta. ${sur(o)} tendrá que buscarlo por fuera.`, `¡Defensa de ${sur(c)}! Le tapa el interior a ${sur(o)}.`, `${sur(c)} se pone por dentro. No se lo va a poner fácil a ${sur(o)}.`]));
+      }
       case "pinchazo": return c ? say(`¡Pinchazo para ${sur(c)}! Vuelta entera con la goma destrozada. ¡Qué drama!`, true) : null;
       case "trompo":
         if (c && (c.player || spanish(c) || Math.random() < 0.4)) return say(pick([`¡Trompo de ${sur(c)}! Ha hecho un trescientos sesenta... y sigue, pero cuánto tiempo ha perdido.`, `¡Se le ha ido el coche a ${sur(c)}! Vuelta completa, ¡qué susto!`]));
