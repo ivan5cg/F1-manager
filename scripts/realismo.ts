@@ -15,6 +15,7 @@ interface Race {
   sc: number; vsc: number; red: number; retire: number; contacts: number; offs: number; pens: number;
   passes: number; lap1: number; stops: number[]; poleWin: boolean; winGrid: number; margin: number; gap10: number;
   lapped: number; wet: boolean;
+  passIn?: number; passOut?: number; sideBySide?: number; overlap?: number;
 }
 
 const args = process.argv.slice(2);
@@ -86,6 +87,11 @@ const METRICS: { k: string; name: string; ref: [number, number] | null; f: (r: R
     f: (r, id) => mean(r.map((x) => x.passes)) / ((circuit(id!).def.adelantamientos?.objetivo ?? 35) * 2.4),
   },
   { k: "cv", name: "dispersión de los adelantamientos (desv./media)", ref: [0, 0.35], f: (r) => sd(r.map((x) => x.passes)) / mean(r.map((x) => x.passes)), dec: 2 },
+  // posición lateral (docs/PLAN-LATERAL.md): por dónde se adelanta, cuánto se va en paralelo y si dos coches se meten
+  // uno en otro (debería ser casi nunca)
+  { k: "pout", name: "% adelantamientos por fuera", ref: null, f: (r) => (100 * mean(r.map((x) => x.passOut ?? NaN))) / mean(r.map((x) => (x.passIn ?? NaN) + (x.passOut ?? NaN))) },
+  { k: "sbs", name: "segundos en paralelo por adelantamiento", ref: null, f: (r) => mean(r.map((x) => x.sideBySide ?? NaN)) / mean(r.map((x) => (x.passIn ?? NaN) + (x.passOut ?? NaN))), dec: 1 },
+  { k: "ovl", name: "segundos con dos coches uno dentro de otro", ref: null, f: (r) => mean(r.map((x) => x.overlap ?? NaN)), dec: 1 },
 ];
 const fmtv = (v: number, dec = 0) => (Number.isFinite(v) ? v.toFixed(dec) : "–");
 

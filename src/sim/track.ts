@@ -66,6 +66,23 @@ export interface Track {
    * sentido de la marcha). Por fuera antes y después de la curva, por dentro en el vértice.
    */
   line: Float32Array;
+  /**
+   * Lado del interior de la próxima curva (mirando INSIDE_AHEAD m por delante, pesando más la más cercana): +1 derecha,
+   * −1 izquierda, 0 si no hay curva que valga (recta larga). Es por donde se tira el que adelanta.
+   */
+  inside: Int8Array;
+}
+
+const INSIDE_AHEAD = 180;
+function insideSide(curv: Float64Array, ds: number): Int8Array {
+  const n = curv.length, out = new Int8Array(n), w = Math.round(INSIDE_AHEAD / ds);
+  for (let i = 0; i < n; i++) {
+    let acc = 0;
+    for (let k = 0; k < w; k++) acc += curv[(i + k) % n] * (1 - k / w);
+    // curvatura > 0 = a izquierdas: el interior es la izquierda (lado negativo)
+    out[i] = Math.abs(acc * ds) < 0.15 ? 0 : acc > 0 ? -1 : 1;
+  }
+  return out;
 }
 
 /** Media móvil circular (ventana de 2·win + 1 puntos). */
@@ -407,6 +424,7 @@ export function buildTrack(def: any): Track {
     refLap: base.time,
     street, wReal, wr,
     line: racingLine(curv, ds),
+    inside: insideSide(curv, ds),
   };
 }
 

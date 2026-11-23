@@ -402,6 +402,19 @@ según el compuesto y el asfalto: el blando sale casi en su ventana y el duro, l
 
 Con la ventaja igual al umbral se pasa una de cada dos veces, y sube o baja deprisa a partir de ahí: con coches iguales casi no se pasa (un 5 % por vuelta), con 1 s por vuelta de ventaja cuesta dos o tres vueltas, con 1,5 s se pasa casi a la primera y un coche con las gomas muertas pierde el puesto en cualquier curva. El umbral es el de la mejor frenada del circuito (`adelantamientos.umbral`); las zonas peores piden más. Hay que llegar pegado (menos de 0,55 s). Un intento fallido hace perder tiempo a los dos, y a veces el que ataca se pasa de frenada y se hace un plano; quien acaba de perder el puesto tarda unos segundos en poder devolverlo. Con un coche pegado detrás se cometen más errores (los pilotos regulares, casi ninguno más).
 
+**Cómo se ve: una maniobra en la pista.** Cada intento es una maniobra con los dos coches en su sitio a lo ancho
+(`Car.maneuver`, ver `docs/PLAN-LATERAL.md`):
+- el que ataca se tira por el **interior** de la curva siguiente y el de delante se aparta un poco hacia el otro lado;
+- si el de delante **cierra la puerta** (Defender, o la IA en las últimas vueltas) le tapa el interior y el ataque va
+  **por fuera**; también se va por fuera si el de delante ya iba por dentro;
+- van **en paralelo** un rato (el que pierde el puesto se queda atrás poco a poco, no de golpe) y el mensaje dice si
+  ha sido por dentro o por fuera;
+- un **intento fallido** se ve: se mete, no le da y vuelve detrás.
+
+La probabilidad de que salga es la misma de arriba (la maniobra decide cómo y por dónde, no cuántas veces). En
+`realismo.ts` salen el % de adelantamientos por fuera, los segundos en paralelo por adelantamiento y los segundos con
+dos coches metidos uno en otro (que debería ser casi nunca).
+
 Antes la dificultad del circuito recortaba la probabilidad por arriba: con dos segundos de ventaja se seguía sin pasar, se formaban trenes y lo que funcionaba siempre era alargar la tanda. Ahora unas gomas mucho más nuevas valen puestos en pista, y el undercut y el overcut dependen del circuito y del tráfico. `npx tsx scripts/carrera.ts <circuito> [carreras]` mide la curva (probabilidad de pasar según la ventaja), los trenes y el total; `npx tsx scripts/calibra.ts` ajusta el umbral de cada circuito al doble de su media real de adelantamientos, que es de coches anteriores a 2026 (con el modo adelantamiento y la batería de ahora se pasa bastante más).
 
 **La IA de los equipos** (`src/sim/strategy.ts`).
