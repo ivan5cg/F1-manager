@@ -86,6 +86,13 @@ const TOUCH_T = 2.5, TOUCH_KL = 0.12, TOUCH_KS = 0.03, TOUCH_MEAN = 0.4, TOUCH_S
 const CAR_LEN = 5.6, CAR_W = 1.9;
 /** Salida (fase 4): a qué distancia del centro va cada fila de la parrilla (fracción de la media anchura). */
 const GRID_SIDE = 0.45;
+/**
+ * Fase 5. Banderas azules: el doblado se aparta de la trazada (BLUE_OFF) y el que dobla sigue casi por ella (BLUE_ON).
+ * Boxes: PIT_APPROACH m antes de la entrada, el que va a parar se pone del lado de boxes (PIT_SIDE). Coche de
+ * seguridad: en fila, haciendo eses para calentar las gomas (SC_WEAVE de amplitud, cada SC_WEAVE_T s); los doblados
+ * que se desdoblan pasan por un lado (UNLAP_SIDE).
+ */
+const BLUE_OFF = 0.7, BLUE_ON = 0.1, PIT_APPROACH = 300, PIT_SIDE = 0.7, SC_WEAVE = 0.35, SC_WEAVE_T = 3.5, UNLAP_SIDE = 0.6;
 /** Probabilidad de pisar fuera de los límites en cada curva rápida de carrera (al ritmo normal). */
 const TL_P = 0.0011;
 /** Probabilidad de dañar el fondo en un bordillo por cada paso de altura por debajo de lo que pide el circuito. */
@@ -332,7 +339,7 @@ export interface Car {
    * Adelantamiento en marcha (lo lleva el que ataca): a quién, por qué lado (+1 derecha), si va por fuera, si sale
    * (`pass`), si el otro le cierra el interior (`cover`) y cuándo empezó.
    */
-  maneuver?: { a: number; side: number; outside: boolean; pass: boolean; cover: boolean; t0: number; touch?: { byDef: boolean } };
+  maneuver?: { a: number; side: number; outside: boolean; pass: boolean; cover: boolean; t0: number; touch?: { byDef: boolean }; blue?: boolean };
   /** Metido en una maniobra en este paso (como atacante o como defensor): no se aparta por su cuenta. */
   inMv?: boolean;
   /** Le están adelantando en una maniobra (el tiempo que pierde se reparte más). */
@@ -2292,7 +2299,7 @@ export class Session {
       }
       if (a.blueHold !== undefined && this.t < a.blueHold) return;
       // el doblado se aparta (y pierde tiempo) y el que dobla también levanta algo al pasarle
-      if (this.rng.chance(0.55)) { this.grantPass(c, a, this.rng.range(0.2, 0.6)); c.delay += this.rng.range(0.05, 0.25); }
+      if (this.rng.chance(0.55)) { this.grantPass(c, a, this.rng.range(0.2, 0.6)); c.delay += this.rng.range(0.05, 0.25); this.startBlue(c, a); }
       return;
     }
     if (a.team === c.team && a.letPass === c.id) {
@@ -2428,6 +2435,15 @@ export class Session {
     return c.maneuver.outside;
   }
 
+  /** Banderas azules (fase 5): el doblado se aparta de la trazada y el que le dobla pasa por ella. */
+  private startBlue(c: Car, a: Car) {
+    const tr = this.track, L = this.L, pos = ((c.s % L) + L) % L;
+    const pi = Math.min(tr.line.length - 1, Math.floor(pos / tr.ds));
+    // el que dobla, del lado de la trazada; el doblado, al otro
+    const side = Math.abs(tr.line[pi]) > 0.05 ? Math.sign(tr.line[pi]) : tr.inside[pi] || (c.id & 1 ? 1 : -1);
+    c.maneuver = { a: a.id, side, outside: false, pass: true, cover: false, t0: this.t, blue: true };
+  }
+
   /** Permiso para pasar: el de delante cede (pierde algo de tiempo) y el otro pasa por velocidad. */
   private grantPass(c: Car, a: Car, lossA: number) {
     if (c.grant === a.id && this.t < c.grantUntil) return;
@@ -2539,8 +2555,8 @@ export class Session {
       if (done) { c.maneuver = undefined; continue; }
       // el intento que no sale: se mete, no le da y vuelve detrás
       const back = !mv.pass && age > MV_FAIL_T;
-      c.latWant = back ? 0 : mv.side * MV_SIDE;
-      a.latWant = back ? 0 : -mv.side * (mv.cover ? MV_COVER : MV_YIELD);
+      c.latWant = back ? 0 : mv.side * (mv.blue ? BLUE_ON : MV_SIDE);
+      a.latWant = back ? 0 : -mv.side * (mv.blue ? BLUE_OFF : mv.cover ? MV_COVER : MV_YIELD);
       c.latQuick = a.latQuick = true;
       c.inMv = a.inMv = true;
       if (mv.pass) a.passedIn = true;
@@ -2548,6 +2564,22 @@ export class Session {
     }
     // salida: hasta la primera frenada cada uno sigue por su lado de la parrilla
     if (isRaceKind(this.kind)) for (const c of on) if (c.gridSide && this.launching(c, 330)) c.latWant = c.gridSide * GRID_SIDE;
+    // boxes: el que va a parar se pone del lado de boxes antes de la entrada
+    const ps = this.track.def.boxes.lado === "izquierda" ? -1 : 1;
+    for (const c of on) {
+      if (c.inMv) continue;
+      const goingIn = isRaceKind(this.kind) ? !!c.pitRequest && !c.pitHold : c.run?.phase === "in";
+      if (!goingIn) continue;
+      let d = this.track.pit.entry - posOf(c);
+      if (d < 0) d += L;
+      if (d < PIT_APPROACH) { c.latWant = ps * PIT_SIDE * Math.min(1, (PIT_APPROACH - d) / 120); c.inMv = true; }
+    }
+    // coche de seguridad: en fila haciendo eses; los que se desdoblan pasan por un lado
+    if (this.flag === "sc") for (const c of on) {
+      if (c.inMv) continue;
+      if (c.unlap) { c.latWant = (c.id & 1 ? 1 : -1) * UNLAP_SIDE; c.inMv = true; continue; }
+      c.latWant = SC_WEAVE * Math.sin((2 * Math.PI * this.t) / SC_WEAVE_T + c.id * 1.7);
+    }
     // salidas de pista: se va largo por fuera y vuelve
     for (const c of on) {
       if (!c.offWide) continue;

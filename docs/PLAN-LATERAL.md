@@ -454,8 +454,29 @@ un paso sin que haya habido toque (es una prueba barata de que la geometría fun
     queda en 81 % con la semilla 1, justo por encima del margen [50–80] (con la semilla 101, en 79 %).
   - Tiempo por paso: un 3 % más.
 
-### Fase 5 · Doblados, coche de seguridad, boxes y lluvia · cambia resultados (poco)
-- §4.7 y §4.8.
+### Fase 5 · Doblados, coche de seguridad, boxes y lluvia · cambia resultados (poco) · ✅ Hecha
+- **Banderas azules** (`startBlue`): cuando el doblado cede, el que dobla sigue casi por la trazada (`BLUE_ON`) y el
+  doblado se aparta al otro lado (`BLUE_OFF`). El que no hace caso a las azules se queda en la trazada. El tiempo que
+  pierde cada uno es el de antes; el doblado lo pierde repartido, como en un adelantamiento.
+- **Boxes:** el que va a parar (con la parada pedida y sin negarse) se pone del lado de boxes en los últimos
+  `PIT_APPROACH` = 300 m. El 3D arranca la calle de boxes desde donde va el coche (antes, desde la trazada).
+- **Coche de seguridad:** en fila haciendo eses (`SC_WEAVE`, cada `SC_WEAVE_T` s, cada uno a su ritmo). Los que se
+  desdoblan pasan por un lado (`UNLAP_SIDE`).
+- **Lluvia:** el agua fuera de la trazada ya se pisa desde la fase 2. La trazada de mojado (por fuera del vértice)
+  se queda sin hacer: no cambia nada que se vea desde el muro.
+- **Comprobación** (`realismo.ts --carreras=8 --rapido`, 24 circuitos, 200 carreras por semilla, fase 4 → fase 5):
+
+  | | Semilla 1 | Semilla 101 |
+  |---|---|---|
+  | Coche de seguridad | 63 → 58 % | 59 → 49 % |
+  | Neutralizadas (SC o VSC) | 81 → 78 % | 79 → 78 % |
+  | Toques por carrera | 0,7 → 0,8 | 1,1 → 1,0 |
+  | Doblados por carrera | 2,0 → 1,7 | 2,0 → 2,6 |
+  | Adelantamientos / objetivo | 0,92 → 0,92 | 1,23 → 1,19 |
+  | Uno dentro de otro, por carrera | 1,9 → 1,6 s | 2,5 → 2,1 s |
+
+  - Lo demás igual. Lo que sube en una semilla baja en la otra: es ruido.
+  - Tiempo por paso: igual que antes (entre 104 y 128 µs en las dos versiones).
 
 ### Fase 6 · Radio, Lobato y README
 - Mensajes nuevos con código propio: «se tira por dentro», «por fuera», «rueda con rueda», «le cierra la puerta»,
