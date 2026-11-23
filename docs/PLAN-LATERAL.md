@@ -492,10 +492,29 @@ un paso sin que haya habido toque (es una prueba barata de que la geometría fun
   cierren encima.
 - Probado con `scripts/lobato.ts` y `scripts/radio.ts` en Monza: salen las frases nuevas.
 
+### Después del plan · ✅ Hecho
+- **Un solo cambio de dirección al defender** (`MOVE2_*`, `moveRoll`). El que tapa el interior a veces se mueve otra
+  vez, con el otro casi al lado (más si es agresivo, ×2,5 en duro). El que ataca levanta 0,3 s y los comisarios lo
+  investigan: 5 s en el 45 % de los casos y, si no, advertencia. Con su propio azar, así que no mueve el resto de la
+  carrera. Sale más o menos una vez cada ocho carreras. Código `frenada` y motivo de sanción `frenada`, con frases de
+  Lobato y de la radio.
+- **«Duro» en la pista.** Atacando va más pegado (`MV_SIDE_HARD`); defendiendo cede menos (`MV_YIELD_HARD`) y tapa el
+  interior más tarde (`COVER_LATE`) y más cerrado (`MV_COVER_HARD`). Con dos coches en paralelo a menos de
+  `SQUEEZE_GAP` y alguno en duro, se pueden rozar (`SQUEEZE_K`); eso sustituye al `RISK_CONTACT` = ×1,8 de antes. En
+  limpio no se roza nunca, así que las carreras de la IA no cambian. Siguen los números de ventaja (`RISK_ADV`,
+  `RISK_DEF`) y de culpa (`RISK_BLAME`).
+  - Toda la parrilla en duro, 24 carreras: 2,8 toques por carrera antes y, con `SQUEEZE_K` entre 0,25 y 0,32, entre 2,3
+    y 3,4 (se queda en 0,28).
+  - Un equipo en duro, 16 carreras por circuito: compensa en Hungaroring y no en Silverstone; en total, 4,3 puntos en
+    limpio frente a 4,8 en duro. Sigue siendo una apuesta.
+- **Trazada de mojado** (`WET_LINE_*`, `lineFactor`). Entre 0,3 y 1 mm de agua la trazada pasa de la de seco a una
+  algo por fuera del vértice, y salirse de la trazada se mide contra esta. El 3D usa la misma.
+  - `realismo.ts --carreras=8 --rapido --clima` (40 carreras mojadas de 192), antes → ahora: adelantamientos 0,93 →
+    0,97, paradas 1,85 → 1,88, toques 0,8 → 0,8, abandonos 3,3 → 3,2 y sanciones 1,4 → 1,6 (en parte las de moverse
+    en la frenada).
+  - Tiempo por paso: igual que antes.
+
 ### Lo que queda (noviembre de 2026)
-- «Duro» como frenar y cerrar más tarde de verdad (hoy son números: más ventaja, más toques, más culpa).
-- La regla de un solo cambio de dirección al defender («moverse en la frenada»).
-- La trazada de mojado (por fuera del vértice).
 - La anchura real de Bakú, Las Vegas, Lusail, Madrid, Miami, Mónaco y Singapur (`scripts/anchos_osm.py`).
 
 ---

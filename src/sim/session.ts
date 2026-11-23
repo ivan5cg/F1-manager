@@ -2694,7 +2694,7 @@ export class Session {
       if (c.loc !== "track") continue;
       const pi = Math.min(tr.line.length - 1, Math.floor(posOf(c) / tr.ds));
       // la trazada de ahora (en mojado, apartada del vértice)
-      const ln = tr.line[pi] * this.lineFactor(c.s);
+      const ln = tr.line[pi] * this.lineFactorMs(tr.msOfPoint[pi]);
       // apartado de la trazada, ya no la sigue del todo
       // (fuera de pista, más allá del borde)
       const lim = c.offWide ? OFF_WIDE : LAT_MAX;
@@ -2771,7 +2771,10 @@ export class Session {
    * trazada se aparta del vértice). Lo usa también el 3D.
    */
   lineFactor(s: number): number {
-    const w = this.water[this.msIndexAt(s)] ?? 0;
+    return this.lineFactorMs(this.msIndexAt(s));
+  }
+  private lineFactorMs(ms: number): number {
+    const w = this.water[ms] ?? 0;
     if (w <= WET_LINE_W0) return 1;
     return 1 - WET_LINE_SHIFT * Math.min(1, (w - WET_LINE_W0) / (WET_LINE_W1 - WET_LINE_W0));
   }
