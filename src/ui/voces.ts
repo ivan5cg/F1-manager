@@ -28,7 +28,7 @@ type Situ = "gomas" | "plano" | "adelanta" | "adelantado" | "toque" | "trompo" |
   | "paradaLenta" | "paradaBuena" | "salePeor" | "estratega" | "aguaSi" | "aguaNo" | "abandono" | "gana" | "podio" | "puntos" | "sinPuntos"
   | "limites" | "pinchazo" | "companero" | "rivalGana" | "noDejo" | "unaMas" | "rivalPasa" | "rivalMePasa"
   // posición lateral (plan lateral, fase 6)
-  | "adelantaFuera" | "paralelo" | "cierro" | "meCierra" | "toqueCierro" | "toqueMeCierra";
+  | "adelantaFuera" | "paralelo" | "cierro" | "meCierra" | "toqueCierro" | "toqueMeCierra" | "meMuevo" | "seMueve";
 
 // {r}: el rival (apellido); {p}: la posición; {s}: los segundos.
 const FRASES: Record<Situ, Partial<Record<Caracter, string[]>> & { _: string[] }> = {
@@ -119,6 +119,26 @@ const FRASES: Record<Situ, Partial<Record<Caracter, string[]>> & { _: string[] }
     socarron: ["{r} ha cerrado la puerta... conmigo dentro.", "Muy bonita la puerta de {r}. Me la ha cerrado encima."],
     novato: ["¡Me ha cerrado! ¿Eso se puede hacer?", "¡Me ha dado! ¿Está bien el coche?"],
     autocritico: ["Me ha cerrado, pero no tenía que haberme metido ahí."],
+  },
+  meMuevo: {
+    _: ["Solo he defendido mi posición."],
+    calmado: ["He defendido. Creo que ha sido legal.", "Un movimiento de más, quizá. Veremos."],
+    quejica: ["¡Era mi curva! ¡Tengo derecho a defenderme!", "¿Investigación? ¡Si no le he tocado!"],
+    volcanico: ["¡Que se aguante! ¡Es mi posición!", "¡No le he tocado! ¡Qué investigación ni qué!"],
+    cerebral: ["Me he movido dos veces. Puede caer sanción.", "Ha sido al límite. Contad con 5 segundos por si acaso."],
+    socarron: ["Le he enseñado los dos lados del coche. Por cortesía.", "Un bailecito en la frenada. Nada grave."],
+    novato: ["¿Eso no se puede hacer? Lo siento, no lo sabía.", "¡Perdón! Me he puesto nervioso."],
+    autocritico: ["Me he movido de más. Mal hecho.", "Eso ha sido feo. Lo siento."],
+  },
+  seMueve: {
+    _: ["¡Se ha movido en la frenada!"],
+    calmado: ["{r} se ha movido en la frenada. Que lo miren.", "He tenido que levantar. Dos movimientos."],
+    quejica: ["¡Se ha movido en la frenada! ¡Eso es sanción, ya!", "¡Casi me mata! ¡Que lo sancionen!"],
+    volcanico: ["¡¿PERO QUÉ HACE?! ¡Se mueve en la frenada!", "¡Casi nos matamos! ¡Sanción ya!"],
+    cerebral: ["Dos cambios de dirección de {r}. Avisad a dirección de carrera.", "He levantado para no tocarle. Que revisen las imágenes."],
+    socarron: ["{r} baila en la frenada. Muy artístico.", "Bonito zigzag de {r}. Muy legal todo."],
+    novato: ["¡Se ha movido delante de mí! ¿Eso se puede?", "¡Casi le doy! ¡Ha cambiado de lado!"],
+    autocritico: ["He tenido que levantar. Tenía que haberlo visto venir."],
   },
   adelantado: {
     _: ["Me ha pasado {r}."],
@@ -640,6 +660,12 @@ export function createVoces(sess: Session) {
         if (!c || !o || !race) break;
         if (c.player && Math.random() < 0.35) push(line(c, "paralelo", { r: sur(o) }));
         else if (o.player && Math.random() < 0.35) push(line(o, "paralelo", { r: sur(c) }));
+        break;
+      case "frenada":
+        // c: el que se mueve; o: el que ataca
+        if (!c || !o || !race) break;
+        if (c.player) push(line(c, "meMuevo", { r: sur(o) }, true));
+        else if (o.player) push(line(o, "seMueve", { r: sur(c) }, true));
         break;
       case "cierra":
         // c: el que defiende; o: el que ataca

@@ -168,6 +168,13 @@ const MV_SIDE = 0.55, MV_YIELD = 0.3, MV_COVER = 0.5, MV_FAIL_T = 1.4, MV_MAX_T 
 const MV_DELAY_RATE = 0.1;
 /** Segundos rueda con rueda a partir de los que se cuenta en la radio y en la tele. */
 const PARALLEL_T = 1.0;
+/**
+ * Un solo cambio de dirección al defender. El que tapa el interior a veces se mueve otra vez, hacia el lado por donde
+ * va el otro, con él ya casi al lado: «moverse en la frenada». Pasa con probabilidad MOVE2_P (más con un piloto
+ * agresivo y × MOVE2_HARD en duro), MOVE2_AT s después de tapar el interior. El que ataca levanta (pierde MOVE2_LIFT s)
+ * y los comisarios lo investigan: sanción de 5 s en MOVE2_PEN de los casos; si no, advertencia.
+ */
+const MOVE2_P = 0.06, MOVE2_HARD = 2.5, MOVE2_AT = 0.35, MOVE2_TO = 0.15, MOVE2_LIFT = 0.3, MOVE2_PEN = 0.45;
 /** Ventaja de más (s/vuelta) que necesita el que ataca si el de delante cierra la puerta. */
 const DEFEND_T = 0.35;
 /**
@@ -341,7 +348,7 @@ export interface Car {
    * Adelantamiento en marcha (lo lleva el que ataca): a quién, por qué lado (+1 derecha), si va por fuera, si sale
    * (`pass`), si el otro le cierra el interior (`cover`) y cuándo empezó.
    */
-  maneuver?: { a: number; side: number; outside: boolean; pass: boolean; cover: boolean; t0: number; touch?: { byDef: boolean }; blue?: boolean; sbs?: number; said?: boolean };
+  maneuver?: { a: number; side: number; outside: boolean; pass: boolean; cover: boolean; t0: number; touch?: { byDef: boolean }; blue?: boolean; sbs?: number; said?: boolean; weave?: boolean; weaved?: boolean };
   /** Metido en una maniobra en este paso (como atacante o como defensor): no se aparta por su cuenta. */
   inMv?: boolean;
   /** Le están adelantando en una maniobra (el tiempo que pierde se reparte más). */
@@ -479,7 +486,7 @@ export interface RaceEvent {
   /** Radio mítica: lo que se dijo de verdad y dónde. */
   mitica?: string;
   /** Por qué es la sanción (code "sancion"). */
-  motivo?: "toque" | "limites" | "pitlane" | "insegura" | "azules";
+  motivo?: "toque" | "limites" | "pitlane" | "insegura" | "azules" | "frenada";
   /** Adelantamiento (code "adelanta"): por dónde. */
   lado?: "dentro" | "fuera";
   /** Toque o sanción por toque: id del coche que cerró la puerta tarde (si no está, se metió el que atacaba). */
@@ -499,7 +506,9 @@ export type EventCode = "fondo" | "limites" | "abandono" | "pinchazo" | "tarde" 
   | "azules"
   // posición lateral (plan lateral, fase 6): dos coches rueda con rueda (carId el que ataca, other el otro, n la
   // posición en juego) y el de delante que tapa el interior (carId el que defiende, other el que ataca)
-  | "paralelo" | "cierra";
+  | "paralelo" | "cierra"
+  // se mueve otra vez en la frenada (carId el que defiende, other el que ataca)
+  | "frenada";
 
 export interface SessionOptions {
   kind: SessionKind;
@@ -564,7 +573,7 @@ export class Session {
   /** Relanzada: a cuántos metros de la meta acelera el líder y cuándo lo ha hecho (s de sesión). */
   scGo: { at: number; t: number | null } | null = null;
   /** Toques que investigan los comisarios: cuándo deciden, quién atacaba, a quién, lo grave que fue y si era la salida. */
-  probes: { at: number; c: number; a: number; sev: number; lap1: boolean; byDef?: boolean }[] = [];
+  probes: { at: number; c: number; a: number; sev: number; lap1: boolean; byDef?: boolean; move?: boolean }[] = [];
   /** Banderas amarillas por zona: minisector, hasta cuándo (s de sesión) y si es doble. */
   yellows: { ms: number; until: number; double: boolean }[] = [];
   /** Salida parada tras una bandera roja: la parrilla espera los semáforos, y cuándo se apagaron (s de sesión). */
@@ -608,7 +617,7 @@ export class Session {
   passCount = 0; // adelantamientos completados en pista (sin contar doblados ni los de boxes)
   passLap1 = 0; // de ellos, los de la primera vuelta
   /** Recuento de lo que ha pasado (solo para medir: scripts/realismo.ts). No cambia nada de la sesión. */
-  stats = { sc: 0, vsc: 0, red: 0, contacts: 0, offs: 0, retire: 0, pens: 0, passIn: 0, passOut: 0, sideBySide: 0, overlap: 0, touchGeo: 0, touchSev: 0, touchStart: 0 };
+  stats = { sc: 0, vsc: 0, red: 0, contacts: 0, offs: 0, retire: 0, pens: 0, passIn: 0, passOut: 0, sideBySide: 0, overlap: 0, touchGeo: 0, touchSev: 0, touchStart: 0, move2: 0 };
   /** Rivalidades de la temporada por pareja («id-id», el menor primero): intensidad de 0 a 1. */
   rivalK: Record<string, number> = {};
   /** Lo que ha pasado entre cada pareja en esta sesión (para las rivalidades de la temporada): toques y adelantamientos. */
@@ -619,6 +628,8 @@ export class Session {
   moodS = 1;
   /** Estado del azar de las banderas azules ignoradas (aparte, para que sin ellas la carrera sea la misma). */
   blueS = 1;
+  /** Azar propio de los dobles movimientos en la frenada (así no mueven el azar del resto de la carrera). */
+  moveS = 1;
   /** Tras una bandera roja por lluvia: cuando se retire el coche de seguridad, salida parada (si la pista lo permite). */
   standAfterSc = false;
   /** Ventaja (s/vuelta) con la que se adelanta una de cada dos veces en la mejor frenada del circuito. */
@@ -674,6 +685,7 @@ export class Session {
     this.rng = new Rng(opt.seed);
     this.moodS = ((opt.seed ^ 0x5bd1e995) >>> 0) || 1;
     this.blueS = ((opt.seed ^ 0x1b873593) >>> 0) || 1;
+    this.moveS = ((opt.seed ^ 0x85ebca6b) >>> 0) || 1;
     for (const [a, b, k] of opt.rivals ?? []) this.rivalK[pairKey(a, b)] = clamp(k, 0, 1);
     this.weather = opt.weather;
     this.water = Float64Array.from(opt.water.length === this.N ? opt.water : new Array(this.N).fill(0));
@@ -1222,6 +1234,13 @@ export class Session {
   private stewards() {
     for (const p of this.probes.filter((x) => x.at <= this.t)) {
       const c = this.carById(p.c), a = this.carById(p.a);
+      // moverse en la frenada (con su propio azar)
+      if (p.move) {
+        if (a.loc === "out" || a.loc === "fin") continue;
+        if (this.moveRoll(MOVE2_PEN)) this.penalize(a, 5, `moverse en la frenada delante de ${c.d.abrev}`, "frenada", a.id);
+        else this.log({ kind: "control", carId: a.id, text: `⚖️ ${a.d.abrev}: advertencia por moverse en la frenada delante de ${c.d.abrev}`, important: a.player || c.player, code: "sinSancion", other: c.id });
+        continue;
+      }
       if (this.rng.chance(p.lap1 ? 0.6 : 0.35)) {
         this.log({ kind: "control", carId: c.id, text: `⚖️ Toque entre ${c.d.abrev} y ${a.d.abrev}: sin sanción, incidente de carrera`, important: c.player || a.player, code: "sinSancion", other: a.id });
         continue;
@@ -2446,7 +2465,9 @@ export class Session {
       const pos = this.order().indexOf(a) + 1;
       if (c.player || a.player || pos <= 5) this.log({ kind: "info", text: `🚪 ${a.d.abrev} le cierra la puerta a ${c.d.abrev}`, carId: a.id, other: c.id, n: pos, code: "cierra" });
     }
-    c.maneuver = { a: a.id, side: prev ? prev.side : side, outside: prev ? prev.outside : outside, pass, cover, t0: prev ? prev.t0 : this.t, touch: prev?.touch, sbs: prev?.sbs, said: prev?.said };
+    // ¿se moverá otra vez en la frenada? (solo al empezar a tapar el interior, con su propio azar)
+    const weave = prev ? prev.weave : cover && isRaceKind(this.kind) && (this.moveRoll(MOVE2_P * (0.4 + a.d.agresividad / 100) * (this.hard(a) ? MOVE2_HARD : 1)) as boolean);
+    c.maneuver = { a: a.id, side: prev ? prev.side : side, outside: prev ? prev.outside : outside, pass, cover, t0: prev ? prev.t0 : this.t, touch: prev?.touch, sbs: prev?.sbs, said: prev?.said, weave, weaved: prev?.weaved };
     return c.maneuver.outside;
   }
 
@@ -2572,6 +2593,17 @@ export class Session {
       const back = !mv.pass && age > MV_FAIL_T;
       c.latWant = back ? 0 : mv.side * (mv.blue ? BLUE_ON : MV_SIDE);
       a.latWant = back ? 0 : -mv.side * (mv.blue ? BLUE_OFF : mv.cover ? MV_COVER : MV_YIELD);
+      // se mueve otra vez en la frenada, hacia donde va el otro: el que ataca levanta y lo investigan
+      if (mv.weave && age > MOVE2_AT && !back) {
+        a.latWant = mv.side * MOVE2_TO;
+        if (!mv.weaved) {
+          mv.weaved = true;
+          c.delay += MOVE2_LIFT;
+          this.stats.move2 = (this.stats.move2 ?? 0) + 1;
+          this.log({ kind: "control", carId: a.id, other: c.id, text: `🚫 ${a.d.abrev} se mueve en la frenada delante de ${c.d.abrev}: lo investigan`, important: a.player || c.player, code: "frenada" });
+          this.probes.push({ at: this.t + 60 + 140 * (this.moveRoll(0, true) as number), c: c.id, a: a.id, sev: 0.3, lap1: false, byDef: true, move: true });
+        }
+      }
       c.latQuick = a.latQuick = true;
       c.inMv = a.inMv = true;
       if (mv.pass) a.passedIn = true;
@@ -2998,6 +3030,13 @@ export class Session {
   }
 
   /** Azar de las banderas azules: ¿pasa algo con probabilidad p? (con u, el número de 0 a 1 tal cual). */
+  /** Tirada con el azar de los dobles movimientos: true con probabilidad p (o el número, con u). */
+  private moveRoll(p: number, u?: boolean): number | boolean {
+    const x = new Rng(this.moveS).next();
+    this.moveS = ((this.moveS >>> 0 || 1) + 0x6d2b79f5) >>> 0;
+    return u ? x : x < p;
+  }
+
   private blueRoll(p: number): boolean;
   private blueRoll(p: number, u: true): number;
   private blueRoll(p: number, u?: boolean): boolean | number {
