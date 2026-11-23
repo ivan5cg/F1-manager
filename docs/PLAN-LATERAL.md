@@ -437,7 +437,8 @@ un paso sin que haya habido toque (es una prueba barata de que la geometría fun
     salidas que ya estaba calibrada.
   - «Solo un cambio de dirección» y que «Duro» sea frenar más tarde siguen sin hacer: «Duro» ya cambia quién se mete
     en un toque y de quién es la culpa.
-- **Comprobación** (`realismo.ts --carreras=8 --rapido`, 25 circuitos, 200 carreras por semilla, fase 3 → fase 4):
+- **Comprobación** (`realismo.ts --carreras=8 --rapido`, 200 carreras por semilla, fase 3 → fase 4; la fase 3 con 25
+  circuitos y la 4 con 24, ya sin Sierra Norte):
 
   | | Semilla 1 | Semilla 101 |
   |---|---|---|
@@ -452,7 +453,6 @@ un paso sin que haya habido toque (es una prueba barata de que la geometría fun
   - El coche de seguridad sube algo: los accidentes se van a los urbanos, donde casi siempre sale. «Neutralizadas»
     queda en 81 % con la semilla 1, justo por encima del margen [50–80] (con la semilla 101, en 79 %).
   - Tiempo por paso: un 3 % más.
-  - (El banco se pasó todavía con los 25 circuitos; Sierra Norte se quitó en esta misma rama.)
 
 ### Fase 5 · Doblados, coche de seguridad, boxes y lluvia · cambia resultados (poco)
 - §4.7 y §4.8.
