@@ -282,8 +282,9 @@ otro. Tras una bandera roja por accidente se reanuda con **salida parada**, en e
 la vuelta de formación cuenta como vuelta de carrera. Con lluvia se sigue reanudando detrás del coche de seguridad.
 
 **Sanciones.** Los comisarios investigan cada toque y deciden en un par de vueltas: en la salida casi siempre es un
-incidente de carrera; si no, la culpa suele ser del que ataca (más si es agresivo y el otro no), y son 5 s, o 10 s si
-acabó en pinchazo o accidente. Los **límites de pista** también cuentan en carrera: a la tercera, bandera blanca y
+incidente de carrera; si no, la culpa suele ser del que se ha metido en el sitio del otro: casi siempre el que ataca
+(más si es agresivo y el otro no), pero si el de delante estaba cerrando la puerta y la cierra tarde (es más agresivo, o
+va en duro), suele ser suya. Son 5 s, o 10 s si acabó en pinchazo o accidente. Los **límites de pista** también cuentan en carrera: a la tercera, bandera blanca y
 negra; a la cuarta, 5 s, y otros 5 cada tres más. Pasarse de velocidad en el pit-lane, 5 s. La sanción se cumple
 parado en la próxima parada (el Muro ya la cuenta en «Si para ahora») o, si no se para más, se suma al tiempo final.
 En la torre sale en rojo (+5s) hasta que se cumple. Con las banderas azules, el que dobla también pierde algo al pasar.
@@ -294,6 +295,15 @@ circuitos donde se dobla mucho, como Monza) y aguanta un rato al que le dobla: 5
 la carrera se reanuda detrás del coche de seguridad y, cuando se retira, con **salida parada** desde la parrilla.
 `npx tsx scripts/gestion.ts [circuito] [carreras]` cuenta las banderas azules ignoradas y las sanciones que pasan a la
 carrera siguiente, y fuerza una bandera roja por lluvia para ver la salida parada.
+
+**Toques en la pista.** Un toque pasa de verdad: el que se mete en el sitio del otro va hacia él hasta que se juntan, y
+lo fuerte que es (un roce, el alerón, un pinchazo, los dos largos o el accidente) depende de lo deprisa que se cierran
+a lo ancho y a lo largo.
+
+**Salirse de pista.** El que se equivoca en una curva se va largo por fuera y vuelve. En qué acaba depende de lo que
+haya: sin escapatoria (los urbanos) termina contra las barreras bastante más a menudo; con mucha grava, casi nunca,
+pero se rompe más el fondo. En total hay los mismos accidentes que antes, repartidos según el circuito (en los urbanos,
+más coches de seguridad).
 
 **Daños.** El alerón delantero se rompe en toques y salidas de pista; el **fondo**, en la grava, en toques en los que
 los dos se van largos y en los bordillos si el coche va más bajo de lo que pide el circuito (ver «Reglajes»). Los dos
@@ -393,7 +403,9 @@ pontones y caja de cambios) y la que está en fábrica en trazo discontinuo, con
 **Vuelta de formación.** Los neumáticos salen de las mantas a 70 °C y en la vuelta de formación cogen temperatura
 según el compuesto y el asfalto: el blando sale casi en su ventana y el duro, lejos; con frío o con agua, menos.
 
-**Salida.** Cada piloto reacciona y tracciona distinto (su nota de salida, con azar), el blando arranca mejor que el medio y el duro, y de vez en cuando alguien se queda clavado. Hasta la primera frenada hay sitio a los lados: los puestos se ganan o se pierden por pura arrancada. En la primera vuelta se pasa en casi cualquier curva, pero la diferencia de agarre cuenta la mitad (van en grupo).
+**Salida.** Cada piloto reacciona y tracciona distinto (su nota de salida, con azar), el blando arranca mejor que el medio y el duro, y de vez en cuando alguien se queda clavado. Hasta la primera frenada hay sitio a los lados: los puestos se ganan o se pierden por pura arrancada. La parrilla va en
+dos filas (la pole, del lado del interior de la primera curva) y cada uno sale por su lado, así que a la primera frenada
+se llega de dos en dos o de tres en tres. En la primera vuelta se pasa en casi cualquier curva, pero la diferencia de agarre cuenta la mitad (van en grupo).
 
 **Adelantamientos.** En cada frenada se compara la **ventaja del que ataca, en segundos por vuelta**, con un umbral:
 - **agarre en aire limpio** (neumáticos y su estado, coche, piloto, modo de ritmo, daños): es lo que da tracción y frenada;

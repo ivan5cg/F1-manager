@@ -414,10 +414,45 @@ un paso sin que haya habido toque (es una prueba barata de que la geometría fun
   - Tiempo por paso: un 7 % más (dentro del presupuesto).
   - Captura del 3D de una maniobra por dentro en Silverstone, con `poc3d/prueba.html`.
 
-### Fase 4 · Toques, salidas y vuelta 1 · cambia resultados
-- §4.4, §4.5 y §4.6. Se quitan los multiplicadores de la vuelta 1 que ya sobren.
-- Comisarios: culpa según quién se movió.
-- **Comprobación:** toques, salidas, coches de seguridad y abandonos dentro de márgenes; la prueba de solapes de §8.
+### Fase 4 · Toques, salidas y vuelta 1 · cambia resultados · ✅ Hecha
+- **Escapatorias** (`Track.runoff`, la misma fórmula que dibuja el 3D; 0 en los urbanos). Un error acaba contra las
+  barreras `× (1,5 − escapatoria/26) / 1,2`, que de media vale 1 donde se cometen los errores (`RUNOFF_NORM`). El fondo
+  se rompe ×1,5 en la grava (más de 8 m) y ×0,55 sin escapatoria. Hay los mismos accidentes, repartidos según el
+  circuito.
+- **Salidas de pista:** el que se equivoca se va largo por fuera de la curva (`Car.offWide`, hasta 1,35 medias
+  anchuras) y vuelve. El tiempo que pierde es el de antes; no paga además el agarre de fuera de la trazada.
+- **Toques en la pista:**
+  - La tirada de siempre decide que habrá toque (`startTouch`). Desde ahí, el que se mete en el sitio del otro va hacia
+    él hasta que se juntan a lo largo y a lo ancho, y entonces `contact()`.
+  - Se mete el que ataca o, si el de delante estaba cerrando la puerta y es más agresivo (o va en duro), el de delante.
+  - El de delante frena un pelo antes, lo justo para que se alcancen, y mientras tanto `interactions()` no los separa.
+  - Lo fuerte que es sale de lo deprisa que se cierran (`touchSeverity`, con `Car.latV`) y mueve la tirada de
+    consecuencias, centrada en la gravedad media (0,40) para que el reparto quede como antes.
+  - Se juntan de verdad el 92 % de los toques; el resto, a los 2,5 s, como antes.
+- **Comisarios:** la culpa es casi siempre del que se mete en el sitio del otro (`probes[].byDef`).
+- **Salida:** parrilla en dos filas (`Car.gridSide`, la pole del lado del interior de la primera curva); cada uno sigue
+  por su lado hasta la primera frenada. También en las salidas paradas tras bandera roja.
+- **Lo que se ha dejado:**
+  - Los multiplicadores de la vuelta 1 (más toques y errores) se quedan: son los que dan la cifra de toques y
+    salidas que ya estaba calibrada.
+  - «Solo un cambio de dirección» y que «Duro» sea frenar más tarde siguen sin hacer: «Duro» ya cambia quién se mete
+    en un toque y de quién es la culpa.
+- **Comprobación** (`realismo.ts --carreras=8 --rapido`, 25 circuitos, 200 carreras por semilla, fase 3 → fase 4):
+
+  | | Semilla 1 | Semilla 101 |
+  |---|---|---|
+  | Toques por carrera | 0,7 → 0,7 | 1,0 → 1,1 |
+  | Abandonos por carrera | 2,9 → 3,0 | 3,2 → 3,1 |
+  | Salidas y trompos | 1,1 → 1,1 | 0,9 → 0,9 |
+  | Sanciones por carrera | 1,3 → 1,3 | 1,5 → 1,6 |
+  | Coche de seguridad | 54 → 63 % | 57 → 59 % |
+  | Adelantamientos / objetivo | 0,93 → 0,92 | 1,21 → 1,23 |
+  | Uno dentro de otro, por carrera | 1,8 → 1,9 s | 2,8 → 2,5 s |
+
+  - El coche de seguridad sube algo: los accidentes se van a los urbanos, donde casi siempre sale. «Neutralizadas»
+    queda en 81 % con la semilla 1, justo por encima del margen [50–80] (con la semilla 101, en 79 %).
+  - Tiempo por paso: un 3 % más.
+  - (El banco se pasó todavía con los 25 circuitos; Sierra Norte se quitó en esta misma rama.)
 
 ### Fase 5 · Doblados, coche de seguridad, boxes y lluvia · cambia resultados (poco)
 - §4.7 y §4.8.
