@@ -3342,7 +3342,8 @@ function replayPoses(dtReal) {
 // posición dibujada de cada coche: interpolada entre los dos últimos pasos de la simulación y llevada a la trazada
 const pose = new Map(), _a = mkS(), _b = mkS(); DBG.pose = pose;
 function latAt(p, s, W, far) {
-  const line = arrAt(T.line, s) * (1 - 0.45 * far) * (1 - Math.min(1, Math.abs(p.lat) / 0.3) * 0.65);
+  // (la trazada de ahora: en mojado, la simulación la aparta del vértice)
+  const line = arrAt(T.line, s) * (sess.lineFactor ? sess.lineFactor(s) : 1) * (1 - 0.45 * far) * (1 - Math.min(1, Math.abs(p.lat) / 0.3) * 0.65);
   // (la calle de boxes arranca de donde iba el coche: la simulación ya le lleva hacia el lado de boxes antes de entrar)
   if (p.c.loc === "pit" || p.c.loc === "lane_out" || p.c.loc === "lane_in" || p.gar || p.lane2) { const r = pitRamp(s); return clamp(line + p.lat, -0.82, 0.82) * (1 - r) + T.PS * (r * PIT_OFF + p.box * 0.95); }
   return clamp(line + p.lat, -0.82, 0.82);

@@ -174,15 +174,22 @@ const PARALLEL_T = 1.0;
  * agresivo y × MOVE2_HARD en duro), MOVE2_AT s después de tapar el interior. El que ataca levanta (pierde MOVE2_LIFT s)
  * y los comisarios lo investigan: sanción de 5 s en MOVE2_PEN de los casos; si no, advertencia.
  */
+/**
+ * Trazada de mojado. Con agua, la goma de la trazada de seco resbala más que el asfalto de al lado: la buena se aparta
+ * del vértice. Entre WET_LINE_W0 y WET_LINE_W1 mm de agua la trazada pasa de la de seco a la de seco × (1 −
+ * WET_LINE_SHIFT): con la pista empapada, algo por fuera del vértice (donde la de seco iba por dentro). Lo que cuesta
+ * salirse de la trazada se mide contra esta (en mojado, ir por la goma de la de seco es lo que cuesta).
+ */
+const WET_LINE_W0 = 0.3, WET_LINE_W1 = 1.0, WET_LINE_SHIFT = 1.4;
 const MOVE2_P = 0.06, MOVE2_HARD = 2.5, MOVE2_AT = 0.35, MOVE2_TO = 0.15, MOVE2_LIFT = 0.3, MOVE2_PEN = 0.45;
 /**
  * «Duro» en la pista. El que ataca en duro se pone más pegado al otro (MV_SIDE_HARD en lugar de MV_SIDE); el que
  * defiende en duro cede menos sitio (MV_YIELD_HARD) o, si tapa el interior, lo tapa más tarde (COVER_LATE s después)
  * y más cerrado (MV_COVER_HARD). Con dos coches en paralelo a menos de SQUEEZE_GAP m (de centro a centro) pueden
- * rozarse: SQUEEZE_K toques por segundo con los coches juntos del todo, menos cuanto más hueco. De ahí salen los
+ * rozarse (si alguno va en duro y pasados SQUEEZE_AFTER s): SQUEEZE_K toques por segundo con los coches juntos del todo, menos cuanto más hueco. De ahí salen los
  * toques de más del duro (antes eran un × 1,8 a ojo).
  */
-const MV_SIDE_HARD = 0.3, MV_YIELD_HARD = 0.15, MV_COVER_HARD = 0.62, COVER_LATE = 0.3, SQUEEZE_GAP = 2.9, SQUEEZE_K = 0.5;
+const MV_SIDE_HARD = 0.3, MV_YIELD_HARD = 0.15, MV_COVER_HARD = 0.62, COVER_LATE = 0.3, SQUEEZE_GAP = 2.9, SQUEEZE_K = 0.28, SQUEEZE_AFTER = 0.6;
 /** Ventaja de más (s/vuelta) que necesita el que ataca si el de delante cierra la puerta. */
 const DEFEND_T = 0.35;
 /**
@@ -2620,7 +2627,8 @@ export class Session {
       if (mv.pass) a.passedIn = true;
       // en paralelo y muy juntos: se pueden rozar (sobre todo con alguno en duro)
       const gapLat = Math.abs((c.lat ?? 0) - (a.lat ?? 0));
-      if (!mv.blue && !back && Math.abs(rel) < CAR_LEN && gapLat < SQUEEZE_GAP && this.flag === "green" && this.rng.chance(SQUEEZE_K * (1 - gapLat / SQUEEZE_GAP) * dt)) {
+      // (solo si alguno va en duro: en limpio siempre se deja sitio; y ya colocados, no al empezar la maniobra)
+      if ((hc || ha) && !mv.blue && !back && age > SQUEEZE_AFTER && Math.abs(rel) < CAR_LEN && gapLat < SQUEEZE_GAP && this.flag === "green" && this.rng.chance(SQUEEZE_K * (1 - gapLat / SQUEEZE_GAP) * dt)) {
         c.maneuver = undefined;
         this.stats.squeeze++;
         this.contact(c, a, this.touchSeverity(c, a), ha && mv.cover && !hc);
@@ -2685,16 +2693,18 @@ export class Session {
       c.latOff = off;
       if (c.loc !== "track") continue;
       const pi = Math.min(tr.line.length - 1, Math.floor(posOf(c) / tr.ds));
+      // la trazada de ahora (en mojado, apartada del vértice)
+      const ln = tr.line[pi] * this.lineFactor(c.s);
       // apartado de la trazada, ya no la sigue del todo
       // (fuera de pista, más allá del borde)
       const lim = c.offWide ? OFF_WIDE : LAT_MAX;
-      const nrm = clamp(tr.line[pi] * (1 - Math.min(1, Math.abs(off) / 0.3) * 0.65) + off, -lim, lim);
+      const nrm = clamp(ln * (1 - Math.min(1, Math.abs(off) / 0.3) * 0.65) + off, -lim, lim);
       // velocidad lateral (m/s): de ella sale lo fuerte que es un toque
       const latPrev = c.lat ?? 0;
       c.lat = nrm * tr.wReal * tr.wr[pi];
       c.latV = (c.lat - latPrev) / dt;
       // (el que se ha salido ya paga su salida con el tiempo perdido)
-      c.offLine = c.offWide ? 0 : Math.abs(nrm - tr.line[pi]);
+      c.offLine = c.offWide ? 0 : Math.abs(nrm - ln);
     }
     // lo que se sale cada uno de la estela del de delante (el mismo que `aheadId`)
     const count = this.flag === "green" && this.t - this.launchT > 20;
@@ -2754,6 +2764,16 @@ export class Session {
     const pole = this.track.inside[0] || 1;
     c.gridSide = (i % 2 === 0 ? 1 : -1) * pole;
     c.latOff = c.latWant = c.gridSide * GRID_SIDE;
+  }
+
+  /**
+   * Cuánto de la trazada de seco vale ahora en el punto s (1 en seco; con la pista empapada, 1 − WET_LINE_SHIFT: la
+   * trazada se aparta del vértice). Lo usa también el 3D.
+   */
+  lineFactor(s: number): number {
+    const w = this.water[this.msIndexAt(s)] ?? 0;
+    if (w <= WET_LINE_W0) return 1;
+    return 1 - WET_LINE_SHIFT * Math.min(1, (w - WET_LINE_W0) / (WET_LINE_W1 - WET_LINE_W0));
   }
 
   /** Escapatoria (m) por fuera de la curva donde está el coche. */
