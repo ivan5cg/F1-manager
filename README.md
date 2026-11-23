@@ -275,8 +275,9 @@ Apartar agua frena también en recta: con pista empapada se pierde velocidad pun
 Lo que no merece neutralizar se queda en **bandera amarilla** (doble si hay un coche parado) en esa zona: se levanta al
 pasar y no se adelanta. En libres y clasificación, quien pasa por una amarilla en vuelta lanzada pierde unas décimas
 (doble: la vuelta estropeada), y un trompo o una salida de pista dejan su amarilla un rato. El coche de seguridad dura
-según lo que haya que limpiar (de 2 a 6 vueltas; el virtual, de 1 a 4 minutos). Antes de retirarse, los doblados
-pueden desdoblarse: adelantan al grupo, dan la vuelta y se ponen a la cola, y se les espera una vuelta. En la última
+según lo que haya que limpiar (de 2 a 6 vueltas; el virtual, de 1 a 4 minutos). Detrás de él van en fila haciendo eses
+para calentar las gomas. Antes de retirarse, los doblados pueden desdoblarse: adelantan al grupo por un lado, dan la
+vuelta y se ponen a la cola, y se les espera una vuelta. En la última
 vuelta el líder agrupa a todos y acelera donde quiere antes de la meta; los demás arrancan al verle, uno detrás de
 otro. Tras una bandera roja por accidente se reanuda con **salida parada**, en el orden de carrera y con semáforos, y
 la vuelta de formación cuenta como vuelta de carrera. Con lluvia se sigue reanudando detrás del coche de seguridad.
@@ -287,7 +288,8 @@ incidente de carrera; si no, la culpa suele ser del que se ha metido en el sitio
 va en duro), suele ser suya. Son 5 s, o 10 s si acabó en pinchazo o accidente. Los **límites de pista** también cuentan en carrera: a la tercera, bandera blanca y
 negra; a la cuarta, 5 s, y otros 5 cada tres más. Pasarse de velocidad en el pit-lane, 5 s. La sanción se cumple
 parado en la próxima parada (el Muro ya la cuenta en «Si para ahora») o, si no se para más, se suma al tiempo final.
-En la torre sale en rojo (+5s) hasta que se cumple. Con las banderas azules, el que dobla también pierde algo al pasar.
+En la torre sale en rojo (+5s) hasta que se cumple. Con las banderas azules, el doblado se aparta de la trazada y el que dobla pasa por ella (también pierde algo al pasar).
+El que va a parar se pone del lado de boxes unos 300 m antes de la entrada.
 Si el sancionado **abandona sin cumplirla**, pasa a la **parrilla de la carrera siguiente**: 3 puestos por 5 s y 5 por
 10 s (sale en los resultados, en «¿Y ahora qué?» y en el aviso de la parrilla). De vez en cuando un doblado **no hace
 caso a las banderas azules** (más los agresivos y los novatos; algo así como una vez cada diez carreras, más en los
