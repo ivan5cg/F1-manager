@@ -166,6 +166,8 @@ const PASS_LAT = 0.05;
 const MV_SIDE = 0.55, MV_YIELD = 0.3, MV_COVER = 0.5, MV_FAIL_T = 1.4, MV_MAX_T = 6, MV_CLEAR = 9;
 /** Lo deprisa que pierde su tiempo (fracción de la velocidad) el que está siendo adelantado: el resto, 0,6. */
 const MV_DELAY_RATE = 0.1;
+/** Segundos rueda con rueda a partir de los que se cuenta en la radio y en la tele. */
+const PARALLEL_T = 1.0;
 /** Ventaja de más (s/vuelta) que necesita el que ataca si el de delante cierra la puerta. */
 const DEFEND_T = 0.35;
 /**
@@ -339,7 +341,7 @@ export interface Car {
    * Adelantamiento en marcha (lo lleva el que ataca): a quién, por qué lado (+1 derecha), si va por fuera, si sale
    * (`pass`), si el otro le cierra el interior (`cover`) y cuándo empezó.
    */
-  maneuver?: { a: number; side: number; outside: boolean; pass: boolean; cover: boolean; t0: number; touch?: { byDef: boolean }; blue?: boolean };
+  maneuver?: { a: number; side: number; outside: boolean; pass: boolean; cover: boolean; t0: number; touch?: { byDef: boolean }; blue?: boolean; sbs?: number; said?: boolean };
   /** Metido en una maniobra en este paso (como atacante o como defensor): no se aparta por su cuenta. */
   inMv?: boolean;
   /** Le están adelantando en una maniobra (el tiempo que pierde se reparte más). */
@@ -478,6 +480,10 @@ export interface RaceEvent {
   mitica?: string;
   /** Por qué es la sanción (code "sancion"). */
   motivo?: "toque" | "limites" | "pitlane" | "insegura" | "azules";
+  /** Adelantamiento (code "adelanta"): por dónde. */
+  lado?: "dentro" | "fuera";
+  /** Toque o sanción por toque: id del coche que cerró la puerta tarde (si no está, se metió el que atacaba). */
+  cierra?: number;
 }
 
 /** Sucesos con código (ver RaceEvent.code). */
@@ -490,7 +496,10 @@ export type EventCode = "fondo" | "limites" | "abandono" | "pinchazo" | "tarde" 
   // el piloto no obedece al muro (n: 0 no deja pasar, 1 retrasa la parada)
   | "desobedece"
   // un doblado no hace caso a las banderas azules (other: el que le dobla)
-  | "azules";
+  | "azules"
+  // posición lateral (plan lateral, fase 6): dos coches rueda con rueda (carId el que ataca, other el otro, n la
+  // posición en juego) y el de delante que tapa el interior (carId el que defiende, other el que ataca)
+  | "paralelo" | "cierra";
 
 export interface SessionOptions {
   kind: SessionKind;
@@ -1179,11 +1188,11 @@ export class Session {
   }
 
   /** Sanción de tiempo: se cumple en la próxima parada o se suma al final. */
-  penalize(c: Car, secs: number, why: string, motivo?: RaceEvent["motivo"]) {
+  penalize(c: Car, secs: number, why: string, motivo?: RaceEvent["motivo"], cierra?: number) {
     if (c.loc === "out" || c.loc === "fin") return;
     c.penS = (c.penS ?? 0) + secs;
     this.stats.pens++;
-    this.log({ kind: "control", carId: c.id, text: `⚖️ ${secs} s de sanción para ${c.d.abrev}: ${why}`, important: c.player, pause: c.player, code: "sancion", n: secs, motivo });
+    this.log({ kind: "control", carId: c.id, text: `⚖️ ${secs} s de sanción para ${c.d.abrev}: ${why}`, important: c.player, pause: c.player, code: "sancion", n: secs, motivo, cierra });
   }
 
   /** Llega a meta: lo que no ha cumplido en una parada se suma al tiempo. */
@@ -1221,7 +1230,8 @@ export class Session {
       const blameC = clamp((p.byDef ? 0.3 : 0.62) + (c.d.agresividad - a.d.agresividad) / 120 + (this.hard(c) ? RISK_BLAME : 0) - (this.hard(a) ? RISK_BLAME : 0), 0.1, 0.9);
       const who = this.rng.chance(blameC) ? c : a, other = who === c ? a : c;
       if (who.loc === "out" || who.loc === "fin") continue;
-      this.penalize(who, p.sev >= 0.6 ? 10 : 5, `provocar un toque con ${other.d.abrev}`, "toque");
+      const closed = p.byDef && who === a;
+      this.penalize(who, p.sev >= 0.6 ? 10 : 5, closed ? `cerrar la puerta tarde a ${other.d.abrev} y provocar un toque` : `provocar un toque con ${other.d.abrev}`, "toque", closed ? a.id : undefined);
     }
     this.probes = this.probes.filter((x) => x.at > this.t);
   }
@@ -2431,7 +2441,12 @@ export class Session {
     const side = outside ? -inside : inside;
     // si ya estaba en una maniobra con él por un lado, sigue por ese (no se cambia de lado a mitad)
     const prev = c.maneuver && c.maneuver.a === a.id ? c.maneuver : undefined;
-    c.maneuver = { a: a.id, side: prev ? prev.side : side, outside: prev ? prev.outside : outside, pass, cover, t0: prev ? prev.t0 : this.t, touch: prev?.touch };
+    // el de delante tapa el interior: se cuenta (tus pilotos o los de cabeza), una vez por pelea
+    if (cover && !prev && isRaceKind(this.kind)) {
+      const pos = this.order().indexOf(a) + 1;
+      if (c.player || a.player || pos <= 5) this.log({ kind: "info", text: `🚪 ${a.d.abrev} le cierra la puerta a ${c.d.abrev}`, carId: a.id, other: c.id, n: pos, code: "cierra" });
+    }
+    c.maneuver = { a: a.id, side: prev ? prev.side : side, outside: prev ? prev.outside : outside, pass, cover, t0: prev ? prev.t0 : this.t, touch: prev?.touch, sbs: prev?.sbs, said: prev?.said };
     return c.maneuver.outside;
   }
 
@@ -2487,7 +2502,7 @@ export class Session {
     if (r < 0.4) {
       c.wing += this.rng.range(0.01, 0.035);
       c.delay += this.rng.range(0.5, 2);
-      this.log({ kind: "incident", text: `💢 Toque entre ${c.d.abrev} y ${a.d.abrev}: ${c.d.abrev} daña el alerón delantero`, carId: c.id, important: c.player || a.player, pause: c.player || a.player, code: "toque", other: a.id });
+      this.log({ kind: "incident", text: `💢 Toque entre ${c.d.abrev} y ${a.d.abrev}: ${c.d.abrev} daña el alerón delantero${byDef ? ` (${a.d.abrev} le cierra la puerta)` : ""}`, carId: c.id, important: c.player || a.player, pause: c.player || a.player, code: "toque", other: a.id, cierra: byDef ? a.id : undefined });
       if (c.player) this.log({ kind: "radio", carId: c.id, text: `📻 Ingeniero: ${c.d.abrev}, alerón dañado: perdemos ~${this.wingLoss(c).toFixed(1)} s por vuelta. Cambiar el morro suma ${NOSE_TIME} s a la parada.`, important: true, code: "alerón" });
       if (this.rng.chance(0.3)) this.incident(c, `restos del alerón de ${c.d.abrev} en la pista`, 0.2, "debris");
       // a veces el golpe ha tocado algo más (suspensión, radiador): llega a boxes y se retira
@@ -2496,13 +2511,13 @@ export class Session {
       const victim = this.rng.chance(0.5) ? a : c;
       victim.slowPuncture = true;
       victim.pitRequest = victim.pitRequest ?? this.bestSetFor(victim, this.avgWater() > WET.iw ? "W" : this.avgWater() > WET.si ? "I" : "M")?.id ?? null;
-      this.log({ kind: "incident", text: `💥 Toque ${c.d.abrev}–${a.d.abrev}: pinchazo para ${victim.d.abrev}`, carId: victim.id, important: true, pause: victim.player, code: "toque", other: victim === c ? a.id : c.id });
+      this.log({ kind: "incident", text: `💥 Toque ${c.d.abrev}–${a.d.abrev}: pinchazo para ${victim.d.abrev}${byDef ? ` (${a.d.abrev} cierra la puerta)` : ""}`, carId: victim.id, important: true, pause: victim.player, code: "toque", other: victim === c ? a.id : c.id, cierra: byDef ? a.id : undefined });
     } else if (r < 0.93) {
       c.delay += this.rng.range(2, 5);
       a.delay += this.rng.range(2, 5);
       c.fx = { k: "off", t: this.t, loss: c.delay }; a.fx = { k: "off", t: this.t, loss: a.delay };
       for (const x of [c, a]) if (this.rng.chance(0.35)) this.damageFloor(x, this.rng.range(0.003, 0.012), "en el toque");
-      this.log({ kind: "incident", text: `💢 ${c.d.abrev} y ${a.d.abrev} se tocan y se van largos`, carId: c.id, important: c.player || a.player, code: "toque", other: a.id });
+      this.log({ kind: "incident", text: `💢 ${c.d.abrev} y ${a.d.abrev} se tocan y se van largos${byDef ? ` (${a.d.abrev} le cierra la puerta)` : ""}`, carId: c.id, important: c.player || a.player, code: "toque", other: a.id, cierra: byDef ? a.id : undefined });
     } else {
       const victim = this.rng.chance(0.5) ? a : c;
       victim.fx = { k: "crash", t: this.t };
@@ -2560,7 +2575,16 @@ export class Session {
       c.latQuick = a.latQuick = true;
       c.inMv = a.inMv = true;
       if (mv.pass) a.passedIn = true;
-      if (Math.abs(rel) < 5.6) this.stats.sideBySide += dt;
+      if (Math.abs(rel) < 5.6) {
+        this.stats.sideBySide += dt;
+        // rueda con rueda un buen rato: se cuenta (tus pilotos o los de cabeza)
+        mv.sbs = (mv.sbs ?? 0) + dt;
+        if (!mv.said && !mv.blue && mv.sbs > PARALLEL_T && isRaceKind(this.kind)) {
+          mv.said = true;
+          const pos = this.order().indexOf(a) + 1;
+          if (c.player || a.player || pos <= 6) this.log({ kind: "info", text: `↔️ ${c.d.abrev} y ${a.d.abrev}, rueda con rueda por la P${pos}`, carId: c.id, other: a.id, n: pos, code: "paralelo" });
+        }
+      }
     }
     // salida: hasta la primera frenada cada uno sigue por su lado de la parrilla
     if (isRaceKind(this.kind)) for (const c of on) if (c.gridSide && this.launching(c, 330)) c.latWant = c.gridSide * GRID_SIDE;
@@ -2772,7 +2796,8 @@ export class Session {
         const pos = this.order().indexOf(c) + 1;
         const how = c.passLog.outside === undefined ? "" : c.passLog.outside ? " por fuera" : " por dentro";
         if (c.passLog.outside !== undefined) { if (c.passLog.outside) this.stats.passOut++; else this.stats.passIn++; }
-        if (c.player || a.player || pos <= 3) this.log({ kind: "info", text: `⚔️ ${c.d.abrev} adelanta a ${a.d.abrev}${how} por la P${pos}`, carId: c.id, code: "adelanta", other: a.id, n: pos });
+        const lado = c.passLog.outside === undefined ? undefined : c.passLog.outside ? "fuera" as const : "dentro" as const;
+        if (c.player || a.player || pos <= 3) this.log({ kind: "info", text: `⚔️ ${c.d.abrev} adelanta a ${a.d.abrev}${how} por la P${pos}`, carId: c.id, code: "adelanta", other: a.id, n: pos, lado });
         c.conf = clamp((c.conf ?? 0) + 0.12, -1, 1);
         a.conf = clamp((a.conf ?? 0) - 0.05, -1, 1);
         c.passLog = undefined;

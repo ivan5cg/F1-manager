@@ -26,7 +26,9 @@ export function voiceOf(nombre: string, engineer = false): VoiceTone {
 
 type Situ = "gomas" | "plano" | "adelanta" | "adelantado" | "toque" | "trompo" | "dano" | "trafico" | "vueltaP1" | "eliminado" | "pole"
   | "paradaLenta" | "paradaBuena" | "salePeor" | "estratega" | "aguaSi" | "aguaNo" | "abandono" | "gana" | "podio" | "puntos" | "sinPuntos"
-  | "limites" | "pinchazo" | "companero" | "rivalGana" | "noDejo" | "unaMas" | "rivalPasa" | "rivalMePasa";
+  | "limites" | "pinchazo" | "companero" | "rivalGana" | "noDejo" | "unaMas" | "rivalPasa" | "rivalMePasa"
+  // posición lateral (plan lateral, fase 6)
+  | "adelantaFuera" | "paralelo" | "cierro" | "meCierra" | "toqueCierro" | "toqueMeCierra";
 
 // {r}: el rival (apellido); {p}: la posición; {s}: los segundos.
 const FRASES: Record<Situ, Partial<Record<Caracter, string[]>> & { _: string[] }> = {
@@ -57,6 +59,66 @@ const FRASES: Record<Situ, Partial<Record<Caracter, string[]>> & { _: string[] }
     socarron: ["{r} se ha quedado mirando. Siguiente.", "Ha sido fácil. Demasiado fácil."],
     novato: ["¡Le he pasado! ¡He pasado a {r}!", "¡Vamos! ¿Habéis visto eso?"],
     autocritico: ["Pasado. Por fin hago algo bien hoy."],
+  },
+  adelantaFuera: {
+    _: ["¡Por fuera! ¡Pasado {r} por fuera!"],
+    calmado: ["Por fuera. Había sitio.", "Pasado {r} por el exterior. Seguimos."],
+    quejica: ["¡Me ha cerrado el interior, pues por fuera!", "Ni por dentro me dejaba... ¡pues por fuera!"],
+    volcanico: ["¡¡POR FUERA!! ¡¿Lo habéis visto?!", "¡Toma ya! ¡Por fuera y sin miedo!"],
+    cerebral: ["Ha tapado el interior y he cruzado la trazada. Funciona.", "Por fuera: salía mejor de la curva. Pasado."],
+    socarron: ["Por fuera, para que se vea bien en la tele.", "{r} me ha guardado el interior. Muy amable, pero no lo necesitaba."],
+    novato: ["¡Por fuera! ¡No me lo creo!", "¡Lo he pasado por fuera! ¿Ha salido en la tele?"],
+    autocritico: ["Por fuera. Esta vez sí.", "Ha salido bien. Por fin."],
+  },
+  paralelo: {
+    _: ["¡Estoy a su lado!"],
+    calmado: ["Voy a su lado. Tranquilos.", "Rueda con rueda con {r}. Le dejo sitio."],
+    quejica: ["¡Me está apretando contra la línea blanca!", "¡Que me deje sitio, que voy a su lado!"],
+    volcanico: ["¡No levanto! ¡No levanto!", "¡A su lado, a su lado! ¡Este es mío!"],
+    cerebral: ["En paralelo con {r}. La siguiente curva es mía, voy por dentro.", "Rueda con rueda. Aguanto hasta la salida."],
+    socarron: ["{r} y yo vamos de paseo, codo con codo.", "Muy juntitos {r} y yo. Demasiado."],
+    novato: ["¡Voy a su lado! ¿Qué hago, levanto?", "¡Estamos rueda con rueda!"],
+    autocritico: ["A su lado. Sin errores esta vez."],
+  },
+  cierro: {
+    _: ["Cierro el interior."],
+    calmado: ["Por dentro no pasa. Tranquilos.", "Le tapo el interior a {r}."],
+    quejica: ["Cierro, pero en la recta me va a comer.", "Lo tapo por dentro, pero tiene más motor."],
+    volcanico: ["¡Por aquí no pasas, {r}!", "¡Puerta cerrada!"],
+    cerebral: ["Cubro la frenada. Si va por fuera, sale peor.", "Interior cerrado. Que lo intente por fuera."],
+    socarron: ["{r}, el interior está ocupado. Pruebe por fuera.", "Cerrado por reformas."],
+    novato: ["Me pongo por dentro, ¿así?", "Le cierro... creo que bien."],
+    autocritico: ["Esta vez no le dejo hueco."],
+  },
+  meCierra: {
+    _: ["Me cierra el interior."],
+    calmado: ["{r} tapa el interior. Lo intento por fuera.", "Me ha cerrado. Paciencia."],
+    quejica: ["¡Se mueve en la frenada! ¡Eso no se puede!", "¡Me ha cerrado la puerta en la cara!"],
+    volcanico: ["¡Me ha cerrado! ¡Pues por fuera!", "¡¿Qué hace?! ¡Se ha movido en la frenada!"],
+    cerebral: ["Cubre el interior. Por fuera salgo mejor de la curva.", "Me tapa la frenada. Lo preparo para la siguiente."],
+    socarron: ["{r} se ha puesto por dentro. Qué original.", "Me ha cerrado. Bueno, hay más curvas."],
+    novato: ["¡Me ha cerrado! ¿Qué hago?", "No me deja pasar por dentro."],
+    autocritico: ["Me ha leído la maniobra. Tenía que haberme tirado antes."],
+  },
+  toqueCierro: {
+    _: ["Nos hemos tocado. Era mi curva."],
+    calmado: ["Contacto. Creo que he cerrado un poco tarde.", "Toque con {r}. A ver qué dicen."],
+    quejica: ["¡Era mi curva! ¡Se ha tirado él!", "¡Yo estaba delante! ¡Que lo miren!"],
+    volcanico: ["¡ERA MI CURVA! ¡Que se aparte!", "¡Yo estaba delante, idiota!"],
+    cerebral: ["He cerrado tarde. Puede que nos investiguen.", "Contacto. He cubierto la frenada demasiado tarde."],
+    socarron: ["{r} se ha metido donde yo iba a estar. Detalles.", "Le he cerrado. Un poco. Mucho, quizá."],
+    novato: ["¡Lo siento! Le he cerrado sin verle.", "¿He cerrado tarde? No le he visto."],
+    autocritico: ["He cerrado tarde. Culpa mía.", "Me he movido en la frenada. Ha sido culpa mía."],
+  },
+  toqueMeCierra: {
+    _: ["¡Me ha cerrado la puerta y nos hemos tocado!"],
+    calmado: ["{r} ha cerrado tarde. Revisad el coche.", "Me ha cerrado en la frenada. Contacto."],
+    quejica: ["¡Me ha cerrado en la frenada! ¡Sanción, ya!", "¡Se ha movido en la frenada! ¡Mirad los daños!"],
+    volcanico: ["¡¿PERO QUÉ HACE?! ¡Se mueve en la frenada!", "¡Me ha echado! ¡Eso es sanción!"],
+    cerebral: ["{r} se ha movido dos veces. Que lo miren los comisarios.", "Ha cerrado con mi morro ya dentro. Revisad el alerón."],
+    socarron: ["{r} ha cerrado la puerta... conmigo dentro.", "Muy bonita la puerta de {r}. Me la ha cerrado encima."],
+    novato: ["¡Me ha cerrado! ¿Eso se puede hacer?", "¡Me ha dado! ¿Está bien el coche?"],
+    autocritico: ["Me ha cerrado, pero no tenía que haberme metido ahí."],
   },
   adelantado: {
     _: ["Me ha pasado {r}."],
@@ -557,7 +619,8 @@ export function createVoces(sess: Session) {
           else push(line(o, "rivalMePasa", { r: sur(c) }, true));
           break;
         }
-        if (c.player) push(Math.random() < ((e.n ?? 9) <= 3 ? 0.7 : 0.3) ? line(c, "adelanta", { r }) : null);
+        if (c.player && e.lado === "fuera") push(Math.random() < 0.8 ? line(c, "adelantaFuera", { r }) : null);
+        else if (c.player) push(Math.random() < ((e.n ?? 9) <= 3 ? 0.7 : 0.3) ? line(c, "adelanta", { r }) : null);
         else if (o.player) push(Math.random() < 0.35 ? line(o, "adelantado", { r: sur(c) }) : null);
         break;
       case "toque": {
@@ -566,9 +629,24 @@ export function createVoces(sess: Session) {
         if (pair.some((x) => is(x, "Fernando Alonso")) && pair.some((x) => is(x, "Lewis Hamilton"))) push(mitica("idiota", 0.8));
         if (out.length) break;
         const me = c.player ? c : o.player ? o : null;
-        if (me) push(line(me, "toque", { r: sur(me === c ? o : c) }, true));
+        if (!me) break;
+        // el que cerró la puerta tarde (e.cierra) o el que se tiró
+        if (e.cierra !== undefined) {
+          push(line(me, me.id === e.cierra ? "toqueCierro" : "toqueMeCierra", { r: sur(me === c ? o : c) }, true));
+        } else push(line(me, "toque", { r: sur(me === c ? o : c) }, true));
         break;
       }
+      case "paralelo":
+        if (!c || !o || !race) break;
+        if (c.player && Math.random() < 0.35) push(line(c, "paralelo", { r: sur(o) }));
+        else if (o.player && Math.random() < 0.35) push(line(o, "paralelo", { r: sur(c) }));
+        break;
+      case "cierra":
+        // c: el que defiende; o: el que ataca
+        if (!c || !o || !race) break;
+        if (c.player && Math.random() < 0.3) push(line(c, "cierro", { r: sur(o) }));
+        else if (o.player && Math.random() < 0.3) push(line(o, "meCierra", { r: sur(c) }));
+        break;
       case "trompo": case "salida":
         if (!c) break;
         if (quali && is(c, "Charles Leclerc")) push(mitica("estupido", 0.7));
