@@ -410,7 +410,7 @@ export interface Car {
   queue: Run[];
   eliminated: boolean;
   elimPart?: number;
-  qPlan?: { part: number; deps: number[]; urgentAt?: number };
+  qPlan?: { part: number; deps: number[]; urgentAt?: number; banker?: boolean };
   sessionLaps: number;
   pitWhy?: string;
   stintW0: number; // desgaste del juego al montarlo
