@@ -3,7 +3,7 @@
 // en libres. Con lo que sabe simula stints con el mismo modelo de neumáticos que la carrera y
 // busca la mejor combinación de paradas con los juegos que le quedan.
 import { Rng, clamp } from "./rng";
-import { Compound, COMPOUNDS, DRY, HiddenTyre, TyreSet, newSet, updateSet, setGrip, setWear, WET, driverRough, steadyGrip } from "./tyres";
+import { Compound, COMPOUNDS, DRY, HiddenTyre, TyreSet, newSet, updateSet, setGrip, setWear, WET, driverRough, steadyGrip, bestWaterGrip } from "./tyres";
 import { msTimeAtGrip } from "./track";
 import { forecast, Forecast } from "./weather";
 import type { Session, Car, TeamDef, Run } from "./session";
@@ -291,6 +291,21 @@ export function planOptions(sess: Session, car: Car, k: TeamKnowledge, n = 3): P
 }
 
 
+/**
+ * Lluvia media sobre el circuito que espera el equipo dentro de m minutos (mm/h). La previsión da el máximo sobre el
+ * circuito; se ajusta con lo que cae ahora de media.
+ */
+function rainCurve(fc: Forecast, rainNow: number): (m: number) => number {
+  const scale = fc.p50[0] > 0.3 ? clamp(rainNow / fc.p50[0], 0.3, 1) : 0.6;
+  return (m: number) => {
+    const hz = fc.horizons;
+    let i = 0;
+    while (i < hz.length - 2 && m > hz[i + 1]) i++;
+    const f = clamp((m - hz[i]) / (hz[i + 1] - hz[i]), 0, 1);
+    return (fc.p50[i] + (fc.p50[i + 1] - fc.p50[i]) * f) * scale;
+  };
+}
+
 /** Previsión del equipo (se refresca cada minuto). */
 export function teamForecast(sess: Session, car: Car): Forecast {
   const k = car.e.knowledge;
@@ -335,15 +350,7 @@ function weatherCall(sess: Session, car: Car): Compound | null {
   if (left < 1) return null;
   const lapMin = sess.lapRefRace / 60;
   const H = Math.round(clamp(left * lapMin * 1.15, 3, 24)); // minutos que se miran
-  // la previsión da el máximo sobre el circuito; se ajusta con lo que cae ahora de media
-  const scale = fc.p50[0] > 0.3 ? clamp(rainNow / fc.p50[0], 0.3, 1) : 0.6;
-  const rainAtMin = (m: number) => {
-    const hz = fc.horizons;
-    let i = 0;
-    while (i < hz.length - 2 && m > hz[i + 1]) i++;
-    const f = clamp((m - hz[i]) / (hz[i + 1] - hz[i]), 0, 1);
-    return (fc.p50[i] + (fc.p50[i + 1] - fc.p50[i]) * f) * scale;
-  };
+  const rainAtMin = rainCurve(fc, rainNow);
   const water = sess.projectWater(now, rainAtMin, H);
   // carácter del equipo: los que tardan en poner intermedios ven «menos agua»; los que tardan en quitarlos, más
   const bias = isDry ? Math.pow(WET.si / k.wetIn, 0.5) : Math.pow((WET.si * 0.75) / k.wetOut, 0.5);
@@ -889,6 +896,11 @@ export function qualiTick(sess: Session, car: Car) {
   const safe = part.advance !== null && lastRun && !wetTrack && isFinite(myBest) && pos < part.advance - 2 && timed > part.advance + 2 && margin > need;
   if (safe) return;
   if (R < outLap + lap * 0.95) return;
+  // con la pista cada vez más mojada no se sale a empeorar: se espera por si escampa
+  if (!qualiCanImprove(sess, car, outLap, margin < need)) {
+    plan.deps.unshift(R - sess.rng.range(30, 60));
+    return;
+  }
   // pista secándose: cada equipo se atreve con los slicks a partir de su propio umbral; si aún llueve, nadie
   const drying = raining < 0.3 && Math.max(fc.prob[1], fc.prob[2]) < 0.4;
   const slickAt = drying ? clamp(k.wetOut * 1.35, WET.si * 0.8, WET.si * 1.2) : WET.si;
@@ -904,6 +916,30 @@ export function qualiTick(sess: Session, car: Car) {
   const fit = Math.floor((R - outLap) / lap);
   const pushLaps = !DRY.includes(c) ? clamp(lastRun || drying ? fit : 4, 2, 7) : water > WET.si * 0.5 ? clamp(fit, 2, 5) : (freshLeft <= 1 && part.advance === null) || lastChance ? 2 : 1;
   sess.startRun(car, { kind: "quali", setId: set.id, pushLaps, fuel: QUALI_FUEL + pushLaps * 2 * sess.fuelPerLap });
+}
+
+/**
+ * Clasificación con agua: ¿puede mejorar su tiempo con la pista que habrá en su próxima vuelta lanzada (dentro de
+ * `inSec` segundos)? El muro proyecta el agua con su previsión y la compara con la que había en su mejor vuelta:
+ * si la pista va a estar bastante más mojada, el agarre perdido no lo compensan un juego nuevo ni la goma en la
+ * trazada, y salir solo gasta neumáticos y arriesga el coche. Quien está fuera del corte apura algo más.
+ */
+export function qualiCanImprove(sess: Session, car: Car, inSec: number, atRisk = false): boolean {
+  const best = car.bestByPart[sess.part] ?? Infinity;
+  const w0 = car.bestWaterByPart[sess.part];
+  if (!isFinite(best) || w0 === undefined) return true;
+  if (sess.avgWater() < WET.si * 0.5 && w0 < WET.si * 0.5) return true; // en seco manda la evolución de la pista
+  const now = sess.avgWater() * sess.rng.logn(0.1); // cada muro lee el agua con su error
+  const fc = teamForecast(sess, car);
+  const lap = sess.track.refLap * 1.15;
+  const mins = Math.max(1, Math.round((inSec + lap * 0.5) / 60));
+  const ws = sess.projectWater(now, rainCurve(fc, sess.rainOnTrack()), mins);
+  const w = ws[ws.length - 1];
+  if (w <= w0) return true;
+  // pérdida por vuelta (fracción): ~0,45 del agarre perdido con el mejor neumático para esa agua
+  const loss = 0.45 * (1 - bestWaterGrip(w) / bestWaterGrip(w0));
+  const gain = 0.005 + (atRisk ? 0.004 : 0);
+  return loss < gain;
 }
 
 /**

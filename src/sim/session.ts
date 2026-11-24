@@ -10,7 +10,7 @@ import { type Setup, type SessionSetup, WET_SHIFT, SETUP_Q, SETUP_GRIP } from ".
 import { Compound, COMPOUNDS, DRY, HiddenTyre, TyreSet, setGrip, waterGrip, updateSet, axleGrip, warmBlankets, setWear, bestWaterGrip, WET, treadT, blisterT, grainT, driverRough } from "./tyres";
 import { WeatherState, stepWeather, rainAt, evaporation, waterStep, windNow } from "./weather";
 import { PU_WEAR, puLife, puPowerLoss, puHazard, FAIL_LAPS } from "./powerunit";
-import { Plan, planStrategy, aiDecide, aiModes, aiErs, TeamKnowledge, practiceProgram, qualiTick, pickSet, learnFromRun, aiRedFlagTyres, practiceWeather, wrongTyresForWater, teamForecast, ruleSatisfied, NOSE_TIME } from "./strategy";
+import { Plan, planStrategy, aiDecide, aiModes, aiErs, TeamKnowledge, practiceProgram, qualiTick, pickSet, learnFromRun, aiRedFlagTyres, practiceWeather, wrongTyresForWater, teamForecast, ruleSatisfied, NOSE_TIME, qualiCanImprove } from "./strategy";
 
 export const PUSH_NAMES = ["Conservar", "Gestionar", "Normal", "Atacar", "Al límite"];
 export const ENGINE_NAMES = ["Ahorro", "Normal", "Potencia"];
@@ -427,6 +427,8 @@ export interface Car {
   bestTyreByPart: Compound[]; // en clasificación, por parte
   bestSecs: number[]; // sectores de su mejor vuelta (para comparar parciales)
   bestSecsByPart: number[][]; // en clasificación, por parte
+  bestWaterByPart: number[]; // en clasificación, agua media en pista durante su mejor vuelta de cada parte
+  lapW0?: number; // libres / clasificación: agua media en pista al empezar la vuelta en curso
   stintLog: { c: Compound; from: number; used: boolean }[]; // carrera: neumáticos montados y desde qué vuelta
   puKm: number; // km de desgaste que suma a su unidad de potencia en esta sesión (ponderados por el modo de motor)
   puBroken?: boolean; // la unidad de potencia se ha roto
@@ -771,7 +773,7 @@ export class Session {
         wearMult: team.desgaste * (1.18 - d.neumaticos * 0.002),
         slowPuncture: false, autoPush: !e.player, autoErs: true, auto: true, gapWant: 2.5,
         queue: [], eliminated: false, sessionLaps: 0, stintW0: 0, stintL0: 0, learnedLap: -99, lastImpede: -1,
-        secCur: [NaN, NaN, NaN], secLast: [NaN, NaN, NaN], secBest: [Infinity, Infinity, Infinity], lastLapValid: true, bestTyreByPart: [], bestSecs: [], bestSecsByPart: [], stintLog: [], puKm: 0,
+        secCur: [NaN, NaN, NaN], secLast: [NaN, NaN, NaN], secBest: [Infinity, Infinity, Infinity], lastLapValid: true, bestTyreByPart: [], bestSecs: [], bestSecsByPart: [], bestWaterByPart: [], stintLog: [], puKm: 0,
       };
       const su = opt.setup?.cars[e.id];
       if (su) car.setup = { a: su.a, r: su.r };
@@ -2044,7 +2046,10 @@ export class Session {
         const prevBest = c.bestByPart[p] ?? Infinity;
         if (lt < c.best) { c.best = lt; c.bestTyre = c.tyres!.c; c.bestSecs = [...c.secLast]; }
         if (lt < this.bestLap) this.bestLap = lt;
-        if (lt < prevBest) { c.bestByPart[p] = lt; c.bestTyreByPart[p] = c.tyres!.c; c.bestSecsByPart[p] = [...c.secLast]; }
+        if (lt < prevBest) {
+          c.bestByPart[p] = lt; c.bestTyreByPart[p] = c.tyres!.c; c.bestSecsByPart[p] = [...c.secLast];
+          c.bestWaterByPart[p] = ((c.lapW0 ?? this.avgWater()) + this.avgWater()) / 2;
+        }
         if (run.phase === "push") this.lapRadio(c, lt);
       } else if (c.player) {
         this.log({ kind: "info", text: `${c.d.abrev}: vuelta de ${fmt(lt)} anulada`, carId: c.id });
@@ -2052,6 +2057,7 @@ export class Session {
       run.done++;
     }
     c.lapStart = c.cross[k];
+    c.lapW0 = this.avgWater();
     c.lapValid = true;
     // fase siguiente
     if (run.phase === "out") run.phase = run.kind === "long" ? "long" : run.kind === "inst" ? "in" : "push";
@@ -2062,6 +2068,8 @@ export class Session {
       if (run.done >= run.pushLaps || this.remaining() <= 0) run.phase = "in";
       // en mojado se encadenan las vueltas; en seco, a veces dos seguidas
       else run.phase = run.kind === "quali" && run.pushLaps > 1 && (this.avgWater() > WET.si * 0.5 || this.rng.chance(0.5)) ? "push" : "cool";
+      // la lluvia arrecia: si con la pista como va a estar ya no puede bajar su tiempo, a boxes a guardar las gomas
+      if (run.phase === "push" && run.kind === "quali" && c.auto && !qualiCanImprove(this, c, 0, this.retryWorthIt(c))) run.phase = "in";
     } else if (run.phase === "cool") run.phase = this.remaining() > 0 ? "push" : "in";
     else if (run.phase === "long" && (run.done >= run.pushLaps || this.remaining() <= 0)) run.phase = "in";
     // con slicks y pista mojada (o con neumáticos de lluvia en seco) no tiene sentido seguir
