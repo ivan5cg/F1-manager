@@ -128,6 +128,23 @@ export function setGrip(t: TyreSet, water: number): number {
   return g * waterGrip(t.c, water) * (1 - 0.006 * t.flatSpot) * punct;
 }
 
+/** Cuánto se gasta la banda según el agua: el agua la enfría y la lubrica, pero los de agua sin agua bastante se
+ * recalientan y se deshacen (el intermedio por debajo de ~0,3 mm, el de lluvia por debajo de ~0,7 mm). */
+export function waterWear(c: Compound, water: number): number {
+  let w = 1 - 0.65 * Math.min(1, water / 0.8);
+  if (c === "I") w *= 1 + (2.8 * Math.max(0, 0.3 - water)) / 0.3;
+  if (c === "W") w *= 1 + (4.5 * Math.max(0, 0.7 - water)) / 0.7;
+  return w;
+}
+
+/** Agarre que queda por el desgaste (1 = nuevo), con el precipicio: el mismo término que en axleGrip. */
+export function wearGrip(c: Compound, wear: number): number {
+  const sp = COMPOUNDS[c];
+  let f = 1 - sp.slope * wear;
+  if (wear > sp.cliff) f -= 0.2 * Math.pow((Math.min(1, wear) - sp.cliff) / (1 - sp.cliff), 1.8);
+  return Math.max(0.6, f);
+}
+
 /** Mejor agarre posible con esa agua (el del compuesto adecuado), para medir si se va con el neumático equivocado. */
 export function bestWaterGrip(water: number): number {
   return Math.max(waterGrip("S", water), waterGrip("I", water), waterGrip("W", water));
@@ -220,9 +237,7 @@ export function updateSet(t: TyreSet, env: TyreEnv, dt: number, lapRef: number, 
     // el calor gasta más goma, pero sin dispararse: con /22 un blando no aguantaba 6 vueltas en un asfalto exigente
     let wMult = over > 0 ? Math.exp(over / 30) : 1;
     if (a.tBulk < sp.opt - sp.window) wMult *= 1.15;
-    let waterW = 1 - 0.65 * wet;
-    if (t.c === "I") waterW *= 1 + (2.8 * Math.max(0, 0.3 - env.water)) / 0.3;
-    if (t.c === "W") waterW *= 1 + (4.5 * Math.max(0, 0.7 - env.water)) / 0.7;
+    const waterW = waterWear(t.c, env.water);
     const axleShare = front ? env.eF : env.eR;
     const rate = (sp.wear * hidden.wearMult[t.c] * env.abrasiveness * env.carWear * axleShare * Math.pow(env.push, 1.6) * wMult * waterW) / lapRef;
     // con ampollas se arrancan trozos; con graining la banda patina sobre los rollitos y se gasta más

@@ -3,7 +3,7 @@
 // en libres. Con lo que sabe simula stints con el mismo modelo de neumáticos que la carrera y
 // busca la mejor combinación de paradas con los juegos que le quedan.
 import { Rng, clamp } from "./rng";
-import { Compound, COMPOUNDS, DRY, HiddenTyre, TyreSet, newSet, updateSet, setGrip, setWear, WET, driverRough, steadyGrip, bestWaterGrip } from "./tyres";
+import { Compound, COMPOUNDS, DRY, HiddenTyre, TyreSet, newSet, updateSet, setGrip, setWear, WET, driverRough, steadyGrip, bestWaterGrip, waterWear, wearGrip } from "./tyres";
 import { msTimeAtGrip } from "./track";
 import { forecast, Forecast } from "./weather";
 import type { Session, Car, TeamDef, Run } from "./session";
@@ -356,22 +356,42 @@ function weatherCall(sess: Session, car: Car): Compound | null {
   const bias = isDry ? Math.pow(WET.si / k.wetIn, 0.5) : Math.pow((WET.si * 0.75) / k.wetOut, 0.5);
   const tT = sess.weather.trackT;
   const gRef = steadyGrip("M", 0, tT);
-  const kinds: Compound[] = ["M", "I", "W"];
-  const lapLoss = (c: Compound, w: number) => {
-    const g = steadyGrip(c, w, tT), best = Math.max(...kinds.map((x) => steadyGrip(x, w, tT)));
+  const avail = availableSets(car);
+  // el seco que se pondría: el que lleva, o el que toca por las vueltas que quedan. Antes se comparaba siempre con el
+  // medio, y con poca agua el blando agarra bastante más (el cruce blando-intermedio está en ~0,24 mm, el del medio
+  // en ~0,16): con una llovizna de 0,15-0,20 la cuenta salía a favor de intermedios cuando lo bueno era el blando
+  const pref: Compound[] = left < 18 ? ["S", "M", "H"] : left < 32 ? ["M", "S", "H"] : ["H", "M", "S"];
+  const dryC: Compound = isDry ? cur : pref.find((c) => avail[c].length) ?? "M";
+  const kindOf = (c: Compound): Compound => (DRY.includes(c) ? dryC : c);
+  // solo se cuenta con lo que hay en el garaje: sin intermedios, la alternativa no es «el de lluvia» sin más
+  const kinds = [dryC, "I", "W"].filter((c) => c === kindOf(cur) || avail[c as Compound].length > 0) as Compound[];
+  const lapLoss = (c: Compound, w: number, wear = 0) => {
+    const g = steadyGrip(c, w, tT) * wearGrip(c, wear), best = Math.max(...kinds.map((x) => steadyGrip(x, w, tT)));
     // tiempo que se pierde frente a la pista seca, más el riesgo de irse fuera si el neumático no es el de esa agua
     return Math.min(45, (1 - g / gRef) * 100 * sess.secPerGrip) + Math.max(0, 0.92 - g / best) * 45;
   };
-  const kindOf = (c: Compound): Compound => (DRY.includes(c) ? "M" : c);
   const bestAt = (w: number) => kinds.reduce((b, x) => (steadyGrip(x, w, tT) > steadyGrip(b, w, tT) ? x : b));
-  const stop = (pitLoss(sess) + car.team.boxes + 1) * (sess.flag === "sc" || sess.flag === "sc_in" ? 0.45 : sess.flag === "vsc" ? 0.6 : 1);
+  const stopT = pitLoss(sess) + car.team.boxes + 1;
+  const stop = stopT * (sess.flag === "sc" || sess.flag === "sc_in" ? 0.45 : sess.flag === "vsc" ? 0.6 : 1);
   const beyond = left * lapMin > H + 2; // queda carrera después de lo que se mira
   const endBest = bestAt(water[water.length - 1] * bias);
+  // el juego con el que se haría cada tipo (el montado, o el menos gastado del garaje) y lo que se gasta por minuto
+  // con esa agua: un intermedio usado o uno de lluvia con poca agua se deshacen en pocas vueltas, y eso es otra parada
+  const perMin = (c: Compound, w: number) => (COMPOUNDS[c].wear * k.hidden.wearMult[c] * sess.track.abrasiveness * waterWear(c, w)) / lapMin;
   const total = (c: Compound) => {
-    let t = c === kindOf(cur) ? 0 : stop;
-    for (const w of water) t += lapLoss(c, w * bias) / lapMin;
+    const same = c === kindOf(cur);
+    let t = same ? 0 : stop;
+    let wear = same ? setWear(car.tyres!) : setWear(avail[c][0]);
+    let extra = 0;
+    for (const w of water) {
+      t += lapLoss(c, w * bias, wear) / lapMin;
+      wear += perMin(c, w * bias);
+      // se acaba antes de que acabe el tramo (o la carrera): habrá que poner otro juego
+      if (wear > 0.9) { extra++; wear = 0.15; }
+    }
+    t += extra * stopT;
     // si al final del tramo ese neumático ya no es el bueno, habrá que parar otra vez
-    if (beyond && endBest !== c && lapLoss(c, water[water.length - 1] * bias) - lapLoss(endBest, water[water.length - 1] * bias) > 1.5) t += pitLoss(sess) + car.team.boxes + 1;
+    if (beyond && endBest !== c && lapLoss(c, water[water.length - 1] * bias) - lapLoss(endBest, water[water.length - 1] * bias) > 1.5) t += stopT;
     return t;
   };
   const stay = total(kindOf(cur));
@@ -384,13 +404,11 @@ function weatherCall(sess: Session, car: Car): Compound | null {
   // parar ahora solo si el otro neumático ya va a ser más rápido en las dos primeras vueltas con él; si la lluvia
   // (o la pista seca) aún está lejos, se espera: se decide otra vez la vuelta que viene
   const soon = Math.min(water.length, Math.max(2, Math.ceil(lapMin * 2.2)));
+  const wCur = setWear(car.tyres!), wNew = setWear(avail[best][0]);
   let dSoon = 0;
-  for (let m = 1; m < soon; m++) dSoon += lapLoss(kindOf(cur), water[m] * bias) - lapLoss(best, water[m] * bias);
+  for (let m = 1; m < soon; m++) dSoon += lapLoss(kindOf(cur), water[m] * bias, wCur) - lapLoss(best, water[m] * bias, wNew);
   if (dSoon <= 0) return null;
-  if (best !== "M") return best;
-  const avail = availableSets(car);
-  const pref: Compound[] = left < 18 ? ["S", "M", "H"] : left < 32 ? ["M", "S", "H"] : ["H", "M", "S"];
-  return pref.find((c) => avail[c].length) ?? "M";
+  return best;
 }
 
 /** Edad equivalente (vueltas) del juego montado según el perfil que cree el equipo. */
@@ -425,15 +443,24 @@ function wetWearCall(sess: Session, car: Car, left: number, adviceOnly: boolean)
   // aún le quedan vueltas: se para cuando entre en la zona de riesgo (o un poco antes, si gasta mucho)
   if (w < 0.84 && w + rate * 2 < 0.92) return null;
   const water = sess.avgWater();
-  const alt: Compound = t.c === "I" ? "W" : "I";
-  const okFor = (c: Compound) => (c === "W" ? water > WET.si : c === "I" ? water > WET.si * 0.5 && water < WET.iw * 1.4 : water < WET.si * 1.2);
-  const cands: Compound[] = [t.c, alt, "M", "H", "S"];
+  const tT = sess.weather.trackT;
+  // el recambio: el juego que más agarre vaya a dar con esta agua, contando lo gastado que está. Antes se probaba en
+  // orden fijo (el mismo tipo, el otro de agua, slicks) y con una llovizna de 0,15-0,20 mm tras un fin de semana mojado
+  // salían intermedios usados que duraban cuatro vueltas o, peor, de lluvia, que sin agua se deshacen: blandos y aguantar
+  const avail = availableSets(car);
+  const dryPref: Compound[] = left < 18 ? ["S", "M", "H"] : left < 32 ? ["M", "S", "H"] : ["H", "M", "S"];
+  const cands: Compound[] = [t.c, t.c === "I" ? "W" : "I", ...dryPref];
   let set: TyreSet | undefined;
+  let bestG = 0;
   for (const c of cands) {
-    if (!okFor(c) && c !== t.c) continue;
-    const s = sess.bestSetFor(car, c);
+    if (c === "W" && water < WET.iw * 0.6) continue; // sin agua bastante, se recalienta y se deshace
+    if (c === "I" && water < WET.si * 0.5) continue;
+    if (DRY.includes(c) && water > WET.si * 1.5) continue;
+    const s = avail[c][0];
     // que el cambio merezca la pena: un juego con bastante más goma que el que lleva
-    if (s && setWear(s) < Math.min(0.7, w - 0.2)) { set = s; break; }
+    if (!s || setWear(s) >= Math.min(0.7, w - 0.2)) continue;
+    const g = steadyGrip(c, water, tT) * wearGrip(c, setWear(s) + 0.5 * COMPOUNDS[c].wear * waterWear(c, water) * Math.min(left, 10));
+    if (g > bestG + 1e-9) { bestG = g; set = s; }
   }
   if (!set) return null;
   if (adviceOnly) { car.adviceWhy = "los neumáticos de agua están al límite: si seguimos, pinchamos"; return set.id; }
@@ -451,9 +478,11 @@ export function aiDecide(sess: Session, car: Car, adviceOnly = false): string | 
   const left = total - done;
   if (left < 1 || car.pitRequest) return null;
   const decideC = (c: Compound) => {
-    const set = sess.bestSetFor(car, c) ?? sess.bestSetFor(car, c === "I" ? "W" : c === "W" ? "I" : "M");
+    // sin intermedios, el de lluvia solo si hay agua para él: con poca se recalienta y se deshace en unas vueltas
+    const alt: Compound | null = c === "I" ? (sess.avgWater() > WET.iw * 0.6 ? "W" : null) : c === "W" ? "I" : "M";
+    const set = sess.bestSetFor(car, c) ?? (alt ? sess.bestSetFor(car, alt) : undefined);
     if (!set) return null;
-    if (!adviceOnly) car.pitRequest = set.id;
+    if (!adviceOnly) { car.pitRequest = set.id; car.pitWhy = `clima v${done} ${car.tyres!.c}${car.tyres!.laps}→${set.c} agua ${sess.avgWater().toFixed(2)}`; }
     return set.id;
   };
   const wc = weatherCall(sess, car);
@@ -624,7 +653,8 @@ export function aiDecide(sess: Session, car: Car, adviceOnly = false): string | 
 
   const fc = teamForecast(sess, car);
   if (Math.max(fc.prob[1], fc.prob[2], fc.prob[3]) > 0.55) {
-    if (sess.avgWater() > 0.06) return decideC("I");
+    // con un poco de humedad los slicks aún van mejor: los intermedios, solo si el agua ya está cerca del cruce
+    if (sess.avgWater() > WET.si * 0.8 && availableSets(car).I.length) return decideC("I");
     if (wear < 0.86) return null;
   }
   // si hay un siguiente stint planificado, se sigue el plan (solo cambia el momento)
