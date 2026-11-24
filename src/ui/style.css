@@ -861,29 +861,46 @@ html[data-tema] .dcard .cl i { color: #aab0ba; }
 .nfl .cc { font-size: .72em; }
 
 /* hoja de tus pilotos: compacta, los dos caben en un móvil sin desplazarse */
-.pcard { margin: 0 0 8px; padding: 6px 8px 8px; background: var(--gl, linear-gradient(var(--bar1), var(--bar2))); border-top: 2px solid var(--text, #fff); }
-.pc-h { display: flex; align-items: center; gap: 6px; font-size: 12px; min-height: 30px; white-space: nowrap; }
-.pc-h .nm { font-weight: 900; text-transform: uppercase; letter-spacing: .03em; font-size: 13px; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex-shrink: 1; }
-.pc-h .tyre { flex: none; }
-.pc-h button { margin-left: auto; flex: none; min-height: 30px; padding: 4px 9px; font-size: 10.5px; }
-.pc-t { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin: 4px 0; }
-.pc-t .ax { display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; align-items: center; column-gap: 7px; padding: 3px 6px; background: var(--panel, #000); border: 2px solid #333; }
-.pc-t .lb { grid-row: 1; grid-column: 2; font-size: 10px; text-transform: uppercase; color: var(--dim); letter-spacing: .05em; }
-.pc-t .tt { grid-row: 1 / span 2; grid-column: 1; font-size: 21px; font-weight: 900; line-height: 1; }
-.pc-t .dt { grid-row: 2; grid-column: 2; font-size: 11px; white-space: nowrap; }
-.pc-t .fl { grid-column: 1 / span 2; font-size: 11px; line-height: 1.25; min-height: 14px; }
-.pc-t .fl .small { font-size: 11px; display: inline; margin-right: 6px; }
-.pc-s { display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px 6px; margin: 2px 0 4px; }
-.pc-s > div { display: flex; flex-direction: column; min-width: 0; }
+/* hoja de pilotos: tarjeta con franja del equipo, ejes con regla de temperatura y mandos segmentados */
+.pcard { position: relative; margin: 0 0 8px; padding: 6px 9px 8px 12px; background: var(--panel, #15171b); border: 1px solid var(--line, #2c3440); border-radius: 8px; overflow: hidden; }
+.pcard::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--team, #fff); }
+.pc-h { display: flex; align-items: center; gap: 8px; font-size: 12px; min-height: 30px; white-space: nowrap; }
+.pc-h .nm { font-weight: 900; text-transform: uppercase; letter-spacing: .04em; font-size: 15px; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex-shrink: 1; }
+.pc-h .tyl { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px 2px 3px; border-radius: 999px; background: rgba(255, 255, 255, .06); font-weight: 700; font-size: 12px; flex: none; }
+.pc-h button { margin-left: auto; flex: none; min-height: 30px; padding: 4px 10px; font-size: 10.5px; border-radius: 6px; }
+.pc-al { display: flex; flex-wrap: wrap; gap: 4px; margin: 2px 0 4px; font-size: 11.5px; font-weight: 700; }
+.pc-al:empty { display: none; }
+.pc-al > span { padding: 2px 7px; border-radius: 4px; background: rgba(255, 255, 255, .06); }
+.pc-al > .redt { background: rgba(255, 90, 80, .14); }
+.pc-al > .yellow { background: rgba(255, 216, 74, .12); }
+.pc-t { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 4px 0 6px; }
+.pc-t .ax { display: flex; flex-direction: column; gap: 3px; padding: 5px 8px; background: rgba(0, 0, 0, .22); border-radius: 6px; box-shadow: inset 3px 0 0 var(--tc); min-width: 0; }
+.pc-t .ax-a { display: flex; align-items: baseline; justify-content: space-between; }
+.pc-t .lb { font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--dim); letter-spacing: .06em; }
+.pc-t .tt { font-size: 20px; font-weight: 900; line-height: 1; color: var(--tc); }
+.pc-t .gauge { position: relative; height: 6px; border-radius: 3px; background: linear-gradient(90deg, rgba(58, 139, 232, .55), rgba(58, 139, 232, .2) 25%, transparent 25%, transparent 75%, rgba(227, 38, 28, .25) 75%, rgba(227, 38, 28, .6)); }
+.pc-t .gauge .g-win { position: absolute; top: 0; bottom: 0; background: rgba(51, 224, 95, .35); }
+.pc-t .gauge .g-b, .pc-t .gauge .g-s { position: absolute; top: 50%; transform: translate(-50%, -50%); border-radius: 2px; }
+.pc-t .gauge .g-b { width: 4px; height: 13px; background: var(--tc); box-shadow: 0 0 0 1.5px rgba(0, 0, 0, .7); }
+.pc-t .gauge .g-s { width: 2px; height: 9px; background: rgba(255, 255, 255, .55); }
+.pc-t .ax-b { display: flex; justify-content: space-between; gap: 4px; font-size: 11px; color: var(--dim); white-space: nowrap; }
+.pc-t .ax-b span:last-child:not(.redt):not(.yellow) { color: var(--text); }
+.pc-t .feel { font-size: 11px; line-height: 1.25; }
+.pc-t .feel .small { font-size: 11px; font-weight: 700; }
+.pc-s { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px 8px; margin: 0 0 6px; padding: 4px 0; border-top: 1px solid var(--line, #2c3440); border-bottom: 1px solid var(--line, #2c3440); }
+.pc-s > div { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .pc-s > div.w2 { grid-column: span 2; }
-.pc-s i { font-style: normal; font-size: 9.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--dim); }
-.pc-s b { font-size: 12.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pc-s i { font-style: normal; font-size: 9.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--dim); }
+.pc-s b { font-size: 13.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pc-s b small { font-size: 10px; color: var(--dim); }
 .pc-s .tyre { width: 15px; height: 15px; font-size: 8px; border-width: 2px; vertical-align: -3px; }
-.pc-c { display: grid; grid-template-columns: 40px 1fr; align-items: center; gap: 3px 6px; }
-.pc-c .sl { font-size: 8.5px; font-weight: 900; text-transform: uppercase; letter-spacing: .05em; color: var(--dim); }
-.pc-c .seg { margin: 0; flex-wrap: nowrap; }
-.pc-c .seg button { flex: 1 1 0; min-width: 0; min-height: 34px; padding: 3px 1px; font-size: clamp(8px, 2.5vw, 11.5px); line-height: 1.05; white-space: nowrap; overflow: hidden; letter-spacing: 0; }
+.pc-c { display: grid; grid-template-columns: 50px 1fr; align-items: center; gap: 4px 6px; }
+.pc-c .sl { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--dim); }
+.pc-c .seg { margin: 0; flex-wrap: nowrap; gap: 0; padding: 2px; background: rgba(0, 0, 0, .3); border: 1px solid var(--line, #2c3440); border-radius: 7px; }
+.pc-c .seg button { flex: 1 1 0; min-width: 0; min-height: 30px; padding: 3px 1px; font-size: clamp(8.5px, 2.5vw, 11.5px); font-weight: 700; line-height: 1.05; white-space: nowrap; overflow: hidden; letter-spacing: 0; background: transparent; border: 0; border-radius: 5px; color: var(--dim); text-shadow: none; box-shadow: none; }
+.pc-c .seg button + button:not(.on) { box-shadow: inset 1px 0 0 rgba(255, 255, 255, .06); }
+.pc-c .seg button.on { background: var(--gl-white, #fff); color: #000; box-shadow: 0 1px 3px rgba(0, 0, 0, .4); }
+.pc-c .seg button.on + button { box-shadow: none; }
 .sheet .pc-close { width: 100%; min-height: 36px; }
 
 /* vista previa del coche en el creador de equipo */

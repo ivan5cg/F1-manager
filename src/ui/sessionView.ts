@@ -1912,17 +1912,29 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     const tempColor = (c: Compound, t: number) => { const sp = COMPOUNDS[c]; const d = t - sp.opt; return Math.abs(d) < sp.window * 0.5 ? "var(--green)" : d < -sp.window ? "var(--blue)" : d > sp.window ? "var(--red1)" : "var(--gold1)"; };
     const card = (c: Car, idx: number) => {
       const t = c.tyres;
+      // eje: temperatura grande, una regla con la ventana buena del compuesto (núcleo = marca llena,
+      // superficie = marca fina) y la goma que queda; los avisos del piloto solo si los hay
       const axle = (name: string, a: TyreSet["F"], k: number) => {
+        const sp = COMPOUNDS[t!.c];
         const col = tempColor(t!.c, a.tBulk);
-        return `<div class="ax" style="border-color:${col}"><span class="lb">${name}</span><b class="tt mono" style="color:${col}">${a.tBulk.toFixed(0)}°</b><span class="dt mono">sup. ${a.tSurf.toFixed(0)}° · ${Math.round((1 - a.wear) * 100)} %</span><span class="fl">${feelHtml(c, k) || "&nbsp;"}</span></div>`;
+        const lo = sp.opt - 2 * sp.window, span = 4 * sp.window;
+        const at = (x: number) => Math.max(0, Math.min(100, ((x - lo) / span) * 100)).toFixed(1);
+        const life = Math.round((1 - a.wear) * 100);
+        const feel = feelHtml(c, k);
+        return `<div class="ax" style="--tc:${col}" title="Ventana buena ${sp.opt - sp.window}–${sp.opt + sp.window}°">
+          <div class="ax-a"><span class="lb">${name}</span><b class="tt mono">${a.tBulk.toFixed(0)}°</b></div>
+          <div class="gauge"><i class="g-win" style="left:25%;width:50%"></i><i class="g-s" style="left:${at(a.tSurf)}%"></i><i class="g-b" style="left:${at(a.tBulk)}%"></i></div>
+          <div class="ax-b mono"><span>sup. ${a.tSurf.toFixed(0)}°</span><span class="${life < 30 ? "redt" : life < 50 ? "yellow" : ""}">goma ${life} %</span></div>
+          ${feel ? `<div class="feel">${feel}</div>` : ""}
+        </div>`;
       };
       const seg = (key: string, label: string, names: string[], cur: number, auto?: boolean) => `<span class="sl">${label}</span><div class="seg" data-k="${key}" data-i="${idx}">${auto !== undefined ? `<button data-v="auto" class="${auto ? "on" : ""}">Auto</button>` : ""}${names.map((n, i) => `<button data-v="${i}" class="${!auto && cur === i ? "on" : ""}" title="${n}">${n}</button>`).join("")}</div>`;
       const fuelDelta = race ? c.fuel / sess.fuelLap(c) - (sess.laps - sess.lapsDone(c)) : 0;
       const plan = race ? c.plan.stints.slice(c.stops).map((s, i, arr) => `${tyreHtml(s.c)}${i < arr.length - 1 ? ` v${s.endLap}` : ""}`).join(" → ") : "";
       const cell = (k: string, v: string, wide = false) => `<div class="${wide ? "w2" : ""}"><i>${k}</i><b class="mono">${v}</b></div>`;
-      const sp = t ? COMPOUNDS[t.c] : null;
-      return `<div class="pcard">
-        <div class="pc-h"><span class="teamdot" style="background:${c.team.color}"></span><b class="nm">${esc(shortName(c.d.nombre))}</b>${c.moral !== undefined ? `<span title="Moral: ${moralLabel(c.moral).text} (${Math.round(c.moral)})">${moralLabel(c.moral).icon}</span>` : ""}${t ? `${tyreHtml(t.c)}<span class="dim">${t.laps} v · ${sp!.opt - sp!.window}–${sp!.opt + sp!.window}°</span>` : `<span class="dim">en el garaje</span>`}${c.wing > 0 ? `<span class="yellow" title="Lo que cuesta por vuelta">alerón −${sess.wingLoss(c).toFixed(1)} s</span>` : ""}${race && c.fault ? `<span class="redt" title="Motor en Ahorro y ritmo bajo para que aguante">⚠️ ${esc(c.fault.what)} ${Math.round(c.fault.lvl * 100)} %</span>` : ""}${c.floor > 0 ? `<span class="redt" title="No se puede arreglar en boxes">fondo −${(c.floor * 100 * sess.secPerGrip).toFixed(1)} s</span>` : ""}${race && c.penS ? `<span class="redt" title="Se cumple en la próxima parada o se suma al final">+${c.penS} s</span>` : ""}${race && (c.tlStrikes ?? 0) >= 3 ? `<span class="dim" title="Bandera blanca y negra: límites de pista">🏁 ${c.tlStrikes}</span>` : ""}${race ? `<button data-let="${idx}" title="Dejar pasar al compañero">Dejar pasar</button>` : ""}</div>
+      return `<div class="pcard" style="--team:${c.team.color}">
+        <div class="pc-h"><b class="nm">${esc(shortName(c.d.nombre))}</b>${c.moral !== undefined ? `<span title="Moral: ${moralLabel(c.moral).text} (${Math.round(c.moral)})">${moralLabel(c.moral).icon}</span>` : ""}${t ? `<span class="tyl">${tyreHtml(t.c)}<span class="mono">${t.laps} v</span></span>` : `<span class="dim">en el garaje</span>`}${race ? `<button data-let="${idx}" title="Dejar pasar al compañero">Dejar pasar</button>` : ""}</div>
+        <div class="pc-al">${c.wing > 0 ? `<span class="yellow" title="Lo que cuesta por vuelta">alerón −${sess.wingLoss(c).toFixed(1)} s</span>` : ""}${race && c.fault ? `<span class="redt" title="Motor en Ahorro y ritmo bajo para que aguante">⚠️ ${esc(c.fault.what)} ${Math.round(c.fault.lvl * 100)} %</span>` : ""}${c.floor > 0 ? `<span class="redt" title="No se puede arreglar en boxes">fondo −${(c.floor * 100 * sess.secPerGrip).toFixed(1)} s</span>` : ""}${race && c.penS ? `<span class="redt" title="Se cumple en la próxima parada o se suma al final">+${c.penS} s</span>` : ""}${race && (c.tlStrikes ?? 0) >= 3 ? `<span class="dim" title="Bandera blanca y negra: límites de pista">🏁 ${c.tlStrikes}</span>` : ""}</div>
         ${t ? `<div class="pc-t">${axle("Del.", t.F, 0)}${axle("Tras.", t.R, 1)}</div>` : ""}
         <div class="pc-s">${cell("Última", fmtLap(c.lapTimes[c.lapTimes.length - 1]))}${cell("Mejor", fmtLap(c.best))}${t ? cell("Posible", fmtLap(sess.estLap(c))) : ""}${cell("Combust.", `${c.fuel.toFixed(1)} kg${race ? ` <small>${fuelDelta >= 0 ? "+" : ""}${fuelDelta.toFixed(1)} v</small>` : ""}`)}${sess.ersLabel ? cell(sess.ersLabel, `${Math.round((c.soc / SOC_MAX) * 100)} %`) : ""}${c.e.pu ? cell("Motor", `${Math.round(puLife(c.e.pu.km0 + c.puKm) * 100)} % vida`) : ""}${race ? cell("Plan", plan || "—", !c.e.pu) : ""}</div>
         ${race ? `<div class="pc-c">${seg("push", "Ritmo", PUSH_NAMES, c.push)}${seg("engine", "Motor", ENGINE_NAMES, c.engine)}${sess.ersLabel ? seg("ers", sess.ersLabel, ERS_SHORT, c.ers, c.autoErs) : ""}${seg("fight", "Pelea", ["Defender", "No pelear"], c.fight === "yield" ? 1 : 0, (c.fight ?? "auto") === "auto")}${seg("risk", "Riesgo", RISK_NAMES, c.risk === "duro" ? 1 : 0)}${c.wing > 0 ? seg("nose", "Morro", ["Cambiar", "Dejar"], c.nose === "no" ? 1 : 0, (c.nose ?? "auto") === "auto") : ""}</div>` : ""}
