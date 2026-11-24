@@ -116,8 +116,10 @@ export function createLobato(sess: Session, gp: string, memo?: WeekendState["mem
       case "sancion": {
         if (!c) return null;
         const s = e.n ?? 5;
-        return say(e.motivo === "toque"
-          ? e.cierra !== undefined
+        return say(e.motivo === "toque" || e.motivo === "frenada"
+          ? e.motivo === "frenada"
+            ? pick([`¡${s} segundos a ${sur(c)} por moverse en la frenada! Lo hemos dicho: eso no se hace.`, `Sanción para ${sur(c)}: ${s} segundos por cambiar de dirección en la frenada.`])
+            : e.cierra !== undefined
             ? pick([`¡${s} segundos a ${sur(c)} por cerrar la puerta tarde! Eso no se hace, moverse en la frenada.`, `Sanción para ${sur(c)}: ${s} segundos. Los comisarios dicen que cerró demasiado tarde.`])
             : pick([`¡Sanción para ${sur(c)}! ${s} segundos por el toque. Los comisarios no perdonan.`, `${s} segundos a ${sur(c)}. Lo han visto culpable, y con razón.`])
           : e.motivo === "limites" ? pick([`¡${s} segundos a ${sur(c)} por los límites de pista! Ya se lo habían avisado con la blanca y negra.`, `Sanción para ${sur(c)}: los límites de pista. Se veía venir.`])
@@ -199,6 +201,12 @@ export function createLobato(sess: Session, gp: string, memo?: WeekendState["mem
           `¡Van en paralelo ${sur(c)} y ${sur(o)}! A ver quién frena más tarde...`,
         ]));
       }
+      case "frenada":
+        // c: el que se mueve; o: el que ataca
+        if (!c || !o || !race) return null;
+        return say(spanish(o)
+          ? pick([`¡Se ha movido en la frenada delante de ${nm(o)}! ¡Eso no se hace! ¡Que lo miren!`, `¡${sur(c)} cambia de dirección dos veces y ${nm(o)} tiene que levantar! ¡Peligrosísimo!`])
+          : pick([`¡Uy, uy! ¡${sur(c)} se ha movido en la frenada! ${sur(o)} ha tenido que levantar.`, `¡Dos movimientos de ${sur(c)}! Eso no está permitido. Los comisarios lo van a mirar.`, `¡${sur(c)} se mueve en la frenada delante de ${sur(o)}! Casi se tocan.`]), true);
       case "cierra": {
         // c: el que defiende; o: el que ataca
         if (!c || !o || !race || Math.random() < 0.4) return null;

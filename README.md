@@ -323,8 +323,15 @@ falta y si se puede pasar (contando si defiendes).
 
 **Riesgo en la pelea.** También en la tarjeta, «Riesgo»: **Limpio** (lo normal) o **Duro**. En duro tu piloto frena
 más tarde y se tira con menos hueco (unas 0,15 s/vuelta más de ventaja al atacar, y vuelve a intentarlo antes) y, al
-defender, cierra más tarde y cede menos (el que le ataca necesita ~0,12 s/vuelta más). A cambio, se toca casi el doble,
-se pasa más de frenada y, si hay toque, los comisarios le echan la culpa más a menudo. La IA de los rivales y el
+defender, cierra más tarde y cede menos (el que le ataca necesita ~0,12 s/vuelta más). Se ve en la pista: atacando va
+más pegado al otro y, defendiendo, tapa el interior más tarde y más cerrado. A cambio, en paralelo y tan juntos se
+rozan (de ahí salen sus toques de más: con toda la parrilla en duro, unos 2,8 por carrera frente a 1,1), se pasa más
+de frenada, se mueve en la frenada bastante más a menudo y, si hay toque, los comisarios le echan la culpa más a
+menudo.
+
+**Moverse en la frenada.** El que tapa el interior puede cambiar de dirección una vez. A veces (más los agresivos, y
+mucho más en duro) se mueve otra vez con el otro ya casi al lado: el que ataca tiene que levantar y los comisarios lo
+investigan (5 s de sanción o una advertencia). Pasa más o menos una vez cada ocho carreras. La IA de los rivales y el
 automático van siempre en limpio. El Muro cuenta el riesgo en la ventaja y en lo que hace falta para pasar.
 
 **Averías que avisan.** La mitad de las averías rompen de golpe; el resto avisa antes por la telemetría (temperatura
@@ -450,6 +457,8 @@ Antes la dificultad del circuito recortaba la probabilidad por arriba: con dos s
   engomada) y, con la pista mojándose o secándose, se pisa el agua que no han apartado los demás. Abrirse para
   respirar compensa hasta más o menos 1 s detrás; más lejos cuesta más de lo que da. `npx tsx scripts/aire.ts` dice
   lo que se pierde por vuelta a 0,3, 0,5, 0,8 y 1,2 s de otro coche en cada circuito.
+- **Trazada de mojado:** con la pista mojada la goma de la trazada de seco resbala, así que la buena se aparta del
+  vértice (con la pista empapada, algo por fuera). Los coches la siguen y lo que cuesta es ir por la de seco.
 
 Cada circuito tiene su balance. En Monza ir a rebufo compensa; en Silverstone o Interlagos es mejor el aire limpio, salvo con mucho hueco.
 
