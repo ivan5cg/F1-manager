@@ -295,14 +295,14 @@ export function planOptions(sess: Session, car: Car, k: TeamKnowledge, n = 3): P
  * Lluvia media sobre el circuito que espera el equipo dentro de m minutos (mm/h). La previsión da el máximo sobre el
  * circuito; se ajusta con lo que cae ahora de media.
  */
-function rainCurve(fc: Forecast, rainNow: number): (m: number) => number {
-  const scale = fc.p50[0] > 0.3 ? clamp(rainNow / fc.p50[0], 0.3, 1) : 0.6;
+function rainCurve(fc: Forecast, rainNow: number, p = fc.p50): (m: number) => number {
+  const scale = p[0] > 0.3 ? clamp(rainNow / p[0], 0.3, 1) : 0.6;
   return (m: number) => {
     const hz = fc.horizons;
     let i = 0;
     while (i < hz.length - 2 && m > hz[i + 1]) i++;
     const f = clamp((m - hz[i]) / (hz[i + 1] - hz[i]), 0, 1);
-    return (fc.p50[i] + (fc.p50[i + 1] - fc.p50[i]) * f) * scale;
+    return (p[i] + (p[i + 1] - p[i]) * f) * scale;
   };
 }
 
@@ -877,16 +877,24 @@ export function qualiTick(sess: Session, car: Car) {
     const hurry = aw > WET.si * 0.6 || sess.rainOnTrack() > 1;
     if (part.minutes * 60 - lastDep > outLap + lap * 2 + 120) deps.push(part.minutes * 60 - (hurry ? r.range(5, 45) : r.range(50, 200)));
     deps.push(lastDep);
-    car.qPlan = { part: sess.part, deps };
+    // con la pista secándose, algún muro prudente sale igualmente pronto a por un tiempo de seguridad
+    const banker = hurry && r.chance(0.08 + 0.2 * (1 - car.team.estrategia / 100));
+    car.qPlan = { part: sess.part, deps, banker };
   }
   const plan = car.qPlan;
   if (!plan.deps.length) return;
   const fc = teamForecast(sess, car);
-  const urgent = Math.max(fc.prob[1], fc.prob[2]) > 0.6 && sess.avgWater() < 0.3;
+  // llega lluvia que va a empeorar la pista (no una llovizna que no impide que se siga secando): a por un tiempo ya
+  const urgent = Math.max(fc.prob[1], fc.prob[2]) > 0.6 && aw < 0.3 && (plan.urgentAt !== undefined || rainWorsens(sess, fc, aw));
   // ante la lluvia cada muro reacciona a su ritmo: unos salen ya, otros tardan en decidirse
   if (urgent && plan.urgentAt === undefined) plan.urgentAt = R - sess.rng.range(3, 20) - sess.rng.range(0, 80) * (1.25 - car.team.estrategia / 100);
   if (urgent && R > plan.urgentAt!) return;
   if (!urgent && R > plan.deps[0]) return;
+  // pista mojada que se va a secar: se espera en el garaje y se sale una sola vez, al final, con la pista mejor
+  if (!urgent && !plan.banker && waitForDrier(sess, car, R, outLap, lap)) {
+    plan.deps = [R - sess.rng.range(30, 60)];
+    return;
+  }
   if (urgent) plan.deps = [];
   else plan.deps.shift();
   const ord = sess.timingOrder().filter((c) => !c.eliminated);
@@ -954,6 +962,37 @@ export function qualiCanImprove(sess: Session, car: Car, inSec: number, atRisk =
   const loss = 0.45 * (1 - bestWaterGrip(w) / bestWaterGrip(w0));
   const gain = 0.005 + (atRisk ? 0.004 : 0);
   return loss < gain;
+}
+
+/** ¿La lluvia prevista para los próximos ~10 minutos va a dejar la pista más mojada que ahora? */
+function rainWorsens(sess: Session, fc: Forecast, now: number): boolean {
+  const ws = sess.projectWater(now, rainCurve(fc, sess.rainOnTrack()), 10);
+  return Math.max(...ws) > now * 1.15 + 0.03;
+}
+
+/**
+ * Clasificación con la pista mojada: ¿le compensa esperar en el garaje? El muro proyecta el agua con su previsión y
+ * compara la de una vuelta lanzada ahora con la de la última que le daría tiempo a dar (saliendo a más tardar con
+ * margen para tres). Si la pista va a estar claramente mejor, espera, salvo que la previsión pesimista traiga lluvia
+ * (entonces mejor tener un tiempo cuanto antes) o que ya no quede margen para esperar más.
+ */
+function waitForDrier(sess: Session, car: Car, R: number, outLap: number, lap: number): boolean {
+  if (sess.avgWater() < WET.si * 0.6) return false;
+  const latest = outLap + lap * 3 + 20;
+  if (R <= latest + 30) return false;
+  const fc = teamForecast(sess, car);
+  const now = sess.avgWater() * sess.rng.logn(0.1); // cada muro lee el agua con su error
+  const mins = Math.max(1, Math.ceil(R / 60));
+  const rainNow = sess.rainOnTrack();
+  const gain = (p: number[]) => {
+    const ws = sess.projectWater(now, rainCurve(fc, rainNow, p), mins);
+    const at = (sec: number) => ws[clamp(Math.round(sec / 60) - 1, 0, ws.length - 1)];
+    const wGoNow = at(outLap + lap * 0.5), wLate = at(R - lap * 1.2);
+    return 0.45 * (1 - bestWaterGrip(wGoNow) / bestWaterGrip(wLate));
+  };
+  // lo que espera ganar, contando algo con la previsión pesimista (si vuelve a llover, esperar sale caro)
+  const g50 = gain(fc.p50);
+  return g50 > 0 && 0.7 * g50 + 0.3 * gain(fc.p90) > 0.008 + 0.006 * (1 - car.team.estrategia / 100);
 }
 
 /**
