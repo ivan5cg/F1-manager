@@ -27,9 +27,13 @@ for (let r = 0; r < n; r++) {
     const last = new Map<number, string>();
     const lapSeen = new Map<number, number>();
     const log: string[] = [];
+    const lapWater: number[] = []; // agua al pasar el líder por meta, para ver si llegó el chaparrón que se esperaba
+    const after = (L: number) => ` → luego ${[1, 3, 5].map((d) => lapWater[L + d]?.toFixed(2) ?? "-").join("/")}`;
     while (!s.finished && s.wall < 4 * 3600) {
       s.step();
       const w = s.avgWater();
+      const lead = Math.max(...s.cars.map((c) => s.lapsDone(c)));
+      if (lapWater[lead] === undefined) lapWater[lead] = w;
       for (const c of s.cars) {
         if (!c.tyres || c.loc === "out") continue;
         const L = s.lapsDone(c);
@@ -51,7 +55,7 @@ for (let r = 0; r < n; r++) {
     }
     const res = s.results();
     console.log(`semilla ${seed0 + r}: podio ${res.slice(0, 3).map((x) => s.carById(x.id).d.abrev + "[" + [...s.carById(x.id).usedCompounds].join("") + "]").join(" ")}`);
-    for (const l of log.slice(0, 8)) console.log("   " + l);
+    for (const l of log.slice(0, 8)) console.log("   " + l.replace(/^V(\d+)(.*)$/, (_, L, r) => `V${L}${r}${after(Number(L))}`));
     wk.finish(s);
   }
 }

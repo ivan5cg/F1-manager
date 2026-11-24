@@ -482,7 +482,7 @@ export function aiDecide(sess: Session, car: Car, adviceOnly = false): string | 
     const alt: Compound | null = c === "I" ? (sess.avgWater() > WET.iw * 0.6 ? "W" : null) : c === "W" ? "I" : "M";
     const set = sess.bestSetFor(car, c) ?? (alt ? sess.bestSetFor(car, alt) : undefined);
     if (!set) return null;
-    if (!adviceOnly) car.pitRequest = set.id;
+    if (!adviceOnly) { car.pitRequest = set.id; car.pitWhy = `clima v${done} ${car.tyres!.c}${car.tyres!.laps}→${set.c} agua ${sess.avgWater().toFixed(2)}`; }
     return set.id;
   };
   const wc = weatherCall(sess, car);
