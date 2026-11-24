@@ -539,7 +539,21 @@ export function aiDecide(sess: Session, car: Car, adviceOnly = false): string | 
   let say = ""; // la razón, dicha para el jugador
   if (wear > 0.9 && left > 2) { box = true; why = "desgaste"; say = "los neumáticos no dan más"; }
   if (stopsLeft > 0 && done >= plannedEnd) {
-    box = true; why = "plan"; say = "es la vuelta prevista";
+    const worn = box; // ya se para por desgaste: eso manda
+    if (!worn) { box = true; why = "plan"; say = needRule ? "es la vuelta prevista y aún falta el segundo compuesto" : "es la vuelta prevista"; }
+    // el plan puede haberse quedado viejo: el jugador no paró cuando tocaba (la parada sigue "pendiente" vueltas
+    // después) o quedan ya pocas vueltas. Antes se pedía parar igual, aunque fuera a 4 del final con gomas que
+    // llegan de sobra. Se hace la cuenta: si seguir (con lo que haga falta después) sale mejor que parar ya, no se para
+    const stale = adviceOnly || done > plannedEnd || left <= 12;
+    if (stale && !needRule && !worn) {
+      const stay = enumeratePlans(sess, car, k, done, cur, age, 0)[0];
+      const pit = enumeratePlans(sess, car, k, done, null, 0, 0, true)[0];
+      if (stay && pit && stay.total! <= pit.total! + lossGreen + sess.trafficCost) {
+        box = false; why = ""; say = "";
+        // las gomas llegan: el plan pasa a ser seguir así (para no volver a pedirlo cada vuelta)
+        if (!adviceOnly) car.plan = { stints: [...car.plan.stints.slice(0, car.stops), ...stay.stints] };
+      }
+    }
     // la ventana está abierta, pero saldría en mitad de un grupo o tendría que esperar al compañero: si las gomas
     // aguantan, una vuelta más (los muros buenos lo ven; no se alarga más de tres vueltas)
     const hold = car.plan.hold ?? 0;
