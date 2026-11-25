@@ -2,7 +2,7 @@
 // Define bioma, paleta de pianos (2 o 3 colores), tipo y pintura de escapatorias,
 // estilo urbano y torres de focos para los 24 circuitos del calendario.
 
-export type BiomeId = "bosque" | "tropical" | "seco" | "mediterraneo" | "dunas" | "desierto";
+export type BiomeId = "alpino" | "bosque" | "tropical" | "seco" | "mediterraneo" | "dunas" | "desierto";
 export type RunoffMode = "grava" | "asfalto";
 export type UrbanStyle = "mediterraneo" | "bahia" | "neones" | "piedra";
 
@@ -67,6 +67,10 @@ export interface TrackVisualProfile {
   overpass?: TrackOverpass;
   /** Curvas con peralte transversal visible (p. ej. Zandvoort y Madrid). */
   bankings?: readonly TrackBank[];
+  /** Tramos [s0, s1] en metros con trampa de grava real en circuitos cuya escapatoria base es asfalto pintado. */
+  gravelZones?: readonly (readonly [number, number])[];
+  /** Tramos [s0, s1] con tira estrecha de grava FIA (~2,5 m) pegada al piano exterior delante del asfalto pintado (p. ej. T9-T10 en Spielberg 2024-2026). */
+  gravelStrips?: readonly (readonly [number, number])[];
 }
 
 export const DEFAULT_TRACK_VISUAL: TrackVisualProfile = {
@@ -86,12 +90,14 @@ export const TRACK_VISUALS: Record<string, TrackVisualProfile> = {
     biome: "tropical",
     kerbs: [0xc21f24, 0xdeddd8],
     runoff: { mode: "asfalto", color: 0x414751, accent: 0xb02626, pattern: 1 },
+    // Trampas de grava reales en Shanghái: horquilla T6, enlazadas T7-T8, T11-T13 y horquilla T14
+    gravelZones: [[1860, 2195], [2240, 2800], [3160, 3670], [4685, 4975]],
   },
   suzuka: {
     biome: "bosque",
     kerbs: [0xc21f24, 0xdeddd8],
     runoff: { mode: "grava", color: 0xc0b08a },
-    overpass: { sOver: 4919, sUnder: 2549, halfSpan: 52, liftOver: 4.4, dipUnder: 2.6 },
+    overpass: { sOver: 4924, sUnder: 2548, halfSpan: 52, liftOver: 4.4, dipUnder: 2.6 },
   },
   sepang: {
     biome: "tropical",
@@ -112,12 +118,17 @@ export const TRACK_VISUALS: Record<string, TrackVisualProfile> = {
     biome: "desierto",
     kerbs: [0xc21e26, 0xdeddd8],
     runoff: { mode: "asfalto", color: 0x3b4048, accent: 0x2372a4, pattern: 1 },
+    // Trampas de grava exteriores reales en Sakhir: T4, horquilla T8 y T11
+    gravelZones: [[1400, 1670], [2510, 2880], [3730, 4050]],
     floodlights: true,
   },
   lusail: {
     biome: "desierto",
     kerbs: [0x7d1636, 0xdeddd8],
     runoff: { mode: "asfalto", color: 0x41454d, accent: 0x7d1636, pattern: 1 },
+    // Trampas de grava y tiras FIA 2024-2026 en Lusail (T1, T4, T6, T10, T12-T14, T16)
+    gravelZones: [[335, 655], [1315, 1750], [1825, 2085], [2810, 3270], [3410, 4045], [4550, 4900]],
+    gravelStrips: [[2165, 2490], [4140, 4400]],
     barrier: [0x7d1636, 0xdeddd8],
     floodlights: true,
   },
@@ -143,11 +154,17 @@ export const TRACK_VISUALS: Record<string, TrackVisualProfile> = {
     biome: "seco",
     kerbs: [0xc21f24, 0xdeddd8],
     runoff: { mode: "asfalto", color: 0x484e57, accent: 0xc9961e, pattern: 1 },
+    // Trampas de grava reales del trazado 2023-2026 (sin chicane final): T1-T2, T3-T4 Repsol, T5, T7-T9 Campsa y T12-T14
+    gravelZones: [[595, 720], [1100, 1830], [1900, 2470], [2600, 2950], [3680, 4400]],
   },
   spielberg: {
-    biome: "bosque",
+    biome: "alpino",
     kerbs: [0xc81e1e, 0xe0b81c],
     runoff: { mode: "asfalto", color: 0x474d56, accent: 0xc02424, pattern: 1 },
+    // Trampas de grava reales FIA 2024-2026: salida de T3 (frenada asfaltada), T4 completa y T6+T7 continuas
+    gravelZones: [[1415, 1545], [2120, 2340], [2580, 3175]],
+    // Tiras estrechas de grava de 2,5 m tras el piano exterior en T9 y T10 manteniendo el gran asfalto pintado detrás
+    gravelStrips: [[3740, 4070]],
   },
   silverstone: {
     biome: "bosque",
@@ -155,7 +172,7 @@ export const TRACK_VISUALS: Record<string, TrackVisualProfile> = {
     runoff: { mode: "grava", color: 0xbeb08d },
   },
   spa: {
-    biome: "bosque",
+    biome: "alpino",
     kerbs: [0xc81e1e, 0xe0b81c],
     runoff: { mode: "grava", color: 0xbba986 },
   },
@@ -163,14 +180,16 @@ export const TRACK_VISUALS: Record<string, TrackVisualProfile> = {
     biome: "seco",
     kerbs: [0xc21f24, 0xdeddd8, 0x1c7a3c],
     runoff: { mode: "asfalto", color: 0x4a5058, accent: 0x25743c, pattern: 1 },
+    // Trampas de grava reales en Hungaroring: T4 Mansell, T5, T11 y T12
+    gravelZones: [[1930, 2345], [3420, 3585], [3655, 3915]],
   },
   zandvoort: {
     biome: "dunas",
     kerbs: [0x1a5cb8, 0xe2bc1c],
     runoff: { mode: "grava", color: 0xd8c89e },
     bankings: [
-      { s0: 825, s1: 985, angle: 0.34, ramp: 35 },   // Hugenholtzbocht (Curva 3, ~19°)
-      { s0: 3710, s1: 4010, angle: -0.32, ramp: 55 }, // Arie Luyendykbocht (Curva 14, ~18°)
+      { s0: 805, s1: 995, angle: 0.34, ramp: 35 },   // Hugenholtzbocht (Curva 3, ~19°)
+      { s0: 3540, s1: 3970, angle: -0.32, ramp: 55 }, // Arie Luyendykbocht (Curva 14, ~18°)
     ],
   },
   monza: {
@@ -182,6 +201,7 @@ export const TRACK_VISUALS: Record<string, TrackVisualProfile> = {
     biome: "seco",
     kerbs: [0xc21e26, 0xdeddd8],
     runoff: { mode: "asfalto", color: 0x444952, accent: 0xb62a24, pattern: 2 },
+    gravelZones: [[2260, 2845]], // Grava exterior en el peralte de La Monumental (T12)
     bankings: [
       { s0: 2285, s1: 2750, angle: -0.38, ramp: 65 }, // La Monumental (Curva 12, ~22°)
     ],
@@ -204,11 +224,16 @@ export const TRACK_VISUALS: Record<string, TrackVisualProfile> = {
     biome: "bosque",
     kerbs: [0xc21f24, 0xdeddd8],
     runoff: { mode: "asfalto", color: 0x464c54, accent: 0x2c6b3a, pattern: 0 },
+    // Trampas de grava reales en Montreal: S de Senna (T1-T2) y Horquilla (T10)
+    gravelZones: [[265, 690], [2600, 2816]],
   },
   austin: {
     biome: "seco",
     kerbs: [0xbe1e26, 0xdeddd8, 0x1b4ca0],
     runoff: { mode: "asfalto", color: 0x1d4e96, accent: 0xbe242a, pattern: 2 },
+    // Grava en T12 y T19 + tiras de grava FIA 2024-2026 en T6 y T11
+    gravelZones: [[3675, 3835], [4970, 5200]],
+    gravelStrips: [[1405, 1635], [2445, 2720]],
     barrier: [0x1b4ca0, 0xe0e2e6],
   },
   mexico: {

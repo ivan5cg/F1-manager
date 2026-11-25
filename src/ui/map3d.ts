@@ -86,6 +86,14 @@ function modLoadLandmarkGlb(trackId, lmId) {
         g.computeBoundingBox();
         if (g.boundingBox) bb.union(g.boundingBox);
         const m = Array.isArray(o.material) ? o.material[0].clone() : o.material.clone();
+        // Mejora de legibilidad PBR en hitos .glb (evita acabados metálicos demasiado oscuros desde vista aérea)
+        if ("envMapIntensity" in m) m.envMapIntensity = 1.55;
+        if ("metalness" in m && typeof m.metalness === "number") m.metalness = Math.min(m.metalness, 0.45);
+        if ("roughness" in m && typeof m.roughness === "number") m.roughness = Math.max(0.32, m.roughness);
+        if ("color" in m && m.color?.isColor && !m.map) {
+          const lum = m.color.r * 0.299 + m.color.g * 0.587 + m.color.b * 0.114;
+          if (lum < 0.18) m.color.lerp(new THREE.Color(0xd8dde4), 0.35);
+        }
         raw.push({ geo: g, mat: m });
       });
       if (!raw.length || bb.isEmpty()) return null;
@@ -310,7 +318,7 @@ catch (e) { throw new Error("sin WebGL"); }
 // La escena se calcula en luz lineal y con valores por encima de 1 (el sol, los focos); la curva de tonos
 // la lleva a pantalla. La «neutra» comprime solo los brillos: los colores de los equipos salen como son.
 renderer.toneMapping = THREE.NeutralToneMapping;
-renderer.toneMappingExposure = 0.88;
+renderer.toneMappingExposure = 0.94;
 const scene = new THREE.Scene();
 const fog = new THREE.FogExp2(0xc3d8ea, 0.00042);
 scene.fog = fog;
@@ -542,6 +550,7 @@ const U = {
 };
 // Biomas del terreno y arbolado (seleccionados por circuito desde trackVisuals.ts)
 const BIOMES = {
+  alpino:       { grass: 0x447439, gravel: 0xc2b28b, cA: 0x2b5b2a, cB: 0x3e7337, cC: 0x528744, slope: 0x5f6354, dry: 0.22, mow: 1.0, treeA: 0x1d4725, treeB: 0x3f7539, tintA: 0x9ac692, tintB: 0xd8ecc4, species: [["pine", 0.78], ["leaf", 0.22]], maxT: 950, arid: false, sea: 0x0b2b36 },
   bosque:       { grass: 0x456e3a, gravel: 0xc2b28b, cA: 0x2f562b, cB: 0x406a37, cC: 0x4e7941, slope: 0x575247, dry: 0.35, mow: 1.0, treeA: 0x28512c, treeB: 0x4e8042, tintA: 0xbad6a8, tintB: 0xe6f2d8, species: [["leaf", 0.58], ["pine", 0.42]], maxT: 800, arid: false, sea: 0x0b2b36 },
   tropical:     { grass: 0x3e6d34, gravel: 0xc2b086, cA: 0x295627, cB: 0x3a6b32, cC: 0x4b7b3e, slope: 0x6b533e, dry: 0.20, mow: 1.0, treeA: 0x225429, treeB: 0x47823f, tintA: 0xaad29c, tintB: 0xdcf4c8, species: [["leaf", 0.55], ["palm", 0.45]], maxT: 800, arid: false, sea: 0x092838 },
   seco:         { grass: 0x697442, gravel: 0xc9b489, cA: 0x566638, cB: 0x747b47, cC: 0x8b8352, slope: 0x867861, dry: 0.65, mow: 0.5, treeA: 0x31522b, treeB: 0x5a703a, tintA: 0xd2c998, tintB: 0xeee2b2, species: [["leaf", 0.65], ["pine", 0.35]], maxT: 560, arid: false, sea: 0x0c3448 },
@@ -778,15 +787,15 @@ float cloudS = texture2D(uCloud, vXZ / (2.0 * uTexR) + 0.5).g;
   col *= (0.55 + 0.9 * d1.r) * (0.72 + 0.56 * d2.r) * (0.84 + 0.32 * vn(vXZ * 0.13));
   col = mix(col, col * vec3(1.42, 1.12, 0.58), smoothstep(0.5, 0.88, vn(vXZ * 0.031 + 4.0)) * uDry);
   dn = (d1.gb - 0.5) * 2.0 + (d2.gb - 0.5) * 0.8; rough = 0.93;
-  // en el talud (vU > 0) la textura en plano XZ se estiraría: se pasa a tierra/roca proyectada a lo largo y en altura
-  float slope = smoothstep(0.005, 0.085, abs(vU) + (vn(vec2(vV * 0.14, vWY * 0.3)) - 0.5) * 0.035);
+  // en el talud (vU > 0) se mantiene hierba en la parte alta y solo aflora tierra/roca suavemente en la base
+  float slope = smoothstep(0.42, 0.88, abs(vU) + (vn(vec2(vV * 0.14, vWY * 0.3)) - 0.5) * 0.08);
   if (slope > 0.01) {
     vec4 rk = texture2D(uRock, vec2(vV, vWY) / 3.8);
     float strata = 0.82 + 0.36 * vn(vec2(vV * 0.05, vWY * 0.45));
     vec3 rcol = uSlopeCol * (0.62 + 0.76 * rk.r) * strata;
-    col = mix(col, rcol, slope);
-    dn = mix(dn, vTan * (rk.g - 0.5) * 2.0, slope);
-    dnY = (rk.b - 0.5) * 1.4 * slope;
+    col = mix(col, rcol, slope * 0.48);
+    dn = mix(dn, vTan * (rk.g - 0.5) * 1.6, slope * 0.55);
+    dnY = (rk.b - 0.5) * 1.0 * slope;
     rough = mix(rough, 0.96, slope);
   }
 #elif RMODE == 4
@@ -842,11 +851,17 @@ float cloudS = texture2D(uCloud, vXZ / (2.0 * uTexR) + 0.5).g;
   dn = vTan * ((pf < 0.5 ? pf : pf - 1.0) * 4.5 / max(postW, 0.01)) * 0.7 * post;
   rough = mix(0.48, 0.38, post); metal = 0.65;
 #elif RMODE == 7
-  // paneles de publicidad: cada 7 m, una marca al azar
+  // paneles de publicidad: cada 7 m, una marca al azar; por detrás, trasera metálica con montantes (evita texto en espejo en Tele)
   float pi = floor(vV / 7.0), f = fract(vV / 7.0);
-  col = texture2D(uAds, vec2((floor(h21(vec2(pi, 3.7)) * 8.0) + (vDash > 0.5 ? 1.0 - f : f)) / 8.0, vU)).rgb;
-  col *= 1.0 - 0.5 * step(f, 0.012);
-  rough = 0.45; glow = 0.08; // los paneles se leen también a contraluz
+  if (!gl_FrontFacing) {
+    float strut = 1.0 - smoothstep(0.03, 0.07, abs(fract(vV / 1.75) - 0.5));
+    col = mix(SR(vec3(0.18, 0.20, 0.23)), SR(vec3(0.32, 0.35, 0.39)), strut * 0.7);
+    rough = 0.65; metal = 0.45;
+  } else {
+    col = texture2D(uAds, vec2((floor(h21(vec2(pi, 3.7)) * 8.0) + (vDash > 0.5 ? 1.0 - f : f)) / 8.0, vU)).rgb;
+    col *= 1.0 - 0.5 * step(f, 0.012);
+    rough = 0.45; glow = 0.08; // los paneles se leen también a contraluz
+  }
 #elif RMODE == 8
   // hormigón de la zona de trabajo y del paddock: losas de 5 m con su tono, juntas de dilatación, manchas de aceite y
   // goma, y agua que se queda en las juntas
@@ -1478,7 +1493,27 @@ function buildTrackData(tr, id, envData) {
       const v = (wMask[j * N + i] * (1 - fx) + wMask[j * N + i + 1] * fx) * (1 - fy) + (wMask[(j + 1) * N + i] * (1 - fx) + wMask[(j + 1) * N + i + 1] * fx) * fy;
       return v >= 0.45;
     };
-    env = { en, abs, at: (x, z) => abs(x, z) - off, sea: wLvl - off, hasWater, wMask, wet };
+    let fMask = null, hasForest = false;
+    if (en.bosque) {
+      const raw = atob(en.bosque);
+      fMask = new Uint8Array(N * N);
+      let fCount = 0;
+      for (let k = 0; k < N * N; k++) {
+        const bit = (raw.charCodeAt(k >> 3) >> (k & 7)) & 1;
+        fMask[k] = bit;
+        if (bit) fCount++;
+      }
+      // Usar máscara OSM estricta solo cuando cubre >= 6 % del mapa (Spa, Spielberg, Monza, Hungaroring, Silverstone, Suzuka, Barcelona, Montreal)
+      hasForest = fCount >= N * N * 0.06;
+    }
+    const forest = (x, z) => {
+      if (!hasForest || !fMask) return -1;
+      const gx = (x + cx - en.x0) / en.paso, gy = (-z + cy - en.y0) / en.paso;
+      if (gx < 0 || gy < 0 || gx > N - 1 || gy > N - 1) return 0.5;
+      const i = clamp(Math.floor(gx), 0, N - 2), j = clamp(Math.floor(gy), 0, N - 2), fx = clamp(gx - i, 0, 1), fy = clamp(gy - j, 0, 1);
+      return (fMask[j * N + i] * (1 - fx) + fMask[j * N + i + 1] * fx) * (1 - fy) + (fMask[(j + 1) * N + i] * (1 - fx) + fMask[(j + 1) * N + i + 1] * fx) * fy;
+    };
+    env = { en, abs, at: (x, z) => abs(x, z) - off, sea: wLvl - off, hasWater, wMask, wet, hasForest, forest, pitPts: en.pit || null, gradas: en.gradas || null };
   }
   let sxx = 0, szz = 0, sxz = 0;
   for (let i = 0; i < n; i++) { sxx += X[i] * X[i]; szz += Z[i] * Z[i]; sxz += X[i] * Z[i]; }
@@ -1499,12 +1534,46 @@ function buildTrackData(tr, id, envData) {
   for (let i = 0; i < n; i++) absk[i] = wide[i];
   const sw = blur(absk, Math.round(40 / ds), n);
   const rL = new Float32Array(n), rR = new Float32Array(n);
+  const shBase = street ? 1.22 : 1.7;
   for (let i = 0; i < n; i++) {
     const s = i * ds, p = tr.pit, inPit = s >= p.entry - 60 || s <= p.exit + 60;
     const r = street ? 0 : clamp((Math.abs(sw[i]) - 0.1) * 60, 0, 26);
     if (sw[i] > 0) rR[i] = r; else rL[i] = r; // a izquierdas: el exterior es la derecha
     if (inPit) (PS > 0 ? rR : rL)[i] = 0;
     if (ovp && dCirc(s, ovp.sOver) < (ovp.halfSpan ?? 52) + 14) { rL[i] = 0; rR[i] = 0; }
+  }
+  // Recorte geométrico de seguridad: ninguna escapatoria ni muro puede invadir un tramo paralelo de pista (ej. Miami T17-T19)
+  if (!street) {
+    const minArc = Math.round(180 / ds), safeGap = (shBase + 1.0) * W_REAL + 5.5;
+    let clampedAny = false;
+    for (let i = 0; i < n; i++) {
+      if (rL[i] <= 0.5 && rR[i] <= 0.5) continue;
+      if (ovp && (dCirc(i * ds, ovp.sOver) < 120 || dCirc(i * ds, ovp.sUnder) < 120)) continue;
+      const i0 = (i - 1 + n) % n, i1 = (i + 1) % n;
+      const tx = X[i1] - X[i0], tz = Z[i1] - Z[i0], tl = Math.hypot(tx, tz) || 1;
+      const rx = -tz / tl, rz = tx / tl;
+      for (const sg of [-1, 1]) {
+        const arr = sg > 0 ? rR : rL;
+        if (arr[i] <= 0.5) continue;
+        let maxR = arr[i];
+        for (let j = 0; j < n; j += 3) {
+          const arc = Math.min(Math.abs(j - i), n - Math.abs(j - i));
+          if (arc < minArc) continue;
+          const dx = X[j] - X[i], dz = Z[j] - Z[i];
+          const lat = dx * rx * sg + dz * rz * sg;
+          if (lat <= 0 || lat > maxR + safeGap + 12) continue;
+          const lon = Math.abs(dx * (tx / tl) + dz * (tz / tl));
+          if (lon > safeGap) continue;
+          const allow = Math.max(0, lat - safeGap);
+          if (allow < maxR) maxR = allow;
+        }
+        if (maxR < arr[i]) { arr[i] = maxR; clampedAny = true; }
+      }
+    }
+    if (clampedAny) {
+      const bL = blur(rL, Math.round(12 / ds), n), bR = blur(rR, Math.round(12 / ds), n);
+      for (let i = 0; i < n; i++) { rL[i] = Math.min(rL[i], bL[i]); rR[i] = Math.min(rR[i], bR[i]); }
+    }
   }
   const rP = PS > 0 ? rR : rL, rO = PS > 0 ? rL : rR; // escapatoria del lado de boxes y del otro
   return { dip, env, bank, SH: street ? 1.22 : 1.7, n, ds, L, E, Ex: maxx - minx, Ez: maxy - miny, cx, cy, X, Z, H, hmean, axis, line, rP, rO, PS, wr, street, Wov: Math.max(16, E * 0.0115) };
@@ -1974,6 +2043,11 @@ function propBuilder() {
       sample(s, f); const h = Math.hypot(f.tx, f.tz) || 1; tx = f.tx / h; tz = f.tz / h; wr = arrAt(T.wr, s); sg = side;
       ch = Math.min(NCH - 1, Math.floor(mod(s, T.L) / CHL)); return B;
     },
+    /** Sitúa el marco local en coordenadas reales del mundo (para gradas/edificios extraídos de OSM). */
+    atWorld(wx, wy, wz, ux, uz, bx, bz, chS = 0) {
+      f.x = wx; f.y = wy; f.z = wz; tx = ux; tz = uz; f.rx = bx; f.rz = bz; wr = 1; sg = 1;
+      ch = Math.min(NCH - 1, Math.floor(mod(chS, T.L) / CHL)); return B;
+    },
     v(x, y, z, lw, lm, c, pat, cell, u, v) {
       const rx = f.rx * sg, rz = f.rz * sg;
       AN.push(f.x + rx * lm, f.y, f.z + rz * lm); SD.push(f.rx, 0, f.rz); LW.push(lw * sg * wr);
@@ -2208,13 +2282,24 @@ function buildWorld() {
   const urbanStyle = vis.urban || "mediterraneo";
   const dsmFlat = urbanStyle === "bahia" || urbanStyle === "neones";
   const ramp = (s) => pitRamp(s);
-  const rightEdge = (s) => Math.max(SH, ramp(s) * (PIT_OFF + 4.2));
+  const hasRealPit = !street && !!(T.env?.pitPts && T.env.pitPts.length >= 6);
+  // Cuando hay polilínea real de pit-lane (OSM), la zona de garajes y paddock queda estrictamente en el tramo recto
+  const laneLen0 = T.L - track.pit.entry + track.pit.exit;
+  const gM0 = Math.min(100, laneLen0 * 0.25);
+  const pitApronRamp = (s) => {
+    if (!hasRealPit) return ramp(s);
+    const p = mod(s - (track.pit.entry + gM0 - 36), T.L);
+    const span = laneLen0 - 2 * gM0 + 84;
+    if (p > span) return 0;
+    return sstep(0, 26, p) * (1 - sstep(span - 26, span, p));
+  };
+  const rightEdge = (s) => Math.max(SH, pitApronRamp(s) * (PIT_OFF + 4.2));
   const grassCol = street ? 0x7c8187 : bio.grass;
   // arcén con su talud suave (aU = 1 abajo: pasa a tierra/roca triplanar sin estirar la hierba), escapatoria (grava o asfalto pintado), boxes, asfalto y muros
   // En el puente de Suzuka, el talud se recoge para dejar totalmente libre el paso inferior.
   const ovp = vis.overpass, dCirc = (a, b) => Math.min(mod(a - b, T.L), mod(b - a, T.L));
   const bridgeK = (s) => (ovp ? 1 - sstep((ovp.halfSpan ?? 52) - 8, (ovp.halfSpan ?? 52) + 14, dCirc(s, ovp.sOver)) : 0);
-  const bankW = street ? 10 : 24, bankH = street ? -28 : -26;
+  const bankW = street ? 10 : 36, bankH = street ? -28 : -16;
   ribbon(0, n, (i, s) => {
     const re = rightEdge(s), bk = bridgeK(s);
     const shL = SH * (1 - bk) + 1.12 * bk, shR = re * (1 - bk) + 1.12 * bk;
@@ -2223,8 +2308,39 @@ function buildWorld() {
   }, ribbonMat(grassCol, street || bio.arid ? 4 : 3, 0), 1);
   if (!street) {
     const painted = vis.runoff.mode === "asfalto";
+    const gZones = vis.gravelZones;
+    const gravelK = (s) => {
+      if (!gZones?.length) return 0;
+      const sm = mod(s, T.L);
+      let k = 0;
+      for (const [a, b] of gZones) k = Math.max(k, sstep(a - 14, a + 10, sm) * (1 - sstep(b - 10, b + 14, sm)));
+      return k;
+    };
+    const gStrips = vis.gravelStrips;
+    const stripK = (s) => {
+      if (!gStrips?.length) return 0;
+      const sm = mod(s, T.L);
+      let k = 0;
+      for (const [a, b] of gStrips) k = Math.max(k, sstep(a - 10, a + 8, sm) * (1 - sstep(b - 8, b + 10, sm)));
+      return k;
+    };
     const rMat = ribbonMat(vis.runoff.color || bio.gravel, painted ? 9 : 4, -1);
-    if (painted) {
+    if (painted && gZones?.length) {
+      // Transición disjunta entre asfalto pintado y grava real (evita solapes / Z-fighting en las juntas)
+      const gMat = ribbonMat(bio.gravel, 4, -2);
+      const pOf = (gk) => 1 - sstep(0.12, 0.46, gk);
+      const gOf = (gk) => sstep(0.54, 0.88, gk);
+      ribbon(0, n, (i, s) => { const r = T.rO[i] * pOf(gravelK(s)), f = Math.min(1, r / 3); return [[-(1.08 + 0.48 * f), -r, 0, r], [-1.08, 0, 0, 0]]; }, rMat, 2, false, () => [0, 1]);
+      ribbon(0, n, (i, s) => { const r = T.rP[i] * pOf(gravelK(s)), f = Math.min(1, r / 3); return [[1.08, 0, 0, 0], [1.08 + 0.48 * f, r, 0, r]]; }, rMat, 2, false, () => [0, 1]);
+      ribbon(0, n, (i, s) => { const r = T.rO[i] * gOf(gravelK(s)); return [[-1.3, -r, 0, 0], [-1.3, 0, 0, 0]]; }, gMat, 2, false, () => [0, 1]);
+      ribbon(0, n, (i, s) => { const r = T.rP[i] * gOf(gravelK(s)); return [[1.3, 0, 0, 0], [1.3, r, 0, 0]]; }, gMat, 2, false, () => [0, 1]);
+      if (gStrips?.length) {
+        // Tira estrecha de grava FIA (2,8 m) pegada al piano exterior delante del asfalto pintado (p. ej. T9-T10 en Spielberg)
+        const sMat = ribbonMat(bio.gravel, 4, -3);
+        ribbon(0, n, (i, s) => { const w = Math.min(2.8, T.rO[i]) * stripK(s) * pOf(gravelK(s)); return [[-1.12, -w, 0.01, 0], [-1.12, 0, 0.01, 0]]; }, sMat, 3, false, () => [0, 1]);
+        ribbon(0, n, (i, s) => { const w = Math.min(2.8, T.rP[i]) * stripK(s) * pOf(gravelK(s)); return [[1.12, 0, 0.01, 0], [1.12, w, 0.01, 0]]; }, sMat, 3, false, () => [0, 1]);
+      }
+    } else if (painted) {
       ribbon(0, n, (i) => { const r = T.rO[i], f = Math.min(1, r / 3); return [[-(1.08 + 0.48 * f), -r, 0, r], [-1.08, 0, 0, 0]]; }, rMat, 2, false, () => [0, 1]);
       ribbon(0, n, (i) => { const r = T.rP[i], f = Math.min(1, r / 3); return [[1.08, 0, 0, 0], [1.08 + 0.48 * f, r, 0, r]]; }, rMat, 2, false, () => [0, 1]);
     } else {
@@ -2232,23 +2348,176 @@ function buildWorld() {
       ribbon(0, n, (i) => [[1.3, 0, 0, 0], [1.3, T.rP[i], 0, 0]], rMat, 2, false, () => [0, 1]);
     }
   }
+  // ---- Calle de boxes real (OSM) o paralela sintética
+  let realPit = null;
   const pitI0 = Math.floor(track.pit.entry / T.ds), pitN = Math.ceil((T.L - track.pit.entry + track.pit.exit) / T.ds);
-  ribbon(pitI0, pitN, (i, s) => { const o = ramp(s) * PIT_OFF; return [[o - 0.55, 0, 0, -1], [o + 0.55, 0, 0, 1]]; }, ribbonMat(0x6d747e, 2, -2), 3);
-  // zona de trabajo delante de los garajes y paddock detrás
-  ribbon(pitI0, pitN, (i, s) => { const o = ramp(s) * PIT_OFF, r = ramp(s); return [[o + 0.55, 0, 0, 0], [o + 0.55 + r * 0.8, 0, 0, 0]]; }, ribbonMat(0x9a9fa6, 8, -2), 3);
-  ribbon(pitI0, pitN, (i, s) => { const o = ramp(s) * PIT_OFF, r = ramp(s); return [[o + 1.35 * r + 0.55 * (1 - r), 0, 0, 0], [o + (1.35 + 2.6) * r + 0.55 * (1 - r), 10 * r, 0, 0]]; }, ribbonMat(0x8a9097, 8, -1), 2);
+  if (hasRealPit) {
+    const rawPts = T.env.pitPts.map(([gx, gy]) => [gx - T.cx, -(gy - T.cy)]);
+    // Remuestreo suave cada ~7 m a lo largo de la polilínea real de OSM
+    const cum = [0];
+    for (let k = 1; k < rawPts.length; k++) cum.push(cum[k - 1] + Math.hypot(rawPts[k][0] - rawPts[k - 1][0], rawPts[k][1] - rawPts[k - 1][1]));
+    const totL = cum[cum.length - 1] || 1;
+    const M = Math.max(40, Math.round(totL / 7));
+    const px = new Float32Array(M + 1), pz = new Float32Array(M + 1), py = new Float32Array(M + 1);
+    const ptx = new Float32Array(M + 1), ptz = new Float32Array(M + 1), prx = new Float32Array(M + 1), prz = new Float32Array(M + 1);
+    const ps = new Float32Array(M + 1), pushW = new Float32Array(M + 1), nearS = new Float32Array(M + 1);
+    for (let k = 0; k <= M; k++) {
+      const dist = (k / M) * totL;
+      ps[k] = dist;
+      let j = 0;
+      while (j < cum.length - 2 && cum[j + 1] < dist) j++;
+      const f = (dist - cum[j]) / Math.max(1e-4, cum[j + 1] - cum[j]);
+      px[k] = rawPts[j][0] + (rawPts[j + 1][0] - rawPts[j][0]) * f;
+      pz[k] = rawPts[j][1] + (rawPts[j + 1][1] - rawPts[j][1]) * f;
+    }
+    // Suavizado ligero de vértices interiores (mantiene intactos el arranque y la incorporación)
+    for (let pass = 0; pass < 2; pass++) {
+      const nx = px.slice(), nz = pz.slice();
+      for (let k = 1; k < M; k++) { nx[k] = (px[k - 1] + 2 * px[k] + px[k + 1]) * 0.25; nz[k] = (pz[k - 1] + 2 * pz[k] + pz[k + 1]) * 0.25; }
+      px.set(nx); pz.set(nz);
+    }
+    // Proyección sobre pista para altitud suave, tangentes y empuje lateral adaptativo con uW
+    for (let k = 0; k <= M; k++) {
+      const dx = px[Math.min(M, k + 1)] - px[Math.max(0, k - 1)];
+      const dz = pz[Math.min(M, k + 1)] - pz[Math.max(0, k - 1)];
+      const dl = Math.hypot(dx, dz) || 1;
+      ptx[k] = dx / dl; ptz[k] = dz / dl;
+      prx[k] = -ptz[k]; prz[k] = ptx[k];
+      let bi = 0, bd2 = 1e12;
+      for (let i = 0; i < n; i++) {
+        const d2 = (T.X[i] - px[k]) ** 2 + (T.Z[i] - pz[k]) ** 2;
+        if (d2 < bd2) { bd2 = d2; bi = i; }
+      }
+      nearS[k] = bi * T.ds;
+      py[k] = T.H[bi];
+      const dTr = Math.sqrt(bd2);
+      const endK = sstep(0, 60, ps[k]) * sstep(0, 60, totL - ps[k]);
+      // En la recta junto a boxes (dTr ~ 12 m), se abre con uW igual que PIT_OFF; en el atajo de curva 10 (dTr > 28 m) mantiene la isleta verde real
+      pushW[k] = PIT_OFF * endK * (1 - sstep(16, 36, dTr));
+    }
+    for (let pass = 0; pass < 4; pass++) {
+      const ny = py.slice();
+      for (let k = 1; k < M; k++) ny[k] = (py[k - 1] + 2 * py[k] + py[k + 1]) * 0.25;
+      py.set(ny);
+    }
+    // Construir cinta de asfalto del pit-lane real usando el mismo shader RMODE=2
+    const V = (M + 1) * 2;
+    const P = new Float32Array(V * 3), NO = new Float32Array(V * 3), S2 = new Float32Array(V * 3), ED = new Float32Array(V * 3), GEO = new Float32Array(V * 4);
+    const f1 = () => new Float32Array(V), UU = f1(), VV = f1(), WET = f1(), WETO = f1(), KE = f1(), DA = f1(), LI = f1(), WR = f1();
+    const idx = [];
+    for (let k = 0; k <= M; k++) {
+      const pw = pushW[k] * T.PS;
+      const cols = [[pw - 0.55, -pw * W_REAL, 0.04, -1], [pw + 0.55, -pw * W_REAL, 0.04, 1]];
+      for (let j = 0; j < 2; j++) {
+        const v = k * 2 + j, c = cols[j];
+        P[v * 3] = px[k]; P[v * 3 + 1] = py[k]; P[v * 3 + 2] = pz[k]; NO[v * 3 + 1] = 1;
+        S2[v * 3] = prx[k]; S2[v * 3 + 2] = prz[k];
+        GEO[v * 4] = c[0]; GEO[v * 4 + 1] = c[1]; GEO[v * 4 + 2] = c[2]; GEO[v * 4 + 3] = 0;
+        UU[v] = c[3]; VV[v] = ps[k]; WR[v] = 1;
+      }
+      if (k < M) { const a = k * 2, b = a + 2; idx.push(a, a + 1, b, a + 1, b + 1, b); }
+    }
+    const pg = new THREE.BufferGeometry();
+    const set = (nm, arr, sz) => pg.setAttribute(nm, new THREE.BufferAttribute(arr, sz));
+    set("position", P, 3); set("normal", NO, 3); set("aSide", S2, 3); set("aEdge", ED, 3); set("aGeo", GEO, 4);
+    set("aU", UU, 1); set("aV", VV, 1); set("aWet", WET, 1); set("aWetOff", WETO, 1); set("aWr", WR, 1); set("aKerb", KE, 1); set("aDash", DA, 1); set("aLine", LI, 1);
+    pg.setIndex(idx);
+    const pitMesh = add(new THREE.Mesh(pg, ribbonMat(0x6d747e, 2, -2)));
+    pitMesh.frustumCulled = false; pitMesh.renderOrder = 3; pitMesh.receiveShadow = true;
+    // Muros bajos de hormigón (lado pista) y guardarraíles exteriores a lo largo del pit-lane real (atajo T10 y salida T1)
+    const addPitWall = (sideLat, hFn, mat) => {
+      const WP = new Float32Array(V * 3), WNO = new Float32Array(V * 3), WS = new Float32Array(V * 3), WED = new Float32Array(V * 3), WGEO = new Float32Array(V * 4);
+      const WUU = f1(), WVV = f1(), WWET = f1(), WWETO = f1(), WKE = f1(), WDA = f1(), WLI = f1(), WWR = f1();
+      for (let k = 0; k <= M; k++) {
+        const pw = pushW[k] * T.PS, h = hFn(k);
+        const cols = [[pw + sideLat, -pw * W_REAL, 0, 0], [pw + sideLat, -pw * W_REAL, h, 1]];
+        for (let j = 0; j < 2; j++) {
+          const v = k * 2 + j, c = cols[j];
+          WP[v * 3] = px[k]; WP[v * 3 + 1] = py[k]; WP[v * 3 + 2] = pz[k]; WNO[v * 3 + 1] = 1;
+          WS[v * 3] = prx[k]; WS[v * 3 + 2] = prz[k];
+          WGEO[v * 4] = c[0]; WGEO[v * 4 + 1] = c[1]; WGEO[v * 4 + 2] = c[2]; WGEO[v * 4 + 3] = 0;
+          WUU[v] = c[3]; WVV[v] = ps[k]; WWR[v] = 1;
+        }
+      }
+      const wg = new THREE.BufferGeometry();
+      const wset = (nm, arr, sz) => wg.setAttribute(nm, new THREE.BufferAttribute(arr, sz));
+      wset("position", WP, 3); wset("normal", WNO, 3); wset("aSide", WS, 3); wset("aEdge", WED, 3); wset("aGeo", WGEO, 4);
+      wset("aU", WUU, 1); wset("aV", WVV, 1); wset("aWet", WWET, 1); wset("aWetOff", WWETO, 1); wset("aWr", WWR, 1); wset("aKerb", WKE, 1); wset("aDash", WDA, 1); wset("aLine", WLI, 1);
+      wg.setIndex(idx);
+      const wm = add(new THREE.Mesh(wg, mat));
+      wm.frustumCulled = false; wm.renderOrder = 5; wm.receiveShadow = true;
+    };
+    // Muro divisor interior del carril de entrada (isla de T10) y del carril de salida (interior T1 hasta antes de la incorporación)
+    addPitWall(-0.62 * T.PS, (k) => {
+      const apr = pitApronRamp(nearS[k]);
+      if (apr > 0.85) return 0;
+      const inEnt = ps[k] > 55 && ps[k] < totL * 0.45;
+      const inEx = ps[k] > totL * 0.5 && ps[k] < totL - 105;
+      return inEnt || inEx ? 0.92 : 0;
+    }, ribbonMat(0xcfd4db, 0, 0));
+    // Guardarraíl exterior protegiendo entrada y salida de boxes fuera de la zona de garajes
+    addPitWall(0.62 * T.PS, (k) => {
+      const apr = pitApronRamp(nearS[k]);
+      if (apr > 0.04) return 0;
+      return ps[k] > 42 && ps[k] < totL - 48 ? 1.0 : 0;
+    }, ribbonMat(0xcfd4db, 5, 0));
+    // Muestras para animar los coches por la calle real de boxes sin tocar la simulación
+    const samplePit = (u, W, out) => {
+      const f = clamp(u, 0, 1) * M, k0 = Math.min(M - 1, Math.floor(f)), t = f - k0;
+      const lerp = (a) => a[k0] + (a[k0 + 1] - a[k0]) * t;
+      const rx = lerp(prx), rz = lerp(prz), tx = lerp(ptx), tz = lerp(ptz);
+      const pw = lerp(pushW) * T.PS * (W - W_REAL);
+      out.x = lerp(px) + rx * pw; out.y = lerp(py) + 0.04; out.z = lerp(pz) + rz * pw;
+      out.tx = tx; out.tz = tz; out.rx = rx; out.rz = rz; out.s = lerp(nearS);
+      return out;
+    };
+    const uOfS = (s) => {
+      const sm = mod(s, T.L);
+      let bk = 0, bd = 1e9;
+      for (let k = 0; k <= M; k++) { const d = Math.min(mod(nearS[k] - sm, T.L), mod(sm - nearS[k], T.L)); if (d < bd) { bd = d; bk = k; } }
+      return bk / M;
+    };
+    const pitNear = new Uint8Array(n);
+    for (let k = 0; k <= M; k++) {
+      for (let i = 0; i < n; i++) {
+        if ((T.X[i] - px[k]) ** 2 + (T.Z[i] - pz[k]) ** 2 < 17 * 17) pitNear[i] = 1;
+      }
+    }
+    realPit = { sample: samplePit, uOfS, sEntry: nearS[0], sExit: nearS[M], totL, pitNear };
+    // Zona de trabajo delante de garajes y plataforma de paddock solo en el tramo recto
+    const apI0 = Math.floor(mod(track.pit.entry + gM0 - 36, T.L) / T.ds);
+    const apN = Math.ceil((laneLen0 - 2 * gM0 + 84) / T.ds);
+    ribbon(apI0, apN, (i, s) => { const r = pitApronRamp(s), o = PIT_OFF; return [[o + 0.55, 0, 0, 0], [o + 0.55 + r * 0.8, 0, 0, 0]]; }, ribbonMat(0x9a9fa6, 8, -2), 3);
+    ribbon(apI0, apN, (i, s) => { const r = pitApronRamp(s), o = PIT_OFF; return [[o + 1.35 * r + 0.55 * (1 - r), 0, 0, 0], [o + (1.35 + 2.6) * r + 0.55 * (1 - r), 10 * r, 0, 0]]; }, ribbonMat(0x8a9097, 8, -1), 2);
+  } else {
+    ribbon(pitI0, pitN, (i, s) => { const o = ramp(s) * PIT_OFF; return [[o - 0.55, 0, 0, -1], [o + 0.55, 0, 0, 1]]; }, ribbonMat(0x6d747e, 2, -2), 3);
+    // zona de trabajo delante de los garajes y paddock detrás
+    ribbon(pitI0, pitN, (i, s) => { const o = ramp(s) * PIT_OFF, r = ramp(s); return [[o + 0.55, 0, 0, 0], [o + 0.55 + r * 0.8, 0, 0, 0]]; }, ribbonMat(0x9a9fa6, 8, -2), 3);
+    ribbon(pitI0, pitN, (i, s) => { const o = ramp(s) * PIT_OFF, r = ramp(s); return [[o + 1.35 * r + 0.55 * (1 - r), 0, 0, 0], [o + (1.35 + 2.6) * r + 0.55 * (1 - r), 10 * r, 0, 0]]; }, ribbonMat(0x8a9097, 8, -1), 2);
+  }
   const road = ribbon(0, n, () => [[-1, 0, 0, -1], [1, 0, 0, 1]], ribbonMat(0x5a606a, 1, -3), 4, true);
   // barrera a cada lado: neumáticos por fuera de las curvas con escapatoria, guardarraíl en el resto
   const wallMat = ribbonMat(0xcfd4db, 5, 0), wl = SH - 0.08;
   const kAbs = blur(Float32Array.from(track.curv, Math.abs), Math.round(45 / T.ds), n);
   const sideOf = (c) => (Math.sign(c[0]) * T.PS > 0 ? 1 : 0);
+  const pitGap = (s) => {
+    if (!realPit) return ramp(s) > 0.02;
+    const sm = mod(s, T.L);
+    const idx = Math.min(n - 1, Math.floor(sm / T.ds));
+    // Abrir huecos limpios donde el pit-lane real discurre pegado a la pista (< 17 m), en la entrada/salida real y en la recta de boxes (manteniendo barrera en islas anchas como T10 en Spielberg)
+    const inEntry = dCirc(sm, realPit.sEntry) < 42;
+    const exitSpan = mod(realPit.sExit - (track.pit.entry + laneLen0 - gM0), T.L);
+    const fromApron = mod(sm - (track.pit.entry + laneLen0 - gM0 - 15), T.L);
+    const inExitCorridor = exitSpan < 700 && fromApron <= exitSpan + 35;
+    return !!realPit.pitNear[idx] || inEntry || inExitCorridor || pitApronRamp(s) > 0.05;
+  };
   ribbon(0, n, (i) => [[-wl, -T.rO[i], 0, 0], [-wl, -T.rO[i], 1.05, 1]], wallMat, 5, false, (i, s, c) => [T.rO[i] > 3 ? 1 : 0, sideOf(c)]);
-  ribbon(0, n, (i, s) => { const h = ramp(s) > 0.02 ? 0 : 1.05; return [[wl, T.rP[i], 0, 0], [wl, T.rP[i], h, 1]]; }, wallMat, 5, false, (i, s, c) => [T.rP[i] > 3 ? 1 : 0, sideOf(c)]);
+  ribbon(0, n, (i, s) => { const h = pitGap(s) ? 0 : 1.05; return [[wl, T.rP[i], 0, 0], [wl, T.rP[i], h, 1]]; }, wallMat, 5, false, (i, s, c) => [T.rP[i] > 3 ? 1 : 0, sideOf(c)]);
   // muro del pit-lane, entre la pista y los boxes
-  ribbon(pitI0, pitN, (i, s) => { const r = ramp(s), o = 1.0 + (PIT_OFF - 0.55 - 1.0) * 0.5, h = r > 0.98 ? 0.9 : 0; return [[o, 0, 0, 0], [o, 0, h, 1]]; }, ribbonMat(0xcfd4db, 0, 0), 5);
+  ribbon(pitI0, pitN, (i, s) => { const r = hasRealPit ? pitApronRamp(s) : ramp(s), o = 1.0 + (PIT_OFF - 0.55 - 1.0) * 0.5, h = r > 0.92 ? 0.9 : 0; return [[o, 0, 0, 0], [o, 0, h, 1]]; }, ribbonMat(0xcfd4db, 0, 0), 5);
   // valla alta translúcida (tras los coches para mezclarse bien sobre ellos si quedan detrás) y paneles de publicidad
   const fenceMat = ribbonMat(0x80868e, 6, 0), adMat = ribbonMat(0xffffff, 7, 0);
-  const pitSide = (s) => ramp(s) > 0.02;
+  const pitSide = (s) => pitGap(s);
   ribbon(0, n, (i) => [[-wl, -T.rO[i] - 1.6, 0, 0], [-wl, -T.rO[i] - 1.6, 3.4, 1]], fenceMat, 11);
   ribbon(0, n, (i, s) => { const h = pitSide(s) ? 0 : 3.4; return [[wl, T.rP[i] + 1.6, 0, 0], [wl, T.rP[i] + 1.6, h, 1]]; }, fenceMat, 11);
   const adH = (i) => (kAbs[i] < 0.0022 ? 1 : 0);
@@ -2260,11 +2529,12 @@ function buildWorld() {
   for (let i = 0; i < n; i += step) { sx.push(T.X[i]); sz.push(T.Z[i]); sh.push(T.H[i]); }
   const terr = (x, z, rc) => {
     let wsum = 0, hsum = 0, dmin = 1e12, cap = 1e9;
+    const rc2 = rc * rc;
     for (let k = 0; k < sx.length; k++) {
       const d2 = (x - sx[k]) ** 2 + (z - sz[k]) ** 2;
       if (d2 < dmin) dmin = d2;
-      if (d2 < rc * rc && sh[k] < cap) cap = sh[k];
-      const w = 1 / (d2 + 900) ** 1.6;
+      if (d2 < rc2 && sh[k] < cap) cap = sh[k];
+      const w = 1 / (d2 + 450) ** 1.75;
       wsum += w; hsum += w * sh[k];
     }
     const d = Math.sqrt(dmin), near = hsum / wsum;
@@ -2274,9 +2544,11 @@ function buildWorld() {
       // terreno real: mar/lagos/ríos por debajo de la lámina de agua, montañas y valles reales (Singapur/Las Vegas en DSM llano)
       wet = T.env.wet(x, z);
       far = wet ? T.env.sea - 6 : dsmFlat ? Math.max(T.env.sea + 1.5, Math.min(T.env.at(x, z), T.hmean + 2)) : T.env.at(x, z);
-      b = wet ? sstep(T.SH * W_REAL + 22, T.SH * W_REAL + 72, d) : sstep(T.SH * T.Wov * 1.6, T.SH * T.Wov * 1.6 + 110, d);
+      b = wet ? sstep(T.SH * W_REAL + 22, T.SH * W_REAL + 72, d) : sstep(T.SH * T.Wov * 1.4, T.SH * T.Wov * 1.4 + 135, d);
     }
-    return { h: Math.min(near + (far - near) * b - 1, cap - 1.5), d, wet };
+    const rawH = near + (far - near) * b - 0.85;
+    // Solo recorta por debajo de la pista en un pasillo estrecho para no hundir laderas vecinas en circuitos con gran desnivel
+    return { h: cap < 1e8 ? Math.min(rawH, cap - 1.35) : rawH, d, wet };
   };
   const park = (x, z) => sstep(0.24, 0.16, vnoise(x / 240 + 5, z / 240 + 9)); // zonas verdes de las ciudades
   const cPark = new THREE.Color(bio.cB), cRock = new THREE.Color(bio.slope), cGarr = new THREE.Color(0x556c44);
@@ -2287,7 +2559,7 @@ function buildWorld() {
   for (let a = 0; a <= G; a++) for (let b = 0; b <= G; b++) {
     const ua = (a / G) * 2 - 1, ub = (b / G) * 2 - 1, x = warp(ua), z = warp(ub), v = a * (G + 1) + b;
     const cell = R * PW * Math.pow(Math.max(Math.abs(ua), Math.abs(ub), 0.02), PW - 1) * (2 / G);
-    const t = terr(x, z, cell * 1.2 + T.Wov * 3.2 + 45);
+    const t = terr(x, z, cell * 0.65 + T.Wov * 1.35 + 10);
     tp[v * 3] = x; tp[v * 3 + 1] = t.h; tp[v * 3 + 2] = z;
     tuv[v * 2] = x / (2 * TR) + 0.5; tuv[v * 2 + 1] = z / (2 * TR) + 0.5;
     cc.copy(cA).lerp(cB, vnoise(x / (E * 0.09) + 7, z / (E * 0.09) + 3)).lerp(cC, Math.max(0, 1 - t.d / (T.Wov * 5)) * 0.6);
@@ -2322,14 +2594,14 @@ function buildWorld() {
         vec3 tcol = diffuse * (0.5 + 1.0 * t1.r) * (0.7 + 0.6 * t2.r) * (0.82 + 0.36 * vn(vTX * 0.13)) * (0.86 + 0.28 * vn(vTX * 0.011));
         ${street || bio.arid ? "" : "tcol = mix(tcol, tcol * vec3(1.42, 1.12, 0.58), smoothstep(0.5, 0.88, vn(vTX * 0.031 + 4.0)) * uDry);"}
         vec2 tdn = (t1.gb - 0.5) * 2.0 + (t2.gb - 0.5) * 0.8;
-        // laderas empinadas: roca/tierra con estratos en proyección vertical (evita el estiramiento en montañas y taludes)
-        float slp = smoothstep(0.08, 0.26, vSlope + (vn(vTX * 0.025) - 0.5) * 0.07);
+        // laderas muy empinadas: roca/tierra con estratos en proyección vertical (mantiene verdes las colinas suaves)
+        float slp = smoothstep(0.24, 0.48, vSlope + (vn(vTX * 0.025) - 0.5) * 0.06);
         if (slp > 0.01) {
           vec4 rk = texture2D(uRock, vec2(vTX.x + vTX.y, vWY) / 6.0);
           float strata = 0.78 + 0.44 * vn(vec2((vTX.x - vTX.y) * 0.018, vWY * 0.16));
           vec3 rcol = uSlopeCol * (0.62 + 0.76 * rk.r) * strata;
-          tcol = mix(tcol, rcol, slp * 0.88);
-          tdn = mix(tdn, (rk.gb - 0.5) * 2.4, slp);
+          tcol = mix(tcol, rcol, slp * 0.68);
+          tdn = mix(tdn, (rk.gb - 0.5) * 2.2, slp);
         }
         tcol *= 1.0 - 0.4 * texture2D(uCloud, vTX / (2.0 * uTexR) + 0.5).g;
         vec4 diffuseColor = vec4(tcol, opacity);`)
@@ -2407,15 +2679,76 @@ function buildWorld() {
     }
   }
 
+  // ---- Pre-cálculo de posiciones de hitos icónicos (para que el arbolado y las manzanas urbanas respeten su claro)
+  const lmSpecs = LANDMARKS[track.id] || [];
+  const lmClear = []; // [x, z, radio] para que ni árboles ni manzanas urbanas atraviesen los hitos
+  const lmPlaced = [];
+  if (lmSpecs.length) {
+    const lmTmp = mkS(), safeTrack = T.SH * T.Wov + 24;
+    for (const spec of lmSpecs) {
+      const s = mod(spec.sFrac * T.L, T.L);
+      sample(s, lmTmp);
+      let lx = 0, lz = 0;
+      if (spec.gameXY) {
+        lx = spec.gameXY[0] - T.cx;
+        lz = -(spec.gameXY[1] - T.cy);
+      } else if (spec.infield) {
+        // Busca el punto más despejado del prado interior cerca del centroide del circuito
+        let bestD = -1;
+        for (let gx = -180; gx <= 180; gx += 30) for (let gz = -180; gz <= 180; gz += 30) {
+          const td = trackDist(gx, gz);
+          if (td > bestD) { bestD = td; lx = gx; lz = gz; }
+        }
+      } else {
+        let d = Math.max(spec.dist, safeTrack + 6), sg = spec.side;
+        for (let attempt = 0; attempt < 6; attempt++) {
+          lx = lmTmp.x + lmTmp.rx * sg * d;
+          lz = lmTmp.z + lmTmp.rz * sg * d;
+          if (trackDist(lx, lz) >= safeTrack) break;
+          if (attempt === 2) { sg = -sg; d = Math.max(spec.dist, safeTrack + 8); } else d += 30;
+        }
+      }
+      const gy = terr(lx, lz, 0).h;
+      const yaw = spec.gameXY ? (spec.rot ?? 0) : (Math.atan2(-lmTmp.tz, lmTmp.tx) + (spec.rot ?? 0));
+      const clr = Math.max(30, spec.height * 0.85);
+      lmClear.push([lx, lz, clr]);
+      lmPlaced.push({ spec, lx, lz, gy, yaw });
+    }
+  }
+  // Áreas ocupadas por gradas reales de OSM (solo si hay >= 2 gradas mapeadas; si no, conserva las procedurales)
+  const osmGradas = !street && T.env?.gradas && T.env.gradas.length >= 2 ? T.env.gradas : null;
+  const gradaClear = osmGradas ? osmGradas.map(([gx, gy, gl, gd]) => [gx - T.cx, -(gy - T.cy), Math.max(gl, gd) * 0.52 + 12]) : [];
+
   // ---- arbolado (malla integrada al instante; los .glb por bioma la sustituyen en cuanto llegan)
   const trees = [], rnd = (() => { let s = 12345 + T.n; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296); })();
-  const maxT = street ? Math.min(450, bio.maxT) : bio.maxT;
-  for (let tries = 0; tries < 12000 && trees.length < maxT; tries++) {
-    const x = (rnd() * 2 - 1) * E * 1.15, z = (rnd() * 2 - 1) * E * 1.15;
-    if (street ? park(x, z) < 0.6 : vnoise(x / (E * 0.12) + 31, z / (E * 0.12) + 17) < 0.52) continue;
+  const denseForest = !street && !bio.arid && q >= 2;
+  const maxT = street ? Math.min(450, bio.maxT) : denseForest ? Math.round(bio.maxT * 2.35) : bio.maxT;
+  const innerTarget = denseForest ? Math.round(maxT * 0.68) : 0;
+  const useOsmForest = !street && !!T.env?.hasForest;
+  for (let tries = 0; tries < 36000 && trees.length < maxT; tries++) {
+    const innerPass = trees.length < innerTarget;
+    const span = innerPass ? E * 0.92 : E * 1.25;
+    const x = (rnd() * 2 - 1) * span, z = (rnd() * 2 - 1) * span;
+    if (street) {
+      if (park(x, z) < 0.6) continue;
+    } else if (useOsmForest) {
+      // Máscara real de bosques de OpenStreetMap: coníferas densas donde hay bosque real y praderas despejadas donde hay pradera
+      const fv = T.env.forest(x, z);
+      if (fv < 0.35 && !(fv > 0.14 && rnd() < 0.08)) continue;
+    } else if (innerPass) {
+      // masas forestales densas y orgánicas rodeando la pista y colinas cercanas
+      const cl = vnoise(x / (E * 0.085) + 31, z / (E * 0.085) + 17);
+      if (cl < 0.43) continue;
+    } else {
+      if (vnoise(x / (E * 0.12) + 31, z / (E * 0.12) + 17) < 0.48) continue;
+    }
     const t = terr(x, z, 0);
-    if (t.wet || t.d < (street ? T.SH * T.Wov + 40 : T.Wov * 3.4 + 45)) continue;
-    trees.push([x, t.h - 1.2, z, 0.75 + rnd() * 0.7, rnd(), rnd() * Math.PI * 2, rnd()]);
+    const minDist = street ? T.SH * T.Wov + 40 : (denseForest ? T.Wov * 2.7 + 34 : T.Wov * 3.4 + 45);
+    if (t.wet || t.d < minDist) continue;
+    if (lmClear.some(([lx, lz, lr]) => (x - lx) ** 2 + (z - lz) ** 2 < (lr + 12) ** 2)) continue;
+    if (gradaClear.some(([gx, gz, gr]) => (x - gx) ** 2 + (z - gz) ** 2 < gr * gr)) continue;
+    const sz = street || bio.arid ? (0.75 + rnd() * 0.7) : (0.95 + rnd() * 0.95);
+    trees.push([x, t.h - 1.2, z, sz, rnd(), rnd() * Math.PI * 2, rnd()]);
   }
   let tgc = collect();
   // dos especies mezcladas en la misma malla: frondosa (copa de varios volúmenes) y conífera (tres pisos)
@@ -2640,7 +2973,17 @@ function buildWorld() {
           B.box(x0, x1, 10.4, 10.7, 0.2, D, lw, 0, 0xcfd3d8, { front: [9, 0], top: [9, 0] }, uo);
           B.box(x0, x1, 10.7, 14, 2.6, D, lw, 0, 0xffffff, { front: [2, k % 5 + 3], back: [9, 0], top: [9, 0] }, uo);
         }
-        B.box(x0 - 0.05, x1 + 0.05, hT, hT + 0.5, -2.0, D + 1.5, lw, 0, 0x8d949c, { front: [9, 0], top: [8, 0] }, uo);
+        const pitAccent = vis.runoff.accent ?? vis.kerbs[0] ?? 0xc81e1e;
+        B.box(x0 - 0.05, x1 + 0.05, hT, hT + 0.55, -2.0, D + 1.5, lw, 0, 0xdce1e8, { front: [9, 0], top: [8, 0] }, uo);
+        // Franja de color del circuito en alero delantero y trasero + costillas estructurales en cubierta (legible desde vista aérea)
+        B.box(x0 - 0.05, x1 + 0.05, hT + 0.05, hT + 0.85, -2.18, -1.75, lw, 0, pitAccent, { front: [0, 0], top: [0, 0] }, uo);
+        B.box(x0 - 0.05, x1 + 0.05, hT + 0.05, hT + 0.85, D + 1.15, D + 1.62, lw, 0, pitAccent, { front: [0, 0], top: [0, 0] }, uo);
+        if (k % 3 === 0) B.box(x0 - 0.25, x0 + 0.25, hT + 0.52, hT + 0.95, -1.7, D + 1.1, lw, 0, 0x626a74, { front: [9, 0], top: [9, 0] }, uo);
+        if (D > 8 && k % 4 === 1) {
+          // Lucernarios acristalados y módulos de clima/hospitalidad sobre la cubierta
+          B.box(x0 + 0.5, x1 - 0.5, hT + 0.52, hT + 1.35, 3.5, D * 0.48, lw, 0, 0xffffff, { front: [2, k % 5], top: [2, k % 5] }, uo);
+          B.box(x0 + 1.1, x1 - 1.1, hT + 0.52, hT + 1.45, D * 0.62, D * 0.86, lw, 0, 0x9aa2ac, { front: [9, 0], top: [8, 0] }, uo);
+        }
         B.fine(() => {
           const Q = (x, y, z, u, v) => [x, y, z, lw, 0, u, v];
           // peto metálico en el borde de la cubierta y barandilla en el balcón de la primera planta
@@ -2661,12 +3004,28 @@ function buildWorld() {
         B.box(-3.2, 3.2, 0, 2.3, -0.6, 0.8, wallLw, 0, 0x2a2e34, { front: [9, 0] });
         B.box(-3.5, 3.5, 2.3, 2.6, -1.3, 1.4, wallLw, 0, tm.color, { front: [9, 0] });
       }));
-      // motorhome del equipo en el paddock, detrás de su garaje
-      if (open && Math.abs(sc - tc) < segL * 0.55) tryAdd(() => {
-        B.at(tc, PS);
-        B.box(-6.5, 6.5, -3, 3.2, 25, 33, lw, 0, tm.color, { front: [0, 0], top: [9, 0] });
-        B.box(-6.5, 6.5, 3.2, 6.4, 25.3, 33, lw, 0, 0xffffff, { front: [2, ti], top: [8, 0] });
-      });
+      // motorhome moderno de 2 plantas y camión tráiler del equipo en el paddock, detrás de su garaje
+      if (open && Math.abs(sc - tc) < segL * 0.55) {
+        tryAdd(() => {
+          B.at(tc, PS);
+          B.box(-6.8, 6.8, -3, 3.4, 24, 33.5, lw, 0, tm.color, { front: [0, 0], top: [9, 0] });
+          B.box(-6.4, 6.4, 3.4, 6.8, 24.4, 33.2, lw, 0, 0xffffff, { front: [2, ti], top: [8, 0] });
+          B.box(-7.2, 7.2, 6.8, 7.35, 23.6, 33.8, lw, 0, 0xe4e8ee, { front: [0, 0], top: [8, 0] });
+          B.box(-7.2, 7.2, 6.9, 7.5, 23.4, 24.0, lw, 0, tm.color, { front: [0, 0], top: [0, 0] });
+        });
+        // Tráiler / camión de escudería aparcado en fila detrás del motorhome (muy reconocible desde vista aérea)
+        if (!street) tryAdd(() => {
+          B.at(tc, PS);
+          // remolque largo con librea del equipo + techo blanco + cabina
+          B.box(-5.8, 2.8, 0.5, 4.1, 38.5, 41.4, lw, 0, tm.color, { front: [0, 0], top: [9, 0] });
+          B.box(-5.6, 2.6, 4.1, 4.35, 38.7, 41.2, lw, 0, 0xeceff2, { front: [0, 0], top: [0, 0] });
+          B.box(3.0, 5.4, 0.5, 3.6, 38.7, 41.2, lw, 0, 0xe4e8ee, { front: [0, 0], top: [9, 0] });
+          B.box(4.8, 5.45, 2.0, 3.1, 38.85, 41.05, lw, 0, 0x202630, { front: [2, 0] });
+          // segundo camión paralelo para dar densidad de paddock real
+          B.box(-5.2, 3.2, 0.5, 4.0, 43.2, 46.0, lw, 0, 0xdce0e6, { front: [0, 0], top: [9, 0] });
+          B.box(-5.2, 3.2, 3.4, 4.1, 43.1, 46.1, lw, 0, tm.color, { front: [0, 0], top: [0, 0] });
+        });
+      }
     }
     // torre de control, detrás del centro del edificio
     const sc = (sA + sB) / 2, lw = ramp(sc) * PIT_OFF + 1.35;
@@ -2676,6 +3035,13 @@ function buildWorld() {
       B.near(() => B.panel(-4.6, 4.6, 19.8, 22.6, 20.95, lw, 0, 3, 0, 1.6));
       B.box(-6.5, 6.5, 24, 29, 19.5, 32.5, lw, 0, 0xffffff, { front: [2, 3], top: [9, 0] });
       B.box(-7, 7, 29, 29.6, 19, 33, lw, 0, 0x6d747c, { front: [9, 0], top: [8, 0] });
+      // Helipuerto del paddock detrás de la torre de control (en circuitos permanentes)
+      if (!street) {
+        B.box(-8.5, 8.5, -2.5, 0.25, 36.5, 53.5, lw, 0, 0x383e46, { front: [9, 0], top: [9, 0] });
+        B.box(-3.0, -2.0, 0.26, 0.34, 41.5, 48.5, lw, 0, 0xf0c420, { top: [0, 0] });
+        B.box(2.0, 3.0, 0.26, 0.34, 41.5, 48.5, lw, 0, 0xf0c420, { top: [0, 0] });
+        B.box(-2.0, 2.0, 0.26, 0.34, 44.5, 45.5, lw, 0, 0xf0c420, { top: [0, 0] });
+      }
       B.near(() => {
         B.box(-0.15, 0.15, 29.6, 36, 25.8, 26.2, lw, 0, 0xb8bec5);
         B.box(-0.5, 0.5, 36, 36.6, 25.5, 26.5, lw, 0, 0xffffff, { front: [10, 0], top: [10, 0] });
@@ -2708,8 +3074,12 @@ function buildWorld() {
         const Q = (x, y, z, u, v) => [x, y, z, lw, lm, u, v];
         B.quad(Q(-L2, 2.4, 0.5, uo - L2, 0), Q(L2, 2.4, 0.5, uo + L2, 0), Q(L2, H, D, uo + L2, sl), Q(-L2, H, D, uo - L2, sl), seat, 1, ci);
         B.box(-L2, L2, -2.5, H + 1.2, D, D + 0.5, lw, lm, 0xc4c9cf, { front: [9, 0], top: [9, 0] }, uo);
-        const ra = [D + 0.8, H + 5.6], rb = [-1.4, H + 4.3];
-        B.quad(Q(-L2, rb[1], rb[0], uo - L2, 0), Q(L2, rb[1], rb[0], uo + L2, 0), Q(L2, ra[1], ra[0], uo + L2, 1), Q(-L2, ra[1], ra[0], uo - L2, 1), 0x9aa1a9, 8, 0);
+        const ra = [D + 0.9, H + 5.4], rb = [D * 0.28, H + 4.1];
+        // Cubierta arquitectónica clara con faldón de color y costillas estructurales visibles desde vista aérea (deja ver graderío y público delante)
+        B.quad(Q(-L2, rb[1], rb[0], uo - L2, 0), Q(L2, rb[1], rb[0], uo + L2, 0), Q(L2, ra[1], ra[0], uo + L2, 1), Q(-L2, ra[1], ra[0], uo - L2, 1), 0xe2e6ec, 8, 0);
+        B.box(-L2, L2, rb[1] - 0.55, rb[1] + 0.35, rb[0] - 0.22, rb[0] + 0.18, lw, lm, seat, { front: [0, 0], top: [0, 0] }, uo);
+        B.box(-L2, L2, ra[1] - 0.45, ra[1] + 0.35, ra[0] - 0.18, ra[0] + 0.22, lw, lm, seat, { front: [0, 0], top: [0, 0] }, uo);
+        if (k % 2 === 0) B.box(-0.28, 0.28, rb[1] + 0.05, ra[1] + 0.38, rb[0], ra[0], lw, lm, 0x5d646e, { front: [9, 0], top: [9, 0] }, uo);
         // de lejos, sin la cara de abajo de la cubierta, la viga, los pilares ni las banderas
         B.near(() => {
           B.quad(Q(-L2, rb[1] - 0.35, rb[0], 0, 0), Q(L2, rb[1] - 0.35, rb[0], 0, 0), Q(L2, ra[1] - 0.35, ra[0], 0, 0), Q(-L2, ra[1] - 0.35, ra[0], 0, 0), 0x5a6068, 0, 0);
@@ -2744,9 +3114,91 @@ function buildWorld() {
     }
     if (ok) { busy[sg === PS ? 0 : 1].push([s0, s1]); standS.push([(s0 + s1) / 2, sg, s1 - s0]); }
   };
-  grandstand(-170, 140, -PS, street ? 12 : 22, street ? 10 : 15, 0); // tribuna principal, enfrente de los boxes
-  const vr2 = brakes.slice().sort((a, b) => vr[a] - vr[b]).slice(0, street ? 3 : 5);
-  vr2.forEach((bi, k) => { const sg = track.curv[bi] > 0 ? 1 : -1, sb = bi * T.ds; grandstand(sb - 150, sb - 10, sg, street ? 10 : 14, street ? 8 : 10.5, k + 1); });
+  if (osmGradas) {
+    // Gradas reales extraídas de OpenStreetMap: posición, longitud, profundidad y orientación exactas (ej. Red Bull Tribüne, Start/Ziel, Steiermark, T3, Mitte, T10)
+    osmGradas.forEach(([gx, gy, glen, gdep, ang, gname], ci) => {
+      const wx = gx - T.cx, wz = -(gy - T.cy);
+      let ux = Math.cos(ang), uz = -Math.sin(ang);
+      // v = (-sin(ang), cos(ang)) en XY apunta hacia la pista; en 3D (Z = -Y) hacia atrás (subiendo asientos) es bx = sin(ang), bz = cos(ang)
+      let bx = Math.sin(ang), bz = Math.cos(ang);
+      const nl = (gname || "").toLowerCase();
+      const isMitte = nl.includes("mitte");
+      const D = isMitte ? Math.min(gdep, 17) : clamp(gdep, 12, 30), H = clamp(D * 0.56, 9.5, 16.5);
+      const seat = nl.includes("red bull") ? 0x1b459c
+        : nl.includes("start") ? 0xc8102e
+        : nl.includes("steiermark") ? 0x1f8a5b
+        : isMitte ? 0xf2c230
+        : STAND_COL[ci % STAND_COL.length];
+      // Verificar orientación frente al punto de pista más cercano al centro de la grada (siempre mirando hacia el asfalto)
+      let nearI = 0, bd2 = 1e12;
+      for (let i = 0; i < n; i += 2) {
+        const d2 = (T.X[i] - wx) ** 2 + (T.Z[i] - wz) ** 2;
+        if (d2 < bd2) { bd2 = d2; nearI = i; }
+      }
+      if ((-bx) * (T.X[nearI] - wx) + (-bz) * (T.Z[nearI] - wz) < 0) {
+        bx = -bx; bz = -bz; ux = -ux; uz = -uz;
+      }
+      // Empuje suave con uW (lw=1.15, lm=-W_REAL*lw) + retranqueo de seguridad si el borde delantero toca pista/escapatoria
+      let fx0 = wx - bx * (D * 0.5), fz0 = wz - bz * (D * 0.5);
+      let pushBack = 0;
+      const minClear = T.SH * W_REAL + 4.5;
+      for (const fl of [-0.45, 0, 0.45]) {
+        const px = fx0 + ux * (fl * glen), pz = fz0 + uz * (fl * glen);
+        let td2 = 1e12, ti = 0;
+        for (let i = 0; i < n; i += 2) {
+          const d2 = (T.X[i] - px) ** 2 + (T.Z[i] - pz) ** 2;
+          if (d2 < td2) { td2 = d2; ti = i; }
+        }
+        const td = Math.sqrt(td2);
+        const i1 = (ti + 1) % n, ttx = T.X[i1] - T.X[ti], ttz = T.Z[i1] - T.Z[ti], ttl = Math.hypot(ttx, ttz) || 1;
+        const rrx = -ttz / ttl, rrz = ttx / ttl;
+        const sideS = ((px - T.X[ti]) * rrx + (pz - T.Z[ti]) * rrz) >= 0 ? 1 : -1;
+        const req = minClear + (sideS === PS ? T.rP[ti] : T.rO[ti]);
+        if (td < req) pushBack = Math.max(pushBack, Math.min(28, req - td + 1.5));
+      }
+      if (pushBack > 0) { fx0 += bx * pushBack; fz0 += bz * pushBack; }
+      const sNear = nearI * T.ds;
+      const nS = Math.max(2, Math.round(glen / 12)), segL = glen / nS, L2 = segL * 0.5 + 0.15, sl = Math.hypot(D - 0.5, H - 2.4);
+      const lw = 1.15, lm = -W_REAL * lw;
+      const covered = true;
+      for (let k = 0; k < nS; k++) {
+        const offX = (k + 0.5 - nS * 0.5) * segL, uo = k * segL;
+        const sx0 = fx0 + ux * offX, sz0 = fz0 + uz * offX;
+        const wy = terr(sx0 + bx * D * 0.35, sz0 + bz * D * 0.35, 0).h;
+        B.atWorld(sx0, wy, sz0, ux, uz, bx, bz, sNear);
+        B.box(-L2, L2, -4.5, 2.4, 0, 0.5, lw, lm, 0xd5d9de, { front: [9, 0], top: [9, 0] }, uo);
+        B.near(() => B.panel(-L2, L2, 0.55, 2.15, -0.02, lw, lm, (ci * 5 + k) % 16, 0, 1));
+        const Q = (x, y, z, u, v) => [x, y, z, lw, lm, u, v];
+        B.quad(Q(-L2, 2.4, 0.5, uo - L2, 0), Q(L2, 2.4, 0.5, uo + L2, 0), Q(L2, H, D, uo + L2, sl), Q(-L2, H, D, uo - L2, sl), seat, 1, ci);
+        B.box(-L2, L2, -4.5, H + 1.2, D, D + 0.6, lw, lm, 0xc4c9cf, { front: [9, 0], top: [9, 0] }, uo);
+        if (covered) {
+          const ra = [D + 0.9, H + 5.2], rb = [D * 0.32, H + 4.0];
+          B.quad(Q(-L2, rb[1], rb[0], uo - L2, 0), Q(L2, rb[1], rb[0], uo + L2, 0), Q(L2, ra[1], ra[0], uo + L2, 1), Q(-L2, ra[1], ra[0], uo - L2, 1), 0xe2e6ec, 8, 0);
+          B.box(-L2, L2, rb[1] - 0.5, rb[1] + 0.35, rb[0] - 0.22, rb[0] + 0.18, lw, lm, seat, { front: [0, 0], top: [0, 0] }, uo);
+          B.box(-L2, L2, ra[1] - 0.45, ra[1] + 0.35, ra[0] - 0.18, ra[0] + 0.22, lw, lm, seat, { front: [0, 0], top: [0, 0] }, uo);
+          if (k % 2 === 0) B.box(-0.28, 0.28, rb[1] + 0.05, ra[1] + 0.38, rb[0], ra[0], lw, lm, 0x5d646e, { front: [9, 0], top: [9, 0] }, uo);
+          B.near(() => {
+            B.quad(Q(-L2, rb[1] - 0.35, rb[0], 0, 0), Q(L2, rb[1] - 0.35, rb[0], 0, 0), Q(L2, ra[1] - 0.35, ra[0], 0, 0), Q(-L2, ra[1] - 0.35, ra[0], 0, 0), 0x5a6068, 0, 0);
+            if (k % 2 === 0) B.box(-0.25, 0.25, H + 1.2, ra[1] - 0.2, D + 0.05, D + 0.45, lw, lm, 0x7a8088, { front: [9, 0] });
+          });
+        }
+        B.near(() => {
+          for (let fq = 0; fq < 2; fq++) if (rnd2() < 0.55) {
+            const fx1 = (rnd2() * 2 - 1) * (L2 - 1.5), ff = 0.15 + rnd2() * 0.75, fz1 = 0.5 + ff * (D - 0.5), fy1 = 2.4 + ff * (H - 2.4), seed = Math.floor(rnd2() * 40);
+            B.box(fx1 - 0.03, fx1 + 0.03, fy1, fy1 + 2.3, fz1 - 0.03, fz1 + 0.03, lw, lm, 0x333333);
+            B.quad(Q(fx1, fy1 + 1.5, fz1, 0, 0), Q(fx1 + 1.3, fy1 + 1.5, fz1, 1, 0), Q(fx1 + 1.3, fy1 + 2.3, fz1, 1, 1), Q(fx1, fy1 + 2.3, fz1, 0, 1), 0xffffff, 11, seed);
+          }
+        });
+        for (const [kk, x] of [[0, -L2], [nS - 1, L2]]) if (k === kk) B.quad(Q(x, -4.5, 0.5, 0, 0), Q(x, 2.4, 0.5, 0, 0), Q(x, H + 1.2, D, 0, 0), Q(x, -4.5, D, 0, 0), 0xc4c9cf, 9, 0);
+      }
+      busy[1].push([sNear - glen * 0.45, sNear + glen * 0.45]);
+      standS.push([sNear, -PS, glen]);
+    });
+  } else {
+    grandstand(-170, 140, -PS, street ? 12 : 22, street ? 10 : 15, 0); // tribuna principal, enfrente de los boxes
+    const vr2 = brakes.slice().sort((a, b) => vr[a] - vr[b]).slice(0, street ? 3 : 5);
+    vr2.forEach((bi, k) => { const sg = track.curv[bi] > 0 ? 1 : -1, sb = bi * T.ds; grandstand(sb - 150, sb - 10, sg, street ? 10 : 14, street ? 8 : 10.5, k + 1); });
+  }
   // torres de las cámaras de tele (en el mismo sitio que la cámara «Tele» a velocidad normal)
   { const nCam = Math.max(3, Math.round(T.L / 360)), sp = T.L / nCam, h = 9 + sp * 0.012 - 1.5;
     for (let k = 0; k < nCam; k++) {
@@ -2830,10 +3282,8 @@ function buildWorld() {
       }
     }
   };
-  // ---- Hitos icónicos del circuito (Bloque 5.4): silueta procedural inmediata + carga híbrida .glb bajo demanda
-  const lmSpecs = LANDMARKS[track.id] || [];
-  const lmClear = []; // [x, z, radio] para que las manzanas urbanas no atraviesen los hitos
-  if (lmSpecs.length) {
+  // ---- Hitos icónicos del circuito (Bloque 5.4 / Plan 3D v2): silueta procedural inmediata + carga híbrida .glb bajo demanda
+  if (lmPlaced.length) {
     const lmMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.7, metalness: 0.14, flatShading: true });
     lmMat.onBeforeCompile = (sh) => {
       sh.uniforms.uFlood = U.uFlood;
@@ -2842,20 +3292,7 @@ function buildWorld() {
         .replace("vec3 totalEmissiveRadiance = emissive;", "vec3 totalEmissiveRadiance = emissive + vColor.rgb * (max(0.0, max(vColor.r, max(vColor.g, vColor.b)) - 0.95) * (0.45 + 1.15 * uFlood) + uFlood * 0.22);");
     };
     lmMat.customProgramCacheKey = () => "hito-placeholder";
-    const lmTmp = mkS(), safeTrack = T.SH * T.Wov + 24;
-    for (const spec of lmSpecs) {
-      const s = mod(spec.sFrac * T.L, T.L);
-      sample(s, lmTmp);
-      let d = Math.max(spec.dist, safeTrack + 6), sg = spec.side, lx = 0, lz = 0;
-      for (let attempt = 0; attempt < 6; attempt++) {
-        lx = lmTmp.x + lmTmp.rx * sg * d;
-        lz = lmTmp.z + lmTmp.rz * sg * d;
-        if (trackDist(lx, lz) >= safeTrack) break;
-        if (attempt === 2) { sg = -sg; d = Math.max(spec.dist, safeTrack + 8); } else d += 30;
-      }
-      const gy = terr(lx, lz, 0).h;
-      const yaw = Math.atan2(-lmTmp.tz, lmTmp.tx) + (spec.rot ?? 0);
-      lmClear.push([lx, lz, Math.max(24, spec.height * 0.55)]);
+    for (const { spec, lx, lz, gy, yaw } of lmPlaced) {
       const phGeo = buildLandmarkPlaceholder(THREE, spec);
       const phMesh = add(new THREE.Mesh(phGeo, lmMat));
       phMesh.position.set(lx, gy, lz);
@@ -2868,18 +3305,40 @@ function buildWorld() {
       modLoadLandmarkGlb(track.id, spec.id).then((tpl) => {
         if (!tpl || !alive3d || !world || !all.includes(phMesh)) return;
         const grp = new THREE.Group();
-        grp.position.set(lx, gy, lz);
+        grp.position.set(lx, gy - 0.5, lz);
         grp.rotation.y = yaw;
-        grp.scale.setScalar(spec.height);
         grp.name = `hito_glb_${spec.id}`;
+        const modelGrp = new THREE.Group();
+        modelGrp.scale.setScalar(spec.height);
         for (const p of tpl.parts) {
           const m = new THREE.Mesh(p.geo, p.mat);
           m.castShadow = true;
           m.receiveShadow = true;
           m.userData.sharedGeo = true;
           m.userData.sharedMat = true;
-          grp.add(m);
+          modelGrp.add(m);
         }
+        // Plaza de piedra clara y zócalo metálico sobrio bajo esculturas monumentales (estilo acero Corten del Toro de Spielberg)
+        if (spec.shape === "bull_monument") {
+          const pr = Math.max(12, spec.height * 0.44), ph = Math.max(3.6, spec.height * 0.12);
+          const plinth = new THREE.Mesh(
+            new THREE.CylinderGeometry(pr * 0.90, pr * 1.12, ph + 8, 22),
+            new THREE.MeshStandardMaterial({ color: 0xcfd3d6, roughness: 0.86, metalness: 0.04 })
+          );
+          plinth.position.y = (ph - 8) * 0.5;
+          plinth.castShadow = true;
+          plinth.receiveShadow = true;
+          grp.add(plinth);
+          const rim = new THREE.Mesh(
+            new THREE.CylinderGeometry(pr * 0.94, pr * 0.96, 0.7, 22),
+            new THREE.MeshStandardMaterial({ color: 0x5c4a3e, roughness: 0.65, metalness: 0.35 })
+          );
+          rim.position.y = ph + 0.05;
+          rim.receiveShadow = true;
+          grp.add(rim);
+          modelGrp.position.y = ph + 0.4;
+        }
+        grp.add(modelGrp);
         add(grp);
         phMesh.visible = false;
       });
@@ -3171,7 +3630,7 @@ function buildWorld() {
     const pts = add(new THREE.Points(g, m)); pts.frustumCulled = false; pts.visible = false; pts.name = "pueblos";
     return pts;
   })();
-  const curWorld = { all, cityRoofs, props, trees: treeMesh, treeMeshes: [treeMesh], treeLod: null, townLights, sparkMesh, fists, chk, beams, towers, night, lampPos, debris, marsh, crane, blank, gant, glit, markMesh, posts, flags, scCar, scBar, road, cars, wheels, crewS, crewC, jacks, loose, puffs, blobs, spray, discs, rings, ghostRings, lamps, poles, halos, decals, steer, carIdx, c2src: c2a.slice(), hlsA: hla, hlsB: hlb, hlA: CAR_LO.attributes.aHelm, hlB: CAR_LO.attributes.aHelm2, hlAH: CAR_GEO.attributes.aHelm, hlBH: CAR_GEO.attributes.aHelm2, carsHi, wheelsHi, col2: CAR_LO.attributes.aCol2, livSrc, carData: CAR_LO.attributes.aCarData, col2H: CAR_GEO.attributes.aCol2, carDataH: CAR_GEO.attributes.aCarData, brakeH, cell: dg.attributes.aCell };
+  const curWorld = { all, realPit, cityRoofs, props, trees: treeMesh, treeMeshes: [treeMesh], treeLod: null, townLights, sparkMesh, fists, chk, beams, towers, night, lampPos, debris, marsh, crane, blank, gant, glit, markMesh, posts, flags, scCar, scBar, road, cars, wheels, crewS, crewC, jacks, loose, puffs, blobs, spray, discs, rings, ghostRings, lamps, poles, halos, decals, steer, carIdx, c2src: c2a.slice(), hlsA: hla, hlsB: hlb, hlA: CAR_LO.attributes.aHelm, hlB: CAR_LO.attributes.aHelm2, hlAH: CAR_GEO.attributes.aHelm, hlBH: CAR_GEO.attributes.aHelm2, carsHi, wheelsHi, col2: CAR_LO.attributes.aCol2, livSrc, carData: CAR_LO.attributes.aCarData, col2H: CAR_GEO.attributes.aCol2, carDataH: CAR_GEO.attributes.aCarData, brakeH, cell: dg.attributes.aCell };
   world = curWorld;
   // ---- carga asíncrona de los .glb de entorno (árboles del bioma, mecánicos y yates) sin bloquear el arranque
   if (trees.length && bio.species?.length) {
@@ -3201,7 +3660,7 @@ function buildWorld() {
         for (const [k, w] of avail) { r -= w; if (r <= 0) { chosen = k; break; } }
         buckets.get(chosen).push(t);
       }
-      const spScale = { leaf: 0.88, pine: 0.90, palm: 0.68 };
+      const spScale = { leaf: 1.05, pine: 1.16, palm: 0.72 };
       const tintB = new THREE.Color(bio.tintB), tc = new THREE.Color();
       const tm = new THREE.Matrix4(), tp = new THREE.Vector3(), tq = new THREE.Quaternion(), ts = new THREE.Vector3(), uy = new THREE.Vector3(0, 1, 0);
       const newMeshes = [], lodHi = [], lodLo = [];
@@ -3403,8 +3862,8 @@ function updateLight(now) {
   else sunDir.set(0.35, 0.8, 0.3).normalize();
   sun.color.setHex(0xfff3dd).lerp(_c1.setHex(0xff9a52), warm);
   if (day <= 0.02) sun.color.setHex(0x8fa8ff);
-  // intensidades en unidades físicas de three (π ≈ «blanco a pleno sol»); de noche el «sol» es la luna
-  sun.intensity = day > 0.02 ? 3.0 * day * (1 - 0.8 * cloud) : 0.35;
+  // intensidades en unidades físicas de three (π ≈ «blanco a pleno sol»); contraste sol/sombra nítido estilo mánager moderno
+  sun.intensity = day > 0.02 ? 3.35 * day * (1 - 0.78 * cloud) : 0.35;
   const grey = cloud * 0.85 * day;
   const zen = _c1.copy(SKY.zNight).lerp(_c3.copy(SKY.zDay).lerp(SKY.zDusk, warm), day).lerp(SKY.zGrey, grey);
   const hor = _c2.copy(SKY.hNight).lerp(_c3.copy(SKY.hDay).lerp(SKY.hDusk, warm * 0.8), day).lerp(SKY.hGrey, grey);
@@ -3419,7 +3878,7 @@ function updateLight(now) {
   // al atardecer y de noche el cielo apenas alumbra: sube un poco lo que aporta el entorno para que se siga viendo
   const preset = day < 0.2 ? "noche" : warm > 0.35 ? "tarde" : (cloud > 0.55 || rainHere > 0.15) ? "nublado" : "dia";
   needHdri(preset);
-  scene.environmentIntensity = (hdriEnv ? (0.85 + 0.35 * (1 - day) + 0.45 * warm) : (1 + 0.6 * (1 - day) + 0.6 * warm)) * (1 + 2.5 * flashK(now));
+  scene.environmentIntensity = (hdriEnv ? (0.78 + 0.38 * (1 - day) + 0.45 * warm) : (0.94 + 0.62 * (1 - day) + 0.6 * warm)) * (1 + 2.5 * flashK(now));
   skyU.uFlash.value = flashK(now) * (0.6 + 0.6 * (1 - day));
   updateEnv(now, [sunDir.x, sunDir.y, sunDir.z, zen.r, zen.g, zen.b, hor.r, hor.g, hor.b, cloud, wxMean, Math.min(rainHere, 3) / 2].map((v) => v.toFixed(2)).join());
   U.uFlood.value = (1 - day) * 0.8;
@@ -3825,7 +4284,7 @@ function updatePoses(dtReal) {
     // lo que se aparta de la trazada: de la simulación (Car.latOff), interpolado como la distancia
     const l0 = prevL.get(c.id), lNow = c.latOff ?? 0;
     p.lat = jump || l0 === undefined ? lNow : l0 + (lNow - l0) * alpha;
-    let boxT = 0;
+    let boxT = 0, pitU = -1;
     p.pf = -1;
     if (c.loc === "pit" && c.pit) {
       // la simulación cruza el pit-lane a velocidad constante: aquí el coche frena, se para delante de su garaje y sale
@@ -3834,12 +4293,17 @@ function updatePoses(dtReal) {
       p.s = c.pit.entryS + c.pit.dist * g;
       boxT = sstep(A - 0.1, A, f) - sstep(B, B + 0.1, f);
       p.pf = f;
+      if (world?.realPit) {
+        const laneLen2 = T.L - track.pit.entry + track.pit.exit;
+        const uGar = world.realPit.uOfS(track.pit.entry + laneLen2 * ga);
+        pitU = f < A ? uGar * (1 - (1 - f / A) ** 2) : f < B ? uGar : uGar + (1 - uGar) * ((f - B) / (1 - B)) ** 2;
+      }
       // el compuesto que traía: la simulación cambia el juego a mitad de la parada
       if (f < 0.49 && c.tyres) p.oldC = c.tyres.c;
       p.newC = c.e.sets.find((x) => x.id === c.pit.setId)?.c ?? c.tyres?.c;
     } else if (c.tyres) p.oldC = c.tyres.c;
     // garaje y calle de boxes de libres/clasificación: sale de su garaje marcha atrás… de frente, y vuelve a él
-    p.gar = 0; p.lane2 = false; p.cool = -1;
+    p.gar = 0; p.lane2 = false; p.cool = -1; p.pitU = pitU;
     const laneLen = T.L - track.pit.entry + track.pit.exit, gaC = gaV.get(c.team.id) ?? 0.5;
     if (inGarage) {
       const mates = sess.cars.filter((o) => o.team === c.team), side = mates.indexOf(c) === 0 ? -1 : 1;
@@ -3857,8 +4321,13 @@ function updatePoses(dtReal) {
       }
     } else if (lane && c.lane) {
       const f = clamp((c.lane.t - (1 - alpha) * sess.dt) / c.lane.total, 0, 1);
-      if (c.loc === "lane_out") { p.s = track.pit.entry + laneLen * (gaC + (1 - gaC) * f); boxT = 1 - sstep(0.04, 0.16, f); p.gar = 1 - sstep(0, 0.05, f); }
-      else { p.s = track.pit.entry + laneLen * gaC * f; boxT = sstep(0.84, 0.95, f); p.gar = sstep(0.95, 1, f); }
+      if (c.loc === "lane_out") {
+        p.s = track.pit.entry + laneLen * (gaC + (1 - gaC) * f); boxT = 1 - sstep(0.04, 0.16, f); p.gar = 1 - sstep(0, 0.05, f);
+        if (world?.realPit) { const uG = world.realPit.uOfS(track.pit.entry + laneLen * gaC); p.pitU = uG + (1 - uG) * f; }
+      } else {
+        p.s = track.pit.entry + laneLen * gaC * f; boxT = sstep(0.84, 0.95, f); p.gar = sstep(0.95, 1, f);
+        if (world?.realPit) { const uG = world.realPit.uOfS(track.pit.entry + laneLen * gaC); p.pitU = uG * f; }
+      }
     }
     // percances (trompo, salida, bloqueo, accidente): solo dibujo, con el reloj de la sesión
     const fx = c.fx, tau = fx ? tNow - fx.t : -1;
@@ -3896,6 +4365,15 @@ function updatePoses(dtReal) {
 function placeCars(list, W) {
   const far = clamp((W - 10) / Math.max(1, T.Wov * 0.8 - 10), 0, 1);
   for (const p of list) {
+    if (world?.realPit && p.pitU >= 0 && p.gar < 0.02 && !p.rp) {
+      const rp = world.realPit.sample(p.pitU, W, _a);
+      const boxLat = T.PS * p.box * 0.95 * W;
+      p.x = rp.x; p.y = rp.y; p.z = rp.z; p.tx = rp.tx; p.tz = rp.tz; p.rx = rp.rx; p.rz = rp.rz;
+      p.px = rp.x + rp.rx * boxLat; p.py = rp.y; p.pz = rp.z + rp.rz * boxLat;
+      p.fx = rp.tx; p.fy = 0; p.fz = rp.tz; p.sx = rp.rx; p.sz = rp.rz;
+      p.yaw = 0; p.gnd = 0; p.yUp = 0; p.bank = 0; p.l0 = boxLat;
+      continue;
+    }
     sample(p.s, p);
     let l0 = latAt(p, p.s, W, far) * W * arrAt(T.wr, p.s);
     p.yaw = 0; p.gnd = 0;
@@ -4173,13 +4651,15 @@ function updateCamera(dt, now) {
     want.fov = 58;
     onboard = true;
   } else if (mode === "grua") {
-    // grúa de meta: de lado y en alto sobre la recta de meta, al otro lado de los boxes; barre siguiendo al coche
+    // grúa de meta: elevada y despejada sobre el borde de la recta principal; se eleva si el coche está en colinas lejanas para no chocar con boxes ni laderas
     const ds = mod(p.s + T.L / 2, T.L) - T.L / 2; // dónde está el coche respecto a la línea (m)
-    sample(clamp(ds, -90, 90) * 0.45, _tq);
-    const out = -T.PS * ((T.SH + 1.4) * curW + 8);
-    want.pos.set(_tq.x + _tq.rx * out, _tq.y + 13, _tq.z + _tq.rz * out);
+    sample(clamp(ds, -70, 110) * 0.48, _tq);
+    const out = -T.PS * (T.SH * curW + 2.5);
+    const farK = sstep(180, 420, Math.abs(ds));
+    const hCrane = Math.max(22, (p.py - _tq.y) + 28 * farK + 18, 22 + 34 * farK);
+    want.pos.set(_tq.x + _tq.rx * out, _tq.y + hCrane, _tq.z + _tq.rz * out);
     want.look.set(p.px, p.py + 0.8, p.pz);
-    want.fov = clamp(2 * Math.atan(12 * fast / want.pos.distanceTo(want.look)) * 180 / Math.PI, 3, 50);
+    want.fov = clamp(2 * Math.atan(13 * fast / want.pos.distanceTo(want.look)) * 180 / Math.PI, 6, 48);
   } else {
     // cámaras fijas en torres junto a la pista, como la realización de la tele: giran, hacen zoom y se corta de una a otra
     const spacing = 360 * Math.max(1, opt.speed() / 2), nCam = Math.max(3, Math.round(T.L / spacing)), sp = T.L / nCam;
@@ -4190,9 +4670,11 @@ function updateCamera(dt, now) {
     // siempre en el lado contrario a los boxes
     const out = -T.PS * tvLat(ci);
     want.pos.set(_tq.x + _tq.rx * out, _tq.y + 9 + sp * 0.012, _tq.z + _tq.rz * out);
-    want.look.set(p.px, p.py + 1, p.pz);
+    // adelanto suave según velocidad para que el coche seguido quede centrado en curvas rápidas y no pegado al borde
+    const lead = clamp((p.c.v || 0) * 0.085, 0, 7.5);
+    want.look.set(p.px + p.fx * lead, p.py + 1.0, p.pz + p.fz * lead);
     const dist = want.pos.distanceTo(want.look);
-    want.fov = clamp(2 * Math.atan(15 * fast / dist) * 180 / Math.PI, 4, 46);
+    want.fov = clamp(2 * Math.atan(15.5 * fast / dist) * 180 / Math.PI, 6.5, 46);
   }
   // micro-vibración en cámaras solidarias al coche (A bordo y Alerón trasero): velocidad, frenada fuerte y pianos
   if (onboard && p && !reduced && !opt.paused() && !opt.debug?.view && !photoNow && !replay) {
@@ -4263,7 +4745,8 @@ function updateCamera(dt, now) {
   curW = cut || camSnap ? wT : curW + (wT - curW) * (1 - Math.exp(-dt / 0.2));
   // calima atmosférica exponencial: despega los planos lejanos según clima y lluvia; en vista general se abre para leer todo
   const wxHaze = 1 + 0.55 * clamp(sess.weather.cloud ?? 0, 0, 1) + 0.8 * clamp(rainHere / 2, 0, 1);
-  fog.density = 0.00042 * wxHaze * Math.min(1, 360 / Math.max(1, dist));
+  const bioHaze = getTrackVisual(track.id).biome === "alpino" ? 1.15 : 1.0;
+  fog.density = 0.00046 * wxHaze * bioHaze * Math.min(1, 460 / Math.max(1, dist));
   // el sol ilumina (y da sombra) alrededor de lo que mira la cámara
   // el tamaño va a saltos y el centro se mueve de téxel en téxel: así el borde de las sombras no tiembla al mover la cámara
   // con el sol bajo (atardecer) las sombras son largas: la caja de sombras se agranda para que no se corten
@@ -4276,7 +4759,7 @@ function updateCamera(dt, now) {
   sc.left = sc.bottom = -S; sc.right = sc.top = S; sc.near = 1; sc.far = S * 8; sc.updateProjectionMatrix();
   sun.shadow.normalBias = texel * 0.85;
   // postproceso: oclusión ambiental pegada a los contactos (sin halos enormes); el desenfoque, solo en tele
-  aoRadius = clamp(halfH * 0.045, 0.35, 25);
+  aoRadius = clamp(halfH * 0.055, 0.45, 28);
   dofFocus = dist; dofK += ((mode === "tele" ? 1 : 0) - dofK) * (cut || camSnap ? 1 : 1 - Math.exp(-dt / 0.4));
   camSnap = false;
   return halfH;
