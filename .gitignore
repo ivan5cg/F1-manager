@@ -15,3 +15,6 @@ public/assets/models/_tmp_*.glb
 
 # caché de Python de los scripts
 __pycache__/
+
+# fotos de referencia locales para generar hitos 3D en Colab (no subir a GitHub)
+/refs_hitos/

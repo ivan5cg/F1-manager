@@ -30,23 +30,32 @@ MANIFEST = os.path.join(LM_DIR, "manifest.json")
 
 
 def decimate_mesh(mesh: "trimesh.Trimesh", target_faces: int) -> "trimesh.Trimesh":
-    """Reduce caras manteniendo UV/colores cuando sea posible."""
+    """Reduce caras conservando los colores por vértice (p. ej. TripoSR) cuando existen."""
     n = len(mesh.faces)
     if n <= target_faces:
         return mesh
-    # Intentar fast_simplification (rápido y fiel, ideal en Google Colab)
+    orig_verts = np.asarray(mesh.vertices, dtype=np.float32)
+    orig_vcol = None
+    if getattr(mesh.visual, "kind", None) == "vertex" and getattr(mesh.visual, "vertex_colors", None) is not None:
+        orig_vcol = np.asarray(mesh.visual.vertex_colors, dtype=np.uint8)
+    # Intentar fast_simplification (rápido y fiel, ideal en local y Google Colab)
     try:
         import fast_simplification
         ratio = max(0.05, min(0.95, 1.0 - target_faces / float(n)))
         v_out, f_out = fast_simplification.simplify(
-            np.asarray(mesh.vertices, dtype=np.float32),
+            orig_verts,
             np.asarray(mesh.faces, dtype=np.int32),
             target_reduction=ratio,
         )
-        return trimesh.Trimesh(vertices=v_out, faces=f_out, process=True)
+        out = trimesh.Trimesh(vertices=v_out, faces=f_out, process=False)
+        if orig_vcol is not None and len(orig_vcol) == len(orig_verts):
+            from scipy.spatial import cKDTree
+            _, idx = cKDTree(orig_verts).query(v_out)
+            out.visual.vertex_colors = orig_vcol[idx]
+        return out
     except Exception:
         pass
-    # Respaldo nativo de trimesh (quadric decimation si open3d/fast_simplification está disponible)
+    # Respaldo nativo de trimesh (quadric decimation si está disponible)
     try:
         return mesh.simplify_quadric_decimation(face_count=target_faces)
     except Exception as exc:
@@ -92,13 +101,18 @@ def normalize_scene(scene: "trimesh.Scene") -> "trimesh.Scene":
 def run_gltf_transform(src_glb: str, dst_glb: str, max_tex: int, use_draco: bool) -> bool:
     """Usa @gltf-transform/cli para convertir texturas a WebP 512px y comprimir con Draco."""
     cli = shutil.which("gltf-transform")
-    base_cmd = [cli] if cli else (["npx", "--yes", "@gltf-transform/cli"] if shutil.which("npx") else None)
+    npx_exe = shutil.which("npx")
+    base_cmd = [cli] if cli else ([npx_exe, "--yes", "@gltf-transform/cli"] if npx_exe else None)
     if not base_cmd:
         return False
     with tempfile.TemporaryDirectory() as td:
         cur = src_glb
+        res_glb = os.path.join(td, "res.glb")
+        r0 = subprocess.run(base_cmd + ["resize", cur, res_glb, "--width", str(max_tex), "--height", str(max_tex)], capture_output=True, text=True)
+        if r0.returncode == 0 and os.path.exists(res_glb):
+            cur = res_glb
         webp_glb = os.path.join(td, "webp.glb")
-        r1 = subprocess.run(base_cmd + ["webp", cur, webp_glb, "--resize", f"{max_tex},{max_tex}", "--quality", "80"], capture_output=True, text=True)
+        r1 = subprocess.run(base_cmd + ["webp", cur, webp_glb, "--quality", "82"], capture_output=True, text=True)
         if r1.returncode == 0 and os.path.exists(webp_glb):
             cur = webp_glb
         if use_draco:

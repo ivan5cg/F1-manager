@@ -1,5 +1,7 @@
 {
   "version": 1,
   "nota": "Registra los hitos .glb (Draco + WebP 512px, <300 KB) disponibles en public/assets/landmarks/<circuito>/<id>.glb. Mientras un hito no figure aquí, map3d.ts dibuja su silueta procedural ligera sin peticiones 404.",
-  "glb": {}
+  "glb": {
+    "spielberg/toro_acero": true
+  }
 }
