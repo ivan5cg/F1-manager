@@ -25,17 +25,16 @@ import { rainAt } from "../sim/weather";
 import { BRANDS, FONT, SECOND, collect, skin, carGeometry, carMinGeometry, wheelGeometry, steerGeometry, liveryTexture, makeCarMaterial, makeWheelMaterial, loadCarAssets, createDracoGltfLoader } from "./car3d";
 import { gearFor, rpmFor } from "./audio";
 import { helmetDesign } from "./visual";
-import { getTrackVisual } from "./trackVisuals";
+import { ENV_TRACK_IDS, getTrackVisual } from "./trackVisuals";
 
 const ASSET = (p) => `${import.meta.env.BASE_URL}assets/${p}`;
 
-// Entornos 3D cargados bajo demanda (solo en los circuitos que tienen rejilla de altura/mar)
-const ENV_TRACKS = new Set(["monaco", "singapur", "baku", "lasvegas"]);
+// Entornos 3D cargados bajo demanda (rejilla real de altitud y agua de cada circuito)
 const envTrackCache = new Map();
 
-/** Descarga y cachea el entorno 3D de un circuito urbano si existe (null en el resto o si falla). */
+/** Descarga y cachea el entorno 3D de un circuito si existe (null si no está o falla). */
 export async function loadTrackEnv(id) {
-  if (!ENV_TRACKS.has(id)) return null;
+  if (!ENV_TRACK_IDS.has(id)) return null;
   if (!envTrackCache.has(id)) {
     envTrackCache.set(
       id,
@@ -1399,7 +1398,28 @@ function buildTrackData(tr, id, envData) {
     for (let i = 0; i < n; i += 4) dif.push(abs(X[i], Z[i]) - H[i]);
     dif.sort((a, b) => a - b);
     const off = dif[dif.length >> 1];
-    env = { en, abs, at: (x, z) => abs(x, z) - off, sea: -off, wet: (x, z) => abs(x, z) <= 0.6 };
+    const wLvl = en.aguaNivel ?? 0;
+    let wMask = null, hasWater = false;
+    if (en.agua) {
+      const raw = atob(en.agua);
+      wMask = new Uint8Array(N * N);
+      for (let k = 0; k < N * N; k++) {
+        const bit = (raw.charCodeAt(k >> 3) >> (k & 7)) & 1;
+        wMask[k] = bit;
+        if (bit) hasWater = true;
+      }
+    } else if (en.tipo === "urbano") {
+      for (let k = 0; k < N * N; k++) if (eh[k] <= 0) { hasWater = true; break; }
+    }
+    const wet = (x, z) => {
+      if (!hasWater) return false;
+      if (!wMask) return abs(x, z) <= 0.6;
+      const gx = (x + cx - en.x0) / en.paso, gy = (-z + cy - en.y0) / en.paso;
+      const i = clamp(Math.floor(gx), 0, N - 2), j = clamp(Math.floor(gy), 0, N - 2), fx = clamp(gx - i, 0, 1), fy = clamp(gy - j, 0, 1);
+      const v = (wMask[j * N + i] * (1 - fx) + wMask[j * N + i + 1] * fx) * (1 - fy) + (wMask[(j + 1) * N + i] * (1 - fx) + wMask[(j + 1) * N + i + 1] * fx) * fy;
+      return v >= 0.45;
+    };
+    env = { en, abs, at: (x, z) => abs(x, z) - off, sea: wLvl - off, hasWater, wMask, wet };
   }
   let sxx = 0, szz = 0, sxz = 0;
   for (let i = 0; i < n; i++) { sxx += X[i] * X[i]; szz += Z[i] * Z[i]; sxz += X[i] * Z[i]; }
@@ -1410,9 +1430,8 @@ function buildTrackData(tr, id, envData) {
   const wide = blur(blur(nk, Math.round(110 / ds), n), Math.round(110 / ds), n);
   // la trazada y la anchura las calcula la simulación (track.ts): los coches van donde ella dice
   const line = tr.line;
-  // escapatorias: metros de grava por fuera de las curvas (izquierda y derecha)
-  // urbanos: los que marcan urbano o traen entorno urbano (Mónaco, Singapur, Bakú, Las Vegas)
-  const street = !!(tr.def.urbano ?? (en && en.tipo !== "semiurbano"));
+  // trazado urbano de competición (muros pegados y calles) separado del entorno visual ("urbano" | "semiurbano" | "circuito")
+  const street = tr.def.urbano !== undefined ? !!tr.def.urbano : en?.tipo === "urbano";
   // anchura real por punto (campo «ancho»), como proporción de la media: también de la simulación
   const wr = tr.wr;
   W_REAL = tr.wReal;
@@ -2183,11 +2202,10 @@ function buildWorld() {
     let far = T.hmean * 0.6 + (vnoise(x / (E * 0.22), z / (E * 0.22)) - 0.35) * E * 0.06;
     let b = sstep(E * 0.06, E * 0.55, d), wet = false;
     if (T.env) {
-      // el terreno de verdad: el mar (y el puerto) por debajo del agua, la ladera de Mónaco; Singapur es llano
-      // (su modelo de superficie trae los edificios, que se ponen aparte)
+      // terreno real: mar/lagos/ríos por debajo de la lámina de agua, montañas y valles reales (Singapur/Las Vegas en DSM llano)
       wet = T.env.wet(x, z);
       far = wet ? T.env.sea - 6 : dsmFlat ? Math.max(T.env.sea + 1.5, Math.min(T.env.at(x, z), T.hmean + 2)) : T.env.at(x, z);
-      b = sstep(T.SH * T.Wov * 1.6, T.SH * T.Wov * 1.6 + 110, d);
+      b = wet ? sstep(T.SH * W_REAL + 22, T.SH * W_REAL + 72, d) : sstep(T.SH * T.Wov * 1.6, T.SH * T.Wov * 1.6 + 110, d);
     }
     return { h: Math.min(near + (far - near) * b - 1, cap - 1.5), d, wet };
   };
@@ -2253,11 +2271,24 @@ function buildWorld() {
   const terrain = add(new THREE.Mesh(tg, terrMat));
   terrain.frustumCulled = false; terrain.receiveShadow = true;
 
-  // ---- mar y puertos (Mónaco, Singapur): una lámina de agua que solo se ve donde el terreno real está a nivel del mar
+  // ---- mar, puertos, lagos y ríos: lámina de agua a su cota real (solo en circuitos que tienen agua en el entorno)
   let boatMeshRef = null;
-  if (T.env) {
-    const en = T.env.en, NE = en.n, md = new Uint8Array(NE * NE * 4);
-    for (let k = 0; k < NE * NE; k++) { md[k * 4] = clamp((1.6 - en.h[k]) / 2, 0, 1) * 255; md[k * 4 + 3] = 255; }
+  if (T.env && T.env.hasWater) {
+    const en = T.env.en, NE = en.n, md = new Uint8Array(NE * NE * 4), wm0 = T.env.wMask;
+    if (wm0) {
+      // suavizado de 1 celda sobre la máscara booleana para dar una orilla orgánica y turquesa
+      for (let j = 0; j < NE; j++) for (let i = 0; i < NE; i++) {
+        let s = 0, cnt = 0;
+        for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
+          const jj = j + dj, ii = i + di;
+          if (jj >= 0 && jj < NE && ii >= 0 && ii < NE) { s += wm0[jj * NE + ii]; cnt++; }
+        }
+        const k = j * NE + i, val = wm0[k] ? 0.55 + 0.45 * (s / cnt) : 0.45 * (s / cnt);
+        md[k * 4] = clamp(val, 0, 1) * 255; md[k * 4 + 3] = 255;
+      }
+    } else {
+      for (let k = 0; k < NE * NE; k++) { md[k * 4] = clamp((1.6 - en.h[k]) / 2, 0, 1) * 255; md[k * 4 + 3] = 255; }
+    }
     const mt = new THREE.DataTexture(md, NE, NE, THREE.RGBAFormat); mt.magFilter = mt.minFilter = THREE.LinearFilter; mt.needsUpdate = true;
     const wm = new THREE.MeshStandardMaterial({ color: bio.sea, roughness: 0.18, metalness: 0, envMapIntensity: 0.72 });
     const span = en.paso * (NE - 1);
@@ -2279,11 +2310,13 @@ function buildWorld() {
     wm.customProgramCacheKey = () => "agua";
     const water = add(new THREE.Mesh(new THREE.PlaneGeometry(E * 7, E * 7).rotateX(-Math.PI / 2).translate(0, T.env.sea + 0.2, 0), wm));
     water.frustumCulled = false; water.receiveShadow = true; water.renderOrder = 0;
-    // barcos amarrados cerca de la orilla
+    // barcos amarrados cerca de la orilla (solo en puertos deportivos como Mónaco, Singapur y Yas Marina)
     const boats = [], rB = (() => { let q = 999 + n; return () => ((q = (q * 1664525 + 1013904223) >>> 0) / 4294967296); })();
-    const shore = (i, j) => { for (let a = -3; a <= 3; a++) for (let b2 = -3; b2 <= 3; b2++) { const ii = i + a, jj = j + b2; if (ii >= 0 && jj >= 0 && ii < NE && jj < NE && en.h[jj * NE + ii] > 1) return true; } return false; };
-    for (let j = 0; j < NE; j++) for (let i = 0; i < NE; i++) {
-      if (en.h[j * NE + i] > 0 || !shore(i, j)) continue;
+    const isLand = (idx) => (wm0 ? !wm0[idx] : en.h[idx] > 1);
+    const shore = (i, j) => { for (let a = -3; a <= 3; a++) for (let b2 = -3; b2 <= 3; b2++) { const ii = i + a, jj = j + b2; if (ii >= 0 && jj >= 0 && ii < NE && jj < NE && isLand(jj * NE + ii)) return true; } return false; };
+    if (vis.yachts) for (let j = 0; j < NE; j++) for (let i = 0; i < NE; i++) {
+      const idx = j * NE + i;
+      if ((wm0 ? !wm0[idx] : en.h[idx] > 0) || !shore(i, j)) continue;
       for (let k = 0; k < 2; k++) {
         if (rB() < 0.55) continue;
         const gx = en.x0 + (i + rB() - 0.5) * en.paso, gy = en.y0 + (j + rB() - 0.5) * en.paso, x = gx - T.cx, z = -(gy - T.cy);

@@ -20,7 +20,7 @@ Tamaño: **P** pequeño (un PR corto), **M** medio, **G** grande (varios PR).
 | 2. Control 3D interactivo, realización TV y HUD móvil vertical | ✅ Hecho | `map3d.ts`, `sessionView.ts`, `store.ts`, `style.css` |
 | 3. Ergonomía táctil y sensación de app móvil | ✅ Hecho | `common.ts`, `sessionView.ts`, `store.ts`, `style.css` |
 | 4. Realismo 3D dinámico y capas tácticas | ✅ Hecho | `map3d.ts`, `car3d.ts`, `sessionView.ts`, `store.ts`, `style.css` |
-| 5. Identidad visual de los 24 circuitos en 3D | 🟡 En curso (5.1 hecho) | `src/ui/trackVisuals.ts`, `map3d.ts`, `scripts/entorno.py`, `public/assets/env-tracks/`, `public/assets/landmarks/` |
+| 5. Identidad visual de los 24 circuitos en 3D | 🟡 En curso (5.1 y 5.2 hechos) | `src/ui/trackVisuals.ts`, `map3d.ts`, `scripts/entorno.py`, `public/assets/env-tracks/`, `public/assets/landmarks/` |
 
 ---
 
@@ -123,10 +123,11 @@ Objetivo: que cada uno de los 24 circuitos del calendario sea reconocible al pri
 - **Estilos urbanos diferenciados** (`urban: "mediterraneo" | "bahia" | "neones" | "piedra"`): Las Vegas con fachadas oscuras de hotel-casino, molduras de neón, marquesinas doradas y pantallas LED animadas (`P = 15`); Bakú con fachadas de piedra caliza tallada y arcos (`P = 16`) combinadas en una sola llamada de dibujo (`cityMat(16)`) con torres modernas de cristal (`P = 6`); Mónaco mediterráneo en ladera y Singapur bahía de rascacielos.
 - Verificados `npm run check`, `npx vite build`, determinismo en `scripts/finde.ts` y 0 errores de consola/WebGL en Yas Marina, Austin, Monza, Spa, Las Vegas y Bakú.
 
-### 5.2 Entornos geográficos reales en los 24 circuitos (M)
-- Separar completamente el trazado urbano de competición (`urbano: true`, muros pegados y más SC) del entorno visual (`tipo: "urbano" | "semiurbano" | "circuito"`).
-- Ampliar `scripts/entorno.py` y `map3d.ts` para soportar máscaras de agua interior por encima de 0 m (lagos, ríos y embalses: Albert Park en Melbourne, Île Notre-Dame en Montreal, Guarapiranga en Interlagos) además de costa/mar y montañas/valles reales (Spielberg, Spa, México, Barcelona, Suzuka, Austin, Zandvoort, etc.).
-- Generar `public/assets/env-tracks/<id>.json` (~15 KB cada uno, descargados bajo demanda) para los 20 circuitos restantes, completando los 24 del calendario.
+### 5.2 Entornos geográficos reales en los 24 circuitos (M) · ✅ Hecho
+- Separado el trazado urbano de competición (`tr.def.urbano`, muros pegados y calles) del entorno visual (`tipo: "urbano" | "semiurbano" | "circuito"`) en `src/ui/map3d.ts`, y habilitado `loadTrackEnv(id)` bajo demanda para los 24 circuitos (`ENV_TRACK_IDS` en `src/ui/trackVisuals.ts`).
+- Ampliados `scripts/entorno.py` y `src/ui/map3d.ts` con soporte para máscaras de agua interior y costera (`"agua"` en base64 de ~0,9 KB + `"aguaNivel"` en metros, con limpieza de ruido DEM y margen de seguridad alrededor del asfalto): lago de Albert Park y bahía en **Melbourne**, río San Lorenzo y Bassin Olympique rodeando Île Notre-Dame en **Montreal**, embalse Guarapiranga en **Interlagos**, puerto y canales de **Yas Marina** (con yates amarrados vía `vis.yachts`) y costa del Mar del Norte en **Zandvoort** (sin inundar los pólderes interiores), omitiendo la malla de agua cuando no hay lámina en el entorno.
+- Generados los 20 `public/assets/env-tracks/<id>.json` restantes, completando los **24 circuitos** (`401,1 KB` en total, ~10–25 KB cada uno cargados solo al abrir ese GP), con montañas y valles reales (Spielberg hasta 1066 m, Spa 544 m, Hungaroring 317 m, Madrid, México, Barcelona, Austin, Suzuka, etc.).
+- Verificados `npm run check`, `npx vite build`, determinismo idéntico en `scripts/finde.ts` (Silverstone 42 y Mónaco 42) y 0 errores de consola/WebGL/red en Melbourne, Montreal, Spielberg, Zandvoort y Yas Marina.
 
 ### 5.3 Estructuras especiales del trazado (M/G)
 - **Túnel de Mónaco:** estructura cubierta con pilares, iluminación interior y adaptación automática al ensanchado de la pista en la vista general.

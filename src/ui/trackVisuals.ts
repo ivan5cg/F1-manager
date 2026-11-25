@@ -28,6 +28,8 @@ export interface TrackVisualProfile {
   urban?: UrbanStyle;
   /** Torres de focos alrededor del trazado (carreras nocturnas o al atardecer). */
   floodlights?: boolean;
+  /** Yates amarrados en puerto deportivo junto al trazado (Mónaco, Singapur, Yas Marina). */
+  yachts?: boolean;
 }
 
 export const DEFAULT_TRACK_VISUAL: TrackVisualProfile = {
@@ -64,6 +66,7 @@ export const TRACK_VISUALS: Record<string, TrackVisualProfile> = {
     runoff: { mode: "asfalto", color: 0x464b54, pattern: 0 },
     urban: "bahia",
     floodlights: true,
+    yachts: true,
   },
 
   // ---- Oriente Medio ----
@@ -86,6 +89,7 @@ export const TRACK_VISUALS: Record<string, TrackVisualProfile> = {
     runoff: { mode: "asfalto", color: 0x0e84d1, accent: 0x0b4c8a, pattern: 1 },
     barrier: [0x1284cf, 0xe0e2e6],
     floodlights: true,
+    yachts: true,
   },
 
   // ---- Europa y Cáucaso ----
@@ -94,6 +98,7 @@ export const TRACK_VISUALS: Record<string, TrackVisualProfile> = {
     kerbs: [0xc21f24, 0xdeddd8],
     runoff: { mode: "asfalto", color: 0x4c5159, pattern: 0 },
     urban: "mediterraneo",
+    yachts: true,
   },
   barcelona: {
     biome: "seco",
@@ -178,6 +183,9 @@ export const TRACK_VISUALS: Record<string, TrackVisualProfile> = {
     floodlights: true,
   },
 };
+
+/** Circuitos con rejilla de entorno 3D bajo demanda en public/assets/env-tracks/<id>.json. */
+export const ENV_TRACK_IDS = new Set<string>(Object.keys(TRACK_VISUALS));
 
 /** Devuelve el perfil visual del circuito (o el estándar si el id no está registrado). */
 export function getTrackVisual(id: string): TrackVisualProfile {

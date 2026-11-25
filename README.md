@@ -557,10 +557,7 @@ compuesto que toca. Los percances de la simulación se ven: el trompo gira el co
 lo lleva a la escapatoria levantando polvo de la grava o de la hierba, el bloqueo echa humo de la rueda delantera y el
 accidente deja el coche contra la barrera un par de minutos.
 
-En Mónaco y Singapur el terreno es el de verdad (`entorno`, una rejilla de altitud alrededor del circuito que genera
-`python3 scripts/entorno.py`): el mar y los puertos con yates amarrados, la ladera de Mónaco con los edificios más altos
-cuesta arriba, parques, y en Singapur cada torre con la altura que da el modelo de superficie. Las calles de la ciudad
-siguen la pista.
+En los 24 circuitos el terreno de alrededor es el de verdad (`public/assets/env-tracks/<id>.json`, descargado bajo demanda al abrir ese GP y generado por `python3 scripts/entorno.py` con altitud real y polígonos de agua de OpenStreetMap): el mar y los puertos deportivos con yates amarrados en Mónaco, Singapur y Yas Marina; el lago interior de Albert Park en Melbourne; el río San Lorenzo y el canal olímpico rodeando Île Notre-Dame en Montreal; los embalses en Interlagos; la costa del Mar del Norte en Zandvoort (sin inundar los pólderes); y las montañas y valles reales de Spielberg, Spa, Hungaroring, Barcelona, Suzuka, Austin o México. En los circuitos urbanos, además, la ladera de Mónaco coloca los edificios más altos cuesta arriba, Singapur y Las Vegas toman la altura de sus torres del modelo de superficie y las calles siguen la pista.
 
 La carrera se lee como en la tele:
 - **Hora del día:** con el sol bajo la caja de las sombras se agranda para que las sombras largas del atardecer no se
