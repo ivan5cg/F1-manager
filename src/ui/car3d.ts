@@ -193,12 +193,14 @@ export function carGeometry(hi) {
     part(0.6, 0.016, 0.09, 2.36, 0.055, 0.99 * s, BLACK);
   }
   c.part = 0;
-  // alerón trasero: tres planos entre dos derivas que se estrechan hacia abajo, sobre dos pilares
+  // alerón trasero: plano principal fijo y dos planos superiores móviles (aPart = 2, DRS/MO) entre las dos derivas
   const spoon = (z) => 0.035 * (1 - (z / 0.6) ** 2);
   const span = [-0.6, -0.4, -0.2, 0, 0.2, 0.4, 0.6];
   wing(span.map((z) => [z, -1.98, 0.81 - spoon(z), 0.38, 8 * DEG]), BLACK);
+  c.part = 2;
   wing(span.map((z) => [z, -2.34, 0.865 - spoon(z) * 0.6, 0.2, 24 * DEG]), BLACK);
   wing(span.map((z) => [z, -2.5, 0.935 - spoon(z) * 0.3, 0.13, 38 * DEG]), TEAM);
+  c.part = 0;
   if (hi) c.keep(new THREE.CapsuleGeometry(0.03, 0.2, 4, 10).rotateZ(Math.PI / 2).translate(-2.2, 0.9, 0), BLACK); // actuador del ala
   for (const s of [1, -1]) {
     plate([[-1.9, 0.56], [-1.88, 0.99], [-2.62, 1.04], [-2.66, 0.6], [-2.46, 0.3], [-2.22, 0.3]], 0.61 * s, 0.02, TEAM, 0.1);
@@ -517,19 +519,31 @@ const uLiv = { value: livTex };
 const CAR_MAT = new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.34, metalness: 0.25, clearcoat: 1, clearcoatRoughness: 0.04, side: THREE.DoubleSide });
 CAR_MAT.onBeforeCompile = (sh) => {
   Object.assign(sh.uniforms, { uFlood: U.uFlood, uLight: U.uLight, uLiv, uDrops: U.uDrops || { value: 0 } });
-  sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\n" + INST_COL_DEF + "uniform float uLight; attribute vec3 aCol2, aHelm, aHelm2; attribute float aLiv, aPart, aDmg; varying float vPaint, vGlow, vShade, vLiv, vHelm; varying vec3 vLP, vLN;")
+  sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\n" + INST_COL_DEF + "uniform float uLight; attribute vec3 aCol2, aHelm, aHelm2; attribute vec4 aCarData; attribute float aPart; varying float vPaint, vGlow, vShade, vLiv, vHelm; varying vec3 vLP, vLN;")
+    .replace("#include <beginnormal_vertex>", `#include <beginnormal_vertex>
+      if (aPart > 1.5 && aCarData.z > 0.001) {
+        float da = 0.50 * aCarData.z, dc = cos(da), ds = sin(da);
+        objectNormal.xy = vec2(objectNormal.x * dc - objectNormal.y * ds, objectNormal.x * ds + objectNormal.y * dc);
+      }`)
     .replace("#include <begin_vertex>", `#include <begin_vertex>
-      // alerón delantero: con daño, el lado derecho se descuelga hasta casi rozar el suelo; sin él (cambio de morro), no se dibuja
-      if (aPart > 0.5 && aDmg != 0.0) {
-        if (aDmg < 0.0) transformed = vec3(2.6, 0.2, 0.0);
-        else { float k = smoothstep(0.05, 0.95, transformed.z) * aDmg;
+      // alerón delantero (aPart = 1): con daño (aCarData.y), el lado derecho se descuelga; sin él (cambio de morro), no se dibuja
+      if (aPart > 0.5 && aPart < 1.5 && aCarData.y != 0.0) {
+        if (aCarData.y < 0.0) transformed = vec3(2.6, 0.2, 0.0);
+        else { float k = smoothstep(0.05, 0.95, transformed.z) * aCarData.y;
           transformed.y = max(0.012, transformed.y - 0.3 * k - 0.05 * k * (transformed.x - 2.4));
           transformed.x -= 0.1 * k; }
+      }
+      // alerón trasero móvil (aPart = 2): el plano superior se abre alrededor del borde de salida con DRS / MO (aCarData.z)
+      if (aPart > 1.5 && aCarData.z > 0.001) {
+        float da = 0.50 * aCarData.z, dc = cos(da), ds = sin(da);
+        vec2 piv = vec2(-2.60, 0.99);
+        vec2 rp = transformed.xy - piv;
+        transformed.xy = piv + vec2(rp.x * dc - rp.y * ds, rp.x * ds + rp.y * dc);
       }`)
     .replace("#include <color_vertex>", `float kr = pow(color.r, 2.2), kb = pow(color.b, 2.2), red = step(color.g, -0.5);
       float h2 = step(2.5, color.g), h1 = step(1.5, color.g) - h2; vHelm = h1 + h2;
       vColor = vec4(INST_COL * kr + aCol2 * kb + vec3(pow(clamp(color.g, 0.0, 1.0), 2.2)) * (1.0 - vHelm) + aHelm * h1 + aHelm2 * h2 + vec3(0.25, 0.0, 0.0) * red, 1.0);
-      vPaint = step(0.25, color.r + color.b); vGlow = red * uLight; vShade = max(kr, kb); vLiv = aLiv; vLP = position; vLN = normal;`);
+      vPaint = step(0.25, color.r + color.b); vGlow = red * max(uLight, aCarData.w); vShade = max(kr, kb); vLiv = aCarData.x; vLP = position; vLN = normal;`);
   sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nuniform float uFlood, uDrops; varying float vPaint, vGlow, vShade, vLiv, vHelm; varying vec3 vLP, vLN;" + LIV_GLSL + DROPS_GLSL + CARBON_GLSL)
     .replace("#include <color_fragment>", "#include <color_fragment>\nvec3 nL = normalize(vLN);\nif (vPaint > 0.5) diffuseColor.rgb = liveryAt(vLP, nL, floor(vLiv + 0.5)) * vShade;\nisCarb = (1.0 - vPaint) * (1.0 - step(0.5, vHelm)) * (1.0 - step(0.06, diffuseColor.r + diffuseColor.g + diffuseColor.b));\nif (isCarb > 0.5) { cw = carbonWeave(vLP, nL); diffuseColor.rgb = mix(vec3(0.005), vec3(0.018), cw); }\ndrop = uDrops > 0.01 ? dropsAt(vLP, nL) * uDrops : vec2(0.0); diffuseColor.rgb *= 1.0 - 0.3 * drop.x;")
     .replace("#include <roughnessmap_fragment>", "float roughnessFactor = mix(mix(mix(0.62, 0.34 + 0.18 * (1.0 - cw), isCarb), roughness, vPaint), 0.04, drop.x);")
@@ -711,6 +725,30 @@ export function extractCarFromGltf(root, separateWheel = false) {
   if (hasCar) {
     carBase = carC.done();
     normalizeCarBounds(carBase);
+    // etiquetar el plano superior del alerón trasero (aPart = 2) para animar DRS/MO sin romper las derivas
+    const pos = carBase.attributes.position, prt = carBase.attributes.aPart;
+    if (pos && prt) {
+      let hasFlap = false;
+      for (let i = 0; i < prt.count; i++) if (prt.getX(i) > 1.5) { hasFlap = true; break; }
+      if (!hasFlap) {
+        for (let t = 0; t + 2 < pos.count; t += 3) {
+          if (prt.getX(t) > 0.5) continue;
+          const x0 = pos.getX(t), y0 = pos.getY(t), z0 = pos.getZ(t);
+          const x1 = pos.getX(t + 1), y1 = pos.getY(t + 1), z1 = pos.getZ(t + 1);
+          const x2 = pos.getX(t + 2), y2 = pos.getY(t + 2), z2 = pos.getZ(t + 2);
+          const cy = (y0 + y1 + y2) / 3;
+          if (
+            cy > 0.855
+            && x0 < -1.82 && x1 < -1.82 && x2 < -1.82
+            && y0 > 0.82 && y1 > 0.82 && y2 > 0.82
+            && Math.abs(z0) < 0.51 && Math.abs(z1) < 0.51 && Math.abs(z2) < 0.51
+          ) {
+            prt.setX(t, 2); prt.setX(t + 1, 2); prt.setX(t + 2, 2);
+          }
+        }
+        prt.needsUpdate = true;
+      }
+    }
   }
   if (hasWhl) {
     wheelBase = whlC.done();
@@ -831,8 +869,7 @@ export function createCarPreview(canvas, team) {
   const mat = makeCarMaterial(tex, U), wmat = makeWheelMaterial();
   let geo = carGeometry(true), wgeo = wheelGeometry(true);
   geo.setAttribute("aCol2", new THREE.InstancedBufferAttribute(new Float32Array(3), 3));
-  geo.setAttribute("aLiv", new THREE.InstancedBufferAttribute(new Float32Array(1), 1));
-  geo.setAttribute("aDmg", new THREE.InstancedBufferAttribute(new Float32Array(1), 1));
+  geo.setAttribute("aCarData", new THREE.InstancedBufferAttribute(new Float32Array(4), 4));
   // casco de la vista previa: blanco con la franja del color del equipo
   const col = new THREE.Color();
   geo.setAttribute("aHelm", new THREE.InstancedBufferAttribute(new Float32Array(col.set("#eceef2").toArray()), 3));
@@ -845,7 +882,7 @@ export function createCarPreview(canvas, team) {
     carLoGeo?.dispose(); // la vista previa siempre se ve de cerca: solo usa la fina
     if (!alive) { carGeo?.dispose(); wheelGeo?.dispose(); return; }
     if (carGeo) {
-      for (const a of ["aCol2", "aLiv", "aDmg", "aHelm", "aHelm2"]) carGeo.setAttribute(a, geo.attributes[a]);
+      for (const a of ["aCol2", "aCarData", "aHelm", "aHelm2"]) carGeo.setAttribute(a, geo.attributes[a]);
       car.geometry = carGeo; geo.dispose(); geo = carGeo;
     }
     if (wheelGeo) {

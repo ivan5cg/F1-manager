@@ -9,7 +9,7 @@ Tamaño: **P** pequeño (un PR corto), **M** medio, **G** grande (varios PR).
 - **Móvil en vertical (`portrait`) primero:** toda la interfaz de sesión, hojas y controles del 3D se diseñan para usarse cómodamente a una mano o dos pulgares en pantalla estrecha vertical. No mantener un segundo diseño horizontal/escritorio.
 - **Todo en español:** textos, comentarios, etiquetas y mensajes de commit con el estilo claro del proyecto (sin jerga técnica innecesaria).
 - **La simulación no puede cambiar de resultados.** Comprobar antes y después con `npx tsx scripts/finde.ts silverstone 42 --resumen` y `npx tsx scripts/finde.ts monaco 42 --resumen`.
-- **Presupuesto PWA y rendimiento 3D:** tope de **8 MB** en `public/assets/`, sin subir llamadas de dibujo ni triángulos en las calidades 0 y 1 respecto a `PLAN-MEJORAS.md`. Los recursos específicos de algunos circuitos (entornos, árboles por bioma) se cargan bajo demanda.
+- **Presupuesto PWA y rendimiento 3D:** mantener el shell mínimo precacheado en `sw.js` y cargar bajo demanda todo recurso específico de circuito (`env-tracks/<id>.json` ~15 KB y hitos `landmarks/<id>/*.glb` optimizados con Draco + WebP 512px, <300 KB por hito y ~3–6k triángulos), sin subir llamadas de dibujo ni triángulos en las calidades 0 y 1 respecto a `PLAN-MEJORAS.md`.
 - **Verificación en cada bloque:** `npm run check`, `npx vite build`, `poc3d/prueba.html` con Playwright (`shot.cjs`) y actualización del `README.md` y de la tabla de estado de este archivo.
 
 ## Estado
@@ -18,9 +18,9 @@ Tamaño: **P** pequeño (un PR corto), **M** medio, **G** grande (varios PR).
 |---|---|---|
 | 1. Cimientos PWA, peso y robustez 3D móvil | ✅ Hecho | `sw.js`, `manifest.webmanifest`, `src/ui/pwa.ts`, `map3d.ts`, `car3d.ts`, `store.ts`, `sessionView.ts`, `hubs.ts` |
 | 2. Control 3D interactivo, realización TV y HUD móvil vertical | ✅ Hecho | `map3d.ts`, `sessionView.ts`, `store.ts`, `style.css` |
-| 3. Ergonomía táctil y sensación de app móvil | ⬜ Pendiente | `common.ts`, `sessionView.ts`, `store.ts`, `style.css` |
-| 4. Realismo 3D dinámico y capas tácticas | ⬜ Pendiente | `map3d.ts`, `car3d.ts`, `sessionView.ts` |
-| 5. Circuitos semiurbanos y costeros en 3D | ⬜ Pendiente | `map3d.ts`, `scripts/entorno.py`, `public/assets/env-tracks/` |
+| 3. Ergonomía táctil y sensación de app móvil | ✅ Hecho | `common.ts`, `sessionView.ts`, `store.ts`, `style.css` |
+| 4. Realismo 3D dinámico y capas tácticas | ✅ Hecho | `map3d.ts`, `car3d.ts`, `sessionView.ts`, `store.ts`, `style.css` |
+| 5. Identidad visual de los 24 circuitos en 3D | ⬜ Pendiente | `src/ui/trackVisuals.ts`, `map3d.ts`, `scripts/entorno.py`, `public/assets/env-tracks/`, `public/assets/landmarks/` |
 
 ---
 
@@ -77,38 +77,62 @@ Tamaño: **P** pequeño (un PR corto), **M** medio, **G** grande (varios PR).
 
 ## Bloque 3 · Ergonomía táctil y sensación de app móvil
 
-### 3.1 Hojas inferiores animadas con cierre *swipe down* (P/M)
-- Animación fluida de entrada/salida en `sheet()` (`src/ui/common.ts`) y gesto natural de deslizar hacia abajo desde la cabecera para cerrar hojas no modales.
+### 3.1 Hojas inferiores animadas con cierre *swipe down* (P/M) · ✅ Hecho
+- Animación fluida de entrada y salida en `sheet()` (`src/ui/common.ts`, clases `.open`/`.closing` en `src/ui/style.css`, respetando `prefers-reduced-motion: reduce`), tirador visual `.sheet-grip` en hojas no modales y gesto táctil de deslizar hacia abajo desde el tirador o la cabecera (con `scrollTop <= 2`) con umbral por distancia/velocidad y rebote elástico al cancelar.
 
-### 3.2 Badges de alerta en los botones inferiores (P)
-- Avisos visuales discretos en los botones `Radar` (lluvia prevista < 10 min), `Muro` (el estratega recomienda parar) y `Radio` (mensajes importantes sin leer).
+### 3.2 Badges de alerta en los botones inferiores (P) · ✅ Hecho
+- Badges discretos `.sbadge` en `.sidebtns` (`src/ui/sessionView.ts` y `src/ui/style.css`): `#bdg-wx` azul en **Radar** cuando la lluvia llega en menos de 10 min (`rainAlert.minH < 10`), `#bdg-muro` dorado en **Muro** cuando el estratega recomienda parar y no hay parada pedida, y `#bdg-rad` rojo con contador en **Radio** al recibir avisos importantes/míticos con la hoja cerrada (se limpia al abrir `radioSheet()`).
 
-### 3.3 Vibración háptica discreta en Android (P)
-- Feedback táctil suave vía `navigator.vibrate` (semáforos de salida, coche de seguridad, confirmación de parada y toques clave), activable/desactivable en Ajustes (`Prefs.haptica`).
+### 3.3 Vibración háptica discreta en Android (P) · ✅ Hecho
+- Helper `haptic()` y patrones `HAPTIC` (`tap`, `light`, `start`, `pit`, `alert`) en `src/ui/common.ts`, controlados por `Prefs.haptica` (activo por defecto en `src/ui/store.ts`, interruptor `#phap` **«Vibración háptica»** en Ajustes).
+- Conectado en `src/ui/sessionView.ts` a los semáforos de salida (independiente del silencio de audio), SC/VSC/bandera roja, confirmaciones de parada (Box, Muro y bandera roja) y toques clave de control.
 
 ---
 
 ## Bloque 4 · Realismo 3D dinámico y capas tácticas
 
-### 4.1 Alerón trasero móvil (DRS/MO) y luz trasera ERS vs lluvia (M)
-- Animar la apertura del flap del alerón trasero cuando `c.drs` esté activo y distinguir el parpadeo rápido de recarga ERS de la luz fija/intermitente de lluvia.
+### 4.1 Alerón trasero móvil (DRS/MO) y luz trasera ERS vs lluvia (M) · ✅ Hecho
+- Marcado el flap superior del alerón trasero como `aPart = 2` tanto en el monoplaza procedural como en `extractCarFromGltf()` para `f1.glb`/`f1_lo.glb` (`src/ui/car3d.ts`).
+- Empaquetados los 4 escalares por coche `(liv, dmg, drs, tail)` en un único atributo `vec4 aCarData` (`src/ui/car3d.ts` y `src/ui/map3d.ts`) para mantenerse bajo el límite WebGL de 16 atributos de vértice (13 en total).
+- Apertura suave del flap (`+0,50 rad` alrededor de `(-2.60, 0.99)`) cuando `c.drs` está activo, y luz trasera (más su reflejo en asfalto mojado) diferenciando el parpadeo rápido de recarga ERS (~4,5 Hz, desfasado por coche) de la luz de lluvia (~1,5 Hz con base fija).
 
-### 4.2 Micro-vibración de cámara a bordo (P)
-- Ligera vibración en *A bordo* y *Alerón trasero* proporcional a velocidad, frenada fuerte y paso por pianos (desactivada con `prefers-reduced-motion`).
+### 4.2 Micro-vibración de cámara a bordo (P) · ✅ Hecho
+- Micro-vibración sutil en *A bordo* y *Alerón trasero* (`updateCamera()` en `src/ui/map3d.ts`) proporcional a velocidad, frenada fuerte, paso por pianos y salidas de pista; desactivada automáticamente en pausa, repetición, foto o con `prefers-reduced-motion: reduce`.
 
-### 4.3 Colores de pianos por circuito, sombras de vallas y charcos (M)
-- Paleta de pianos propia por circuito (rojo/blanco, azul/blanco, verde/blanco, amarillo/negro, etc.).
-- Sombras con recorte alfa (`customDepthMaterial` / `alphaTest`) en barandillas y celosías, y reflejo real del cielo en los charcos del asfalto mojado.
+### 4.3 Sombras de vallas y reflejos en charcos (M) · ✅ Hecho
+- Recorte alfa (`discard`) en el shader `PROP_DEPTH` (`DoubleSide`) para celosías y barandillas (`P == 7` y `P == 13`), proyectando sombras caladas en lugar de bloques opacos.
+- Reflejo analítico de cielo, sol, nubes y resplandor nocturno (Fresnel de Schlick usando `skyU`) en los charcos y película de agua del asfalto mojado (`RMODE == 1`), sin coste cuando la pista está seca. *(La paleta de pianos por circuito pasa al Bloque 5.1.)*
 
-### 4.4 Capas tácticas opcionales sobre el 3D (M)
-- Interruptores en el menú rápido del 3D para resaltar zonas de DRS/Modo Adelantamiento, contraste de línea seca vs mojada y fantasma de parada en pista.
+### 4.4 Capas tácticas opcionales sobre el 3D (M) · ✅ Hecho
+- Nueva sección **«Capas tácticas»** en el menú rápido `#campop` (`#cldrs`, `#clagua`, `#clghost` en `src/ui/sessionView.ts`, persistida en `Prefs.capas3d` de `src/ui/store.ts` y aplicada con `setLayers()` en `src/ui/map3d.ts`):
+  - **Zonas DRS / Modo Adelantamiento:** cheurones verdes sobre las zonas activas de la era y resaltado ámbar en los puntos de frenada fuerte.
+  - **Contraste de agua:** refuerza visualmente el carril seco frente al asfalto mojado.
+  - **Fantasma de parada:** anillos 3D pulsantes sobre la pista sincronizados con el punto de reincorporación proyectado en carrera.
+- Verificados `npm run check`, `npx vite build`, determinismo idéntico en `scripts/finde.ts` (Silverstone 42 y Mónaco 42) y 0 errores de consola/WebGL en Singapur (`q=2`, lluvia), Silverstone (`q=1`) y Mónaco (`q=2`).
 
 ---
 
-## Bloque 5 · Circuitos semiurbanos y costeros en 3D
+## Bloque 5 · Identidad visual de los 24 circuitos en 3D
 
-### 5.1 Modo semiurbano/costero en `map3d.ts` (M)
-- Separar completamente el concepto de trazado urbano de competición (`urbano: true`, muros pegados y más SC) del entorno visual (`tipo: "semiurbano"`), manteniendo escapatorias de grava/hierba y vegetación abierta junto al agua, puertos o skyline real.
+Objetivo: que cada uno de los 24 circuitos del calendario sea reconocible al primer vistazo (sin buscar fotorrealismo), combinando identidad a pie de pista, geografía real, estructuras singulares del trazado y 1–2 hitos icónicos bajo demanda por circuito.
 
-### 5.2 Entornos generados para Melbourne, Montreal, Miami, Yas Marina y Madrid (M)
-- Generar con `scripts/entorno.py` los archivos `public/assets/env-tracks/{melbourne,montreal,miami,yasmarina,madrid}.json` con `tipo: "semiurbano"`, descargados solo bajo demanda al abrir el 3D de cada circuito.
+### 5.1 Identidad a pie de pista: pianos, escapatorias pintadas y estilos urbanos (M)
+- Crear módulo de perfiles visuales por circuito (`src/ui/trackVisuals.ts`) conectado a `map3d.ts`, sin alterar la simulación.
+- **Paleta de pianos propia** por circuito (rojo/amarillo en Spa y Spielberg, verde/blanco/rojo en Monza y México, azul/blanco en Miami, azul/amarillo en Zandvoort, verde/amarillo/blanco en Interlagos, etc.).
+- **Escapatorias de asfalto pintado** en circuitos modernos (Yas Marina azul, Austin rojo/azul, Miami azul claro, Baréin, Lusail, México verde, Barcelona, etc.) en lugar de grava uniforme.
+- **Estilos urbanos diferenciados** más allá del par clásico/torres: Las Vegas (neones, fachadas iluminadas y pantallas nocturnas), Bakú (piedra cálida histórica + torres modernas de cristal), Mónaco (mediterráneo en ladera) y Singapur (bahía + rascacielos).
+
+### 5.2 Entornos geográficos reales en los 24 circuitos (M)
+- Separar completamente el trazado urbano de competición (`urbano: true`, muros pegados y más SC) del entorno visual (`tipo: "urbano" | "semiurbano" | "circuito"`).
+- Ampliar `scripts/entorno.py` y `map3d.ts` para soportar máscaras de agua interior por encima de 0 m (lagos, ríos y embalses: Albert Park en Melbourne, Île Notre-Dame en Montreal, Guarapiranga en Interlagos) además de costa/mar y montañas/valles reales (Spielberg, Spa, México, Barcelona, Suzuka, Austin, Zandvoort, etc.).
+- Generar `public/assets/env-tracks/<id>.json` (~15 KB cada uno, descargados bajo demanda) para los 20 circuitos restantes, completando los 24 del calendario.
+
+### 5.3 Estructuras especiales del trazado (M/G)
+- **Túnel de Mónaco:** estructura cubierta con pilares, iluminación interior y adaptación automática al ensanchado de la pista en la vista general.
+- **Puente del cruce en «8» de Suzuka:** paso elevado con tablero, pilares y barreras claramente visibles sobre la recta inferior.
+- **Peraltes visibles:** inclinación transversal (*banking*) en las curvas peraltadas características (Zandvoort, Madrid).
+
+### 5.4 Hitos icónicos `.glb` bajo demanda, placeholders y pipeline de Google Colab (G)
+- **Manifiesto de hitos de los 24 circuitos:** 1–2 elementos emblemáticos por GP con coordenadas `(s, lado, dist)` o `(x, z)`, rotación, altura objetivo en metros y metadatos de colocación (con margen seguro respecto a la vista general).
+- **Cargador híbrido bajo demanda en `map3d.ts`:** descarga `public/assets/landmarks/<circuito>/<id>.glb` (Draco) solo al abrir ese circuito, con caché entre sesiones, normalización automática (pivote al suelo `y=0` y escalado a la altura objetivo) y **placeholders procedurales ligeros** mientras el `.glb` no exista.
+- **Pipeline para Google Colab:** notebook/script listo para generar modelos en GPU y optimizarlos automáticamente al contrato del juego (decimate a ~3–6k triángulos, textura WebP 512px, compresión Draco, <300 KB por hito).

@@ -498,6 +498,8 @@ const U = {
   uSlopeCol: { value: new THREE.Color(0x575247) }, uDry: { value: 0.35 }, uMow: { value: 1 }, // bioma del circuito
   uHiQ: { value: 0 }, // 1 con calidad 2 o 3: interiores detrás de los cristales
   uDay: { value: 1 }, // luz de día que entra por las ventanas (0 de noche, menos con nubes)
+  uTacDrs: { value: 0 }, // capa táctica: zonas de DRS / modo adelantamiento y frenadas
+  uTacWet: { value: 0 }, // capa táctica: contraste línea seca vs mojada
 };
 // Biomas del terreno y arbolado por circuito (sin archivos externos)
 const BIOME_OF = {
@@ -571,7 +573,7 @@ transformed.y += aY * (aY > 0.0 ? uW / 6.5 : 1.0);
 vU = aU; vV = aV; vWet = aWet; vWetOff = aWetOff; vKerb = aKerb; vDash = aDash; vLine = aLine; vEdge = aEdge; vXZ = transformed.xz; vWY = transformed.y; vSide = aSide.xz;
 `;
 const RIB_FH = `` + GLSL_NOISE + `
-uniform float uW, uDetail, uL, uFlood, uTexR, uTime, uNL, uNT, uLampK, uDry, uMow; uniform vec3 uYel, uSlopeCol; uniform vec4 uLamps[16], uTails[6]; uniform sampler2D uCloud, uAds, uDet, uRock;
+uniform float uW, uDetail, uL, uFlood, uTexR, uTime, uNL, uNT, uLampK, uDry, uMow, uTacDrs, uTacWet, uSkyNight; uniform vec3 uYel, uSlopeCol, uSkyZen, uSkyHor, uSkySun, uSkySunCol, uSkyCloud; uniform vec4 uLamps[16], uTails[6]; uniform sampler2D uCloud, uAds, uDet, uRock;
 varying float vU, vV, vWet, vWetOff, vKerb, vDash, vLine, vWY; varying vec3 vEdge; varying vec2 vXZ, vSide;
 `;
 // Cada cinta compila solo su rama (RMODE): 0 muro liso, 1 pista, 2 calle de boxes, 3 hierba, 4 grava, 5 barrera, 6 valla,
@@ -624,6 +626,22 @@ float cloudS = texture2D(uCloud, vXZ / (2.0 * uTexR) + 0.5).g;
       float dist = length(o), ring = dist - ph * 0.3;
       dn += normalize(o + 1e-4) * sin(ring * 70.0) * exp(-ring * ring * 500.0) * (1.0 - ph) * rainK * step(0.45, hh) * 0.8;
     }
+    // reflejo real del cielo, el sol y las nubes en la película de agua y los charcos del asfalto mojado
+    if (film > 0.02) {
+      vec3 Fw = vec3(vXZ.x, vWY, vXZ.y);
+      vec3 Vw = normalize(cameraPosition - Fw);
+      vec3 Nw = normalize(vec3(dn.x * 0.35, 1.0, dn.y * 0.35));
+      vec3 Rw = reflect(-Vw, Nw);
+      float rUp = clamp(Rw.y, 0.0, 1.0);
+      vec3 skyR = mix(uSkyHor, uSkyZen, pow(rUp, 0.55));
+      float rSun = max(dot(Rw, uSkySun), 0.0);
+      skyR += uSkySunCol * (pow(rSun, 8.0) * 0.16 + pow(rSun, 48.0) * 0.45 + smoothstep(0.997, 0.9995, rSun) * 4.2);
+      skyR = mix(skyR, uSkyCloud * 0.85, clamp(cloudS * 0.72, 0.0, 0.82));
+      skyR += vec3(1.0, 0.55, 0.25) * uSkyNight * exp(-rUp * 8.0) * 0.08;
+      float fres = 0.04 + 0.96 * pow(1.0 - clamp(dot(Nw, Vw), 0.0, 1.0), 4.0);
+      float refK = max(pud * (0.48 + 0.52 * fres), film * fres * 0.36) * uDetail;
+      refC += skyR * refK * 0.78;
+    }
     // de noche o con lluvia en urbanos, cada foco se refleja en el agua como una estela alargada hacia quien mira
     if (uNL > 0.5 && film > 0.02) {
       vec3 F = vec3(vXZ.x, vWY, vXZ.y), d1 = normalize(F - cameraPosition);
@@ -651,11 +669,22 @@ float cloudS = texture2D(uCloud, vXZ / (2.0 * uTexR) + 0.5).g;
       refC += vec3(1.4, 0.10, 0.05) * accT * max(film * 0.65, pud) * 0.65;
     }
     col = mix(col, SR(vec3(0.27, 0.59, 0.94)), vWet * (1.0 - uDetail) * 0.85);
+    // capa táctica opcional: contraste claro de línea seca frente a zonas húmedas/encharcadas
+    if (uTacWet > 0.5) {
+      float wLoc = mix(vWetOff, vWet, lineK);
+      float dryDiff = clamp((vWetOff - vWet) * 2.4, 0.0, 1.0) * lineK;
+      vec3 wetTint = mix(SR(vec3(0.16, 0.56, 0.98)), SR(vec3(0.05, 0.28, 0.86)), smoothstep(0.25, 0.85, wLoc));
+      col = mix(col, wetTint, clamp(wLoc * 0.78, 0.0, 0.78));
+      col = mix(col, SR(vec3(0.95, 0.86, 0.42)), dryDiff * 0.42);
+      glow = max(glow, wLoc * 0.18 + dryDiff * 0.16);
+    }
     // línea de límite de pista fina de cerca (20-25 cm) y ancha de lejos para leerse en la vista general; arcén sucio por fuera
     float jitt = (vn(vec2(vV * 0.9, vU * 3.0)) - 0.5) * 0.014 * uDetail;
     float lineIn = mix(0.80, 0.885, uDetail), lineOut = mix(1.02, 0.922, uDetail);
     float whiteLine = smoothstep(lineIn - 0.012, lineIn, a + jitt) * (1.0 - smoothstep(lineOut, lineOut + 0.015, a + jitt) * uDetail);
-    float dash = vDash > 0.5 ? step(0.45, fract(vV / (uW * 4.0))) : 1.0;
+    float isDash = step(0.5, vDash) * (1.0 - step(1.5, vDash));
+    float isDrs = step(0.5, vDash);
+    float dash = isDash > 0.5 ? step(0.45, fract(vV / (uW * 4.0))) : 1.0;
     float k = step(0.5, vKerb) * uDetail;
     // pianos con relieve de dientes de sierra, juntas entre bloques y goma de los coches en el vértice
     float kMask = smoothstep(0.895, 0.912, a) * k;
@@ -687,6 +716,22 @@ float cloudS = texture2D(uCloud, vXZ / (2.0 * uTexR) + 0.5).g;
     float yd = abs(mod(vV - uYel.x + uL * 0.5, uL) - uL * 0.5), yz = uYel.z * (1.0 - smoothstep(uYel.y, uYel.y + 30.0, yd));
     float yk = yz * max(smoothstep(0.84, 0.90, a) * 0.85, (1.0 - uDetail) * 0.35) * (0.75 + 0.25 * sin(uTime * 6.0));
     col = mix(col, SR(vec3(1.0, 0.8, 0.1)), yk); glow = max(glow, yk * 0.5);
+    // capa táctica opcional: zonas de DRS / modo adelantamiento (verde) y frenadas clave (ámbar)
+    if (uTacDrs > 0.5) {
+      if (isDrs > 0.5) {
+        float edgeD = smoothstep(0.68, 0.88, a);
+        float chev = smoothstep(0.35, 0.65, sin((vV - abs(vU) * uW * 0.9) * 0.42 - uTime * 3.5)) * (1.0 - smoothstep(0.55, 0.78, a));
+        float dm = max(edgeD * 0.68, chev * 0.22);
+        col = mix(col, SR(vec3(0.16, 0.92, 0.42)), dm);
+        glow = max(glow, dm * 0.45);
+      }
+      float isOt = step(0.96, vEdge.r) * (1.0 - step(0.3, vEdge.b));
+      if (isOt > 0.5) {
+        float om = smoothstep(0.66, 0.88, a) * 0.55;
+        col = mix(col, SR(vec3(1.0, 0.58, 0.14)), om);
+        glow = max(glow, om * 0.35);
+      }
+    }
   #else
     float pEdge = smoothstep(0.88, 0.92, a) * (1.0 - smoothstep(0.96, 0.99, a) * uDetail);
     col = mix(col, SR(vec3(0.88)), pEdge * (0.3 + 0.55 * uDetail));
@@ -803,7 +848,7 @@ function ribbonMat(color, mode, po) {
   m.defines = { ...m.defines, RMODE: mode };
   const uDet = RIB_DET[mode] || { value: null };
   m.onBeforeCompile = (sh) => {
-    Object.assign(sh.uniforms, U, { uDet, uRock: DET_U.grava });
+    Object.assign(sh.uniforms, U, { uDet, uRock: DET_U.grava, uSkyZen: skyU.uZen, uSkyHor: skyU.uHor, uSkySun: skyU.uSun, uSkySunCol: skyU.uSunCol, uSkyCloud: skyU.uCloudCol, uSkyNight: skyU.uNight });
     sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\n" + RIB_VH).replace("#include <begin_vertex>", RIB_VB);
     sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\n" + RIB_FH)
       .replace("vec4 diffuseColor = vec4( diffuse, opacity );", RIB_FB)
@@ -883,8 +928,8 @@ const DECAL_GEO = (() => {
 })();
 const LIV_TEX = liveryTexture(TEAMS);
 const CAR_MAT = makeCarMaterial(LIV_TEX, U), WHEEL_MAT = makeWheelMaterial();
-/** Datos de cada coche que comparten sus mallas (la fina, la ligera y la mínima): segundo color, librea, daños y casco. */
-const CAR_INST = ["aCol2", "aLiv", "aDmg", "aHelm", "aHelm2"];
+/** Datos de cada coche que comparten sus mallas (la fina, la ligera y la mínima): segundo color, estado empaquetado (librea/daños/DRS/luz) y casco. */
+const CAR_INST = ["aCol2", "aCarData", "aHelm", "aHelm2"];
 // Sombra de contacto suave bajo el fondo plano y las cuatro ruedas: ancla el coche al asfalto en todas las calidades
 // (también con luz nublada, de noche o bajo el voladizo de los boxes, donde la sombra del sol se despega).
 const blobTex = (() => {
@@ -1692,11 +1737,24 @@ function propMat() {
   m.customProgramCacheKey = () => "decorado";
   return m;
 }
-// la sombra tiene que salir de la forma ya ensanchada
-const PROP_DEPTH = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
+// la sombra tiene que salir de la forma ya ensanchada y con recorte alfa en celosías (P = 7) y barandillas (P = 13)
+const PROP_DEPTH = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, side: THREE.DoubleSide });
 PROP_DEPTH.onBeforeCompile = (sh) => {
   Object.assign(sh.uniforms, { uW: U.uW, uS: U.uS, uTime: U.uTime });
   sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\n" + PROP_VH).replace("#include <begin_vertex>", PROP_VB);
+  sh.fragmentShader = sh.fragmentShader
+    .replace("#include <common>", "#include <common>\nvarying vec4 vPat;")
+    .replace("#include <clipping_planes_fragment>", `#include <clipping_planes_fragment>
+      float dP = floor(vPat.x + 0.5);
+      if (dP > 6.5 && dP < 7.5) {
+        vec2 df = fract(vPat.zw / 1.4);
+        float db = max(max(step(df.x, 0.14), step(df.y, 0.14)), step(abs(df.x - df.y), 0.1));
+        if (db < 0.5) discard;
+      } else if (dP > 12.5 && dP < 13.5) {
+        float dfx = fract(vPat.z / 1.2);
+        float db = max(max(step(0.88, vPat.w), step(abs(vPat.w - 0.45), 0.045)), step(dfx, 0.055));
+        if (db < 0.5) discard;
+      }`);
 };
 PROP_DEPTH.customProgramCacheKey = () => "decorado-sombra";
 /**
@@ -1916,7 +1974,7 @@ function buildWorld() {
         if (road) {
           const ot = m.overtake >= 0.15;
           ED[v * 3] = ot ? 1 : 0.93; ED[v * 3 + 1] = ot ? 0.58 : 0.95; ED[v * 3 + 2] = ot ? 0.16 : 0.97;
-          DA[v] = m.drs && !ot ? 1 : 0; KE[v] = Math.abs(track.curv[i]) > 0.009 ? 1 : 0; LI[v] = T.line[i];
+          DA[v] = m.drs && sess.aidShort ? (ot ? 2 : 1) : 0; KE[v] = Math.abs(track.curv[i]) > 0.009 ? 1 : 0; LI[v] = T.line[i];
         } else if (extra) { const e = extra(i, s, c); KE[v] = e[0]; DA[v] = e[1]; }
       }
     }
@@ -2579,9 +2637,10 @@ function buildWorld() {
   sess.cars.forEach((c, i) => { const d = helmetDesign(c.d.nombre); hla.set(col.set(d.base).toArray(), i * 3); hlb.set(col.set(d.c2).toArray(), i * 3); });
   const livSrc = Float32Array.from(sess.cars, (c) => Math.max(0, TEAMS.indexOf(c.team)));
   for (const g of [CAR_LO, CAR_GEO]) {
+    const cd = new Float32Array(NC * 4);
+    for (let k = 0; k < NC; k++) cd[k * 4] = livSrc[k];
     g.setAttribute("aCol2", new THREE.InstancedBufferAttribute(c2a.slice(), 3).setUsage(THREE.DynamicDrawUsage));
-    g.setAttribute("aLiv", new THREE.InstancedBufferAttribute(livSrc.slice(), 1).setUsage(THREE.DynamicDrawUsage));
-    g.setAttribute("aDmg", new THREE.InstancedBufferAttribute(new Float32Array(NC), 1).setUsage(THREE.DynamicDrawUsage));
+    g.setAttribute("aCarData", new THREE.InstancedBufferAttribute(cd, 4).setUsage(THREE.DynamicDrawUsage));
     g.setAttribute("aHelm", new THREE.InstancedBufferAttribute(hla.slice(), 3).setUsage(THREE.DynamicDrawUsage));
     g.setAttribute("aHelm2", new THREE.InstancedBufferAttribute(hlb.slice(), 3).setUsage(THREE.DynamicDrawUsage));
   }
@@ -2693,6 +2752,10 @@ function buildWorld() {
     const r = add(new THREE.Mesh(RING_GEO, new THREE.MeshBasicMaterial({ color: k === 2 ? 0xffd84a : 0xffffff, depthTest: false, depthWrite: false, fog: false })));
     r.renderOrder = 5; r.visible = false; return r;
   });
+  const ghostRings = [0, 1].map(() => {
+    const r = add(new THREE.Mesh(RING_GEO, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85, depthTest: false, depthWrite: false, fog: false })));
+    r.userData.sharedGeo = true; r.renderOrder = 6; r.visible = false; return r;
+  });
   // el dorsal y el segundo color son de cada coche, pero los coches se dibujan por orden en pista: se copian a su hueco en cada fotograma
   const carIdx = new Map(sess.cars.map((c, i) => [c.id, i]));
   DBG.towers = towers;
@@ -2714,7 +2777,7 @@ function buildWorld() {
     const pts = add(new THREE.Points(g, m)); pts.frustumCulled = false; pts.visible = false; pts.name = "pueblos";
     return pts;
   })();
-  const curWorld = { all, cityRoofs, props, trees: treeMesh, treeMeshes: [treeMesh], treeLod: null, townLights, sparkMesh, fists, chk, beams, towers, night, lampPos, debris, marsh, crane, blank, gant, glit, markMesh, posts, flags, scCar, scBar, road, cars, wheels, crewS, crewC, jacks, loose, puffs, blobs, spray, discs, rings, lamps, poles, halos, decals, steer, carIdx, c2src: c2a.slice(), hlsA: hla, hlsB: hlb, hlA: CAR_LO.attributes.aHelm, hlB: CAR_LO.attributes.aHelm2, hlAH: CAR_GEO.attributes.aHelm, hlBH: CAR_GEO.attributes.aHelm2, carsHi, wheelsHi, col2: CAR_LO.attributes.aCol2, livSrc, liv: CAR_LO.attributes.aLiv, dmg: CAR_LO.attributes.aDmg, col2H: CAR_GEO.attributes.aCol2, livH: CAR_GEO.attributes.aLiv, dmgH: CAR_GEO.attributes.aDmg, brakeH, cell: dg.attributes.aCell };
+  const curWorld = { all, cityRoofs, props, trees: treeMesh, treeMeshes: [treeMesh], treeLod: null, townLights, sparkMesh, fists, chk, beams, towers, night, lampPos, debris, marsh, crane, blank, gant, glit, markMesh, posts, flags, scCar, scBar, road, cars, wheels, crewS, crewC, jacks, loose, puffs, blobs, spray, discs, rings, ghostRings, lamps, poles, halos, decals, steer, carIdx, c2src: c2a.slice(), hlsA: hla, hlsB: hlb, hlA: CAR_LO.attributes.aHelm, hlB: CAR_LO.attributes.aHelm2, hlAH: CAR_GEO.attributes.aHelm, hlBH: CAR_GEO.attributes.aHelm2, carsHi, wheelsHi, col2: CAR_LO.attributes.aCol2, livSrc, carData: CAR_LO.attributes.aCarData, col2H: CAR_GEO.attributes.aCol2, carDataH: CAR_GEO.attributes.aCarData, brakeH, cell: dg.attributes.aCell };
   world = curWorld;
   // ---- carga asíncrona de los .glb de entorno (árboles del bioma, mecánicos y yates) sin bloquear el arranque
   if (trees.length && bio.species?.length) {
@@ -3730,6 +3793,25 @@ function updateCamera(dt, now) {
     const dist = want.pos.distanceTo(want.look);
     want.fov = clamp(2 * Math.atan(15 * fast / dist) * 180 / Math.PI, 4, 46);
   }
+  // micro-vibración en cámaras solidarias al coche (A bordo y Alerón trasero): velocidad, frenada fuerte y pianos
+  if (onboard && p && !reduced && !opt.paused() && !opt.debug?.view && !photoNow && !replay) {
+    const vNorm = clamp((p.c.v || 0) / 88, 0, 1.15);
+    const spdV = vNorm * vNorm;
+    const brkV = clamp((-p.acc - 11) / 30, 0, 1);
+    const iK = Math.min(T.n - 1, Math.floor(mod(p.s, T.L) / T.ds));
+    const edgeFrac = Math.abs(p.l0) / Math.max(1, curW * arrAt(T.wr, p.s));
+    const onKerb = Math.abs(track.curv[iK]) > 0.009 && edgeFrac > 0.74 ? clamp((edgeFrac - 0.74) / 0.18, 0, 1) : 0;
+    const offTrk = p.gnd > 0 ? clamp(p.gnd, 0, 1) : 0;
+    const tS = now * 0.001, kc = carK(curW);
+    const amp = (0.0045 * spdV + 0.0085 * brkV + 0.014 * onKerb + 0.022 * offTrk) * kc;
+    if (amp > 0.0005) {
+      const kRumble = onKerb + offTrk > 0.01 ? Math.sin(p.s * 14.5) * (0.011 * onKerb + 0.018 * offTrk) * kc : 0;
+      const jY = (Math.sin(tS * 47.3) * 0.55 + Math.sin(tS * 83.1) * 0.45) * amp + kRumble;
+      const jS = (Math.sin(tS * 37.7 + 1.3) * 0.6 + Math.sin(tS * 67.9) * 0.4) * amp * 0.75;
+      want.pos.x += p.sx * jS; want.pos.y += jY; want.pos.z += p.sz * jS;
+      want.look.x += p.sx * jS * 0.35; want.look.y += jY * 0.35; want.look.z += p.sz * jS * 0.35;
+    }
+  }
   if (photoNow) {
     // foto: cámara de tele cercana, tres cuartos por detrás y un poco por encima
     const pp = pose.get(photoNow.id);
@@ -3949,16 +4031,16 @@ function updateLampRefl(W) {
 /** Los 6 pilotos traseros más cercanos, para su reflejo rojo en el asfalto mojado. */
 function updateTailRefl(list, k, wetMax) {
   const u = U.uTails.value;
-  if (q < 2 || wetMax < 0.03 || U.uLight.value < 0.15) { U.uNT.value = 0; return; }
+  if (q < 2 || wetMax < 0.03) { U.uNT.value = 0; return; }
   const c = cur.look, near = [];
   for (const p of list) {
-    if (p.c.loc !== "track") continue;
+    if (p.c.loc !== "track" || !(p.tail > 0.15)) continue;
     const x = p.px - p.fx * 2.65 * k, z = p.pz - p.fz * 2.65 * k;
-    near.push([(x - c.x) ** 2 + (z - c.z) ** 2, x, p.py + 0.45 * k, z]);
+    near.push([(x - c.x) ** 2 + (z - c.z) ** 2, x, p.py + 0.45 * k, z, p.tail]);
   }
   near.sort((a, b) => a[0] - b[0]);
   const nT = Math.min(6, near.length);
-  for (let j = 0; j < nT; j++) u[j].set(near[j][1], near[j][2], near[j][3], U.uLight.value);
+  for (let j = 0; j < nT; j++) u[j].set(near[j][1], near[j][2], near[j][3], near[j][4]);
   U.uNT.value = nT;
 }
 /** Coche de seguridad, banderas de los comisarios y la zona en amarillo sobre la pista. */
@@ -4068,7 +4150,10 @@ function draw3d(dt, now) {
   { const tgt = clamp(rainHere / 1.5, 0, 1), d = U.uDrops;
     if (d.value < 0) d.value = tgt;
     else d.value += (tgt - d.value) * (1 - Math.exp(-dt * (isPaused() ? 0 : Math.min(8, curSpeed())) / (tgt > d.value ? 8 : 120))); }
-  U.uLight.value = rainHere > 0.3 ? (Math.floor(now / 160) % 2 ? 1 : 0.1) : 0.25;
+  // la luz trasera va por coche en aTail (recarga ERS vs lluvia); uLight queda en 0 para no pisarla
+  U.uLight.value = 0;
+  const rainPulse = Math.floor(now / 340) % 2 ? 1.0 : 0.42;
+  const hasErs = !sess.era || sess.era.ers > 0;
   const { cars, wheels, blobs, spray, discs } = world;
   // malla fina solo de cerca y con calidad alta; de muy lejos (vista general), la mínima con las ruedas dentro
   const tiny = far > (cars.geometry === CAR_MIN ? 0.6 : 0.7);
@@ -4187,12 +4272,29 @@ function draw3d(dt, now) {
     blobs.setMatrixAt(i, mL);
     world.decals.setMatrixAt(i, m4);
     const ci = world.carIdx.get(c.id);
-    world.cell.array[i] = ci; world.liv.array[i] = world.livSrc[ci];
+    world.cell.array[i] = ci;
     // daños: el alerón tocado se ve descolgado; en un cambio de morro se quita mientras trabajan
     const nose = stop && c.pit?.noseChange && u > 0.18 && u < 0.7;
-    world.dmg.array[i] = nose ? -1 : clamp(c.wing / 0.025, 0, 1) * (c.wing > 0.004 ? 1 : 0); world.col2.array[i * 3] = world.c2src[ci * 3]; world.col2.array[i * 3 + 1] = world.c2src[ci * 3 + 1]; world.col2.array[i * 3 + 2] = world.c2src[ci * 3 + 2];
+    const dmgVal = nose ? -1 : clamp(c.wing / 0.025, 0, 1) * (c.wing > 0.004 ? 1 : 0);
+    // alerón trasero móvil (DRS / MO): apertura suave del flap cuando c.drs está activo
+    const drsT = c.loc === "track" && !!c.drs ? 1 : 0;
+    p.drs = p.drs === undefined || dt <= 0 ? drsT : p.drs + (drsT - p.drs) * (1 - Math.exp(-dt / 0.12));
+    // luz trasera: parpadeo rápido de recarga ERS (~4,5 Hz) distinto de la luz de lluvia (~1,5 Hz con base fija)
+    const miL = track.msOfPoint[Math.min(T.n - 1, Math.floor(mod(p.s, T.L) / T.ds))];
+    const wetL = c.loc === "track" ? Math.max(sess.water[miL] || 0, sess.waterOff[miL] || 0) : 0;
+    const wetRain = rainHere > 0.25 || wetL > 0.06;
+    const ersHarvest = hasErs && c.loc === "track" && c.v > 25 && (c.ers === 0 || (c.soc < 3.85 && p.acc < -15));
+    const ersFast = Math.floor((now + c.id * 73) / 110) % 2 ? 1.25 : 0.04;
+    const tailVal = ersHarvest && wetRain ? (ersFast > 0.5 ? 1.3 : 0.36)
+      : ersHarvest ? ersFast
+      : wetRain ? rainPulse
+      : (1 - dayK) * 0.22;
+    p.tail = tailVal;
+    const livVal = world.livSrc[ci];
+    world.carData.array.set([livVal, dmgVal, p.drs, tailVal], i * 4);
+    world.col2.array[i * 3] = world.c2src[ci * 3]; world.col2.array[i * 3 + 1] = world.c2src[ci * 3 + 1]; world.col2.array[i * 3 + 2] = world.c2src[ci * 3 + 2];
     world.hlA.array.set(world.hlsA.subarray(ci * 3, ci * 3 + 3), i * 3); world.hlB.array.set(world.hlsB.subarray(ci * 3, ci * 3 + 3), i * 3);
-    if (hi >= 0) { world.livH.array[hi] = world.liv.array[i]; world.dmgH.array[hi] = world.dmg.array[i]; world.col2H.array.set(world.col2.array.subarray(i * 3, i * 3 + 3), hi * 3); world.hlAH.array.set(world.hlsA.subarray(ci * 3, ci * 3 + 3), hi * 3); world.hlBH.array.set(world.hlsB.subarray(ci * 3, ci * 3 + 3), hi * 3); }
+    if (hi >= 0) { world.carDataH.array.set([livVal, dmgVal, p.drs, tailVal], hi * 4); world.col2H.array.set(world.col2.array.subarray(i * 3, i * 3 + 3), hi * 3); world.hlAH.array.set(world.hlsA.subarray(ci * 3, ci * 3 + 3), hi * 3); world.hlBH.array.set(world.hlsB.subarray(ci * 3, ci * 3 + 3), hi * 3); }
     const bigDash = fcDash && c === fcDash;
     mL.makeRotationX(-steer * 2.4).multiply(mTilt);
     if (bigDash) mL.scale(_ws.set(DASH_K, DASH_K, DASH_K));
@@ -4242,9 +4344,9 @@ function draw3d(dt, now) {
     g.instanceCount = P.n; pa.needsUpdate = aa.needsUpdate = true; SPARK_MAT.uniforms.uNight.value = 1 - dayK; }
   for (const a of Object.values(spray.geometry.attributes)) if (a.isInstancedBufferAttribute) a.needsUpdate = true;
   discs.visible = far > 0.02;
-  world.cell.needsUpdate = world.col2.needsUpdate = world.liv.needsUpdate = world.dmg.needsUpdate = world.hlA.needsUpdate = world.hlB.needsUpdate = true;
+  world.cell.needsUpdate = world.col2.needsUpdate = world.carData.needsUpdate = world.hlA.needsUpdate = world.hlB.needsUpdate = true;
   carsHi.count = nH; wheelsHi.count = nH * 4;
-  world.livH.needsUpdate = world.dmgH.needsUpdate = world.col2H.needsUpdate = world.brakeH.needsUpdate = world.hlAH.needsUpdate = world.hlBH.needsUpdate = true;
+  world.carDataH.needsUpdate = world.col2H.needsUpdate = world.brakeH.needsUpdate = world.hlAH.needsUpdate = world.hlBH.needsUpdate = true;
   for (const m of [cars, wheels, carsHi, wheelsHi, blobs, discs, world.decals, world.steer]) { m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true; }
   const sel = opt.selId() === null ? null : pose.get(opt.selId());
   const ringFor = [...opt.mine().map((c) => (c.id === opt.selId() ? null : pose.get(c.id))), sel];
@@ -4338,11 +4440,23 @@ function draw3d(dt, now) {
     } else if (!el.hidden) el.hidden = true;
   }
   for (const [id, rec] of labels) if (!pose.has(id) && !rec.el.hidden) rec.el.hidden = true;
-  // fantasma de parada: dónde estaría tu piloto si parase ahora
-  const gs = opt.ghosts ? opt.ghosts() : [];
+  // fantasma de parada: dónde estaría tu piloto si parase ahora (etiqueta + aro en pista)
+  const gs = layers.fantasma && opt.ghosts ? opt.ghosts() : [];
   ghostEls.forEach((el, j) => {
-    const g = gs[j];
-    if (g) { sample(g.s, _a); _v.set(_a.x, _a.y + 1, _a.z).project(camera); }
+    const g = gs[j], gr = world.ghostRings?.[j];
+    if (g) {
+      sample(g.s, _a);
+      _v.set(_a.x, _a.y + 1, _a.z).project(camera);
+      if (gr) {
+        gr.visible = true;
+        gr.position.set(_a.x, _a.y + 0.25, _a.z);
+        const pulse = reduced ? 1 : 0.92 + 0.14 * Math.sin(now * 0.005 + j * 1.5);
+        gr.scale.setScalar(Math.max(W * 0.62, k * 2.4) * pulse);
+        gr.material.color.set(g.color);
+      }
+    } else if (gr) {
+      gr.visible = false;
+    }
     const ok = !!g && _v.z < 1 && Math.abs(_v.x) < 1 && Math.abs(_v.y) < 1;
     if (el.hidden !== !ok) el.hidden = !ok;
     if (!ok) return;
@@ -4354,6 +4468,17 @@ function draw3d(dt, now) {
 
 
 // ------------------------------------------------------------------ arranque y lo que se ofrece fuera
+const layers = { drs: false, agua: false, fantasma: true };
+function applyLayers(l) {
+  if (l && typeof l === "object") {
+    if (typeof l.drs === "boolean") layers.drs = l.drs;
+    if (typeof l.agua === "boolean") layers.agua = l.agua;
+    if (typeof l.fantasma === "boolean") layers.fantasma = l.fantasma;
+  }
+  U.uTacDrs.value = layers.drs ? 1 : 0;
+  U.uTacWet.value = layers.agua ? 1 : 0;
+}
+applyLayers(opt.layers);
 T = buildTrackData(track, track.id, opt.env);
 const remember = () => { for (const c of sess.cars) { prevS.set(c.id, c.s); prevV.set(c.id, c.v); prevL.set(c.id, c.latOff ?? 0); } };
 remember();
@@ -4523,6 +4648,8 @@ return {
   orbitState: () => ({ ...orb }),
   tvState: () => ({ ...tvDir, auto: isAutoTv() }),
   resetAutoTv() { tvDir.since = -1e9; tvDir.carId = null; tvDir.prio = 0; busyUntil = performance.now() + 300; },
+  setLayers(l) { applyLayers(l); busyUntil = performance.now() + 250; },
+  layers: () => ({ ...layers }),
   /** Coche más cercano al punto tocado (px del recuadro), o null. */
   pick(x, y) {
     let best = null, bd = 24 * 24;

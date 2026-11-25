@@ -248,6 +248,10 @@ export interface Prefs {
   ahorro3d?: boolean;
   /** Realización automática en la cámara Tele (salida, boxes, incidentes y batallas; por defecto, sí). */
   autoTv?: boolean;
+  /** Vibración háptica discreta en dispositivos compatibles (por defecto, sí). */
+  haptica?: boolean;
+  /** Capas tácticas opcionales sobre el mapa 3D: zonas DRS/MO, contraste seco/mojado y fantasma de parada. */
+  capas3d?: { drs?: boolean; agua?: boolean; fantasma?: boolean };
   /** Sonido de la sesión: sí/no y volúmenes (0 a 1). */
   sonido: SoundPrefs;
   /** Copias de seguridad: carreras que llevaba cada partida (por número) la última vez que se exportó. */
@@ -286,6 +290,14 @@ export function loadPrefs(): Prefs {
       if ([0, 1, 2, 3].includes(o.calidad3d as number)) p.calidad3d = o.calidad3d;
       if (o.ahorro3d === true) p.ahorro3d = true;
       if (o.autoTv === false) p.autoTv = false;
+      if (o.haptica === false) p.haptica = false;
+      if (o.capas3d && typeof o.capas3d === "object") {
+        const cp: NonNullable<Prefs["capas3d"]> = {};
+        if (o.capas3d.drs === true) cp.drs = true;
+        if (o.capas3d.agua === true) cp.agua = true;
+        if (o.capas3d.fantasma === false) cp.fantasma = false;
+        if (Object.keys(cp).length) p.capas3d = cp;
+      }
       if (o.exportadas && typeof o.exportadas === "object") p.exportadas = o.exportadas;
       if (typeof o.ultimaExportacion === "number") p.ultimaExportacion = o.ultimaExportacion;
       if (o.sinAvisoSafari === true) p.sinAvisoSafari = true;

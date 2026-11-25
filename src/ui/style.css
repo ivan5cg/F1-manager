@@ -1133,3 +1133,93 @@ html[data-tema] .camb.on, html[data-tema] .m3b.on, html[data-tema] .bigb.on { ba
   opacity: 0;
   pointer-events: none;
 }
+
+/* ===================================================================================
+   BLOQUE 3 · Hojas inferiores animadas con swipe down, badges de alerta y capas 3D
+   =================================================================================== */
+.sheet-bg {
+  opacity: 0;
+  transition: opacity .2s ease;
+}
+.sheet-bg.open { opacity: 1; }
+.sheet-bg.closing { opacity: 0; pointer-events: none; }
+.sheet {
+  transform: translateY(100%);
+  transition: transform .24s cubic-bezier(.22, .9, .24, 1);
+  will-change: transform;
+}
+.sheet-bg.open .sheet { transform: translateY(0); }
+.sheet-bg.closing .sheet { transform: translateY(100%); transition-duration: .2s; }
+.sheet.dragging { transition: none !important; user-select: none; }
+.sheet-grip {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: -10px -12px 6px;
+  padding: 8px 0 6px;
+  cursor: grab;
+  touch-action: none;
+}
+.sheet-grip i {
+  display: block;
+  width: 38px;
+  height: 4px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, .28);
+}
+@media (prefers-reduced-motion: reduce) {
+  .sheet-bg, .sheet { transition: none !important; }
+}
+
+/* badges discretos en los botones inferiores (Radar, Muro, Radio) */
+.sidebtns button { position: relative; }
+.sbadge[hidden] { display: none; }
+.sbadge {
+  position: absolute;
+  top: 3px;
+  right: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 7px;
+  height: 7px;
+  border-radius: 99px;
+  font-style: normal;
+  font-size: 9px;
+  font-weight: 900;
+  line-height: 1;
+  pointer-events: none;
+  box-shadow: 0 0 0 1.5px rgba(8, 10, 14, .9);
+}
+.sbadge.wx { background: var(--blue); }
+.sbadge.pit { background: var(--gold1); }
+.sbadge.rad {
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  top: 2px;
+  right: 2px;
+  background: var(--red1);
+  color: #fff;
+}
+@keyframes bdgPulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.25); opacity: .75; }
+}
+.sbadge.wx, .sbadge.pit { animation: bdgPulse 1.8s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .sbadge.wx, .sbadge.pit { animation: none; }
+}
+
+/* sección de capas tácticas dentro del menú rápido del 3D (#campop) */
+.camsec {
+  margin-top: 6px;
+  padding-top: 5px;
+  border-top: 1px solid rgba(255, 255, 255, .14);
+  font-size: 9.5px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: var(--dim);
+}
+.camopt.compact { margin-top: 4px; padding-top: 0; border-top: 0; }

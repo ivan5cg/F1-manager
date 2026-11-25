@@ -105,16 +105,34 @@ export function closeAllSheets() {
 }
 
 /**
- * Hoja inferior. Devuelve el elemento y una función para cerrarla.
- * Con `modal`, no se cierra tocando fuera ni con atrás: solo con sus propios botones.
+ * Hoja inferior animada con cierre deslizando hacia abajo (*swipe down*) en hojas no modales.
+ * Devuelve el elemento y una función para cerrarla.
+ * Con `modal`, no se cierra tocando fuera, deslizando ni con atrás: solo con sus propios botones.
  */
 export function sheet(html: string, onClose?: () => void, opts: { modal?: boolean } = {}): { el: HTMLElement; close: () => void } {
   const bg = document.createElement("div");
   bg.className = "sheet-bg";
-  bg.innerHTML = `<div class="sheet">${html}</div>`;
+  bg.innerHTML = `<div class="sheet">${opts.modal ? "" : `<div class="sheet-grip" aria-hidden="true"><i></i></div>`}${html}</div>`;
   document.body.appendChild(bg);
+  const panel = bg.firstElementChild as HTMLElement;
+  const reduce = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (reduce) bg.classList.add("open");
+  else requestAnimationFrame(() => requestAnimationFrame(() => { if (!closed) bg.classList.add("open"); }));
   let closed = false;
-  const doClose = () => { if (closed) return; closed = true; bg.remove(); onClose?.(); };
+  const doClose = () => {
+    if (closed) return;
+    closed = true;
+    onClose?.();
+    if (reduce) { bg.remove(); return; }
+    panel.classList.remove("dragging");
+    panel.style.transform = "";
+    bg.style.background = "";
+    bg.classList.remove("open");
+    bg.classList.add("closing");
+    const done = () => { if (bg.isConnected) bg.remove(); };
+    panel.addEventListener("transitionend", done, { once: true });
+    window.setTimeout(done, 260);
+  };
   const entry: OpenSheet = { close: doClose, modal: !!opts.modal };
   sheets.push(entry);
   try { history.pushState({ muro: "hoja" }, ""); } catch { /* sin historial */ }
@@ -128,9 +146,82 @@ export function sheet(html: string, onClose?: () => void, opts: { modal?: boolea
     }
     doClose();
   };
-  if (!opts.modal) bg.addEventListener("click", (e) => { if (e.target === bg) close(); });
+  if (!opts.modal) {
+    bg.addEventListener("click", (e) => { if (e.target === bg) close(); });
+    // Gesto natural de deslizar hacia abajo desde el tirador o desde la cabecera (con scroll arriba del todo)
+    const grip = panel.querySelector<HTMLElement>(".sheet-grip");
+    let dragId: number | null = null, startX = 0, startY = 0, lastY = 0, lastT = 0, dy = 0, vy = 0, engaged = false;
+    const canDragFrom = (target: EventTarget | null, y: number) => {
+      const t = target as HTMLElement | null;
+      if (grip && t && grip.contains(t)) return true;
+      if (panel.scrollTop > 2) return false;
+      if (t?.closest("input, select, textarea, canvas")) return false;
+      const r = panel.getBoundingClientRect();
+      return y - r.top <= 68;
+    };
+    const resetDrag = () => {
+      panel.classList.remove("dragging");
+      panel.style.transform = "";
+      bg.style.background = "";
+      dragId = null; engaged = false; dy = 0; vy = 0;
+    };
+    panel.addEventListener("pointerdown", (e) => {
+      if (closed || e.button > 0 || dragId !== null) return;
+      if (!canDragFrom(e.target, e.clientY)) return;
+      dragId = e.pointerId;
+      startX = e.clientX; startY = lastY = e.clientY; lastT = performance.now();
+      dy = 0; vy = 0; engaged = false;
+    });
+    panel.addEventListener("pointermove", (e) => {
+      if (closed || e.pointerId !== dragId) return;
+      const curY = e.clientY, dx = e.clientX - startX, rawDy = curY - startY;
+      if (!engaged) {
+        if (rawDy < 10) { if (rawDy < -12) dragId = null; return; }
+        if (Math.abs(rawDy) < Math.abs(dx) * 1.15 || panel.scrollTop > 2) { dragId = null; return; }
+        engaged = true;
+        panel.classList.add("dragging");
+        try { panel.setPointerCapture(e.pointerId); } catch { /* noop */ }
+      }
+      const now = performance.now(), dt = Math.max(1, now - lastT);
+      vy = (curY - lastY) / dt;
+      lastY = curY; lastT = now;
+      dy = Math.max(0, rawDy);
+      panel.style.transform = `translateY(${dy.toFixed(1)}px)`;
+      bg.style.background = `rgba(0, 0, 0, ${(0.65 * Math.max(0.12, 1 - dy / 340)).toFixed(3)})`;
+    });
+    const endDrag = (e: PointerEvent) => {
+      if (e.pointerId !== dragId) return;
+      const wasEngaged = engaged, curDy = dy, curVy = vy;
+      if (!wasEngaged) { dragId = null; return; }
+      const thresh = Math.min(115, Math.max(70, panel.offsetHeight * 0.26));
+      if (curDy > thresh || (curVy > 0.45 && curDy > 34)) {
+        dragId = null; engaged = false;
+        close();
+      } else {
+        resetDrag();
+      }
+    };
+    panel.addEventListener("pointerup", endDrag);
+    panel.addEventListener("pointercancel", () => { if (dragId !== null) resetDrag(); });
+  }
   bg.querySelectorAll<HTMLElement>("[data-close]").forEach((b) => (b.onclick = close));
   return { el: bg, close };
+}
+
+// ------------------------------------------------------------------ vibración háptica (Android)
+export const HAPTIC = {
+  tap: 10,
+  light: 16,
+  start: [35, 30, 50],
+  pit: [18, 35, 28],
+  alert: [30, 40, 30],
+} as const;
+
+/** Vibración táctil discreta (solo si está activa y el dispositivo la soporta). */
+export function haptic(pattern: number | readonly number[], enabled = true) {
+  if (!enabled || typeof navigator === "undefined" || typeof navigator.vibrate !== "function") return;
+  if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+  try { navigator.vibrate(Array.isArray(pattern) ? [...pattern] : (pattern as number)); } catch { /* sin soporte */ }
 }
 
 // ------------------------------------------------------------------ pantalla encendida

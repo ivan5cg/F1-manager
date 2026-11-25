@@ -1,4 +1,4 @@
-import { $, esc, fmtLap, fmtClock, tyreHtml, setLabel, sheet, dirName, flagHtml, lifeLeft, wearColor, groupSets, keepAwake, setBack, closeTopSheet, closeAllSheets, anySheetOpen } from "./common";
+import { $, esc, fmtLap, fmtClock, tyreHtml, setLabel, sheet, dirName, flagHtml, lifeLeft, wearColor, groupSets, keepAwake, setBack, closeTopSheet, closeAllSheets, anySheetOpen, haptic, HAPTIC } from "./common";
 import { setLastPhotos, type Photo } from "./photos";
 import { CIRCUITS } from "./data";
 import { puLife } from "../sim/powerunit";
@@ -86,6 +86,8 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   /** Sonido (audio.ts): el AudioContext se crea con el primer toque en la velocidad, el 3D o la salida. */
   const audio = createAudio(prefs.sonido);
   const unlockAudio = () => audio.unlock();
+  const buzz = (p: number | readonly number[]) => { if (prefs.haptica !== false && !skipping && !ended) haptic(p); };
+  let unreadRadio = 0, radioOpen = false;
   /** Antonio Lobato comenta la sesión (solo interfaz: no cambia nada de la simulación). */
   const lob = createLobato(sess, def.gp ?? def.nombre, scn ? undefined : wk.st.memo);
   const LOB_TAB = "Antonio Lobato";
@@ -130,7 +132,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
         <div class="wxbox" id="wx"></div>
         <div id="lapban"></div>
         <div class="ticker" id="ticker"></div>
-        <div class="sidebtns${race ? " four" : ""}"><button data-s="pilotos">Pilotos</button>${race ? `<button data-s="muro">Muro</button>` : ""}<button data-s="tiempo">Radar</button><button data-s="radio">Radio</button></div>
+        <div class="sidebtns${race ? " four" : ""}"><button data-s="pilotos">Pilotos</button>${race ? `<button data-s="muro">Muro<i class="sbadge pit" id="bdg-muro" hidden></i></button>` : ""}<button data-s="tiempo">Radar<i class="sbadge wx" id="bdg-wx" hidden></i></button><button data-s="radio">Radio<i class="sbadge rad" id="bdg-rad" hidden></i></button></div>
       </div>
     </div>
     <div class="drivers" id="drivers"></div>
@@ -205,6 +207,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   spEl.onclick = (e) => {
     const b = (e.target as HTMLElement).closest("button");
     if (!b) return;
+    buzz(HAPTIC.tap);
     if (b.dataset.ff) fastForward();
     else if (b.dataset.d) stepSpeed(Number(b.dataset.d));
     else setSpeed(Number(b.dataset.v));
@@ -479,13 +482,14 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     let k = 0;
     const on = () => {
       if (ended) return ov.remove();
-      if (k < 5) { lamps[k++].classList.add("on"); setTimeout(on, step); return; }
+      if (k < 5) { lamps[k++].classList.add("on"); buzz(HAPTIC.light); setTimeout(on, step); return; }
       // espera variable antes de apagarse, como en la realidad
       setTimeout(() => {
         if (ended) return ov.remove();
         lamps.forEach((l) => l.classList.remove("on"));
         ov.classList.add("go");
         ov.querySelector(".lmsg")!.textContent = "¡Salida!";
+        buzz(HAPTIC.start);
         setTimeout(() => { ov.remove(); done(); }, 650);
       }, reducedMotion() ? 300 : 400 + Math.random() * 1800);
     };
@@ -503,11 +507,13 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   function onEventShow(e: RaceEvent) {
     bannerFor(e);
     if (e.kind === "control" || e.kind === "weather") lastCtlReal = performance.now();
+    if (e.kind === "control" && /COCHE DE SEGURIDAD|BANDERA ROJA/.test(e.text)) buzz(HAPTIC.alert);
     if (prefs.lobato !== false) lob.onEvent(e);
     if (prefs.experta !== false) exp.onEvent(e);
     soundEvent(e);
     tvRadio(e);
     const mineEv = isMineEv(e) && e.kind !== "control" && e.kind !== "weather";
+    if (!radioOpen && (e.important || e.mitica) && (e.kind === "control" || e.kind === "weather" || mineEv)) unreadRadio++;
     // la meteo informa pero no para; dirección de carrera y lo de tus pilotos, sí, según lo que
     // el jugador haya dejado activado en Ajustes (cada tipo de aviso por separado)
     const cat: keyof PausePrefs = e.kind === "control" ? (/Empieza la|Eliminados en|POLE para/.test(e.text) ? "partes" : "control") : /Estratega/.test(e.text) ? "estratega" : "radio";
@@ -522,6 +528,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       updSpeed();
     }
     renderMessages();
+    updateSideBadges();
   }
 
 
@@ -669,25 +676,49 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     pop.hidden = true;
     cam3d(view3d && m3 ? (m3.cam() as string) : "");
   }
+  const layers3d = () => ({
+    drs: !!prefs.capas3d?.drs,
+    agua: !!prefs.capas3d?.agua,
+    fantasma: prefs.capas3d?.fantasma !== false,
+  });
   function openCamPop() {
     if (!view3d || !m3) return;
     const pop = $("#campop");
     const list = m3.camList() as { id: string; name: string; more: boolean }[], cur = m3.cam() as string;
-    // Bloque 4.4 añadirá aquí los interruptores de capas tácticas
+    const lay = layers3d();
     pop.innerHTML = `<div class="campop-grid">${list.map((c) => `<button type="button" data-cam="${c.id}" class="${c.id === cur ? "on" : ""}" aria-pressed="${c.id === cur}">${esc(c.name)}</button>`).join("")}</div>
-      <label class="camopt"><input type="checkbox" id="cautotv" ${prefs.autoTv !== false ? "checked" : ""}><span><b>Auto-TV</b><small>Salida, boxes y peleas en Tele</small></span></label>`;
+      <label class="camopt"><input type="checkbox" id="cautotv" ${prefs.autoTv !== false ? "checked" : ""}><span><b>Auto-TV</b><small>Salida, boxes y peleas en Tele</small></span></label>
+      <div class="camsec">Capas tácticas</div>
+      ${sess.aidShort ? `<label class="camopt compact"><input type="checkbox" id="cldrs" ${lay.drs ? "checked" : ""}><span><b>Zonas ${esc(sess.aidShort)}</b><small>Resalta rectas y frenadas clave</small></span></label>` : ""}
+      <label class="camopt compact"><input type="checkbox" id="clagua" ${lay.agua ? "checked" : ""}><span><b>Seco / mojado</b><small>Contraste de trazada y agua</small></span></label>
+      ${race ? `<label class="camopt compact"><input type="checkbox" id="clghost" ${lay.fantasma ? "checked" : ""}><span><b>Fantasma de parada</b><small>Posición estimada tras boxes</small></span></label>` : ""}`;
     pop.hidden = false;
     pop.querySelectorAll<HTMLButtonElement>("[data-cam]").forEach((b) => (b.onclick = (e) => {
       e.stopPropagation();
+      buzz(HAPTIC.tap);
       m3?.setCamera(b.dataset.cam!);
       closeCamPop();
     }));
     const atv = pop.querySelector<HTMLInputElement>("#cautotv")!;
     atv.onchange = () => {
+      buzz(HAPTIC.tap);
       prefs.autoTv = atv.checked;
       savePrefs(prefs);
       m3?.resetAutoTv();
     };
+    const wireLayer = (id: string, key: "drs" | "agua" | "fantasma") => {
+      const inp = pop.querySelector<HTMLInputElement>(id);
+      if (!inp) return;
+      inp.onchange = () => {
+        buzz(HAPTIC.tap);
+        prefs.capas3d = { ...(prefs.capas3d ?? {}), [key]: inp.checked };
+        savePrefs(prefs);
+        m3?.setLayers(layers3d());
+      };
+    };
+    wireLayer("#cldrs", "drs");
+    wireLayer("#clagua", "agua");
+    wireLayer("#clghost", "fantasma");
     cam3d(cur);
   }
   const onDocDown = (e: PointerEvent) => {
@@ -719,6 +750,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
           paused: () => paused, speed: () => (ff ? FF_SPEED : speed), quality: prefs.calidad3d,
           targetFps: () => (prefs.ahorro3d ? 30 : 60),
           autoTv: () => prefs.autoTv !== false,
+          layers: layers3d(),
           onContextLost: () => {
             ctxLost3d = true;
             clearTimeout(ctxLostTimer);
@@ -748,7 +780,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     renderPerf();
     if (save) { prefs.mapa3d = view3d; savePrefs(prefs); }
   }
-  $("#m3b").onclick = (e) => { e.stopPropagation(); closeCamPop(); unlockAudio(); void set3d(!view3d); };
+  $("#m3b").onclick = (e) => { e.stopPropagation(); closeCamPop(); unlockAudio(); buzz(HAPTIC.tap); void set3d(!view3d); };
   // medidor de rendimiento del 3D (se enciende en Ajustes): fps, calidad, resolución, llamadas y triángulos
   const QNAME = ["baja", "media", "alta", "máxima"];
   function renderPerf() {
@@ -797,6 +829,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     if (!b) return;
     e.stopPropagation();
     closeCamPop();
+    buzz(HAPTIC.tap);
     select(Number(b.dataset.drv));
   });
   function renderBigHud() {
@@ -1540,15 +1573,36 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   // como mucho cada 2 s reales (a 64× no se recalcula en cada refresco).
   const RAIN_H = [0, 2, 4, 6, 8, 10, 12, 15, 20, 25, 30];
   const secPts = [0, 1, 2].map((j) => track.ms.filter((m) => m.sector === j).filter((_, k) => k % 3 === 0).map((m) => [m.x / 1000, m.y / 1000] as [number, number]));
-  const rainAlert: { kind: "" | "start" | "stop"; text: string; wall: number; real: number; toastWall: number } = { kind: "", text: "", wall: -1e9, real: 0, toastWall: -1e9 };
+  const rainAlert: { kind: "" | "start" | "stop"; text: string; minH: number; wall: number; real: number; toastWall: number } = { kind: "", text: "", minH: Infinity, wall: -1e9, real: 0, toastWall: -1e9 };
+  function updateSideBadges() {
+    const wx = document.getElementById("bdg-wx");
+    if (wx) {
+      const soon = rainAlert.kind === "start" && rainAlert.minH < 10;
+      wx.hidden = !soon;
+      wx.parentElement?.setAttribute("title", soon ? rainAlert.text : "Radar meteorológico");
+    }
+    const mu = document.getElementById("bdg-muro");
+    if (mu) {
+      const adv = race && mine().some((c) => c.loc === "track" && !!c.advice && !c.pitRequest);
+      mu.hidden = !adv;
+      mu.parentElement?.setAttribute("title", adv ? "El estratega recomienda parar" : "Muro de boxes");
+    }
+    const rd = document.getElementById("bdg-rad");
+    if (rd) {
+      const show = unreadRadio > 0;
+      rd.hidden = !show;
+      if (show) rd.textContent = unreadRadio > 9 ? "9+" : String(unreadRadio);
+      rd.parentElement?.setAttribute("title", show ? `${unreadRadio} aviso${unreadRadio === 1 ? "" : "s"} sin leer` : "Radio y dirección de carrera");
+    }
+  }
   function updateRainAlert() {
     const w = sess.weather;
     const now = performance.now();
     if (Math.abs(sess.wall - rainAlert.wall) < 20 || now - rainAlert.real < 2000) return;
     rainAlert.wall = sess.wall; rainAlert.real = now;
     const before = rainAlert.kind;
-    rainAlert.kind = ""; rainAlert.text = "";
-    if (!w.cells.length && w.drizzle <= 0) return;
+    rainAlert.kind = ""; rainAlert.text = ""; rainAlert.minH = Infinity;
+    if (!w.cells.length && w.drizzle <= 0) { updateSideBadges(); return; }
     const team = wk.teams.find((t) => t.id === wk.playerTeam)!;
     const starts: { j: number; h: number }[] = [], stops: { j: number; h: number }[] = [];
     let wetSecs = 0;
@@ -1569,7 +1623,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     if (starts.length) {
       const h = Math.min(...starts.map((x) => x.h));
       const secs = starts.filter((x) => x.h <= h + 2).map((x) => `S${x.j + 1}`).join("·");
-      rainAlert.kind = "start"; rainAlert.text = `Lluvia en ${secs} en ~${h}′`;
+      rainAlert.kind = "start"; rainAlert.text = `Lluvia en ${secs} en ~${h}′`; rainAlert.minH = h;
       // aviso a la izquierda solo cuando aparece (no cada vez que la previsión baila)
       if (before !== "start" && sess.wall - rainAlert.toastWall > 300) {
         rainAlert.toastWall = sess.wall;
@@ -1578,6 +1632,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     } else if (wetSecs && stops.length === wetSecs) {
       rainAlert.kind = "stop"; rainAlert.text = `escampa ~${Math.max(...stops.map((x) => x.h))}′`;
     }
+    updateSideBadges();
   }
 
   // ------------------------------------------------------------ cabecera
@@ -1746,8 +1801,8 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     if (!b || b.disabled) return;
     const c = mine()[Number(b.dataset.i)];
     const a = b.dataset.a;
-    if (a === "minus") ritmoOrden(c, () => (c.push = Math.max(0, c.push - 1)));
-    if (a === "plus") ritmoOrden(c, () => (c.push = Math.min(4, c.push + 1)));
+    if (a === "minus") { buzz(HAPTIC.tap); ritmoOrden(c, () => (c.push = Math.max(0, c.push - 1))); }
+    if (a === "plus") { buzz(HAPTIC.tap); ritmoOrden(c, () => (c.push = Math.min(4, c.push + 1))); }
     if (a === "box") boxSheet(c);
     if (a === "red") redSheet(c);
     if (a === "go") quali ? qualiSheet(c) : practiceSheet(c);
@@ -1783,9 +1838,9 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     const nRest = rest.reduce((a, g) => a + g.sets.length, 0);
     return `<div class="opts">${main.map(btn).join("")}</div>${rest.length ? `<details class="fold"><summary>Intermedios y lluvia · ${nRest} juegos (la pista está seca)</summary><div class="opts">${rest.map(btn).join("")}</div></details>` : ""}`;
   }
-  function open(html: string, wire: (el: HTMLElement, close: () => void) => void) {
+  function open(html: string, wire: (el: HTMLElement, close: () => void) => void, onClosed?: () => void) {
     sheetOpen = true;
-    const { el, close } = sheet(html, () => { sheetOpen = false; renderDrivers(); });
+    const { el, close } = sheet(html, () => { sheetOpen = false; onClosed?.(); renderDrivers(); updateSideBadges(); });
     wire(el, close);
   }
   function boxSheet(c: Car) {
@@ -1800,12 +1855,13 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       el.querySelectorAll<HTMLButtonElement>("[data-set]").forEach((b) => (b.onclick = () => {
         c.pitRequest = b.dataset.set!;
         const set = c.e.sets.find((s) => s.id === c.pitRequest)!;
+        buzz(HAPTIC.pit);
         showToast(`📻 "${c.d.abrev}, box, box. ${COMPOUNDS[set.c].name}${set.laps ? " usados" : ""}."`, 3000);
         ordenRadio(c, "box");
         close();
       }));
       const cb = el.querySelector<HTMLButtonElement>("#cancel");
-      if (cb) cb.onclick = () => { c.pitRequest = null; ordenRadio(c, "anula"); close(); };
+      if (cb) cb.onclick = () => { buzz(HAPTIC.tap); c.pitRequest = null; ordenRadio(c, "anula"); close(); };
       el.querySelectorAll<HTMLButtonElement>("[data-pm]").forEach((b) => (b.onclick = () => { c.pitMode = Number(b.dataset.pm); el.querySelectorAll<HTMLElement>("[data-pm]").forEach((x) => x.classList.toggle("on", x === b)); }));
     });
   }
@@ -1816,7 +1872,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       ${setButtons(c, (s) => !s.punctured, c.tyres?.id)}
       <button data-close style="width:100%">Cerrar</button>`, (el, close) => {
       el.querySelectorAll<HTMLButtonElement>("[data-set]").forEach((b) => (b.onclick = () => {
-        if (sess.redFlagChange(c, b.dataset.set!)) showToast(`${c.d.abrev}: neumáticos cambiados.`, 2500, "Boxes");
+        if (sess.redFlagChange(c, b.dataset.set!)) { buzz(HAPTIC.pit); showToast(`${c.d.abrev}: neumáticos cambiados.`, 2500, "Boxes"); }
         close();
       }));
     });
@@ -2214,11 +2270,12 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
           if (c.loc !== "track") return;
           c.pitRequest = b.dataset.stop!;
           const set = c.e.sets.find((x) => x.id === c.pitRequest)!;
+          buzz(HAPTIC.pit);
           showToast(`📻 "${c.d.abrev}, box, box. ${COMPOUNDS[set.c].name}${set.laps ? " usados" : ""}."`, 3000);
           ordenRadio(c, "box");
           close();
         }));
-        el.querySelectorAll<HTMLButtonElement>("[data-cancel]").forEach((b) => (b.onclick = () => { const c = mine()[Number(b.dataset.cancel)]; c.pitRequest = null; ordenRadio(c, "anula"); draw(); }));
+        el.querySelectorAll<HTMLButtonElement>("[data-cancel]").forEach((b) => (b.onclick = () => { buzz(HAPTIC.tap); const c = mine()[Number(b.dataset.cancel)]; c.pitRequest = null; ordenRadio(c, "anula"); draw(); updateSideBadges(); }));
         el.querySelectorAll<HTMLElement>("[data-close]").forEach((b) => (b.onclick = () => close()));
       };
       draw();
@@ -2335,13 +2392,16 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     });
   }
   function radioSheet() {
+    unreadRadio = 0;
+    radioOpen = true;
+    updateSideBadges();
     // mensajes y comentarios de Lobato, mezclados por orden (los más nuevos arriba)
     type Row = { t: number; lap: number; text: string; tab: string; cls: string };
     const rows: Row[] = sess.events.slice(-150).map((e) => ({ t: e.t, lap: e.lap, text: withOrig(e), tab: tabOf(e), cls: e.mitica ? "mit" : e.kind === "control" && /ROJA/.test(e.text) ? "red" : e.kind === "control" || e.kind === "weather" ? "ctl" : "" }));
     if (prefs.lobato !== false) for (const c of lob.list) rows.push({ t: c.t + 1e-6, lap: c.lap, text: c.text, tab: LOB_TAB, cls: "lob" });
     if (prefs.experta !== false) for (const c of exp.list) rows.push({ t: c.t + 2e-6, lap: c.lap, text: c.text, tab: EXP_TAB, cls: "exp" });
     rows.sort((a, b) => b.t - a.t);
-    open(`<span class="tab">Radio y dirección de carrera</span><div style="margin:6px 0;display:flex;flex-direction:column;gap:3px">${rows.slice(0, 200).map((e) => rmHtml(`${race ? "V" + e.lap : fmtClock(e.t)} · ${e.tab}`, e.text, e.cls)).join("") || "<div class='dim'>Sin mensajes.</div>"}</div><button data-close style="width:100%">Cerrar</button>`, () => {});
+    open(`<span class="tab">Radio y dirección de carrera</span><div style="margin:6px 0;display:flex;flex-direction:column;gap:3px">${rows.slice(0, 200).map((e) => rmHtml(`${race ? "V" + e.lap : fmtClock(e.t)} · ${e.tab}`, e.text, e.cls)).join("") || "<div class='dim'>Sin mensajes.</div>"}</div><button data-close style="width:100%">Cerrar</button>`, () => {}, () => { radioOpen = false; });
   }
 
   // ------------------------------------------------- menú, datos y ajustes
@@ -2383,6 +2443,8 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       <label class="optrow"><input type="checkbox" id="pexp" ${prefs.experta !== false ? "checked" : ""}><span><b>Comentarios de la experta técnica</b><br><span class="small dim">${EXPERTA}, ingeniera de pista retirada (personaje inventado), explica la estrategia: undercuts, paradas con coche de seguridad, gomas y lluvia. Habla menos que Lobato y con su propia voz.</span></span></label>
       <label class="optrow"><input type="checkbox" id="pvozl" ${prefs.sonido.vozLobato ? "checked" : ""}><span><b>Voz de Lobato</b><br><span class="small dim">Sus comentarios en voz alta, con otra voz.</span></span></label>
       ${([["volumen", "Volumen general"], ["motores", "Motores"], ["ambiente", "Ambiente"], ["radio", "Radio"]] as const).map(([k, n]) => `<label class="optrow volrow"><span class="grow">${n}</span><input type="range" min="0" max="100" step="5" data-vol="${k}" value="${Math.round(prefs.sonido[k] * 100)}" aria-label="${n}"></label>`).join("")}
+      <h2>Vibración</h2>
+      <label class="optrow"><input type="checkbox" id="phap" ${prefs.haptica !== false ? "checked" : ""}><span><b>Vibración háptica</b><br><span class="small dim">Toque suave en Android con los semáforos de salida, coche de seguridad, confirmación de parada y controles clave.</span></span></label>
       <h2>Mapa 3D</h2>
       <label class="optrow"><input type="checkbox" id="pperf" ${prefs.rendimiento3d ? "checked" : ""}><span><b>Mostrar rendimiento del 3D</b><br><span class="small dim">Fotogramas por segundo, calidad, resolución y triángulos, en una esquina del mapa. Tocándolo cambia la calidad.</span></span></label>
       <label class="optrow"><input type="checkbox" id="pahorro" ${prefs.ahorro3d ? "checked" : ""}><span><b>Ahorro de batería (30 fps)</b><br><span class="small dim">Limita el mapa 3D a 30 fotogramas por segundo para gastar menos batería y evitar que el móvil se caliente.</span></span></label>
@@ -2409,6 +2471,8 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       pv.onchange = () => { prefs.sonido.voz = pv.checked; unlockAudio(); soundPrefsChanged(); };
       pvl.onchange = () => { prefs.sonido.vozLobato = pvl.checked; unlockAudio(); soundPrefsChanged(); };
       el.querySelectorAll<HTMLInputElement>("[data-vol]").forEach((r) => (r.oninput = () => { prefs.sonido[r.dataset.vol as "volumen"] = Number(r.value) / 100; soundPrefsChanged(); }));
+      const ph = el.querySelector<HTMLInputElement>("#phap")!;
+      ph.onchange = () => { prefs.haptica = ph.checked; savePrefs(prefs); if (ph.checked) haptic(HAPTIC.tap); };
       const pf = el.querySelector<HTMLInputElement>("#pperf")!;
       pf.onchange = () => { prefs.rendimiento3d = pf.checked; savePrefs(prefs); renderPerf(); };
       const pa = el.querySelector<HTMLInputElement>("#pahorro")!;
@@ -2669,14 +2733,14 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
 
   sizeMap();
   window.onresize = sizeMap;
-  renderTower(); renderTop(); renderDrivers(); renderDrvChips(); renderBigHud();
+  renderTower(); renderTop(); renderDrivers(); renderDrvChips(); renderBigHud(); updateSideBadges();
   const mapObs = new ResizeObserver(() => { sizeMap(); m3?.resize(); });
   mapObs.observe(document.querySelector(".mapbox")!);
   updSpeed();
   // «atrás» (móvil o navegador) abre el menú de la sesión en vez de sacarte de la app
   setBack(() => menuSheet());
   if (prefs.mapa3d) void set3d(true, false);
-  let last = performance.now(), last3d = last, simAdv = 0;
+  let last = performance.now(), last3d = last, simAdv = 0, lastHapLights = sess.startLights();
   const loop = (now: number) => {
     const real = Math.min(0.1, (now - last) / 1000);
     last = now;
@@ -2719,12 +2783,18 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
         if (started && !paused && prefs.experta !== false) exp.tick();
         if (started && !paused) for (const l of voces.tick()) sess.log({ kind: "radio", carId: l.carId, text: l.text, important: l.important, voz: true, mitica: l.mitica });
         if (now >= towerAnimUntil) renderTower();
-        renderTop(); renderMessages(); renderSel(); renderDrvChips(); renderBigHud();
+        renderTop(); renderMessages(); renderSel(); renderDrvChips(); renderBigHud(); updateSideBadges();
         { const rb = $("#repb"), can = view3d && !!m3 && (m3.replaying() || !!m3.lastIncident()); if (rb.hidden === can) rb.hidden = !can; }
         renderPerf();
         tvTick(now);
         if (!sheetOpen) renderDrivers();
         else if (sheetTick && now - lastSheet > 1000) { lastSheet = now; sheetTick(); }
+      }
+      if (!paused && !skipping && !ended && document.visibilityState === "visible") {
+        const hl = sess.startLights();
+        if (hl > lastHapLights) buzz(HAPTIC.light);
+        else if (lastHapLights > 0 && hl === 0 && sess.t > 0) buzz(HAPTIC.start);
+        lastHapLights = hl;
       }
       soundFrame(now, simAdv);
       simAdv = 0;
