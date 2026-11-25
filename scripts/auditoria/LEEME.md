@@ -53,18 +53,22 @@ npx tsx scripts/auditoria/gp.ts silverstone 1 seco > fin.json
 Auditoría hecha y escrita en `docs/AUDITORIA-SIMULACION.md`; no se ha cambiado nada del simulador. Lo pendiente, por
 impacto (detalle y líneas de código en el informe):
 
-1. Ritmo de carrera casi igual que el de clasificación (vuelta rápida / pole 1,005 frente a 1,045 real en 2026), y los
-   libres baten la pole.
+1. ~~Ritmo de carrera casi igual que el de clasificación (vuelta rápida / pole 1,005 frente a 1,045 real en 2026), y los
+   libres baten la pole.~~ **Hecho:** modo de clasificación del motor y la batería (`DEPLOY_TRIM` en `session.ts`).
+   Con 48 fines de semana (semillas 1 y 2): vuelta rápida / pole 1,045, vuelta verde / pole 1,073, sprint 1,028,
+   libres a 1,2 / 0,9 / 0,6 s de la pole, sin cambios en coches de seguridad, abandonos ni pole frente a la real.
 2. La clasificación no evoluciona (Q1 → Q3: 0,17 s frente a 1,28 s en 2026).
 3. Neumáticos: ~1 s entre compuestos (real 0,3-0,6 s), poca degradación progresiva y precipicio brusco; muy poco duro.
 4. Parrilla demasiado apretada (Q1 1,2 s frente a 3,3 s; 1,3 doblados frente a 7,5).
 5. Regularidad de metrónomo (σ 0,05 s frente a 0,2-0,3 s).
 6. Victorias demasiado abiertas en carrera (pole 31 %, desde P4+ 35 %) y demasiado cerradas en la sprint (pole 83 %).
-7. **Fallo:** descalificaciones por la regla de los dos compuestos cuando se prevé lluvia que no llega
+7. ~~**Fallo:** descalificaciones por la regla de los dos compuestos cuando se prevé lluvia que no llega
    (`src/sim/strategy.ts:655-658` anula la parada de `strategy.ts:650`). Se reproduce con
    `npx tsx scripts/auditoria/gp.ts spa 32 chubD` (HAM, NOR, LAW y BEA descalificados; con `DEPURAR=1` sale por qué para
-   cada uno).
+   cada uno).~~ **Hecho** (PR #41).
 8. Coche de seguridad y virtual demasiado lentos, y la mitad de vueltas en libres.
 
-El siguiente paso propuesto era arreglar el punto 7 (es pequeño y no cambia nada más) y después, de uno en uno y
-midiendo con este banco y con `scripts/realismo.ts`, los puntos 1-3.
+Siguiente: los puntos 2 y 3, de uno en uno y midiendo con este banco y con `scripts/realismo.ts`. Con el punto 1 la
+vuelta media del ganador sube a ~1,10-1,12 de la pole (real 1,11), pero las carreras con coche de seguridad largo se
+alargan: el punto 8 (coche de seguridad demasiado lento) pesa ahora algo más. Al tocar el punto 2 hay que volver a mirar
+los libres frente a la pole (`PRACTICE_PUSH_TRIM`), porque una clasificación que evoluciona cambia esa distancia.
