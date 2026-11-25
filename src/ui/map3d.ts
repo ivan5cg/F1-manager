@@ -83,8 +83,18 @@ function modLoadKitGlb(key) {
       const bb = new THREE.Box3().setFromObject(gltf.scene);
       if (bb.isEmpty()) return null;
       const sz = bb.getSize(new THREE.Vector3()), ctr = bb.getCenter(new THREE.Vector3());
-      const targetH = key === "crane" ? 6.5 : key === "heli" ? 3.2 : 1.75;
+      const targetH = key === "crane" ? 6.5 : key === "heli" ? 3.8 : 1.72;
       const sc = targetH / Math.max(0.05, sz.y);
+      gltf.scene.traverse((o) => {
+        if (!o.isMesh) return;
+        o.castShadow = key !== "heli";
+        o.receiveShadow = true;
+        const m = o.material;
+        if (m) {
+          if ("envMapIntensity" in m) m.envMapIntensity = 1.45;
+          if ("metalness" in m && typeof m.metalness === "number") m.metalness = Math.min(m.metalness, 0.55);
+        }
+      });
       const grp = new THREE.Group();
       gltf.scene.scale.setScalar(sc);
       gltf.scene.position.set(-ctr.x * sc, -bb.min.y * sc, -ctr.z * sc);

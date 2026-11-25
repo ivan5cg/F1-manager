@@ -23,5 +23,10 @@
     "stand": "crew_stand.glb",
     "crouch": "crew_crouch.glb"
   },
-  "yacht": "yacht.glb"
+  "yacht": "yacht.glb",
+  "kit": {
+    "crane": "kit_crane.glb",
+    "heli": "kit_heli.glb",
+    "medical": "kit_medical.glb"
+  }
 }
