@@ -655,7 +655,9 @@ export function aiDecide(sess: Session, car: Car, adviceOnly = false): string | 
   if (Math.max(fc.prob[1], fc.prob[2], fc.prob[3]) > 0.55) {
     // con un poco de humedad los slicks aún van mejor: los intermedios, solo si el agua ya está cerca del cruce
     if (sess.avgWater() > WET.si * 0.8 && availableSets(car).I.length) return decideC("I");
-    if (wear < 0.86) return null;
+    // se espera a la lluvia salvo que sea la última ocasión de cumplir la regla de los dos compuestos: si el agua no
+    // llega a tiempo, sin esa parada el coche acabaría descalificado
+    if (wear < 0.86 && why !== "regla") return null;
   }
   // si hay un siguiente stint planificado, se sigue el plan (solo cambia el momento)
   const nextPlanned = car.plan.stints[car.stops + 1];

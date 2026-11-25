@@ -18,3 +18,6 @@ __pycache__/
 
 # fotos de referencia locales para generar hitos 3D en Colab (no subir a GitHub)
 /refs_hitos/
+
+# resultados de la auditoría de la simulación (scripts/auditoria/lote.mjs): se regeneran con las semillas
+/auditoria-out/
