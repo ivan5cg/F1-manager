@@ -293,7 +293,9 @@ export function buildTrack(def: any): Track {
   const aero = def.aero ?? { cl: 1, cd: 1 };
   // calibración: la adherencia del coche de referencia se ajusta para que la vuelta ideal
   // (mejor coche, neumático blando nuevo, poco combustible) se acerque a la pole real
-  const target = (def.poleObjetivo ?? 80) + 0.9;
+  // (+0,8: lo que la pole real tarda de más que esa vuelta ideal: ritmo de clasificación, piloto, goma de la vuelta de
+  // salida; medido con el banco de scripts/auditoria)
+  const target = (def.poleObjetivo ?? 80) + 0.8;
   let lo = 1.0, hi = 3.0;
   let car: CarParams = { ...REF_CAR, clA: REF_CAR.clA * aero.cl, cdA: REF_CAR.cdA * aero.cd };
   for (let it = 0; it < 22; it++) {

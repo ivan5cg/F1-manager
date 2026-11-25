@@ -166,6 +166,13 @@ export function planStrategy(sess: Session, car: Car, k: TeamKnowledge, fromLap 
   return options[0];
 }
 
+/**
+ * Lo que cuesta en la salida y la primera vuelta cada compuesto (s equivalentes), en carrera y en la sprint: el duro
+ * tracciona peor y tarda en calentar, y los puestos perdidos cuestan luego. Sin esto, salir con duro o con medio daba
+ * igual y la mitad de la parrilla salía con duro.
+ */
+const START_COST: Partial<Record<Compound, number>> = { H: 1.2 };
+
 /** Todas las estrategias posibles en seco (0, 1 o 2 paradas) con los juegos que quedan, de mejor a peor. */
 function enumeratePlans(sess: Session, car: Car, k: TeamKnowledge, fromLap = 0, curC: Compound | null = null, curAge = 0, margin = Infinity, keepUsed = false): Plan[] {
   const total = sess.laps;
@@ -203,14 +210,16 @@ function enumeratePlans(sess: Session, car: Car, k: TeamKnowledge, fromLap = 0, 
   for (const st of starts) {
     const c0 = st.c, a0 = st.age;
     const id0 = st.own ? avail[c0][0]?.id : undefined;
+    // salida: con el duro se tracciona peor y, frío, se pierden puestos en la primera vuelta que luego cuesta recuperar
+    const startCost = st.own && fromLap === 0 && (isRace || sess.kind === "SPRINT") ? START_COST[c0] ?? 0 : 0;
     const idx = (c: Compound, n: number) => n + (st.own && c === c0 ? 1 : 0); // índice del juego libre
-    if (ruleOk([c0])) { const t = stintCost(sess, car, k, c0, a0, remain); if (keep(t)) options.push({ stints: [{ c: c0, endLap: total, setId: id0 }], total: t }); }
+    if (ruleOk([c0])) { const t = startCost + stintCost(sess, car, k, c0, a0, remain); if (keep(t)) options.push({ stints: [{ c: c0, endLap: total, setId: id0 }], total: t }); }
     for (const c2 of DRY) {
       const i2 = idx(c2, 0);
       if (!avail[c2][i2] || !ruleOk([c0, c2])) continue;
       const a2 = ageOf(c2, i2);
       for (let l1 = 4; l1 <= remain - 4; l1++) {
-        const t = stintCost(sess, car, k, c0, a0, l1) + stintCost(sess, car, k, c2, a2, remain - l1) + loss;
+        const t = startCost + stintCost(sess, car, k, c0, a0, l1) + stintCost(sess, car, k, c2, a2, remain - l1) + loss;
         if (keep(t)) options.push({ stints: [{ c: c0, endLap: fromLap + l1, setId: id0 }, { c: c2, endLap: total, setId: avail[c2][i2].id }], total: t });
       }
     }
@@ -220,7 +229,7 @@ function enumeratePlans(sess: Session, car: Car, k: TeamKnowledge, fromLap = 0, 
       if (!avail[c2][i2] || !avail[c3][i3] || !ruleOk([c0, c2, c3])) continue;
       const a2 = ageOf(c2, i2), a3 = ageOf(c3, i3);
       for (let l1 = 4; l1 <= remain - 8; l1++) for (let l2 = 4; l1 + l2 <= remain - 4; l2++) {
-        const t = stintCost(sess, car, k, c0, a0, l1) + stintCost(sess, car, k, c2, a2, l2) + stintCost(sess, car, k, c3, a3, remain - l1 - l2) + 2 * loss;
+        const t = startCost + stintCost(sess, car, k, c0, a0, l1) + stintCost(sess, car, k, c2, a2, l2) + stintCost(sess, car, k, c3, a3, remain - l1 - l2) + 2 * loss;
         if (keep(t)) options.push({ stints: [{ c: c0, endLap: fromLap + l1, setId: id0 }, { c: c2, endLap: fromLap + l1 + l2, setId: avail[c2][i2].id }, { c: c3, endLap: total, setId: avail[c3][i3].id }], total: t });
       }
     }
@@ -947,8 +956,12 @@ export function qualiTick(sess: Session, car: Car) {
   }
   const tight = lap * (0.0055 + 0.004 * (1 - k.strategy / 100));
   // para no volver a salir, además lo que mejorará la pista desde el tiempo del primero que cae: si sale al final, la
-  // tendrá más rápida. Para gastar un juego nuevo, solo el margen de antes: la evolución la tienen también los demás
-  const need = tight + lap * (part.advance !== null ? sess.qualiEvoGain(ord[part.advance]) : 0);
+  // tendrá más rápida (y con un juego usado no le basta: los de atrás saldrán con uno nuevo)
+  // y si el primero que cae marcó su tiempo con un juego usado, lo que ganará con uno nuevo
+  const cut = part.advance !== null ? ord[part.advance] : undefined;
+  const cutC = cut?.bestTyreByPart[sess.part];
+  const tyreGain = cut?.bestEvo?.part === sess.part && cutC && DRY.includes(cutC) ? Math.max(0, wearGrip(cutC, 0.04) - wearGrip(cutC, cut.bestEvo.wear)) : 0;
+  const need = tight + lap * (cut ? sess.qualiEvoGain(cut) + 0.9 * tyreGain : 0);
   const timed = ord.filter((c) => isFinite(c.bestByPart[sess.part] ?? Infinity)).length;
   const safe = part.advance !== null && lastRun && !wetTrack && isFinite(myBest) && pos < part.advance - 2 && timed > part.advance + 2 && margin > need;
   if (safe) return;
@@ -962,9 +975,10 @@ export function qualiTick(sess: Session, car: Car) {
   const drying = raining < 0.3 && Math.max(fc.prob[1], fc.prob[2]) < 0.4;
   const slickAt = drying ? clamp(k.wetOut * 1.35, WET.si * 0.8, WET.si * 1.2) : WET.si;
   let c: Compound = water > WET.iw * 1.05 ? "W" : water > slickAt ? "I" : (part.compound ?? "S");
-  // riesgo de caer: 2 fuera del corte (o sin tiempo en la última salida), 1 justo. Sin tiempo en la primera salida, un
-  // coche que pasa de sobra no se da por en peligro: la regla de reserva de qualiSet decide si va con uno usado
-  const risk = margin < 0 || (!isFinite(myBest) && (lastRun || car.pace <= 1.004)) ? 2 : margin < tight ? 1 : 0;
+  // riesgo de caer: 2 fuera del corte (o sin tiempo en la última salida), 1 justo (sin el margen para quedarse en el
+  // garaje). Sin tiempo en la primera salida, un coche que pasa de sobra no se da por en peligro: la regla de reserva
+  // de qualiSet decide si va con uno usado
+  const risk = margin < 0 || (!isFinite(myBest) && (lastRun || car.pace <= 1.004)) ? 2 : margin < need ? 1 : 0;
   let set = qualiSet(sess, car, c, lastRun, risk);
   if (!set && c === "W") { c = "I"; set = qualiSet(sess, car, c, lastRun, 2); }
   if (!set) return;
@@ -1054,9 +1068,11 @@ function qualiSet(sess: Session, car: Car, c: Compound, lastRun: boolean, risk: 
   // última salida de Q1/Q2: nuevo si está fuera o si aún quedan los de reserva (dos para la última parte); si solo va
   // justo, también, pero guardando al menos uno nuevo para la última parte
   if (lastRun) return risk >= 2 || fresh.length > (risk === 1 ? Math.min(reserve, 1) : reserve) || !used.length ? fresh[0] : used[0];
-  // primera salida: nuevo si sobran; si no, usado (salvo que el coche no dé para pasar con uno usado)
-  if (fresh.length - 1 >= reserve || !used.length) return fresh[0];
-  return car.pace > 1.004 && !atRisk ? used[0] : fresh[0];
+  // primera salida: nuevo si sobran; si no, usado (salvo que el coche no dé para pasar con uno usado). El usado, poco
+  // gastado: ese tiempo es el que queda si luego se anula la vuelta buena
+  const light = used.filter((x) => setWear(x) < 0.12);
+  if (fresh.length - 1 >= reserve || !light.length) return fresh[0];
+  return car.pace > 1.004 && !atRisk ? light[0] : fresh[0];
 }
 
 /** Neumáticos de la IA durante una bandera roja en carrera (cambio gratis). */

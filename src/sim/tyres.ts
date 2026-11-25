@@ -40,11 +40,13 @@ export interface CompoundSpec {
 // (pole en mojado de Interlagos 2024, 1:23.405, frente a 1:08.899 en seco el mismo fin de semana).
 const SLICK_WATER = [[0, 1], [0.05, 0.945], [0.1, 0.895], [0.2, 0.825], [0.3, 0.765], [0.5, 0.665], [0.8, 0.565], [1.2, 0.48], [2, 0.39], [3, 0.33]] as const;
 
-// ~2,5 % de agarre entre compuestos = ~1 s por vuelta en un circuito como Silverstone
+// ~1,2-1,3 % de agarre entre compuestos = ~0,5 s por vuelta en un circuito como Silverstone (Pirelli: 0,3-0,6 s por
+// escalón). La pérdida progresiva (slope × desgaste por vuelta) es en Silverstone ~0,12 / 0,07 / 0,04 s por vuelta; el
+// desgaste por vuelta y el precipicio dan la vida de cada compuesto (~16 / 30 / 45 vueltas allí).
 export const COMPOUNDS: Record<Compound, CompoundSpec> = {
-  S: { name: "Blando", short: "S", color: "#E8452C", base: 1.0, opt: 95, window: 12, slope: 0.06, wear: 0.036, cliff: 0.72, water: SLICK_WATER, cooling: 1, grainK: 1.35, blisterK: 0.8 },
-  M: { name: "Medio", short: "M", color: "#F2D23C", base: 0.973, opt: 103, window: 13, slope: 0.036, wear: 0.0175, cliff: 0.74, water: SLICK_WATER, cooling: 1, grainK: 1.0, blisterK: 1.0 },
-  H: { name: "Duro", short: "H", color: "#F2F2F2", base: 0.955, opt: 111, window: 14, slope: 0.026, wear: 0.0118, cliff: 0.76, water: SLICK_WATER, cooling: 1, grainK: 0.75, blisterK: 1.25 },
+  S: { name: "Blando", short: "S", color: "#E8452C", base: 1.0, opt: 95, window: 12, slope: 0.078, wear: 0.036, cliff: 0.72, water: SLICK_WATER, cooling: 1, grainK: 1.35, blisterK: 0.8 },
+  M: { name: "Medio", short: "M", color: "#F2D23C", base: 0.987, opt: 103, window: 13, slope: 0.085, wear: 0.0175, cliff: 0.74, water: SLICK_WATER, cooling: 1, grainK: 1.0, blisterK: 1.0 },
+  H: { name: "Duro", short: "H", color: "#F2F2F2", base: 0.978, opt: 111, window: 14, slope: 0.075, wear: 0.0118, cliff: 0.76, water: SLICK_WATER, cooling: 1, grainK: 0.75, blisterK: 1.25 },
   I: { name: "Intermedio", short: "I", color: "#3CC35A", base: 1.0, opt: 88, window: 16, slope: 0.035, wear: 0.03, cliff: 0.75,
     water: [[0, 0.875], [0.1, 0.835], [0.2, 0.8], [0.35, 0.77], [0.5, 0.748], [0.8, 0.718], [1.2, 0.675], [1.8, 0.605], [2.5, 0.535], [3, 0.485]], cooling: 0.55, grainK: 1.1, blisterK: 1.1 },
   W: { name: "Lluvia", short: "W", color: "#3A7BE8", base: 1.0, opt: 80, window: 18, slope: 0.03, wear: 0.026, cliff: 0.78,
@@ -111,9 +113,7 @@ export function axleGrip(c: Compound, a: Axle): number {
   const fT = d < 0 ? 1 - 0.075 * Math.min(2.2, Math.pow(-d / 30, 2)) : 1 - 0.05 * Math.min(2.5, Math.pow(dh / 30, 2));
   const ds = a.tSurf - (sp.opt + 25);
   const fS = ds > 0 ? 1 - Math.min(0.03, ds * 0.0012) : 1;
-  let fW = 1 - sp.slope * a.wear;
-  if (a.wear > sp.cliff) fW -= 0.2 * Math.pow((a.wear - sp.cliff) / (1 - sp.cliff), 1.8);
-  return sp.base * fT * fS * Math.max(0.6, fW) * (1 - 0.03 * a.grain) * (1 - 0.045 * a.blister);
+  return sp.base * fT * fS * wearGrip(c, a.wear) * (1 - 0.03 * a.grain) * (1 - 0.045 * a.blister);
 }
 
 export function waterGrip(c: Compound, water: number): number {
@@ -141,9 +141,11 @@ export function waterWear(c: Compound, water: number): number {
 export function wearGrip(c: Compound, wear: number): number {
   const sp = COMPOUNDS[c];
   let f = 1 - sp.slope * wear;
-  if (wear > sp.cliff) f -= 0.2 * Math.pow((Math.min(1, wear) - sp.cliff) / (1 - sp.cliff), 1.8);
+  // pasado el precipicio la goma se va deprisa, pero sin desplomarse de golpe: hasta un 12 % más con la lona a la vista
+  if (wear > sp.cliff) f -= CLIFF_LOSS * Math.pow((Math.min(1, wear) - sp.cliff) / (1 - sp.cliff), 2);
   return Math.max(0.6, f);
 }
+const CLIFF_LOSS = 0.12;
 
 /** Mejor agarre posible con esa agua (el del compuesto adecuado), para medir si se va con el neumático equivocado. */
 export function bestWaterGrip(water: number): number {

@@ -398,7 +398,7 @@ export interface Car {
   best: number; // mejor vuelta válida de la sesión (o de la parte en curso)
   bestByPart: number[];
   /** Evolución de la pista que faltaba cuando hizo su mejor vuelta de la parte (ver Session.qualiEvoGain). */
-  bestEvo?: { part: number; evo: number };
+  bestEvo?: { part: number; evo: number; wear: number };
   lapValid: boolean;
   noise: number;
   followGap: number;
@@ -907,7 +907,8 @@ export class Session {
     if (!t) return 1;
     const w = this.water[0] ?? 0;
     if (w > 0.05) return clamp(0.9 * waterGrip(t.c, w) / bestWaterGrip(w), 0.55, 0.92);
-    return 1 + (COMPOUNDS[t.c].base - 0.973) * 1.2;
+    // frente al medio: el blando ~3 % más de tracción y el duro ~3 % menos (no depende de la escala de compuestos)
+    return 1 + (COMPOUNDS[t.c].base - COMPOUNDS.M.base) * 2.5;
   }
 
   mount(c: Car, set: TyreSet) {
@@ -2112,7 +2113,7 @@ export class Session {
         if (lt < this.bestLap) this.bestLap = lt;
         if (lt < prevBest) {
           c.bestByPart[p] = lt; c.bestTyreByPart[p] = c.tyres!.c; c.bestSecsByPart[p] = [...c.secLast];
-          c.bestEvo = { part: p, evo: this.qualiEvo() };
+          c.bestEvo = { part: p, evo: this.qualiEvo(), wear: setWear(c.tyres!) };
           c.bestWaterByPart[p] = ((c.lapW0 ?? this.avgWater()) + this.avgWater()) / 2;
         }
         if (run.phase === "push") this.lapRadio(c, lt);
