@@ -520,9 +520,14 @@ evitar la pantalla negra.
 
 Alrededor de la pista hay edificio de boxes con un garaje por equipo (con su cartel), puestos en el muro y
 motorhomes en el paddock, torre de control, tribunas con su perfil de verdad (gradas en pendiente con público y cubierta
-en voladizo) que siguen la curva, torres de las cámaras de tele y puentes de publicidad sobre las rectas. Mónaco y
-Singapur son ciudades: filas de edificios pegadas a la acera y manzanas detrás (pisos con contraventanas en Mónaco,
-torres de cristal en Singapur, con las ventanas encendidas de noche). Todo lo que va junto a la pista se ensancha con
+en voladizo) que siguen la curva, torres de las cámaras de tele y puentes de publicidad sobre las rectas. Cada uno de los
+24 circuitos tiene además su identidad a pie de pista (`src/ui/trackVisuals.ts`): paleta de pianos propia de 2 o 3 colores
+(rojo/amarillo en Spa y Spielberg, tricolor en Monza, México, Austin, Interlagos y Hungaroring, negro/blanco en Silverstone,
+azul/amarillo en Zandvoort, granate/blanco en Lusail, azul/blanco en Miami, Yas Marina y Bakú…), escapatorias de asfalto
+pintado con franjas de alta adherencia en los circuitos modernos frente a grava rastrillada en los clásicos, y cuatro
+estilos urbanos propios: pisos mediterráneos con contraventanas y teja en Mónaco, torres de cristal junto a la bahía en
+Singapur, hoteles-casino con neones y pantallas LED nocturnas en Las Vegas, y piedra caliza histórica con arcos mezclada
+con torres modernas de cristal en Bakú. Todo lo que va junto a la pista se ensancha con
 ella al alejar la cámara y se comprueba que no la pise a ninguna escala.
 Con calidad 2 o 3, y solo de cerca, hay más detalle (los escalones 0 y 1 no dibujan ni un triángulo más):
 - detrás de los cristales se ven habitaciones con fondo (paredes, suelo, techo, muebles y alguna cortina), oficinas en

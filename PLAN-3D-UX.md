@@ -20,7 +20,7 @@ Tamaño: **P** pequeño (un PR corto), **M** medio, **G** grande (varios PR).
 | 2. Control 3D interactivo, realización TV y HUD móvil vertical | ✅ Hecho | `map3d.ts`, `sessionView.ts`, `store.ts`, `style.css` |
 | 3. Ergonomía táctil y sensación de app móvil | ✅ Hecho | `common.ts`, `sessionView.ts`, `store.ts`, `style.css` |
 | 4. Realismo 3D dinámico y capas tácticas | ✅ Hecho | `map3d.ts`, `car3d.ts`, `sessionView.ts`, `store.ts`, `style.css` |
-| 5. Identidad visual de los 24 circuitos en 3D | ⬜ Pendiente | `src/ui/trackVisuals.ts`, `map3d.ts`, `scripts/entorno.py`, `public/assets/env-tracks/`, `public/assets/landmarks/` |
+| 5. Identidad visual de los 24 circuitos en 3D | 🟡 En curso (5.1 hecho) | `src/ui/trackVisuals.ts`, `map3d.ts`, `scripts/entorno.py`, `public/assets/env-tracks/`, `public/assets/landmarks/` |
 
 ---
 
@@ -116,11 +116,12 @@ Tamaño: **P** pequeño (un PR corto), **M** medio, **G** grande (varios PR).
 
 Objetivo: que cada uno de los 24 circuitos del calendario sea reconocible al primer vistazo (sin buscar fotorrealismo), combinando identidad a pie de pista, geografía real, estructuras singulares del trazado y 1–2 hitos icónicos bajo demanda por circuito.
 
-### 5.1 Identidad a pie de pista: pianos, escapatorias pintadas y estilos urbanos (M)
-- Crear módulo de perfiles visuales por circuito (`src/ui/trackVisuals.ts`) conectado a `map3d.ts`, sin alterar la simulación.
-- **Paleta de pianos propia** por circuito (rojo/amarillo en Spa y Spielberg, verde/blanco/rojo en Monza y México, azul/blanco en Miami, azul/amarillo en Zandvoort, verde/amarillo/blanco en Interlagos, etc.).
-- **Escapatorias de asfalto pintado** en circuitos modernos (Yas Marina azul, Austin rojo/azul, Miami azul claro, Baréin, Lusail, México verde, Barcelona, etc.) en lugar de grava uniforme.
-- **Estilos urbanos diferenciados** más allá del par clásico/torres: Las Vegas (neones, fachadas iluminadas y pantallas nocturnas), Bakú (piedra cálida histórica + torres modernas de cristal), Mónaco (mediterráneo en ladera) y Singapur (bahía + rascacielos).
+### 5.1 Identidad a pie de pista: pianos, escapatorias pintadas y estilos urbanos (M) · ✅ Hecho
+- Creado `src/ui/trackVisuals.ts` con perfiles visuales tipados para los 24 circuitos del calendario (`biome`, `kerbs`, `runoff`, `barrier`, `urban`, `floodlights`), conectado a `src/ui/map3d.ts` sin tocar la simulación ni añadir llamadas de dibujo ni triángulos en `q=0`/`q=1`.
+- **Paleta de pianos propia** (2 o 3 colores vía `uKerbA/B/C` y `uKerbN`, además de `uBarA/B` en barreras): rojo/amarillo en Spa y Spielberg, verde/blanco/rojo en Monza y México, azul/blanco en Miami, Bakú y Yas Marina, azul/amarillo en Zandvoort, verde/amarillo/blanco en Interlagos, negro/blanco en Silverstone, granate/blanco en Lusail, rojo/blanco/azul en Austin, verde/blanco en Melbourne y rojo/blanco/verde en Hungaroring.
+- **Escapatorias de asfalto pintado** (`RMODE == 9` con franjas paralelas o diagonales anti-aliasing y respuesta al agua) en circuitos modernos (Yas Marina azul, Austin azul/rojo, Miami turquesa, México verde, Baréin, Lusail granate, Barcelona ocre, Madrid, Spielberg, Shanghái, Hungaroring y Montreal), manteniendo grava clásica rastrillada en los tradicionales.
+- **Estilos urbanos diferenciados** (`urban: "mediterraneo" | "bahia" | "neones" | "piedra"`): Las Vegas con fachadas oscuras de hotel-casino, molduras de neón, marquesinas doradas y pantallas LED animadas (`P = 15`); Bakú con fachadas de piedra caliza tallada y arcos (`P = 16`) combinadas en una sola llamada de dibujo (`cityMat(16)`) con torres modernas de cristal (`P = 6`); Mónaco mediterráneo en ladera y Singapur bahía de rascacielos.
+- Verificados `npm run check`, `npx vite build`, determinismo en `scripts/finde.ts` y 0 errores de consola/WebGL en Yas Marina, Austin, Monza, Spa, Las Vegas y Bakú.
 
 ### 5.2 Entornos geográficos reales en los 24 circuitos (M)
 - Separar completamente el trazado urbano de competición (`urbano: true`, muros pegados y más SC) del entorno visual (`tipo: "urbano" | "semiurbano" | "circuito"`).
