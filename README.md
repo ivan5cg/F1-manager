@@ -670,6 +670,11 @@ adelantamientos frente al objetivo de cada circuito. Con `--json=a.json` guarda 
 enseña al lado de las nuevas; `--clima` corre con el tiempo de cada semilla en vez de en seco, y `--rapido` se salta la
 clasificación.
 
+`scripts/auditoria/` (ver su [LEEME](scripts/auditoria/LEEME.md)) juega fines de semana completos en lote, también con
+lluvia, y mide lo que `realismo.ts` no mira: ritmo de carrera y de libres frente a la pole, evolución de la
+clasificación, degradación por compuesto, regularidad, doblados y uso de cada compuesto. Las conclusiones de la
+auditoría de noviembre de 2026 están en [docs/AUDITORIA-SIMULACION.md](docs/AUDITORIA-SIMULACION.md).
+
 ## Fuentes
 
 - Trazados: [TUMFTM racetrack-database](https://github.com/TUMFTM/racetrack-database), licencia LGPL-3.0 (copia en `data/circuitos/LICENCIA-TRAZADOS-TUM.txt`); Mónaco, Marina Bay, Melbourne, Miami, Madrid, Bakú, Las Vegas, Lusail y Yas Marina de [bacinger/f1-circuits](https://github.com/bacinger/f1-circuits), licencia MIT (copia en `data/circuitos/LICENCIA-TRAZADOS-BACINGER.txt`). Melbourne y Yas Marina, de bacinger porque los de TUM son de antes de sus reformas (2022 y 2021). Los circuitos del calendario completo los crea `python3 scripts/nuevos.py` (después, `scripts/relieve.py` y, en Bakú y Las Vegas, `scripts/entorno.py`).
