@@ -64,6 +64,16 @@ const SPRINT_HALF = [4, 3.5, 3, 2.5, 2, 1.5, 1, 0.5];
 /** Fracción del agua de la trazada que aparta cada coche al pasar (a ritmo de carrera). */
 const CAR_DRY = 0.0035;
 const ENGINE_FAIL = [0.6, 1, 2.2];
+/**
+ * Modo de clasificación del motor y la batería. Solo en las vueltas lanzadas de clasificación se despliega toda la
+ * energía; en el resto (carrera, tandas largas, vueltas de salida) se gestiona y la vuelta sale más lenta. La pista
+ * está calibrada con la pole, así que esto no acelera la clasificación: frena todo lo demás. Va en tanto por uno del
+ * tiempo de vuelta y pesa más donde se va a fondo. En carrera, ~4 % (2026: vuelta rápida / pole ≈ 1,045); en la
+ * sprint, menos, porque con poca distancia apenas se gestiona.
+ */
+const DEPLOY_TRIM: Record<SessionKind, number> = { FP1: 0.04, FP2: 0.04, FP3: 0.04, SQ: 0.04, Q: 0.04, SPRINT: 0.02, RACE: 0.04 };
+/** Vueltas lanzadas de libres: sin el modo de clasificación entero y con algo más de combustible. */
+const PRACTICE_PUSH_TRIM: Partial<Record<SessionKind, number>> = { FP1: 0.01, FP2: 0.005, FP3: 0.003 };
 /** De los errores en curva, cuántos acaban contra las barreras (en seco). */
 const CRASH_P = 0.11;
 /**
@@ -676,6 +686,8 @@ export class Session {
   private lastRainMsg = -999;
   private wasRaining = false;
   private tRef: number[];
+  private trimW: number[];
+  private estimating = false;
   /** Energía recuperada por vuelta (MJ) y cómo se reparten la recarga y el gasto entre los minisectores. */
   ersLap = 6;
   private ersIn: number[] = [];
@@ -712,6 +724,12 @@ export class Session {
     this.sprintWeekend = opt.sprintWeekend;
     this.lapRefRace = this.track.refLap;
     this.tRef = this.track.ms.map((m) => msTimeAtGrip(m, 1));
+    {
+      // reparto del recorte de energía por minisector: sobre todo a fondo, algo en curva; suma lo mismo en la vuelta
+      const w = this.track.ms.map((m) => 0.3 + 0.7 * m.throttle);
+      const k = this.tRef.reduce((a, t) => a + t, 0) / this.tRef.reduce((a, t, i) => a + t * w[i], 0);
+      this.trimW = w.map((x) => x * k);
+    }
     // Batería dentro de la vuelta: se recupera donde se frena o se levanta y se gasta donde se va a fondo
     // (menos al final de las rectas, donde el reglamento recorta la potencia eléctrica). El saldo de la
     // vuelta sigue siendo el del modo elegido (ERS_NET): solo cambia cuándo entra y cuándo sale la energía.
@@ -1554,8 +1572,16 @@ export class Session {
     t -= scale * (m.dPower * power + m.dDrag * dragCut);
     t += m.dMass * (MIN_MASS + c.fuel - REF_CAR.mass);
     if (su) t *= 1 + su.pen;
+    t *= 1 + this.deployTrim(c) * this.trimW[m.i];
     t *= 1 + c.noise;
     return { t, grip };
+  }
+
+  /** Lo que se pierde por no ir en modo de clasificación (ver DEPLOY_TRIM). */
+  private deployTrim(c: Car): number {
+    // en libres y clasificación, la vuelta estimada («Posible») es la de una vuelta lanzada
+    if (c.run?.phase === "push" || (this.estimating && !isRaceKind(this.kind))) return isQualiKind(this.kind) ? 0 : PRACTICE_PUSH_TRIM[this.kind] ?? DEPLOY_TRIM[this.kind];
+    return DEPLOY_TRIM[this.kind];
   }
 
   /**
@@ -1656,7 +1682,10 @@ export class Session {
     // final). Con el depósito lleno no se penaliza: las estrategias de la IA están calculadas sin este efecto y,
     // si las primeras tandas gastaran más de lo previsto, todo el mundo acababa parando una vez de más.
     const fuelK = isRaceKind(this.kind) ? Math.min(1, (MIN_MASS + c.fuel) / (MIN_MASS + 0.5 * this.fuelPerLap * this.laps)) : 1;
-    const relE = (e: number) => (e / this.tRef[m.i]) * this.lapRefRace * fuelK;
+    // la energía va por segundo: con el recorte del modo de clasificación se tarda más en el tramo, pero lo que se
+    // pierde es gestión de la energía del coche, no más trabajo del neumático (ni más recarga de la batería)
+    const trimK = 1 + this.deployTrim(c) * this.trimW[m.i];
+    const relE = (e: number) => (e / (this.tRef[m.i] * trimK)) * this.lapRefRace * fuelK;
     const slow = this.flag !== "green" ? 0.35 : ph.energy;
     // en aire sucio el morro pierde carga: el tren delantero desliza (subviraje), se recalienta y se rasga
     const wk = c.aheadId >= 0 ? wake(c.aheadDl ?? 0, WAKE_DIRTY) : 0;
@@ -1678,7 +1707,7 @@ export class Session {
     c.fuel -= (this.fuelLap(c) * ENGINE_FUEL[c.engine] * PUSH_FUEL[c.push] * (underFlag ? 0.5 : 1) * move) / L;
     if (!underFlag) {
       const dE = this.ersLap * this.ersIn[m.i] - (this.ersLap - ERS_NET[c.ers]) * this.ersOut[m.i]; // MJ en este minisector
-      c.soc = clamp(c.soc + (dE / this.tRef[m.i]) * dt, 0, SOC_MAX);
+      c.soc = clamp(c.soc + (dE / (this.tRef[m.i] * trimK)) * dt, 0, SOC_MAX);
     } else c.soc = clamp(c.soc + (1.5 / this.lapRefRace) * dt, 0, SOC_MAX);
     // media de la última vuelta más o menos: es la que mira la IA para elegir modo, no el pico del momento
     c.socAvg = (c.socAvg ?? c.soc) + ((c.soc - (c.socAvg ?? c.soc)) * dt) / (this.lapRefRace * 0.6);
@@ -3058,7 +3087,9 @@ export class Session {
     let t = 0;
     const saved = { fg: c.followGap, ah: c.aheadId, drs: c.drs, n: c.noise };
     c.followGap = 99; c.aheadId = -1; c.drs = false; c.noise = 0;
+    this.estimating = true;
     for (const m of this.track.ms) t += this.msTime(c, m, this.water[m.i]).t;
+    this.estimating = false;
     c.followGap = saved.fg; c.aheadId = saved.ah; c.drs = saved.drs; c.noise = saved.n;
     return t;
   }
