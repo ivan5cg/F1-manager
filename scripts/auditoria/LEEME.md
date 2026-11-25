@@ -57,7 +57,11 @@ impacto (detalle y líneas de código en el informe):
    libres baten la pole.~~ **Hecho:** modo de clasificación del motor y la batería (`DEPLOY_TRIM` en `session.ts`).
    Con 48 fines de semana (semillas 1 y 2): vuelta rápida / pole 1,045, vuelta verde / pole 1,073, sprint 1,028,
    libres a 1,2 / 0,9 / 0,6 s de la pole, sin cambios en coches de seguridad, abandonos ni pole frente a la real.
-2. La clasificación no evoluciona (Q1 → Q3: 0,17 s frente a 1,28 s en 2026).
+2. ~~La clasificación no evoluciona (Q1 → Q3: 0,17 s frente a 1,28 s en 2026).~~ **Hecho:** evolución de la
+   clasificación (`QUALI_EVO` en `session.ts`) y la IA la tiene en cuenta (margen para volver a salir, reparto de
+   juegos nuevos para guardar dos a Q3). Con 48 fines de semana: Q1 → Q3 1,0-1,1 s en seco, Q3 peor que Q2 en 1-2 de
+   10, la pole igual que antes (+0,006 s de media) y los de cabeza caen en Q1 lo mismo que antes. La sprint pasa de
+   0,8 a ~1,35 s de SQ1 a SQ3: bajará al rehacer los compuestos (punto 3).
 3. Neumáticos: ~1 s entre compuestos (real 0,3-0,6 s), poca degradación progresiva y precipicio brusco; muy poco duro.
 4. Parrilla demasiado apretada (Q1 1,2 s frente a 3,3 s; 1,3 doblados frente a 7,5).
 5. Regularidad de metrónomo (σ 0,05 s frente a 0,2-0,3 s).
@@ -68,7 +72,7 @@ impacto (detalle y líneas de código en el informe):
    cada uno).~~ **Hecho** (PR #41).
 8. Coche de seguridad y virtual demasiado lentos, y la mitad de vueltas en libres.
 
-Siguiente: los puntos 2 y 3, de uno en uno y midiendo con este banco y con `scripts/realismo.ts`. Con el punto 1 la
+Siguiente: el punto 3, midiendo con este banco y con `scripts/realismo.ts`. Con el punto 1 la
 vuelta media del ganador sube a ~1,10-1,12 de la pole (real 1,11), pero las carreras con coche de seguridad largo se
-alargan: el punto 8 (coche de seguridad demasiado lento) pesa ahora algo más. Al tocar el punto 2 hay que volver a mirar
-los libres frente a la pole (`PRACTICE_PUSH_TRIM`), porque una clasificación que evoluciona cambia esa distancia.
+alargan: el punto 8 (coche de seguridad demasiado lento) pesa ahora algo más. Con el punto 2 los libres frente a la
+pole en seco no cambian (la pole es la misma); al rehacer los compuestos sí habrá que volver a mirarlos.

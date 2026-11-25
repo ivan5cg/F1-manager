@@ -945,7 +945,10 @@ export function qualiTick(sess: Session, car: Car) {
     const cutT = ord[part.advance]?.bestByPart[sess.part] ?? Infinity;
     margin = isFinite(cutT) ? cutT - myBest : pos < part.advance ? Infinity : -1;
   }
-  const need = lap * (0.0055 + 0.004 * (1 - k.strategy / 100));
+  const tight = lap * (0.0055 + 0.004 * (1 - k.strategy / 100));
+  // para no volver a salir, además lo que mejorará la pista desde el tiempo del primero que cae: si sale al final, la
+  // tendrá más rápida. Para gastar un juego nuevo, solo el margen de antes: la evolución la tienen también los demás
+  const need = tight + lap * (part.advance !== null ? sess.qualiEvoGain(ord[part.advance]) : 0);
   const timed = ord.filter((c) => isFinite(c.bestByPart[sess.part] ?? Infinity)).length;
   const safe = part.advance !== null && lastRun && !wetTrack && isFinite(myBest) && pos < part.advance - 2 && timed > part.advance + 2 && margin > need;
   if (safe) return;
@@ -959,8 +962,11 @@ export function qualiTick(sess: Session, car: Car) {
   const drying = raining < 0.3 && Math.max(fc.prob[1], fc.prob[2]) < 0.4;
   const slickAt = drying ? clamp(k.wetOut * 1.35, WET.si * 0.8, WET.si * 1.2) : WET.si;
   let c: Compound = water > WET.iw * 1.05 ? "W" : water > slickAt ? "I" : (part.compound ?? "S");
-  let set = qualiSet(sess, car, c, lastRun, margin < need || !isFinite(myBest));
-  if (!set && c === "W") { c = "I"; set = qualiSet(sess, car, c, lastRun, true); }
+  // riesgo de caer: 2 fuera del corte (o sin tiempo en la última salida), 1 justo. Sin tiempo en la primera salida, un
+  // coche que pasa de sobra no se da por en peligro: la regla de reserva de qualiSet decide si va con uno usado
+  const risk = margin < 0 || (!isFinite(myBest) && (lastRun || car.pace <= 1.004)) ? 2 : margin < tight ? 1 : 0;
+  let set = qualiSet(sess, car, c, lastRun, risk);
+  if (!set && c === "W") { c = "I"; set = qualiSet(sess, car, c, lastRun, 2); }
   if (!set) return;
   const freshLeft = car.e.sets.filter((s) => s.c === c && s.laps === 0 && !s.returned).length;
   // si no habrá otra salida, dos vueltas lanzadas para tener un margen ante un error o una vuelta anulada
@@ -968,7 +974,7 @@ export function qualiTick(sess: Session, car: Car) {
   // en mojado se rueda seguido: la pista cambia cada vuelta y los neumáticos de agua no piden vuelta de enfriamiento;
   // si se está secando, hasta la bandera (la última vuelta es la buena)
   const fit = Math.floor((R - outLap) / lap);
-  const pushLaps = !DRY.includes(c) ? clamp(lastRun || drying ? fit : 4, 2, 7) : water > WET.si * 0.5 ? clamp(fit, 2, 5) : (freshLeft <= 1 && part.advance === null) || lastChance ? 2 : 1;
+  const pushLaps = !DRY.includes(c) ? clamp(lastRun || drying ? fit : 4, 2, 7) : water > WET.si * 0.5 ? clamp(fit, 2, 5) : (part.advance === null && (freshLeft === 0 || (freshLeft === 1 && set.laps === 0))) || lastChance ? 2 : 1;
   sess.startRun(car, { kind: "quali", setId: set.id, pushLaps, fuel: QUALI_FUEL + pushLaps * 2 * sess.fuelPerLap });
 }
 
@@ -1032,7 +1038,8 @@ function waitForDrier(sess: Session, car: Car, R: number, outLap: number, lap: n
  * la última) y, mientras no haga falta, la primera salida de una parte se hace con un juego usado que aún sirva;
  * el nuevo se deja para el final, con la pista en su mejor momento. Si el coche está en peligro, el mejor que haya.
  */
-function qualiSet(sess: Session, car: Car, c: Compound, lastRun: boolean, atRisk: boolean): TyreSet | undefined {
+function qualiSet(sess: Session, car: Car, c: Compound, lastRun: boolean, risk: number): TyreSet | undefined {
+  const atRisk = risk > 0;
   const sets = car.e.sets.filter((s) => s.c === c && !s.returned && !s.punctured && s !== car.tyres).sort((a, b) => setWear(a) - setWear(b));
   if (!sets.length) return undefined;
   if (!DRY.includes(c)) return sets[0];
@@ -1044,7 +1051,9 @@ function qualiSet(sess: Session, car: Car, c: Compound, lastRun: boolean, atRisk
   const later = sess.parts.slice(sess.part + 1).filter((p) => !p.compound || p.compound === c);
   const reserve = later.length + (later.some((p) => p.advance === null) ? 1 : 0);
   if (final) return lastRun || fresh.length >= 2 || !used.length ? fresh[0] : used[0];
-  if (lastRun) return atRisk || fresh.length > Math.min(reserve, later.length) || !used.length ? fresh[0] : used[0];
+  // última salida de Q1/Q2: nuevo si está fuera o si aún quedan los de reserva (dos para la última parte); si solo va
+  // justo, también, pero guardando al menos uno nuevo para la última parte
+  if (lastRun) return risk >= 2 || fresh.length > (risk === 1 ? Math.min(reserve, 1) : reserve) || !used.length ? fresh[0] : used[0];
   // primera salida: nuevo si sobran; si no, usado (salvo que el coche no dé para pasar con uno usado)
   if (fresh.length - 1 >= reserve || !used.length) return fresh[0];
   return car.pace > 1.004 && !atRisk ? used[0] : fresh[0];
