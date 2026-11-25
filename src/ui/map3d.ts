@@ -354,22 +354,24 @@ const skyMat = (env) => new THREE.ShaderMaterial({
     float cloudDen(vec2 q){ float s = 0.0, a = 0.5; for (int i = 0; i < 5; i++) { s += a * gn(q); q = mat2(1.6, 1.2, -1.2, 1.6) * q + 3.7; a *= 0.5; } return 0.5 + 0.9 * s; }
     // lo mismo con tres octavas (las otras dos apenas mueven la forma grande): para recorrer el volumen
     float cloudDen3(vec2 q){ float s = 0.0, a = 0.5; for (int i = 0; i < 3; i++) { s += a * gn(q); q = mat2(1.6, 1.2, -1.2, 1.6) * q + 3.7; a *= 0.5; } return 0.5 + 0.9 * s; }
+    // dos octavas para la autosombra de los costados (forma general, mucho más ligera en GPU)
+    float cloudDen2(vec2 q){ float s = 0.5 * gn(q); q = mat2(1.6, 1.2, -1.2, 1.6) * q + 3.7; s += 0.25 * gn(q); return 0.5 + 0.9 * s; }
     // Nubes con volumen (calidad 2 y 3): la capa plana da la base; por encima, cada nube sube hasta una altura que
     // depende de lo densa que es (cúmulos de cima redonda). Entre los huecos de las bases se ven, sobre todo hacia el
-    // horizonte, los costados de las que hay detrás: cuatro pasos de 1,6 a 3,0 km. Devuelve (cuánto tapan los
+    // horizonte, los costados de las que hay detrás: tres pasos de 1,6 a 3,0 km. Devuelve (cuánto tapan los
     // costados, a qué altura de la nube se ven de media, cuánta nube tienen delante hacia el sol).
     vec3 cloudSides(vec3 d){
       float Tr = 1.0, hs = 0.0, sh = 0.0;
       vec2 toSun = uSun.xz / max(uSun.y, 0.2);
-      for (int i = 1; i <= 4; i++) {
-        float hf = float(i) / 4.0, h = 1600.0 + 1400.0 * hf;
+      for (int i = 1; i <= 3; i++) {
+        float hf = float(i) / 3.0, h = 1600.0 + 1400.0 * hf;
         vec2 q = uCam + d.xz * (h / (d.y + 0.06));
         vec4 w = texture2D(uWx, q / (2.0 * uWxR) + 0.5);
         float lo = mix(0.66, 0.2, w.g) + 0.02 + hf * 0.3;
         float a = smoothstep(lo, lo + 0.1, cloudDen3(q / 2600.0 + uWind));
         if (a < 0.01) continue;
         // ¿hay nube 400 m más arriba hacia el sol? Entonces este costado está en sombra
-        float ls = smoothstep(lo + 0.05, lo + 0.15, cloudDen3((q + toSun * 400.0) / 2600.0 + uWind));
+        float ls = smoothstep(lo + 0.05, lo + 0.15, cloudDen2((q + toSun * 400.0) / 2600.0 + uWind));
         hs += Tr * a * hf; sh += Tr * a * ls; Tr *= 1.0 - a;
       }
       float cv = 1.0 - Tr;
@@ -447,19 +449,23 @@ function updateEnv(now, sig) {
   if (!hdriEnv) scene.environment = envRT.texture;
 }
 const hdriCache = new Map();
-let alive3d = true, ctxLost = false, hdriPreset = "", hdriEnv = null;
+let alive3d = true, ctxLost = false, hdriPreset = "", hdriEnv = null, hdriSwapAt = -1e9;
 function needHdri(preset) {
   if (preset === hdriPreset && hdriEnv) return;
+  const changed = hdriPreset !== "" && hdriPreset !== preset;
   hdriPreset = preset;
   const hit = hdriCache.get(preset);
-  if (hit) { hdriEnv = hit; scene.environment = hit.texture; return; }
+  if (hit) {
+    if (hdriEnv !== hit) { hdriEnv = hit; scene.environment = hit.texture; if (changed) hdriSwapAt = performance.now(); }
+    return;
+  }
   if (hit === null) return;
   hdriCache.set(preset, null);
   modLoadHdriRaw(preset).then((hdr) => {
     if (!alive3d || !hdr) { if (!hdr) hdriCache.delete(preset); return; }
     const rt = pmrem.fromEquirectangular(hdr);
     hdriCache.set(preset, rt);
-    if (hdriPreset === preset) { hdriEnv = rt; scene.environment = rt.texture; }
+    if (hdriPreset === preset) { hdriEnv = rt; scene.environment = rt.texture; if (changed) hdriSwapAt = performance.now(); }
   });
 }
 
@@ -542,6 +548,7 @@ const U = {
   uSlopeCol: { value: new THREE.Color(0x575247) }, uDry: { value: 0.35 }, uMow: { value: 1 }, // bioma del circuito
   uHiQ: { value: 0 }, // 1 con calidad 2 o 3: interiores detrás de los cristales
   uDay: { value: 1 }, // luz de día que entra por las ventanas (0 de noche, menos con nubes)
+  uCloudShade: { value: 0.32 }, // fuerza de la sombra de nubes en suelo y pista (baja de noche o con nublado cerrado)
   uTacDrs: { value: 0 }, // capa táctica: zonas de DRS / modo adelantamiento y frenadas
   uTacWet: { value: 0 }, // capa táctica: contraste línea seca vs mojada
   uKerbA: { value: new THREE.Color(0xc21f24) }, uKerbB: { value: new THREE.Color(0xdeddd8) }, uKerbC: { value: new THREE.Color(0xc21f24) }, uKerbN: { value: 2 },
@@ -616,7 +623,7 @@ transformed.y += aGeo.z * (aGeo.z > 0.0 ? uW / 6.5 : 1.0) + bankLat * aGeo.w;
 vU = aU; vV = aV; vWet = aWet; vWetOff = aWetOff; vKerb = aKerb; vDash = aDash; vLine = aLine; vEdge = aEdge; vXZ = transformed.xz; vWY = transformed.y; vSide = aSide.xz;
 `;
 const RIB_FH = `` + GLSL_NOISE + `
-uniform float uW, uDetail, uL, uFlood, uTexR, uTime, uNL, uNT, uLampK, uDry, uMow, uTacDrs, uTacWet, uSkyNight, uKerbN, uRunPat; uniform vec3 uYel, uSlopeCol, uSkyZen, uSkyHor, uSkySun, uSkySunCol, uSkyCloud, uKerbA, uKerbB, uKerbC, uBarA, uBarB, uRunAcc; uniform vec4 uLamps[16], uTails[6]; uniform sampler2D uCloud, uAds, uDet, uRock;
+uniform float uW, uDetail, uL, uFlood, uTexR, uTime, uNL, uNT, uLampK, uDry, uMow, uTacDrs, uTacWet, uSkyNight, uKerbN, uRunPat, uCloudShade; uniform vec3 uYel, uSlopeCol, uSkyZen, uSkyHor, uSkySun, uSkySunCol, uSkyCloud, uKerbA, uKerbB, uKerbC, uBarA, uBarB, uRunAcc; uniform vec4 uLamps[16], uTails[6]; uniform sampler2D uCloud, uAds, uDet, uRock;
 varying float vU, vV, vWet, vWetOff, vKerb, vDash, vLine, vWY; varying vec3 vEdge; varying vec2 vXZ, vSide;
 `;
 // Cada cinta compila solo su rama (RMODE): 0 muro liso, 1 pista, 2 calle de boxes, 3 hierba, 4 grava, 5 barrera, 6 valla,
@@ -631,16 +638,19 @@ float cloudS = texture2D(uCloud, vXZ / (2.0 * uTexR) + 0.5).g;
   float a = abs(vU);
   // asfalto: el árido de cerca, manchas de un par de metros y parches de distinto tono a lo lejos. El árido se lee dos
   // veces (la segunda girada 37° y a otra escala) y se mezcla con un ruido suave: así no se ven las baldosas de 2,7 m.
+  // El detalle fino y su relieve se atenúan con la distancia (detFade) para evitar centelleo y ruido al alejar la cámara.
   const mat2 ASF_R = mat2(0.8, 0.6, -0.6, 0.8);
   vec4 d1a = texture2D(uDet, vXZ / 2.7), d1b = texture2D(uDet, ASF_R * vXZ / 3.3 + 0.47), d2 = texture2D(uDet, vXZ / 23.0 + 0.31);
   float dmix = smoothstep(0.25, 0.75, vn(vXZ * 0.13));
   d1b.gb = vec2(0.5) + (d1b.gb - 0.5) * ASF_R; // su relieve, de vuelta a los ejes del mundo
   vec4 d1 = mix(d1a, d1b, dmix);
-  d1.r = 0.5 + (d1.r - 0.5) * (1.0 + 0.6 * dmix * (1.0 - dmix)); // la mezcla aplana el contraste: se le devuelve
+  d1.r = 0.5 + (d1.r - 0.5) * (1.0 + 0.5 * dmix * (1.0 - dmix)); // la mezcla aplana el contraste: se le devuelve
+  float detFade = 1.0 - smoothstep(0.03, 0.28, px);
+  float d1r = mix(0.5, d1.r, detFade);
   float big = vn(vXZ * 0.06);
-  col *= (0.55 + 0.9 * d1.r) * (0.72 + 0.56 * d2.r) * (0.84 + 0.32 * big);
-  dn = (d1.gb - 0.5) * 1.5 + (d2.gb - 0.5) * 0.5;
-  rough = 0.86 + (d1.a - 0.5) * 0.2;
+  col *= (0.72 + 0.56 * d1r) * (0.86 + 0.28 * d2.r) * (0.88 + 0.24 * big);
+  dn = (d1.gb - 0.5) * (1.15 * detFade) + (d2.gb - 0.5) * (0.35 * (0.35 + 0.65 * detFade));
+  rough = 0.85 + (mix(0.5, d1.a, detFade) - 0.5) * 0.18;
   #if RMODE == 1
     // la trazada: goma depositada, más oscura y más lisa
     float dl = (vU - vLine) / 0.30;
@@ -696,7 +706,7 @@ float cloudS = texture2D(uCloud, vXZ / (2.0 * uTexR) + 0.5).g;
         float h = dot(dd, hx), v = length(dd - hx * h);
         acc += Lp.w * exp(-(h * h) / (sgm * sgm * 0.25) - (v * v) / (sgm * sgm * 14.0));
       }
-      refC = vec3(1.0, 0.88, 0.68) * acc * max(film * 0.5, pud) * uLampK * 2.5;
+      refC += vec3(1.0, 0.88, 0.68) * acc * max(film * 0.5, pud) * uLampK * 2.5;
     }
     // pilotos traseros rojos reflejados en el asfalto mojado detrás de cada coche cercano
     if (uNT > 0.5 && film > 0.02) {
@@ -909,9 +919,10 @@ float cloudS = texture2D(uCloud, vXZ / (2.0 * uTexR) + 0.5).g;
   }
   float innerW = smoothstep(0.15, 0.35, distM) * (1.0 - smoothstep(0.65, 0.95, distM)) * aa;
   pcol = mix(pcol, SR(vec3(0.88, 0.89, 0.90)), innerW * 0.58);
+  float detFadeR = 1.0 - smoothstep(0.03, 0.28, px);
   col = pcol * wear;
-  dn = (d1.gb - 0.5) * 0.9 + (d2.gb - 0.5) * 0.25;
-  rough = clamp(0.82 + (d1.a - 0.5) * 0.14, 0.42, 0.96);
+  dn = (d1.gb - 0.5) * (0.85 * detFadeR) + (d2.gb - 0.5) * (0.22 * (0.35 + 0.65 * detFadeR));
+  rough = clamp(0.82 + (mix(0.5, d1.a, detFadeR) - 0.5) * 0.14, 0.42, 0.96);
   float wetR = texture2D(uCloud, vXZ / (2.0 * uTexR) + 0.5).r;
   float dampR = clamp(wetR * 1.4, 0.0, 1.0);
   col *= 1.0 - 0.32 * dampR; rough = mix(rough, 0.18, dampR); dn *= 1.0 - 0.55 * dampR;
@@ -925,7 +936,7 @@ float cloudS = texture2D(uCloud, vXZ / (2.0 * uTexR) + 0.5).g;
   col *= (0.9 + 0.16 * h21(vec2(floor(vV / 6.0), 3.0))) * (1.0 - 0.45 * pj) * (1.0 - 0.3 * (1.0 - smoothstep(0.0, 0.3, vU)) * vn(vec2(vV * 0.8, 1.0)));
   dn += vTan * (step(pc, 0.5) - 0.5) * pj * 0.9;
 #endif
-col *= 1.0 - 0.4 * cloudS;
+col *= 1.0 - uCloudShade * cloudS;
 vec4 diffuseColor = vec4(col, alpha);
 `;
 const RIB_DET = [DET_U.hormigon, DET_U.asfalto, DET_U.asfalto, DET_U.hierba, DET_U.grava, null, null, null, DET_U.hormigon, DET_U.asfalto];
@@ -2586,10 +2597,10 @@ function buildWorld() {
   const terrMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.94, metalness: 0 });
   const uDetT = street ? DET_U.asfalto : bio.arid ? DET_U.grava : DET_U.hierba;
   terrMat.onBeforeCompile = (sh) => {
-    Object.assign(sh.uniforms, { uDet: uDetT, uRock: DET_U.grava, uCloud: U.uCloud, uTexR: U.uTexR, uFlood: U.uFlood, uSlopeCol: U.uSlopeCol, uDry: U.uDry });
+    Object.assign(sh.uniforms, { uDet: uDetT, uRock: DET_U.grava, uCloud: U.uCloud, uTexR: U.uTexR, uFlood: U.uFlood, uSlopeCol: U.uSlopeCol, uDry: U.uDry, uCloudShade: U.uCloudShade });
     sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\nvarying vec2 vTX; varying float vWY, vSlope;")
       .replace("#include <begin_vertex>", "#include <begin_vertex>\nvTX = position.xz; vWY = position.y; vSlope = 1.0 - clamp(normal.y, 0.0, 1.0);");
-    sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nvarying vec2 vTX; varying float vWY, vSlope; uniform sampler2D uDet, uRock, uCloud; uniform float uTexR, uFlood, uDry; uniform vec3 uSlopeCol;" + GLSL_NOISE)
+    sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nvarying vec2 vTX; varying float vWY, vSlope; uniform sampler2D uDet, uRock, uCloud; uniform float uTexR, uFlood, uDry, uCloudShade; uniform vec3 uSlopeCol;" + GLSL_NOISE)
       .replace("vec4 diffuseColor = vec4( diffuse, opacity );", `vec4 t1 = texture2D(uDet, vTX / 3.3), t2 = texture2D(uDet, vTX / 41.0 + 0.31);
         vec3 tcol = diffuse * (0.5 + 1.0 * t1.r) * (0.7 + 0.6 * t2.r) * (0.82 + 0.36 * vn(vTX * 0.13)) * (0.86 + 0.28 * vn(vTX * 0.011));
         ${street || bio.arid ? "" : "tcol = mix(tcol, tcol * vec3(1.42, 1.12, 0.58), smoothstep(0.5, 0.88, vn(vTX * 0.031 + 4.0)) * uDry);"}
@@ -2603,7 +2614,7 @@ function buildWorld() {
           tcol = mix(tcol, rcol, slp * 0.68);
           tdn = mix(tdn, (rk.gb - 0.5) * 2.2, slp);
         }
-        tcol *= 1.0 - 0.4 * texture2D(uCloud, vTX / (2.0 * uTexR) + 0.5).g;
+        tcol *= 1.0 - uCloudShade * texture2D(uCloud, vTX / (2.0 * uTexR) + 0.5).g;
         vec4 diffuseColor = vec4(tcol, opacity);`)
       .replace("#include <normal_fragment_maps>", "normal = normalize(normal + mat3(viewMatrix) * vec3(tdn.x, 0.0, tdn.y));")
       .replace("vec3 totalEmissiveRadiance = emissive;", "vec3 totalEmissiveRadiance = emissive + diffuseColor.rgb * vColor.rgb * uFlood * 0.12;");
@@ -3731,7 +3742,9 @@ function buildWorld() {
     });
   }
   U.uL.value = T.L;
-  wetT = cloudT = lightT = -1e9;
+  wetT = -1e9;
+  cloudReady = wxReady = false; cloudRow = wxRow = 0;
+  lightInit = false; smoothClock = NaN; windInit = false;
   applyQuality();
 }
 
@@ -3759,15 +3772,42 @@ function updateWet(now) {
   a.needsUpdate = b.needsUpdate = true;
 }
 
-/** Nubes y lluvia del juego en una textura sobre el circuito: R = lluvia, G = sombra de nube. */
-let cloudT = -1e9, rainHere = 0;
-function updateCloud(now) {
-  if (now - cloudT < 450) return;
-  cloudT = now;
-  const w = sess.weather, TR = U.uTexR.value, t = w.clock;
-  const wx = Math.cos(w.windDir) * w.windSpeed / 60, wy = Math.sin(w.windDir) * w.windSpeed / 60;
-  let rmax = 0;
-  for (let iz = 0; iz < CN; iz++) for (let ix = 0; ix < CN; ix++) {
+/** Nubes y lluvia del juego en una textura sobre el circuito: R = lluvia, G = sombra de nube.
+ *  Se rellena completa en el primer fotograma y después se actualiza por franjas (sin picos de CPU ni saltos). */
+const cloudNext = new Uint8Array(CN * CN * 4);
+let cloudReady = false, cloudRow = 0, cloudRmax = 0, rainHere = 0;
+let windInit = false, windPosX = 0, windPosY = 0, smoothWindDir = 0;
+let smoothClock = NaN, smoothCloud = 0, smoothRain = 0;
+function updateCloud(dt, now) {
+  const w = sess.weather, TR = U.uTexR.value;
+  // Reloj continuo: el clima de la simulación avanza cada 5 s, aquí interpolamos suavemente entre pasos
+  const simDt = isPaused() ? 0 : dt * (replay ? REPLAY_SPEED : curSpeed());
+  if (!isFinite(smoothClock) || Math.abs(w.clock - smoothClock) > 1.5) {
+    smoothClock = w.clock;
+  } else {
+    smoothClock += simDt / 60;
+    smoothClock += (w.clock - smoothClock) * (1 - Math.exp(-dt / 2.5));
+  }
+  // Advectar el viento de forma incremental en cada fotograma: evita los teletransportes al variar windDir
+  if (!windInit) {
+    smoothWindDir = w.windDir;
+    const k0 = (w.clock % 120) * w.windSpeed / 60 / 2.6;
+    windPosX = -Math.cos(smoothWindDir) * k0;
+    windPosY = Math.sin(smoothWindDir) * k0;
+    windInit = true;
+  } else {
+    let dAng = ((w.windDir - smoothWindDir + Math.PI) % (Math.PI * 2) + Math.PI * 2) % (Math.PI * 2) - Math.PI;
+    smoothWindDir += dAng * (1 - Math.exp(-dt / 2.0));
+    const adv = simDt * w.windSpeed / 9360; // km/h → unidades de 2,6 km por segundo simulado
+    windPosX += -Math.cos(smoothWindDir) * adv;
+    windPosY += Math.sin(smoothWindDir) * adv;
+  }
+  skyU.uWind.value.set(windPosX, windPosY);
+
+  const rows = cloudReady ? 6 : CN;
+  const endRow = Math.min(CN, cloudRow + rows);
+  if (cloudRow === 0) cloudRmax = 0;
+  for (let iz = cloudRow; iz < endRow; iz++) for (let ix = 0; ix < CN; ix++) {
     const X = ((ix + 0.5) / CN * 2 - 1) * TR, Z = ((iz + 0.5) / CN * 2 - 1) * TR;
     const xk = (X + T.cx) / 1000, yk = (-Z + T.cy) / 1000;
     const rain = rainAt(w, xk, yk);
@@ -3776,28 +3816,41 @@ function updateCloud(now) {
       const env = Math.pow(Math.max(0, Math.sin(Math.PI * clamp(c.age / c.life, 0, 1))), 0.6), rad = Math.max(2, 2.5 * c.sigma);
       cl += 0.85 * Math.min(1, env * 1.5) * Math.exp(-((xk - c.x) ** 2 + (yk - c.y) ** 2) / (2 * rad * rad));
     }
-    const nx = xk * 1.3 - wx * t, ny = yk * 1.3 - wy * t;
+    const nx = xk * 1.3 + windPosX * 2.6, ny = yk * 1.3 - windPosY * 2.6;
     const cum = sstep(0.66 - 0.4 * w.baseCloud, 0.84, 0.6 * vnoise(nx, ny) + 0.4 * vnoise(nx * 2.3 + 9, ny * 2.3 + 4)) * 0.75;
     const shade = clamp(Math.max(cl * (0.6 + 0.6 * vnoise(nx * 0.7, ny * 0.7)), cum) + Math.min(0.5, rain / 6), 0, 1);
     const o = (iz * CN + ix) * 4;
-    cloudData[o] = clamp(rain / 3, 0, 1) * 255; cloudData[o + 1] = shade * 255; cloudData[o + 3] = 255;
-    if (rain > rmax) rmax = rain;
+    cloudNext[o] = clamp(rain / 3, 0, 1) * 255; cloudNext[o + 1] = shade * 255; cloudNext[o + 3] = 255;
+    if (rain > cloudRmax) cloudRmax = rain;
   }
-  cloudTex.needsUpdate = true;
-  rainHere = rmax;
+  cloudRow = endRow;
+  if (cloudRow >= CN) {
+    cloudRow = 0;
+    if (!cloudReady) {
+      cloudData.set(cloudNext);
+      cloudReady = true;
+    } else {
+      for (let i = 0; i < cloudData.length; i += 4) {
+        cloudData[i] = Math.round(cloudData[i] + (cloudNext[i] - cloudData[i]) * 0.45);
+        cloudData[i + 1] = Math.round(cloudData[i + 1] + (cloudNext[i + 1] - cloudData[i + 1]) * 0.45);
+        cloudData[i + 3] = 255;
+      }
+    }
+    cloudTex.needsUpdate = true;
+    rainHere = cloudRmax;
+  }
   updateSkyWeather(now);
 }
-/** Lo que se ve en el cielo sale de las mismas células y la misma llovizna que dibuja el radar. */
-let wxT = -1e9, wxMean = 0;
+/** Lo que se ve en el cielo sale de las mismas células y la misma llovizna que dibuja el radar.
+ *  Actualización incremental por franjas para evitar micro-tirones cada 2 s. */
+const wxNext = new Uint8Array(WN * WN * 4);
+let wxReady = false, wxRow = 0, wxSum = 0, wxMean = 0;
 function updateSkyWeather(now) {
   const w = sess.weather;
-  // las nubes viajan con el viento de altura, igual que las células
-  const k = w.clock * w.windSpeed / 60 / 2.6;
-  skyU.uWind.value.set(-Math.cos(w.windDir) * k, Math.sin(w.windDir) * k);
-  if (now - wxT < 2000) return;
-  wxT = now;
-  let sum = 0;
-  for (let iz = 0; iz < WN; iz++) for (let ix = 0; ix < WN; ix++) {
+  const rows = wxReady ? 4 : WN;
+  const endRow = Math.min(WN, wxRow + rows);
+  if (wxRow === 0) wxSum = 0;
+  for (let iz = wxRow; iz < endRow; iz++) for (let ix = 0; ix < WN; ix++) {
     const xk = (((ix + 0.5) / WN * 2 - 1) * WX_R + T.cx) / 1000, yk = (-((iz + 0.5) / WN * 2 - 1) * WX_R + T.cy) / 1000;
     const rain = rainAt(w, xk, yk);
     let cl = w.baseCloud;
@@ -3807,17 +3860,31 @@ function updateSkyWeather(now) {
     }
     // donde llueve hay nube siempre, aunque el borde de la célula quede fuera de su mancha
     const cover = clamp(Math.max(cl, rain > 0.05 ? 0.75 + rain * 0.1 : 0), 0, 1), o = (iz * WN + ix) * 4;
-    wxData[o] = Math.sqrt(clamp(rain / 6, 0, 1)) * 255; wxData[o + 1] = cover * 255; wxData[o + 3] = 255;
-    sum += cover;
+    wxNext[o] = Math.sqrt(clamp(rain / 6, 0, 1)) * 255; wxNext[o + 1] = cover * 255; wxNext[o + 3] = 255;
+    wxSum += cover;
   }
-  wxMean = sum / (WN * WN);
-  wxTex.needsUpdate = true;
+  wxRow = endRow;
+  if (wxRow >= WN) {
+    wxRow = 0;
+    wxMean = wxSum / (WN * WN);
+    if (!wxReady) {
+      wxData.set(wxNext);
+      wxReady = true;
+    } else {
+      for (let i = 0; i < wxData.length; i += 4) {
+        wxData[i] = Math.round(wxData[i] + (wxNext[i] - wxData[i]) * 0.45);
+        wxData[i + 1] = Math.round(wxData[i + 1] + (wxNext[i + 1] - wxData[i + 1]) * 0.45);
+        wxData[i + 3] = 255;
+      }
+    }
+    wxTex.needsUpdate = true;
+  }
 }
 
 // ------------------------------------------------------------------ luz según la hora
-let lightT = -1e9, dayK = 1;
-const sunDir = new THREE.Vector3(0.4, 0.7, 0.4);
-const C = (h) => new THREE.Color(h), _c1 = C(0), _c2 = C(0), _c3 = C(0);
+let lightInit = false, dayK = 1, smoothEnvInt = 0.85, chosenPreset = "dia";
+const sunDir = new THREE.Vector3(0.4, 0.7, 0.4), _dayDir = new THREE.Vector3(), _moonDir = new THREE.Vector3(0.35, 0.8, 0.3).normalize();
+const C = (h) => new THREE.Color(h), _c1 = C(0), _c2 = C(0), _c3 = C(0), _c4 = C(0);
 const SKY = { zDay: C(0x3d7bc8), zDusk: C(0x34447c), zNight: C(0x04060c), zGrey: C(0x7f8a96), hDay: C(0xc3d8ea), hDusk: C(0xf0a56c), hNight: C(0x0c111d), hGrey: C(0xaab3bc) };
 // ------------------------------------------------------------------ relámpagos
 // Bajo las células de tormenta (más de 15 mm/h a menos de 30 km) caen rayos de vez en cuando: el cielo y la luz
@@ -3848,27 +3915,46 @@ function updateStorm(now) {
     if (thunders.length > 4) thunders.shift(); // nadie los escucha (2D o sin sonido): no se acumulan
   }
 }
-function updateLight(now) {
+function pickHdriPreset(day, warm, cloud, rain) {
+  // Histéresis para evitar saltos continuos cuando las nubes, la lluvia o la elevación rozan el umbral
+  if (chosenPreset === "noche") { if (day > 0.24) chosenPreset = warm > 0.36 ? "tarde" : (cloud > 0.56 || rain > 0.18) ? "nublado" : "dia"; }
+  else if (day < 0.16) chosenPreset = "noche";
+  else if (chosenPreset === "tarde") { if (warm < 0.28) chosenPreset = (cloud > 0.56 || rain > 0.18) ? "nublado" : "dia"; }
+  else if (warm > 0.40) chosenPreset = "tarde";
+  else if (chosenPreset === "nublado") { if (cloud < 0.48 && rain < 0.10) chosenPreset = "dia"; }
+  else if (cloud > 0.60 || rain > 0.22) chosenPreset = "nublado";
+  return chosenPreset;
+}
+function updateLight(dt, now) {
   updateStorm(now);
-  if (now - lightT < 700) return;
-  lightT = now;
-  const h = sess.weather.clock / 60, lat = track.def.clima?.latitud ?? 45, DEG = Math.PI / 180;
+  const rawCloud = clamp(sess.weather.cloud ?? 0, 0, 1);
+  if (!lightInit) {
+    smoothCloud = rawCloud;
+    smoothRain = rainHere;
+    lightInit = true;
+  } else {
+    smoothCloud += (rawCloud - smoothCloud) * (1 - Math.exp(-dt / 1.8));
+    smoothRain += (rainHere - smoothRain) * (1 - Math.exp(-dt / 1.5));
+  }
+  const h = (isFinite(smoothClock) ? smoothClock : sess.weather.clock) / 60, lat = track.def.clima?.latitud ?? 45, DEG = Math.PI / 180;
   let el = 62 * DEG * Math.sin(Math.PI * (h - 6.2) / 13.6), az = (h - 13) * 15 * DEG;
   if (hourMode === "tarde") { el = 8 * DEG; az = 78 * DEG; }
   if (hourMode === "noche") { el = -25 * DEG; az = 120 * DEG; }
-  const cloud = clamp(sess.weather.cloud ?? 0, 0, 1);
+  const cloud = smoothCloud;
   const day = dayK = sstep(-4 * DEG, 9 * DEG, el), warm = (1 - sstep(4 * DEG, 28 * DEG, el)) * day;
-  if (day > 0.02) sunDir.set(-Math.sin(az) * Math.cos(el), Math.max(0.1, Math.sin(el)), Math.cos(az) * Math.cos(el) * (lat < 0 ? -1 : 1)).normalize();
-  else sunDir.set(0.35, 0.8, 0.3).normalize();
-  sun.color.setHex(0xfff3dd).lerp(_c1.setHex(0xff9a52), warm);
-  if (day <= 0.02) sun.color.setHex(0x8fa8ff);
+  const sunK = sstep(0.0, 0.14, day);
+  _dayDir.set(-Math.sin(az) * Math.cos(el), Math.max(0.1, Math.sin(el)), Math.cos(az) * Math.cos(el) * (lat < 0 ? -1 : 1)).normalize();
+  sunDir.copy(_moonDir).lerp(_dayDir, sunK).normalize();
+  // transición continua entre luz lunar (noche) y luz solar (cálida al atardecer, blanca de día)
+  _c4.setHex(0xfff3dd).lerp(_c1.setHex(0xff9a52), warm);
+  sun.color.setHex(0x8fa8ff).lerp(_c4, sunK);
   // intensidades en unidades físicas de three (π ≈ «blanco a pleno sol»); contraste sol/sombra nítido estilo mánager moderno
-  sun.intensity = day > 0.02 ? 3.35 * day * (1 - 0.78 * cloud) : 0.35;
+  sun.intensity = 3.35 * day * (1 - 0.78 * cloud) + 0.35 * (1 - sunK);
   const grey = cloud * 0.85 * day;
   const zen = _c1.copy(SKY.zNight).lerp(_c3.copy(SKY.zDay).lerp(SKY.zDusk, warm), day).lerp(SKY.zGrey, grey);
   const hor = _c2.copy(SKY.hNight).lerp(_c3.copy(SKY.hDay).lerp(SKY.hDusk, warm * 0.8), day).lerp(SKY.hGrey, grey);
   skyU.uZen.value.copy(zen); skyU.uHor.value.copy(hor); skyU.uSun.value.copy(sunDir); skyU.uNight.value = 1 - day;
-  skyU.uSunCol.value.copy(sun.color).multiplyScalar(day > 0.02 ? day * (1 - 0.7 * cloud) : 0.25);
+  skyU.uSunCol.value.copy(sun.color).multiplyScalar(day * (1 - 0.7 * cloud) + 0.25 * (1 - sunK));
   skyU.uCloudCol.value.setRGB(1, 1, 1).lerp(hor, 0.3 + 0.4 * cloud).multiplyScalar((0.25 + 0.75 * day) * 1.1);
   // el suelo que ve el entorno: lo que el sol y el cielo sacan del verde (o del gris en los urbanos)
   skyU.uGround.value.setHex(T.street ? 0x3a3d42 : 0x26381f).multiplyScalar(0.25 + 0.9 * day * (1 - 0.5 * cloud));
@@ -3876,17 +3962,31 @@ function updateLight(now) {
   SPRAY_MAT.uniforms.uCol.value.setRGB(0.8, 0.84, 0.88).lerp(hor, 0.35).multiplyScalar(0.2 + 0.7 * day);
   renderer.setClearColor(hor, 1);
   // al atardecer y de noche el cielo apenas alumbra: sube un poco lo que aporta el entorno para que se siga viendo
-  const preset = day < 0.2 ? "noche" : warm > 0.35 ? "tarde" : (cloud > 0.55 || rainHere > 0.15) ? "nublado" : "dia";
+  const preset = pickHdriPreset(day, warm, cloud, smoothRain);
   needHdri(preset);
-  scene.environmentIntensity = (hdriEnv ? (0.78 + 0.38 * (1 - day) + 0.45 * warm) : (0.94 + 0.62 * (1 - day) + 0.6 * warm)) * (1 + 2.5 * flashK(now));
-  skyU.uFlash.value = flashK(now) * (0.6 + 0.6 * (1 - day));
-  updateEnv(now, [sunDir.x, sunDir.y, sunDir.z, zen.r, zen.g, zen.b, hor.r, hor.g, hor.b, cloud, wxMean, Math.min(rainHere, 3) / 2].map((v) => v.toFixed(2)).join());
+  const fl = flashK(now);
+  const targetEnv = hdriEnv ? (0.78 + 0.38 * (1 - day) + 0.45 * warm) : (0.94 + 0.62 * (1 - day) + 0.6 * warm);
+  smoothEnvInt += (targetEnv - smoothEnvInt) * (1 - Math.exp(-dt / 0.55));
+  // suaviza brevemente la exposición si acaba de cambiar el HDRI para evitar un fogonazo seco
+  const swapT = clamp((now - hdriSwapAt) / 600, 0, 1);
+  const swapDip = 1 - 0.08 * Math.sin(swapT * Math.PI);
+  scene.environmentIntensity = smoothEnvInt * swapDip * (1 + 2.5 * fl);
+  skyU.uFlash.value = fl * (0.6 + 0.6 * (1 - day));
+  updateEnv(now, [sunDir.x, sunDir.y, sunDir.z, zen.r, zen.g, zen.b, hor.r, hor.g, hor.b, cloud, wxMean, Math.min(smoothRain, 3) / 2].map((v) => v.toFixed(2)).join());
   U.uFlood.value = (1 - day) * 0.8;
   U.uDay.value = day * (1 - 0.55 * cloud);
+  U.uCloudShade.value = 0.36 * day * (1 - 0.65 * cloud);
   skyU.uCity.value = T.street ? 1 : 0.3;
   // luces de los pueblos en el horizonte: con la noche (solo en calidad 2 y 3)
   if (world.townLights) { const k = sstep(0.25, 0.75, 1 - day); world.townLights.visible = q >= 2 && k > 0.01; world.townLights.material.opacity = k; }
-  world.lamps.visible = world.poles.visible = world.halos.visible = day < 0.5 && !world.night;
+  const lampFade = world.night ? 0 : sstep(0.65, 0.22, day);
+  world.poles.visible = !world.night && day < 0.7;
+  world.lamps.visible = lampFade > 0.01;
+  world.halos.visible = lampFade > 0.01;
+  if (lampFade > 0.01) {
+    world.lamps.material.color.setHex(0xfff1c9).multiplyScalar(0.35 + 3.65 * lampFade);
+    world.halos.material.opacity = lampFade;
+  }
 }
 
 // ------------------------------------------------------------------ postproceso
@@ -4744,7 +4844,7 @@ function updateCamera(dt, now) {
   const wT = onboard || replay ? W_REAL : clamp(halfH * 0.0195, W_REAL, T.Wov);
   curW = cut || camSnap ? wT : curW + (wT - curW) * (1 - Math.exp(-dt / 0.2));
   // calima atmosférica exponencial: despega los planos lejanos según clima y lluvia; en vista general se abre para leer todo
-  const wxHaze = 1 + 0.55 * clamp(sess.weather.cloud ?? 0, 0, 1) + 0.8 * clamp(rainHere / 2, 0, 1);
+  const wxHaze = 1 + 0.55 * (lightInit ? smoothCloud : clamp(sess.weather.cloud ?? 0, 0, 1)) + 0.8 * clamp((lightInit ? smoothRain : rainHere) / 2, 0, 1);
   const bioHaze = getTrackVisual(track.id).biome === "alpino" ? 1.15 : 1.0;
   fog.density = 0.00046 * wxHaze * bioHaze * Math.min(1, 460 / Math.max(1, dist));
   // el sol ilumina (y da sombra) alrededor de lo que mira la cámara
@@ -5034,7 +5134,7 @@ function draw3d(dt, now) {
   U.uW.value = W; U.uS.value = Math.max(1, W / W_REAL);
   if (!DBG.noLod) propLod(U.uS.value);
   U.uDetail.value = clamp((T.Wov * 0.8 - W) / Math.max(1, T.Wov * 0.8 - W_REAL), 0, 1);
-  updateWet(now); updateCloud(now); updateLight(now);
+  updateWet(now); updateCloud(dt, now); updateLight(dt, now);
   if (!isPaused()) U.uTime.value = (U.uTime.value + dt * (replay ? REPLAY_SPEED : 1)) % 1000;
   // gotas en la carrocería: aparecen enseguida con la lluvia y tardan en irse cuando para (al ritmo de la sesión)
   { const tgt = clamp(rainHere / 1.5, 0, 1), d = U.uDrops;
