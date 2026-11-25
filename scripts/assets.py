@@ -100,7 +100,7 @@ def pack_texture(nombre: str, asset_id: str, dest: Path) -> None:
     if not (u_diff and u_norm and u_rough):
         raise RuntimeError(f"Faltan mapas PBR en {asset_id}")
 
-    sz = (384, 384)
+    sz = (512, 512) if nombre == "asfalto" else (384, 384)
     res = Image.Resampling.LANCZOS
     diff = np.asarray(Image.open(io.BytesIO(fetch(u_diff))).convert("RGB").resize(sz, res), dtype=np.float32) / 255.0
     norm = np.asarray(Image.open(io.BytesIO(fetch(u_norm))).convert("RGB").resize(sz, res), dtype=np.float32) / 255.0
