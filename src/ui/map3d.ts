@@ -26,6 +26,7 @@ import { BRANDS, FONT, SECOND, collect, skin, carGeometry, carMinGeometry, wheel
 import { gearFor, rpmFor } from "./audio";
 import { helmetDesign } from "./visual";
 import { ENV_TRACK_IDS, getTrackVisual } from "./trackVisuals";
+import { LANDMARKS, buildLandmarkPlaceholder } from "./landmarks";
 
 const ASSET = (p) => `${import.meta.env.BASE_URL}assets/${p}`;
 
@@ -52,8 +53,9 @@ const SC_COLORS = {
   llanta: [0.09, 0.095, 0.1], goma: [0.018, 0.018, 0.018], cristal: [0.02, 0.026, 0.034], rojo: [0.45, 0.015, 0.015],
   ambar: [0.9, 0.35, 0.02], acento: [0.6, 0.03, 0.03],
 };
-let modManifestCache = null, modGltfLoaderP = null, modScCache = null, modCrewCache = null, modYachtCache = null;
+let modManifestCache = null, modLandmarkManCache = null, modGltfLoaderP = null, modScCache = null, modCrewCache = null, modYachtCache = null;
 const modEnvTreeCache = new Map();
+const modLandmarkCache = new Map();
 const modTexImgCache = new Map();
 const modHdriRawCache = new Map();
 const modHdrLoader = new HDRLoader();
@@ -61,6 +63,40 @@ const modHdrLoader = new HDRLoader();
 function modLoadManifest() {
   if (!modManifestCache) modManifestCache = fetch(`${ASSET("models/")}manifest.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
   return modManifestCache;
+}
+function modLoadLandmarkManifest() {
+  if (!modLandmarkManCache) modLandmarkManCache = fetch(`${ASSET("landmarks/")}manifest.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+  return modLandmarkManCache;
+}
+/** Carga bajo demanda y cachea entre sesiones un hito .glb (Draco), normalizado con base en y = 0 y altura = 1 m. */
+function modLoadLandmarkGlb(trackId, lmId) {
+  const key = `${trackId}/${lmId}`;
+  if (!modLandmarkCache.has(key)) modLandmarkCache.set(key, (async () => {
+    try {
+      const man = await modLoadLandmarkManifest();
+      if (!man?.glb?.[key]) return null;
+      const loader = await getSharedGltfLoader();
+      const gltf = await loader.loadAsync(`${ASSET("landmarks/")}${key}.glb`);
+      gltf.scene.updateWorldMatrix(true, true);
+      const raw = [], bb = new THREE.Box3();
+      gltf.scene.traverse((o) => {
+        if (!o.isMesh || !o.geometry) return;
+        const g = o.geometry.clone();
+        g.applyMatrix4(o.matrixWorld);
+        g.computeBoundingBox();
+        if (g.boundingBox) bb.union(g.boundingBox);
+        const m = Array.isArray(o.material) ? o.material[0].clone() : o.material.clone();
+        raw.push({ geo: g, mat: m });
+      });
+      if (!raw.length || bb.isEmpty()) return null;
+      const sz = bb.getSize(new THREE.Vector3()), ctr = bb.getCenter(new THREE.Vector3());
+      const invH = 1 / Math.max(0.01, sz.y);
+      const norm = new THREE.Matrix4().makeScale(invH, invH, invH).multiply(new THREE.Matrix4().makeTranslation(-ctr.x, -bb.min.y, -ctr.z));
+      for (const p of raw) { p.geo.applyMatrix4(norm); p.geo.computeBoundingSphere(); }
+      return { parts: raw };
+    } catch (e) { console.warn("hito .glb:", key, e); return null; }
+  })());
+  return modLandmarkCache.get(key);
 }
 function getSharedGltfLoader() {
   if (!modGltfLoaderP) modGltfLoaderP = createDracoGltfLoader().then(({ loader }) => loader);
@@ -2794,6 +2830,61 @@ function buildWorld() {
       }
     }
   };
+  // ---- Hitos icónicos del circuito (Bloque 5.4): silueta procedural inmediata + carga híbrida .glb bajo demanda
+  const lmSpecs = LANDMARKS[track.id] || [];
+  const lmClear = []; // [x, z, radio] para que las manzanas urbanas no atraviesen los hitos
+  if (lmSpecs.length) {
+    const lmMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.7, metalness: 0.14, flatShading: true });
+    lmMat.onBeforeCompile = (sh) => {
+      sh.uniforms.uFlood = U.uFlood;
+      sh.fragmentShader = sh.fragmentShader
+        .replace("#include <common>", "#include <common>\nuniform float uFlood;")
+        .replace("vec3 totalEmissiveRadiance = emissive;", "vec3 totalEmissiveRadiance = emissive + vColor.rgb * (max(0.0, max(vColor.r, max(vColor.g, vColor.b)) - 0.95) * (0.45 + 1.15 * uFlood) + uFlood * 0.22);");
+    };
+    lmMat.customProgramCacheKey = () => "hito-placeholder";
+    const lmTmp = mkS(), safeTrack = T.SH * T.Wov + 24;
+    for (const spec of lmSpecs) {
+      const s = mod(spec.sFrac * T.L, T.L);
+      sample(s, lmTmp);
+      let d = Math.max(spec.dist, safeTrack + 6), sg = spec.side, lx = 0, lz = 0;
+      for (let attempt = 0; attempt < 6; attempt++) {
+        lx = lmTmp.x + lmTmp.rx * sg * d;
+        lz = lmTmp.z + lmTmp.rz * sg * d;
+        if (trackDist(lx, lz) >= safeTrack) break;
+        if (attempt === 2) { sg = -sg; d = Math.max(spec.dist, safeTrack + 8); } else d += 30;
+      }
+      const gy = terr(lx, lz, 0).h;
+      const yaw = Math.atan2(-lmTmp.tz, lmTmp.tx) + (spec.rot ?? 0);
+      lmClear.push([lx, lz, Math.max(24, spec.height * 0.55)]);
+      const phGeo = buildLandmarkPlaceholder(THREE, spec);
+      const phMesh = add(new THREE.Mesh(phGeo, lmMat));
+      phMesh.position.set(lx, gy, lz);
+      phMesh.rotation.y = yaw;
+      phMesh.castShadow = true;
+      phMesh.receiveShadow = true;
+      phMesh.frustumCulled = true;
+      phMesh.name = `hito_${spec.id}`;
+      // Si el .glb existe en public/assets/landmarks/manifest.json, se descarga bajo demanda y sustituye al placeholder
+      modLoadLandmarkGlb(track.id, spec.id).then((tpl) => {
+        if (!tpl || !alive3d || !world || !all.includes(phMesh)) return;
+        const grp = new THREE.Group();
+        grp.position.set(lx, gy, lz);
+        grp.rotation.y = yaw;
+        grp.scale.setScalar(spec.height);
+        grp.name = `hito_glb_${spec.id}`;
+        for (const p of tpl.parts) {
+          const m = new THREE.Mesh(p.geo, p.mat);
+          m.castShadow = true;
+          m.receiveShadow = true;
+          m.userData.sharedGeo = true;
+          m.userData.sharedMat = true;
+          grp.add(m);
+        }
+        add(grp);
+        phMesh.visible = false;
+      });
+    }
+  }
   // calles: una fila de edificios a cada lado, pegados a la acera, y manzanas detrás con identidad por ciudad
   if (street) {
     const isBay = urbanStyle === "bahia", isNeon = urbanStyle === "neones", isStone = urbanStyle === "piedra";
@@ -2844,7 +2935,7 @@ function buildWorld() {
       const x = (rnd2() * 2 - 1) * ext, z = (rnd2() * 2 - 1) * ext, w = 12 + rnd2() * 20, d = 12 + rnd2() * 18;
       const dist = trackDist(x, z), near = tdNear, need = Math.max(T.SH * T.Wov + 8, T.SH * W_REAL + 32) + Math.hypot(w, d) / 2;
       const rad = Math.max(w, d) * 0.58;
-      if (dist < need || park(x, z) > 0.3 || (T.env && T.env.wet(x, z)) || !free(x, z, rad)) continue;
+      if (dist < need || park(x, z) > 0.3 || (T.env && T.env.wet(x, z)) || !free(x, z, rad) || lmClear.some(([lx, lz, lr]) => Math.hypot(x - lx, z - lz) < lr + rad)) continue;
       const nx = (near + 2) % n, ang = Math.atan2(-(T.Z[nx] - T.Z[near]), T.X[nx] - T.X[near]) + (rnd2() - 0.5) * 0.15;
       let h, bCol;
       if (tower) {

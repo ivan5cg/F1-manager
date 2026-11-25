@@ -20,7 +20,7 @@ Tamaño: **P** pequeño (un PR corto), **M** medio, **G** grande (varios PR).
 | 2. Control 3D interactivo, realización TV y HUD móvil vertical | ✅ Hecho | `map3d.ts`, `sessionView.ts`, `store.ts`, `style.css` |
 | 3. Ergonomía táctil y sensación de app móvil | ✅ Hecho | `common.ts`, `sessionView.ts`, `store.ts`, `style.css` |
 | 4. Realismo 3D dinámico y capas tácticas | ✅ Hecho | `map3d.ts`, `car3d.ts`, `sessionView.ts`, `store.ts`, `style.css` |
-| 5. Identidad visual de los 24 circuitos en 3D | 🟡 En curso (5.1–5.3 hechos) | `src/ui/trackVisuals.ts`, `map3d.ts`, `scripts/entorno.py`, `public/assets/env-tracks/`, `public/assets/landmarks/` |
+| 5. Identidad visual de los 24 circuitos en 3D | ✅ Hecho | `src/ui/trackVisuals.ts`, `src/ui/landmarks.ts`, `map3d.ts`, `scripts/entorno.py`, `scripts/optimiza_hito_glb.py`, `scripts/colab_genera_hitos.ipynb`, `public/assets/env-tracks/`, `public/assets/landmarks/` |
 
 ---
 
@@ -135,7 +135,46 @@ Objetivo: que cada uno de los 24 circuitos del calendario sea reconocible al pri
 - **Peraltes visibles (`vis.bankings`):** inclinación transversal (*banking*) sin triángulos ni llamadas de dibujo extra (empaquetada en `vec4 aGeo` en `RIB_VB` para mantener las cintas en 13 atributos WebGL) en **Zandvoort** (Hugenholtzbocht T3 ~19° y Arie Luyendykbocht T14 ~18°) y **Madrid** (*La Monumental* T12 ~22°), inclinando asfalto, pianos, escapatorias, barreras, altura/balanceo rígido de los monoplazas y horizonte de las cámaras *A bordo* y *Alerón trasero*.
 - Verificados `npm run check`, `npx vite build`, determinismo idéntico en `scripts/finde.ts` (Silverstone 42 y Mónaco 42) y 0 errores de consola/WebGL/red en las 6 vistas de Mónaco, Suzuka, Zandvoort y Madrid.
 
-### 5.4 Hitos icónicos `.glb` bajo demanda, placeholders y pipeline de Google Colab (G)
-- **Manifiesto de hitos de los 24 circuitos:** 1–2 elementos emblemáticos por GP con coordenadas `(s, lado, dist)` o `(x, z)`, rotación, altura objetivo en metros y metadatos de colocación (con margen seguro respecto a la vista general).
-- **Cargador híbrido bajo demanda en `map3d.ts`:** descarga `public/assets/landmarks/<circuito>/<id>.glb` (Draco) solo al abrir ese circuito, con caché entre sesiones, normalización automática (pivote al suelo `y=0` y escalado a la altura objetivo) y **placeholders procedurales ligeros** mientras el `.glb` no exista.
-- **Pipeline para Google Colab:** notebook/script listo para generar modelos en GPU y optimizarlos automáticamente al contrato del juego (decimate a ~3–6k triángulos, textura WebP 512px, compresión Draco, <300 KB por hito).
+### 5.4 Hitos icónicos `.glb` bajo demanda, placeholders y pipeline de Google Colab (G) · ✅ Hecho
+- **Manifiesto de hitos de los 24 circuitos (`src/ui/landmarks.ts` + `public/assets/landmarks/manifest.json`):** 48 hitos emblemáticos (2 por GP: Noria de Suzuka, Torre COTA, The Sphere y Torre París, Marina Bay Sands y Singapore Flyer, Flame Towers y Torre de la Doncella, Hotel W Abu Dhabi, Hard Rock Stadium, Foro Sol, Biosphère, Toro de Spielberg, Casino de Montecarlo, Cubierta Hibisco de Sepang, etc.) con `(sFrac, side, dist, height, shape, color, accent, glow, prompt)` y recolocación segura fuera de la pista ensanchada y de las manzanas urbanas.
+- **Cargador híbrido bajo demanda en `src/ui/map3d.ts`:** dibuja al instante siluetas procedurales ligeras (17 arquetipos en `buildLandmarkPlaceholder`, zócalo enterrado y brillo nocturno), consulta `public/assets/landmarks/manifest.json` sin generar peticiones 404 y, cuando un hito dispone de `.glb` (Draco), lo descarga bajo demanda, lo cachea entre sesiones (`modLandmarkCache`), normaliza su pivote al suelo (`y = 0`) y escala a `spec.height` sustituyendo el placeholder.
+- **Pipeline para Google Colab y local:** notebook `scripts/colab_genera_hitos.ipynb` (GPU T4) y script CLI `scripts/optimiza_hito_glb.py` que deciman a ~3–6k triángulos, reducen texturas a WebP 512px, comprimen con Draco (<300 KB), normalizan `y = 0` y actualizan `public/assets/landmarks/manifest.json`.
+- Verificados `npm run check`, `npx vite build`, sintaxis Python/JSON del pipeline, determinismo idéntico en `scripts/finde.ts` y 0 errores de consola/WebGL/404 en Suzuka, Austin, Las Vegas, Singapur, Bakú y Miami.
+
+---
+
+## Cómo usar Google Colab para añadir hitos `.glb` reales (qué hacer ahora)
+
+Todos los circuitos ya se ven completos hoy gracias a las **48 siluetas procedurales ligeras** (`src/ui/landmarks.ts`). A partir de aquí puedes ir sustituyendo poco a poco los hitos que más te interesen por modelos `.glb` reales sin tocar una sola línea de código del juego:
+
+### Paso 1 · Abrir el notebook en Google Colab con GPU
+1. Entra en [Google Colab](https://colab.research.google.com/) y sube el archivo `scripts/colab_genera_hitos.ipynb` (*Archivo → Subir cuaderno*).
+2. Activa la GPU gratuita: menú **Entorno de ejecución → Cambiar tipo de entorno de ejecución → GPU T4**.
+3. Ejecuta la **celda 1** (instala `trimesh`, `fast-simplification`, `pillow` y `@gltf-transform/cli` para WebP + Draco).
+
+### Paso 2 · Elegir hitos y generar o subir modelos brutos
+1. En la **celda 2** revisa la lista `HITOS` (o añade cualquiera de los 48 hitos y *prompts* que están en `src/ui/landmarks.ts`).
+2. En la **celda 3** tienes dos caminos:
+   - **Opción A · Subir modelos ya creados (`MODO = "subir"`):** si generas los modelos en otra web (Meshy, Tripo3D, Hunyuan3D web, Blender, Sketchfab CC0…), nómbralos `<circuito>__<hito>.glb` (doble guion bajo, por ejemplo `suzuka__noria.glb`, `austin__torre_cota.glb`, `lasvegas__esfera.glb`) y súbelos cuando la celda te lo pida.
+   - **Opción B · Generar en GPU dentro de Colab (`MODO = "hunyuan"`):** cambia `MODO = "hunyuan"` para instalar Tencent Hunyuan3D-2 en la GPU T4 y generar las mallas directamente desde una imagen de referencia o *prompt*.
+
+### Paso 3 · Optimizar y descargar el paquete listo para la PWA
+1. Ejecuta la **celda 4**: normaliza cada modelo (base apoyada en `y = 0`, centrado en `X/Z`, altura = `1 m`), decima a `~4 500` triángulos, reduce texturas a **WebP 512 px**, comprime con **Draco** (avisando si alguno pasa de `300 KB`) y crea `out_landmarks/manifest.json` y `landmarks.zip`.
+2. Ejecuta la **celda 5** para descargar `landmarks.zip` a tu PC.
+
+### Paso 4 · Colocar los `.glb` en el repositorio y probar
+1. Descomprime `landmarks.zip` dentro de `public/assets/landmarks/` de modo que cada archivo quede en `public/assets/landmarks/<circuito>/<hito>.glb` (por ejemplo `public/assets/landmarks/suzuka/noria.glb`).
+2. Asegúrate de que en `public/assets/landmarks/manifest.json` figure `"<circuito>/<hito>": true` dentro de `"glb"` (si vas añadiendo hitos en varias tandas, conserva las entradas anteriores en `manifest.json` en lugar de sobreescribirlo).
+   - **Alternativa rápida en tu PC para un solo modelo:** si ya tienes un `.glb` o `.obj` en local, puedes ejecutar directamente:
+     ```bash
+     python scripts/optimiza_hito_glb.py ruta/al/modelo.glb suzuka noria
+     ```
+     Eso lo optimiza, lo guarda en `public/assets/landmarks/suzuka/noria.glb` y añade `"suzuka/noria": true` a `manifest.json` automáticamente.
+3. Arranca `npm run dev` y compruébalo en `http://localhost:5173/poc3d/prueba.html?c=suzuka&q=2&v=general` (o entrando al GP en el juego): el juego descargará el `.glb` bajo demanda, lo escalará a `spec.height` y ocultará el placeholder automáticamente.
+4. Si un hito queda ligeramente girado o desplazado, solo ajusta `rot`, `sFrac` o `dist` en `src/ui/landmarks.ts`, verifica con `npm run check && npx vite build` y haz commit + push a `main`.
+
+### Orden recomendado para empezar (mayor impacto visual)
+1. `suzuka/noria` (Noria de Suzuka) y `austin/torre_cota` (Torre COTA).
+2. `lasvegas/esfera` (*The Sphere*) y `singapur/marina_sands` (Marina Bay Sands).
+3. `baku/flame_towers` (Flame Towers) y `yasmarina/hotel_w` (Hotel W Abu Dhabi).
+4. `spielberg/toro_acero` (Toro de Spielberg) y `miami/hard_rock_stadium` (Hard Rock Stadium).
