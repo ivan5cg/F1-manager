@@ -22,7 +22,7 @@ import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { toCreasedNormals } from "three/addons/utils/BufferGeometryUtils.js";
 import { HDRLoader } from "three/addons/loaders/HDRLoader.js";
 import { rainAt } from "../sim/weather";
-import { BRANDS, FONT, SECOND, collect, skin, carGeometry, carMinGeometry, wheelGeometry, steerGeometry, liveryTexture, makeCarMaterial, makeWheelMaterial, loadCarAssets, createDracoGltfLoader } from "./car3d";
+import { BRANDS, FONT, SECOND, MATTE_TEAMS, collect, skin, carGeometry, carMinGeometry, wheelGeometry, steerGeometry, driverTorsoGeometry, liveryTexture, makeCarMaterial, makeWheelMaterial, loadCarAssets, createDracoGltfLoader } from "./car3d";
 import { gearFor, rpmFor } from "./audio";
 import { helmetDesign } from "./visual";
 import { ENV_TRACK_IDS, getTrackVisual } from "./trackVisuals";
@@ -1046,8 +1046,36 @@ function ribbonMat(color, mode, po) {
 // dos mallas: la fina para verlo de cerca y una ligera para la vista de circuito y los dispositivos justos
 const CAR_GEO = carGeometry(true), WHEEL_GEO = wheelGeometry(true), CAR_LO = carGeometry(false), WHEEL_LO = wheelGeometry(false), CAR_MIN = carMinGeometry();
 // volante con las manos del piloto (gira con la dirección) y pantalla LED viva a bordo
-const STEER_GEO = steerGeometry();
+const STEER_GEO = steerGeometry(), TORSO_GEO = driverTorsoGeometry();
 const STEER_MAT = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55, metalness: 0.15 });
+STEER_MAT.onBeforeCompile = (sh) => {
+  sh.vertexShader = sh.vertexShader
+    .replace("#include <common>", "#include <common>\nattribute float aPart; varying float vPart; varying vec3 vLP;")
+    .replace("#include <color_vertex>", `#include <color_vertex>
+      vPart = aPart; vLP = position;
+      float isSuit = step(0.5, aPart) * (1.0 - step(1.5, aPart));
+      #ifdef USE_INSTANCING_COLOR
+        vColor.rgb = mix(color.rgb, color.rgb * instanceColor.rgb, isSuit);
+      #endif`);
+  sh.fragmentShader = sh.fragmentShader
+    .replace("#include <common>", "#include <common>\nvarying float vPart; varying vec3 vLP;")
+    .replace("#include <color_fragment>", `#include <color_fragment>
+      float isSuit = step(0.5, vPart) * (1.0 - step(1.5, vPart));
+      float isCarb = step(2.5, vPart);
+      if (isSuit > 0.5) {
+        // tejido ignífugo Nomex + leve acolchado diagonal en mangas y hombros
+        float weave = sin(vLP.x * 420.0) * sin((vLP.y + vLP.z) * 420.0);
+        float quilt = smoothstep(0.86, 1.0, abs(sin((vLP.x + vLP.z) * 34.0)));
+        diffuseColor.rgb *= (0.96 + 0.05 * weave) * (1.0 - 0.10 * quilt);
+      } else if (isCarb > 0.5) {
+        // trama de fibra de carbono en el volante, levas y collarín HANS
+        vec2 cc = floor((vLP.xy + vec2(vLP.z * 0.7, -vLP.z * 0.7)) / 0.0045);
+        float cw = step(2.0, mod(cc.x + cc.y, 4.0));
+        diffuseColor.rgb *= mix(0.68, 1.28, cw);
+      }`)
+    .replace("#include <roughnessmap_fragment>", "float isSuitR = step(0.5, vPart) * (1.0 - step(1.5, vPart)); float isMetR = step(1.5, vPart) * (1.0 - step(2.5, vPart)); float isCarbR = step(2.5, vPart); float roughnessFactor = mix(mix(mix(roughness, 0.90, isSuitR), 0.24, isMetR), 0.36, isCarbR);")
+    .replace("#include <metalnessmap_fragment>", "float isSuitM = step(0.5, vPart) * (1.0 - step(1.5, vPart)); float isMetM = step(1.5, vPart) * (1.0 - step(2.5, vPart)); float metalnessFactor = mix(mix(metalness, 0.0, isSuitM), 0.88, isMetM);");
+};
 const srgb = (t) => { t.colorSpace = THREE.SRGBColorSpace; return t; };
 const dashCv = document.createElement("canvas"); dashCv.width = 256; dashCv.height = 144;
 const dashCtx = dashCv.getContext("2d"), dashTex = srgb(new THREE.CanvasTexture(dashCv));
@@ -3621,7 +3649,14 @@ function buildWorld() {
   // el casco de cada piloto, con los colores de su diseño (los mismos que en las pantallas)
   const hla = new Float32Array(NC * 3), hlb = new Float32Array(NC * 3);
   sess.cars.forEach((c, i) => { const d = helmetDesign(c.d.nombre); hla.set(col.set(d.base).toArray(), i * 3); hlb.set(col.set(d.c2).toArray(), i * 3); });
-  const livSrc = Float32Array.from(sess.cars, (c) => Math.max(0, TEAMS.indexOf(c.team)));
+  // empaqueta índice de librea (entero) + cámara en T piloto 2 (+0.25) + pintura mate/satinada (+0.125)
+  const seenTeam = new Set();
+  const livSrc = Float32Array.from(sess.cars, (c) => {
+    const ti = Math.max(0, TEAMS.indexOf(c.team));
+    const isCar2 = seenTeam.has(c.team.id);
+    seenTeam.add(c.team.id);
+    return ti + (isCar2 ? 0.25 : 0) + (MATTE_TEAMS.has(c.team.id) ? 0.125 : 0);
+  });
   for (const g of [CAR_LO, CAR_GEO]) {
     const cd = new Float32Array(NC * 4);
     for (let k = 0; k < NC; k++) cd[k * 4] = livSrc[k];
@@ -3634,8 +3669,13 @@ function buildWorld() {
   for (const a of CAR_INST) CAR_MIN.setAttribute(a, CAR_LO.attributes[a]);
   const loose = inst(WHEEL_GEO.clone(), WHEEL_MAT, NC * 8, 10);
   const brakeH = new THREE.InstancedBufferAttribute(new Float32Array(NC * 4), 1).setUsage(THREE.DynamicDrawUsage);
-  WHEEL_GEO.setAttribute("aBrake", brakeH);
+  const brakeL = new THREE.InstancedBufferAttribute(new Float32Array(NC * 4), 1).setUsage(THREE.DynamicDrawUsage);
+  const wheelFxH = new THREE.InstancedBufferAttribute(new Float32Array(NC * 4 * 2), 2).setUsage(THREE.DynamicDrawUsage);
+  const wheelFxL = new THREE.InstancedBufferAttribute(new Float32Array(NC * 4 * 2), 2).setUsage(THREE.DynamicDrawUsage);
+  WHEEL_GEO.setAttribute("aBrake", brakeH); WHEEL_GEO.setAttribute("aWheelFx", wheelFxH);
+  WHEEL_LO.setAttribute("aBrake", brakeL); WHEEL_LO.setAttribute("aWheelFx", wheelFxL);
   const steer = inst(STEER_GEO, STEER_MAT, NC, 10);
+  const torso = inst(TORSO_GEO, STEER_MAT, NC, 10);
   const crewS = inst(crewAttr(CREW_STAND.clone(), NC * 12, 0xe2e4e8), CREW_MAT, NC * 12, 10), crewC = inst(crewAttr(CREW_CROUCH.clone(), NC * 4, 0xe2e4e8), CREW_MAT, NC * 4, 10), jacks = inst(JACK_GEO, JACK_MAT, NC * 2, 10);
   carLoCur = CAR_LO; // hasta que llegue la del .glb (con los datos de este circuito), la integrada
   loadCarAssets(({ carGeo, wheelGeo, carLoGeo, steer, cam }) => {
@@ -3659,6 +3699,7 @@ function buildWorld() {
       const looseGeo = wheelGeo.clone();
       loose.geometry.dispose(); loose.geometry = looseGeo;
       wheelGeo.setAttribute("aBrake", brakeH);
+      wheelGeo.setAttribute("aWheelFx", wheelFxH);
       wheelsHi.geometry = wheelGeo;
       if (extWheelGeo) extWheelGeo.dispose();
       extWheelGeo = wheelGeo;
@@ -3770,7 +3811,7 @@ function buildWorld() {
     isWet: T.env ? (x, z) => T.env.wet(x, z) : undefined,
     loadKitGlb: modLoadKitGlb,
   });
-  const curWorld = { all, trackKit, realPit, cityRoofs, props, trees: treeMesh, treeMeshes: [treeMesh], treeLod: null, townLights, sparkMesh, fists, chk, beams, towers, night, lampPos, debris, marsh, crane, blank, gant, glit, markMesh, posts, flags, scCar, scBar, road, cars, wheels, crewS, crewC, jacks, loose, puffs, blobs, spray, discs, rings, ghostRings, lamps, poles, halos, decals, steer, carIdx, c2src: c2a.slice(), hlsA: hla, hlsB: hlb, hlA: CAR_LO.attributes.aHelm, hlB: CAR_LO.attributes.aHelm2, hlAH: CAR_GEO.attributes.aHelm, hlBH: CAR_GEO.attributes.aHelm2, carsHi, wheelsHi, col2: CAR_LO.attributes.aCol2, livSrc, carData: CAR_LO.attributes.aCarData, col2H: CAR_GEO.attributes.aCol2, carDataH: CAR_GEO.attributes.aCarData, brakeH, cell: dg.attributes.aCell };
+  const curWorld = { all, trackKit, realPit, cityRoofs, props, trees: treeMesh, treeMeshes: [treeMesh], treeLod: null, townLights, sparkMesh, fists, chk, beams, towers, night, lampPos, debris, marsh, crane, blank, gant, glit, markMesh, posts, flags, scCar, scBar, road, cars, wheels, crewS, crewC, jacks, loose, puffs, blobs, spray, discs, rings, ghostRings, lamps, poles, halos, decals, steer, torso, carIdx, c2src: c2a.slice(), hlsA: hla, hlsB: hlb, hlA: CAR_LO.attributes.aHelm, hlB: CAR_LO.attributes.aHelm2, hlAH: CAR_GEO.attributes.aHelm, hlBH: CAR_GEO.attributes.aHelm2, carsHi, wheelsHi, col2: CAR_LO.attributes.aCol2, livSrc, carData: CAR_LO.attributes.aCarData, col2H: CAR_GEO.attributes.aCol2, carDataH: CAR_GEO.attributes.aCarData, brakeH, brakeL, wheelFxH, wheelFxL, cell: dg.attributes.aCell };
   world = curWorld;
   // ---- carga asíncrona de los .glb de entorno (árboles del bioma, mecánicos y yates) sin bloquear el arranque
   if (trees.length && bio.species?.length) {
@@ -5399,13 +5440,22 @@ function draw3d(dt, now) {
     const brkT = c.loc === "track" ? clamp((-p.acc - 10) / 26, 0, 1) : 0;
     p.brk = p.brk === undefined ? brkT : p.brk + (brkT - p.brk) * (1 - Math.exp(-dt / 0.18));
     _col.set(COMPOUND[c.tyres?.c] || "#888888");
+    const spd01 = clamp((c.v || 0) / 85, 0, 1);
+    const wear01 = clamp(c.tyres?.wear ?? 0, 0, 1);
+    const brkBoost = 1 + 0.35 * (1 - dayK);
     for (let w = 0; w < 4; w++) {
       const wd = WHEELS[w];
       mL.makeRotationY(wd[2] ? steer : 0).multiply(mS.makeRotationZ(-p.spin)).scale(_ws.set(1, 1, wd[3])).setPosition(wd[0], 0.36, wd[1]);
       if (off) mW.makeScale(0, 0, 0); else mW.multiplyMatrices(m4, mL);
+      const brkGlow = (w < 2 ? p.brk : p.brk * 0.55) * brkBoost;
+      world.brakeL.array[i * 4 + w] = brkGlow;
+      world.wheelFxL.array[(i * 4 + w) * 2] = spd01;
+      world.wheelFxL.array[(i * 4 + w) * 2 + 1] = wear01;
       if (hi >= 0) {
         wheelsHi.setMatrixAt(hi * 4 + w, mW); wheelsHi.setColorAt(hi * 4 + w, _col); wheels.setMatrixAt(i * 4 + w, _zero);
-        world.brakeH.array[hi * 4 + w] = w < 2 ? p.brk : p.brk * 0.55;
+        world.brakeH.array[hi * 4 + w] = brkGlow;
+        world.wheelFxH.array[(hi * 4 + w) * 2] = spd01;
+        world.wheelFxH.array[(hi * 4 + w) * 2 + 1] = wear01;
       }
       else wheels.setMatrixAt(i * 4 + w, mW);
       wheels.setColorAt(i * 4 + w, _col);
@@ -5494,11 +5544,14 @@ function draw3d(dt, now) {
     const bigDash = fcDash && c === fcDash;
     mL.makeRotationX(-steer * 2.4).multiply(mTilt);
     if (bigDash) mL.scale(_ws.set(DASH_K, DASH_K, DASH_K));
-    mL.setPosition(steerPos[0], steerPos[1], steerPos[2]); mW.multiplyMatrices(m4, mL); world.steer.setMatrixAt(i, mW);
+    mL.setPosition(steerPos[0], steerPos[1], steerPos[2]); mW.multiplyMatrices(m4, mL); world.steer.setMatrixAt(i, mW); world.steer.setColorAt(i, _col.set(c.team.color));
     if (bigDash) {
       dashMesh.matrix.copy(mW); dashMesh.visible = true;
       if (now - dashT > 65) { dashT = now; drawDash(c); }
     }
+    // torso del piloto (hombros, HANS y arneses): fijo al chasis a escala real, sin tapar el casco
+    mL.copy(mTilt);
+    mL.setPosition(steerPos[0], steerPos[1], steerPos[2]); mW.multiplyMatrices(m4, mL); world.torso.setMatrixAt(i, mW); world.torso.setColorAt(i, _col);
     mL.makeScale(dr, dr, dr).setPosition(p.px, p.py + 0.3, p.pz); discs.setMatrixAt(i, mL); discs.setColorAt(i, _col.set(c.team.color));
     // spray: estela de agua detrás de cada coche sobre asfalto mojado
     const mi = track.msOfPoint[Math.min(T.n - 1, Math.floor(mod(p.s, T.L) / T.ds))], offLine = Math.min(1, Math.abs(p.lat) / 0.3);
@@ -5518,9 +5571,20 @@ function draw3d(dt, now) {
         sa.aPar.array.set([str, k, ci * 0.173 + (j + 0.5) / SPRAY_P, L], ns * 4); sa.aSpl.array[ns] = spl;
       }
     }
+    // vórtices finos de condensación en las puntas del alerón trasero con lluvia o humedad alta
+    if (hi >= 0 && q > 0 && c.loc === "track" && p.simDt > 0 && c.v > 46 && (wet > 0.03 || rainHere > 0.35)) {
+      const hum = clamp(Math.max(wet * 2.5, rainHere * 0.8), 0, 1) * clamp((c.v - 46) / 36, 0, 1);
+      const rateV = 28 * hum * p.simDt;
+      if (Math.random() < rateV) {
+        for (const sgV of [-1, 1]) {
+          _e.set(-2.55, 0.98, 0.58 * sgV).applyMatrix4(m4);
+          emit(_e.x, _e.y, _e.z, -fx * 1.6, 0.15, -fz * 1.6, 0.07 * k, 0.28 * k, 0.26, 0.88, 0.91, 0.96, 0.20 * hum, 0.25);
+        }
+      }
+    }
     i++;
   }
-  cars.count = blobs.count = discs.count = world.decals.count = world.steer.count = i; wheels.count = i * 4; spray.geometry.instanceCount = ns;
+  cars.count = blobs.count = discs.count = world.decals.count = world.steer.count = world.torso.count = i; wheels.count = i * 4; spray.geometry.instanceCount = ns;
   crewS.count = nS; crewC.count = nC; jacks.count = nJ; loose.count = nL; gant.count = glit.count = nG; blank.count = nB; fists.count = nF; world.debris.count = cs.d; world.marsh.count = cs.m; world.crane.count = cs.c; world.beams.count = cs.b;
   for (const m of [crewS, crewC, jacks, loose, gant, glit, blank, fists, world.debris, world.marsh, world.crane, world.beams]) { m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true; }
   crewS.geometry.attributes.aCrew2.needsUpdate = crewC.geometry.attributes.aCrew2.needsUpdate = true;
@@ -5542,8 +5606,8 @@ function draw3d(dt, now) {
   discs.visible = far > 0.02;
   world.cell.needsUpdate = world.col2.needsUpdate = world.carData.needsUpdate = world.hlA.needsUpdate = world.hlB.needsUpdate = true;
   carsHi.count = nH; wheelsHi.count = nH * 4;
-  world.carDataH.needsUpdate = world.col2H.needsUpdate = world.brakeH.needsUpdate = world.hlAH.needsUpdate = world.hlBH.needsUpdate = true;
-  for (const m of [cars, wheels, carsHi, wheelsHi, blobs, discs, world.decals, world.steer]) { m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true; }
+  world.carDataH.needsUpdate = world.col2H.needsUpdate = world.brakeH.needsUpdate = world.brakeL.needsUpdate = world.wheelFxH.needsUpdate = world.wheelFxL.needsUpdate = world.hlAH.needsUpdate = world.hlBH.needsUpdate = true;
+  for (const m of [cars, wheels, carsHi, wheelsHi, blobs, discs, world.decals, world.steer, world.torso]) { m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true; }
   const sel = opt.selId() === null ? null : pose.get(opt.selId());
   const ringFor = [...opt.mine().map((c) => (c.id === opt.selId() ? null : pose.get(c.id))), sel];
   world.rings.forEach((r, j) => {
@@ -5894,7 +5958,7 @@ return {
       if (o.material && !o.userData?.sharedMat) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => m.dispose());
     });
     cloudTex.dispose(); wxTex.dispose(); dashTex.dispose(); blobTex.dispose(); FAN_U.tex.value?.dispose(); if (sun.shadow.map) sun.shadow.map.dispose();
-    for (const g of [CAR_GEO, WHEEL_GEO, CAR_LO, WHEEL_LO, CAR_MIN, STEER_GEO, CREW_STAND, CREW_CROUCH, BOAT_GEO, CITY_GABLE, CITY_TOP, SC_GEO, SC_BAR, extCarLoGeo]) g?.dispose();
+    for (const g of [CAR_GEO, WHEEL_GEO, CAR_LO, WHEEL_LO, CAR_MIN, STEER_GEO, TORSO_GEO, CREW_STAND, CREW_CROUCH, BOAT_GEO, CITY_GABLE, CITY_TOP, SC_GEO, SC_BAR, extCarLoGeo]) g?.dispose();
     for (const r of envResDispose) r?.dispose();
     envResDispose.length = 0;
     for (const t of Object.values(DET)) t.dispose();

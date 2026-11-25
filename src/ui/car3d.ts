@@ -14,8 +14,10 @@ const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
 // color de vértice: r = cuánto color del equipo, g = gris fijo, b = luz roja trasera
 // color de vértice: r = cuánto color del equipo, g = gris fijo (−1 = luz roja trasera), b = cuánto del segundo color del equipo
 const TEAM = [1, 0, 0], TEAM2 = [0.5, 0.02, 0], BLACK = [0, 0.04, 0], WHITE = [0, 0.85, 0], RED = [0, -1, 0];
-// casco del piloto: g = 2, su color (aHelm); g = 3, la franja (aHelm2). Los colores salen de helmetDesign, por coche.
-const HELM = [0, 2, 0], HELM2 = [0, 3, 0];
+// casco del piloto: g = 2, su color (aHelm); g = 3, la franja (aHelm2); g = 4, visera espejo; g = 5, cámara en T (negra o amarilla flúor).
+const HELM = [0, 2, 0], HELM2 = [0, 3, 0], VISOR = [0, 4, 0], TCAM = [0, 5, 0];
+// equipos con pintura satinada/mate (el resto usa acabado metálico brillante)
+export const MATTE_TEAMS = new Set(["redbull", "ferrari", "haas", "cadillac"]);
 // segundo color de cada equipo (para la línea del costado y un plano del alerón); el resto usa un gris claro
 export const SECOND = { mercedes: "#16181c", ferrari: "#f4f4f4", redbull: "#f0c020", mclaren: "#16181c", racingbulls: "#f4f4f4", alpine: "#f078b4", haas: "#d8242c", audi: "#c4c8cc", williams: "#f4f4f4", astonmartin: "#cfe22a", cadillac: "#16181c" };
 export function collect() {
@@ -160,7 +162,7 @@ export function carGeometry(hi) {
   const box = [[0.0, 0.98, 0.115, 0.11, 0.1], [-0.06, 0.985, 0.13, 0.12, 0.11], [-0.4, 0.99, 0.13, 0.11, 0.13], [-0.9, 0.9, 0.1, 0.09, 0.15], [-1.5, 0.74, 0.05, 0.05, 0.1]];
   skin(c, [box[0], ...resample(box.slice(1))].map((q) => sec(q[0], q[1], 0, q[2], q[3], q[4], 2.2, hi ? 24 : 10)), (u, r) => (r === 0 ? BLACK : TEAM));
   part(0.06, 0.09, 0.03, -0.3, 1.13, 0, BLACK);
-  wing([-0.17, 0, 0.17].map((z) => [z, -0.18, 1.18, 0.24, 0]), BLACK); // cámara en T
+  wing([-0.17, 0, 0.17].map((z) => [z, -0.18, 1.18, 0.24, 0]), TCAM); // cámara en T (negra piloto 1 / amarilla flúor piloto 2)
   plate([[-0.75, 0.6], [-0.6, 1.07], [-1.0, 1.05], [-1.82, 0.84], [-1.97, 0.5]], 0, 0.03, TEAM, 0.08);
   // fondo plano (con su forma en planta), difusor y estructura trasera con el escape y la luz de lluvia
   plateXZ([[1.78, 0.2], [1.3, 0.52], [1.0, 0.79], [-1.15, 0.8], [-1.32, 0.6], [-2.1, 0.56], [-2.1, -0.56], [-1.32, -0.6], [-1.15, -0.8], [1.0, -0.79], [1.3, -0.52], [1.78, -0.2]], 0.06, 0.035, BLACK, 0.12);
@@ -169,9 +171,9 @@ export function carGeometry(hi) {
   c.keep(new THREE.CylinderGeometry(0.07, 0.085, 0.5, hi ? 20 : 8).rotateZ(Math.PI / 2).translate(-2.4, 0.36, 0), BLACK);
   c.keep(new THREE.CylinderGeometry(0.05, 0.05, 0.22, hi ? 16 : 6, 1, true).rotateZ(Math.PI / 2).translate(-2.3, 0.5, 0), [0, 0.3, 0]);
   part(0.05, 0.11, 0.13, -2.67, 0.36, 0, RED);
-  // habitáculo: casco del piloto con su visera, halo y retrovisores
+  // habitáculo: casco del piloto con su visera espejo, halo y retrovisores
   { const g = new THREE.SphereGeometry(0.135, hi ? 28 : 12, hi ? 20 : 8).toNonIndexed(), p = g.attributes.position, cl = new Float32Array(p.count * 3);
-    for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i), z = p.getZ(i); cl.set(x > 0.035 && y > -0.03 && y < 0.06 ? [0, 0.02, 0] : Math.abs(z) < 0.035 && y > 0 ? HELM2 : HELM, i * 3); }
+    for (let i = 0; i < p.count; i++) { const x = p.getX(i), y = p.getY(i), z = p.getZ(i); cl.set(x > 0.035 && y > -0.03 && y < 0.06 ? VISOR : Math.abs(z) < 0.035 && y > 0 ? HELM2 : HELM, i * 3); }
     g.setAttribute("color", new THREE.BufferAttribute(cl, 3)); c.raw(g.translate(0.5, 0.79, 0)); }
   tube([[-0.46, 0.62, 0.275], [-0.3, 0.77, 0.295], [-0.12, 0.875, 0.305], [0.2, 0.925, 0.305], [0.45, 0.93, 0.3], [0.68, 0.915, 0.265], [0.85, 0.88, 0.2], [0.98, 0.845, 0.1], [1.05, 0.82, 0], [0.98, 0.845, -0.1], [0.85, 0.88, -0.2], [0.68, 0.915, -0.265], [0.45, 0.93, -0.3], [0.2, 0.925, -0.305], [-0.12, 0.875, -0.305], [-0.3, 0.77, -0.295], [-0.46, 0.62, -0.275]], 0.04, TEAM2);
   tube([[1.05, 0.82, 0], [1.14, 0.75, 0], [1.24, 0.64, 0], [1.3, 0.57, 0]], 0.03, TEAM2);
@@ -266,10 +268,10 @@ export function wheelGeometry(hi) {
       c.keep(face(new THREE.ConeGeometry(0.2, 0.022, SEG, 1, true).rotateX(Math.PI / 2)).translate(0, 0, sz * 0.166), [0, 0.085, 0]);
     }
     c.keep(face(new THREE.CylinderGeometry(0.045, 0.055, 0.03, hi ? 12 : 6).rotateX(Math.PI / 2)).translate(0, 0, sz * 0.178), [0, 0.45, 1]);
-    for (let k = 0; k < 2; k++) c.add(new THREE.BoxGeometry(0.09, 0.022, 0.006).translate(0.31, 0, sz * 0.172).rotateZ(k * Math.PI + 0.4), [1, 0, 0]);
   }
   const g = c.done();
   g.setAttribute("aBrake", new THREE.BufferAttribute(new Float32Array(g.attributes.position.count), 1));
+  g.setAttribute("aWheelFx", new THREE.BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2));
   return g;
 }
 // ------------------------------------------------------------------ libreas
@@ -516,10 +518,10 @@ float carbonWeave(vec3 p, vec3 n){
 }`;
 export function makeCarMaterial(livTex, U) {
 const uLiv = { value: livTex };
-const CAR_MAT = new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.34, metalness: 0.25, clearcoat: 1, clearcoatRoughness: 0.04, side: THREE.DoubleSide });
+const CAR_MAT = new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.30, metalness: 0.30, clearcoat: 1, clearcoatRoughness: 0.04, envMapIntensity: 1.28, side: THREE.DoubleSide });
 CAR_MAT.onBeforeCompile = (sh) => {
   Object.assign(sh.uniforms, { uFlood: U.uFlood, uLight: U.uLight, uLiv, uDrops: U.uDrops || { value: 0 } });
-  sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\n" + INST_COL_DEF + "uniform float uLight; attribute vec3 aCol2, aHelm, aHelm2; attribute vec4 aCarData; attribute float aPart; varying float vPaint, vGlow, vShade, vLiv, vHelm; varying vec3 vLP, vLN;")
+  sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\n" + INST_COL_DEF + "uniform float uLight; attribute vec3 aCol2, aHelm, aHelm2; attribute vec4 aCarData; attribute float aPart; varying float vPaint, vGlow, vShade, vLiv, vHelm, vMatte; varying vec3 vLP, vLN;")
     .replace("#include <beginnormal_vertex>", `#include <beginnormal_vertex>
       if (aPart > 1.5 && aCarData.z > 0.001) {
         float da = 0.50 * aCarData.z, dc = cos(da), ds = sin(da);
@@ -541,14 +543,20 @@ CAR_MAT.onBeforeCompile = (sh) => {
         transformed.xy = piv + vec2(rp.x * dc - rp.y * ds, rp.x * ds + rp.y * dc);
       }`)
     .replace("#include <color_vertex>", `float kr = pow(color.r, 2.2), kb = pow(color.b, 2.2), red = step(color.g, -0.5);
-      float h2 = step(2.5, color.g), h1 = step(1.5, color.g) - h2; vHelm = h1 + h2;
-      vColor = vec4(INST_COL * kr + aCol2 * kb + vec3(pow(clamp(color.g, 0.0, 1.0), 2.2)) * (1.0 - vHelm) + aHelm * h1 + aHelm2 * h2 + vec3(0.25, 0.0, 0.0) * red, 1.0);
-      vPaint = step(0.25, color.r + color.b); vGlow = red * max(uLight, aCarData.w); vShade = max(kr, kb); vLiv = aCarData.x; vLP = position; vLN = normal;`);
-  sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nuniform float uFlood, uDrops; varying float vPaint, vGlow, vShade, vLiv, vHelm; varying vec3 vLP, vLN;" + LIV_GLSL + DROPS_GLSL + CARBON_GLSL)
+      float tcam = step(4.5, color.g), vis = step(3.5, color.g) - tcam, h2 = step(2.5, color.g) - tcam - vis, h1 = step(1.5, color.g) - tcam - vis - h2;
+      float livFrac = aCarData.x - floor(aCarData.x);
+      float isCar2 = step(0.20, livFrac);
+      vMatte = step(0.08, mod(livFrac, 0.25));
+      vHelm = h1 + h2 + vis * 2.0; // 1 = casco lacado, 2 = visera espejo
+      vec3 tcamCol = mix(vec3(0.014, 0.016, 0.02), vec3(0.85, 0.98, 0.03), isCar2);
+      float isSpecial = h1 + h2 + vis + tcam;
+      vColor = vec4(INST_COL * kr + aCol2 * kb + vec3(pow(clamp(color.g, 0.0, 1.0), 2.2)) * (1.0 - isSpecial) + aHelm * h1 + aHelm2 * h2 + vec3(0.015, 0.022, 0.038) * vis + tcamCol * tcam + vec3(0.25, 0.0, 0.0) * red, 1.0);
+      vPaint = step(0.25, color.r + color.b); vGlow = red * max(uLight, aCarData.w); vShade = max(kr, kb); vLiv = floor(aCarData.x); vLP = position; vLN = normal;`);
+  sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nuniform float uFlood, uDrops; varying float vPaint, vGlow, vShade, vLiv, vHelm, vMatte; varying vec3 vLP, vLN;" + LIV_GLSL + DROPS_GLSL + CARBON_GLSL)
     .replace("#include <color_fragment>", "#include <color_fragment>\nvec3 nL = normalize(vLN);\nif (vPaint > 0.5) diffuseColor.rgb = liveryAt(vLP, nL, floor(vLiv + 0.5)) * vShade;\nisCarb = (1.0 - vPaint) * (1.0 - step(0.5, vHelm)) * (1.0 - step(0.06, diffuseColor.r + diffuseColor.g + diffuseColor.b));\nif (isCarb > 0.5) { cw = carbonWeave(vLP, nL); diffuseColor.rgb = mix(vec3(0.005), vec3(0.018), cw); }\ndrop = uDrops > 0.01 ? dropsAt(vLP, nL) * uDrops : vec2(0.0); diffuseColor.rgb *= 1.0 - 0.3 * drop.x;")
-    .replace("#include <roughnessmap_fragment>", "float roughnessFactor = mix(mix(mix(0.62, 0.34 + 0.18 * (1.0 - cw), isCarb), roughness, vPaint), 0.04, drop.x);")
-    .replace("#include <metalnessmap_fragment>", "float metalnessFactor = metalness * vPaint;")
-    .replace("#include <lights_physical_fragment>", "#include <lights_physical_fragment>\nmaterial.clearcoat *= mix(0.32 * isCarb, 1.0, vPaint);")
+    .replace("#include <roughnessmap_fragment>", "float pRough = mix(0.24, 0.48, vMatte); float baseR = mix(mix(0.62, 0.34 + 0.18 * (1.0 - cw), isCarb), pRough, vPaint); baseR = mix(baseR, mix(0.12, 0.06, step(1.5, vHelm)), step(0.5, vHelm)); float roughnessFactor = mix(baseR, 0.04, drop.x);")
+    .replace("#include <metalnessmap_fragment>", "float pMetal = mix(0.42, 0.12, vMatte); float metalnessFactor = mix(pMetal * vPaint, 0.85, step(1.5, vHelm));")
+    .replace("#include <lights_physical_fragment>", "#include <lights_physical_fragment>\nfloat pCoat = mix(1.0, 0.35, vMatte); material.clearcoat *= max(mix(0.32 * isCarb, pCoat, vPaint), step(0.5, vHelm));")
     .replace("vec3 totalEmissiveRadiance = emissive;", "vec2 drop = vec2(0.0); float isCarb = 0.0, cw = 0.5;\nvec3 totalEmissiveRadiance = emissive + vColor.rgb * uFlood * 0.28 + vec3(3.2, 0.16, 0.06) * vGlow;")
     .replace("#include <emissivemap_fragment>", "#include <emissivemap_fragment>\ntotalEmissiveRadiance += vec3(0.9, 0.95, 1.0) * drop.y * (0.15 + 0.6 * uFlood);");
 };
@@ -556,57 +564,78 @@ CAR_MAT.userData.uLiv = uLiv; // para cambiar la librea sin rehacer el material
 return CAR_MAT;
 }
 export function makeWheelMaterial() {
-const WHEEL_MAT = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.82 });
+const WHEEL_MAT = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.78 });
 WHEEL_MAT.onBeforeCompile = (sh) => {
-  sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\n" + INST_COL_DEF + "attribute float aBrake; varying vec3 vLP; varying float vMetal, vDisc, vBrake, vWetTyre;")
+  sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\n" + INST_COL_DEF + "attribute float aBrake; attribute vec2 aWheelFx; varying vec3 vLP; varying float vMetal, vDisc, vBrake, vWetTyre, vSpd, vWear;")
     .replace("#include <color_vertex>", `float disc = step(color.g, -0.5);
       vColor = vec4(INST_COL * color.r + vec3(pow(max(color.g, 0.0), 2.2)) + vec3(0.05) * disc, 1.0);
-      vMetal = color.b; vDisc = disc; vBrake = aBrake; vLP = position;
+      vMetal = color.b; vDisc = disc; vBrake = aBrake; vSpd = aWheelFx.x; vWear = aWheelFx.y; vLP = position;
       vWetTyre = max(step(0.55, INST_COL.g) * (1.0 - step(0.65, INST_COL.r)), step(0.6, INST_COL.b));`);
-  sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nvarying vec3 vLP; varying float vMetal, vDisc, vBrake, vWetTyre;")
+  sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nvarying vec3 vLP; varying float vMetal, vDisc, vBrake, vWetTyre, vSpd, vWear;")
     .replace("vec3 totalEmissiveRadiance = emissive;", "float groove = 0.0;\nvec3 totalEmissiveRadiance = emissive;")
     .replace("#include <color_fragment>", `#include <color_fragment>
       float rad = length(vLP.xy), ang = atan(vLP.y, vLP.x);
+      float blurK = smoothstep(0.12, 0.62, vSpd);
       float isSide = step(0.145, abs(vLP.z)) * step(0.22, rad) * (1.0 - vDisc);
       float isTread = (1.0 - step(0.145, abs(vLP.z))) * step(0.32, rad);
       if (isSide > 0.5 && rad > 0.24 && rad < 0.295) {
+        // a alta velocidad la banda de color se funde en un aro continuo sin efecto estroboscópico
         float arc = smoothstep(0.22, 0.34, abs(sin(ang * 2.0)));
-        diffuseColor.rgb = mix(vec3(0.015), diffuseColor.rgb, arc);
+        diffuseColor.rgb = mix(vec3(0.015), diffuseColor.rgb, mix(arc, 0.80, blurK));
       }
       if (isTread > 0.5) {
         float gr = fract(sin(floor(ang * 48.0) * 12.989 + floor(vLP.z * 90.0) * 78.233) * 43758.545);
-        diffuseColor.rgb *= 0.85 + 0.3 * gr;
+        diffuseColor.rgb *= mix(0.85 + 0.3 * gr, 0.96, blurK);
         if (vWetTyre > 0.5) {
           float vpat = abs(fract((ang / 6.28318) * 18.0 + abs(vLP.z) * 4.5) - 0.5);
           float ch = smoothstep(0.06, 0.14, abs(abs(vLP.z) - 0.045));
-          groove = 1.0 - min(smoothstep(0.08, 0.18, vpat), ch);
+          groove = (1.0 - min(smoothstep(0.08, 0.18, vpat), ch)) * (1.0 - 0.65 * blurK);
           diffuseColor.rgb *= 1.0 - 0.45 * groove;
         }
       }`)
-    .replace("#include <roughnessmap_fragment>", "float roughnessFactor = mix(mix(roughness + 0.1 * groove, 0.3, vMetal), 0.45, vDisc);")
+    .replace("#include <roughnessmap_fragment>", "float tyreR = vWetTyre > 0.5 ? mix(0.46, 0.72, vWear) : mix(0.56, 0.88, vWear); float roughnessFactor = mix(mix(tyreR + 0.1 * groove, 0.3, vMetal), 0.45, vDisc);")
     .replace("#include <metalnessmap_fragment>", "float metalnessFactor = mix(vMetal, 0.7, vDisc);")
-    .replace("#include <emissivemap_fragment>", "#include <emissivemap_fragment>\ntotalEmissiveRadiance += vec3(5.2, 0.95, 0.08) * vDisc * vBrake * vBrake;");
+    .replace("#include <emissivemap_fragment>", "#include <emissivemap_fragment>\ntotalEmissiveRadiance += vec3(6.8, 1.35, 0.14) * vDisc * pow(max(vBrake, 0.0), 1.6);");
 };
 return WHEEL_MAT;
 }
 
-/** Volante de F1 detallado en carbono con ruletas de colores, levas y manos enguantadas. */
+/** Volante de F1 detallado en carbono con levas, ruletas metálicas, guantes cosidos y mangas ignífugas. */
 export function steerGeometry() {
   const c = collect();
   const s = new THREE.Shape();
-  s.moveTo(-0.14, -0.055); s.lineTo(-0.13, 0.055); s.lineTo(-0.075, 0.078);
-  s.lineTo(0.075, 0.078); s.lineTo(0.13, 0.055); s.lineTo(0.14, -0.055);
-  s.lineTo(0.08, -0.078); s.lineTo(0.045, -0.045); s.lineTo(-0.045, -0.045); s.lineTo(-0.08, -0.078);
+  s.moveTo(-0.142, -0.056); s.lineTo(-0.132, 0.056); s.lineTo(-0.075, 0.080);
+  s.lineTo(0.075, 0.080); s.lineTo(0.132, 0.056); s.lineTo(0.142, -0.056);
+  s.lineTo(0.082, -0.078); s.lineTo(0.045, -0.044); s.lineTo(-0.045, -0.044); s.lineTo(-0.082, -0.078);
   s.closePath();
-  const body = new THREE.ExtrudeGeometry(s, { depth: 0.022, bevelEnabled: true, bevelThickness: 0.004, bevelSize: 0.004, bevelSegments: 1 });
+  // cuerpo principal en fibra de carbono (aPart = 3)
+  c.part = 3;
+  const body = new THREE.ExtrudeGeometry(s, { depth: 0.022, bevelEnabled: true, bevelThickness: 0.0045, bevelSize: 0.0045, bevelSegments: 2 });
   body.rotateY(Math.PI / 2).translate(-0.011, 0, 0);
-  c.add(body, [0.07, 0.075, 0.085]);
-  // marco de pantalla, botones/ruletas de colores y levas traseras
-  c.add(new THREE.BoxGeometry(0.014, 0.076, 0.126).translate(-0.014, 0.014, 0), [0.02, 0.022, 0.028]);
-  for (const [y, z, col] of [[0.036, 0.082, [0.9, 0.15, 0.1]], [0.008, 0.085, [0.95, 0.78, 0.1]], [-0.022, 0.08, [0.15, 0.78, 0.35]], [0.036, -0.082, [0.15, 0.55, 0.95]], [0.008, -0.085, [0.95, 0.78, 0.1]], [-0.022, -0.08, [0.9, 0.15, 0.1]]]) {
-    c.keep(new THREE.CylinderGeometry(0.009, 0.009, 0.012, 8).rotateZ(Math.PI / 2).translate(-0.018, y, z), col);
+  c.add(body, [0.10, 0.105, 0.115]);
+  // levas de cambio en carbono detrás del volante
+  for (const sg of [1, -1]) {
+    c.add(new THREE.BoxGeometry(0.006, 0.028, 0.052).translate(0.018, 0.006, 0.078 * sg), [0.09, 0.095, 0.105]);
+    c.add(new THREE.BoxGeometry(0.005, 0.020, 0.044).translate(0.018, -0.024, 0.072 * sg), [0.09, 0.095, 0.105]);
   }
-  // brazos: manga ignífuga que se afina hacia la muñeca, puño con franja, guante redondeado con dedos y pulgar
+  c.part = 0;
+  // marco de pantalla, visera superior de LEDs y botones de colores
+  c.add(new THREE.BoxGeometry(0.014, 0.076, 0.126).translate(-0.014, 0.014, 0), [0.02, 0.022, 0.028]);
+  c.add(new THREE.BoxGeometry(0.016, 0.009, 0.116).translate(-0.016, 0.056, 0), [0.025, 0.028, 0.034]);
+  for (const [y, z, col] of [[0.036, 0.082, [0.9, 0.15, 0.1]], [0.008, 0.085, [0.95, 0.78, 0.1]], [-0.022, 0.08, [0.15, 0.78, 0.35]], [0.036, -0.082, [0.15, 0.55, 0.95]], [0.008, -0.085, [0.95, 0.78, 0.1]], [-0.022, -0.08, [0.9, 0.15, 0.1]]]) {
+    c.keep(new THREE.CylinderGeometry(0.009, 0.009, 0.012, 10).rotateZ(Math.PI / 2).translate(-0.018, y, z), col);
+  }
+  // ruletas centrales metálicas (aPart = 2)
+  c.part = 2;
+  for (const z of [-0.042, 0, 0.042]) {
+    c.keep(new THREE.CylinderGeometry(0.011, 0.012, 0.011, 12).rotateZ(Math.PI / 2).translate(-0.017, -0.040, z), [0.72, 0.75, 0.80]);
+  }
+  // ruletas de pulgar en aluminio
+  for (const sg of [1, -1]) {
+    c.keep(new THREE.CylinderGeometry(0.012, 0.012, 0.009, 10).translate(-0.005, 0.050, 0.102 * sg), [0.78, 0.80, 0.84]);
+  }
+  c.part = 0;
+  // brazos: manga ignífuga Nomex que se afina hacia la muñeca, puño acanalado, guante cosido con nudillos y velcro
   const blob = (r, x, y, z, col) => c.keep(new THREE.SphereGeometry(1, 14, 10).scale(r[0], r[1], r[2]).translate(x, y, z), col);
   /** Tubo de sección elíptica a lo largo de una curva suave; rad = [radio, achatamiento] en cada punto dado. */
   const loft = (pts, rad, col, n = 10, sides = 12) => {
@@ -626,28 +655,101 @@ export function steerGeometry() {
     }
     skin(c, rings, () => col, 0.8);
   };
-  const SUIT = [0.09, 0.1, 0.13], SUIT2 = [0.13, 0.14, 0.18], CUFF = [0.82, 0.82, 0.85], GLOVE = [0.055, 0.06, 0.07], GRIP = [0.2, 0.21, 0.25], SEAM = [0.75, 0.1, 0.08];
+  const SUIT = [0.76, 0.77, 0.80], SUIT2 = [0.60, 0.62, 0.66], CUFF = [0.85, 0.86, 0.89], GLOVE = [0.055, 0.06, 0.072], GLOVE2 = [0.11, 0.12, 0.14], GRIP = [0.16, 0.17, 0.20], SEAM = [0.90, 0.91, 0.94];
   for (const sg of [1, -1]) {
-    const hz = 0.135 * sg;
-    // brazo entero: del hombro al codo y del codo a la muñeca, con el músculo del antebrazo y la muñeca fina
-    loft([[-0.62, 0.05, 0.24 * sg], [-0.5, 0, 0.255 * sg], [-0.37, -0.1, 0.245 * sg]], [[0.058, 0.95], [0.052, 0.95], [0.045, 1]], SUIT, 6);
-    blob([0.052, 0.05, 0.05], -0.37, -0.1, 0.245 * sg, SUIT2); // codo
-    loft([[-0.37, -0.1, 0.245 * sg], [-0.27, -0.09, 0.225 * sg], [-0.16, -0.055, 0.185 * sg], [-0.075, -0.02, 0.148 * sg]], [[0.044, 1], [0.047, 0.92], [0.038, 0.9], [0.027, 0.92]], SUIT, 12);
-    loft([[-0.31, -0.095, 0.235 * sg], [-0.30, -0.094, 0.233 * sg]], [[0.05, 0.9], [0.05, 0.9]], SEAM, 1); // banda reflectante del antebrazo
-    loft([[-0.085, -0.025, 0.152 * sg], [-0.05, -0.008, 0.14 * sg]], [[0.03, 0.9], [0.031, 0.9]], CUFF, 3); // puño del mono
-    loft([[-0.058, -0.012, 0.142 * sg], [-0.02, 0.0, hz]], [[0.031, 0.9], [0.034, 0.92]], GLOVE, 3); // puño del guante
-    // dorso de la mano con nudillos y palma sobre el agarre
-    blob([0.04, 0.044, 0.034], -0.02, 0.004, hz, GLOVE);
-    blob([0.014, 0.035, 0.026], 0.0, 0.0, hz + 0.014 * sg, GRIP);
+    const hz = 0.136 * sg;
+    // brazo entero (aPart = 1 para teñir el mono ignífugo con el color del equipo y textura Nomex en map3d.ts)
+    c.part = 1;
+    loft([[-0.60, 0.045, 0.235 * sg], [-0.49, -0.005, 0.252 * sg], [-0.37, -0.098, 0.244 * sg]], [[0.060, 0.94], [0.053, 0.94], [0.046, 0.98]], SUIT, 8, 14);
+    blob([0.052, 0.048, 0.048], -0.37, -0.098, 0.244 * sg, SUIT2); // pliegue del codo
+    loft([[-0.37, -0.098, 0.244 * sg], [-0.27, -0.088, 0.224 * sg], [-0.16, -0.054, 0.184 * sg], [-0.076, -0.020, 0.148 * sg]], [[0.045, 0.98], [0.048, 0.91], [0.039, 0.89], [0.028, 0.92]], SUIT, 14, 14);
+    c.part = 0;
+    // costura / ribete exterior a lo largo del antebrazo
+    loft([[-0.35, -0.088, 0.276 * sg], [-0.24, -0.076, 0.252 * sg], [-0.11, -0.034, 0.186 * sg]], [[0.007, 0.8], [0.0065, 0.8], [0.0055, 0.8]], SEAM, 8, 6);
+    // puño elástico acanalado del mono + correa de velcro del guante
+    loft([[-0.088, -0.026, 0.153 * sg], [-0.052, -0.009, 0.141 * sg]], [[0.031, 0.90], [0.032, 0.90]], CUFF, 4, 12);
+    loft([[-0.060, -0.013, 0.143 * sg], [-0.022, 0.0, hz]], [[0.032, 0.90], [0.035, 0.92]], GLOVE, 4, 12);
+    loft([[-0.050, -0.008, 0.141 * sg], [-0.040, -0.004, 0.138 * sg]], [[0.035, 0.92], [0.035, 0.92]], GLOVE2, 2, 12);
+    // dorso de la mano con refuerzo de nudillos y empuñadura del volante
+    blob([0.041, 0.044, 0.034], -0.02, 0.004, hz, GLOVE);
+    blob([0.012, 0.036, 0.022], -0.028, 0.005, hz + 0.016 * sg, GLOVE2);
+    blob([0.015, 0.036, 0.026], 0.0, 0.0, hz + 0.014 * sg, GRIP);
     for (let i = 0; i < 4; i++) {
-      const y = 0.036 - i * 0.021, rr = 0.0105 - i * 0.0004;
-      blob([0.013, 0.012, 0.012], -0.028, y, hz + 0.004 * sg, GLOVE); // nudillo
-      // dedo que rodea el agarre: por detrás, por fuera y por delante, con la punta hacia el centro
+      const y = 0.036 - i * 0.021, rr = 0.0108 - i * 0.0004;
+      blob([0.013, 0.012, 0.012], -0.028, y, hz + 0.004 * sg, GLOVE2); // nudillo reforzado
       loft([[-0.032, y, 0.12 * sg], [-0.03, y, 0.152 * sg], [-0.002, y, 0.162 * sg], [0.026, y, 0.152 * sg], [0.032, y, 0.126 * sg]], [[rr, 1], [rr, 1], [rr * 0.9, 1], [rr * 0.82, 1]], GLOVE, 8, 8);
     }
-    // pulgar en dos falanges, apoyado en la cara trasera del volante
+    // pulgar en dos falanges apoyado en la cara trasera del volante
     loft([[-0.04, 0.055, 0.13 * sg], [-0.03, 0.062, 0.108 * sg], [-0.016, 0.07, 0.092 * sg]], [[0.013, 1], [0.0115, 1], [0.0095, 1]], GLOVE, 5, 8);
   }
+  return c.done();
+}
+
+/**
+ * Torso superior del piloto fijo al chasis (no gira con el volante): hombros con charreteras FIA, pecho del mono
+ * ignífugo, cuello con pasamontañas, collarín HANS de carbono y arneses de 6 puntos con hebillas metálicas.
+ * Usa el mismo sistema de coordenadas que steerGeometry() (origen en steerPos con mTilt y DASH_K a bordo).
+ */
+export function driverTorsoGeometry() {
+  const c = collect();
+  const blob = (r, x, y, z, col) => c.keep(new THREE.SphereGeometry(1, 16, 12).scale(r[0], r[1], r[2]).translate(x, y, z), col);
+  const loft = (pts, rad, col, n = 10, sides = 12) => {
+    const cur = new THREE.CatmullRomCurve3(pts.map((p) => new THREE.Vector3(...p)), false, "catmullrom", 0.5);
+    const P = cur.getPoints(n), rings = [], m = rad.length - 1;
+    for (let i = 0; i <= n; i++) {
+      const t = cur.getTangentAt(i / n), ref = Math.abs(t.y) > 0.9 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
+      const u = new THREE.Vector3().crossVectors(t, ref).normalize(), v = new THREE.Vector3().crossVectors(t, u);
+      const f = (i / n) * m, k = Math.min(m - 1, Math.floor(f)), w = f - k;
+      const r = rad[k][0] + (rad[k + 1][0] - rad[k][0]) * w, fl = rad[k][1] + (rad[k + 1][1] - rad[k][1]) * w;
+      const ring = [];
+      for (let j = 0; j < sides; j++) {
+        const a = (j / sides) * Math.PI * 2;
+        ring.push([P[i].x + u.x * Math.cos(a) * r + v.x * Math.sin(a) * r * fl, P[i].y + u.y * Math.cos(a) * r + v.y * Math.sin(a) * r * fl, P[i].z + u.z * Math.cos(a) * r + v.z * Math.sin(a) * r * fl]);
+      }
+      rings.push(ring);
+    }
+    skin(c, rings, () => col, 0.8);
+  };
+  const SUIT = [0.76, 0.77, 0.80], SUIT_D = [0.58, 0.60, 0.64], EPAUL = [0.90, 0.91, 0.94];
+  const BALA = [0.04, 0.042, 0.05], CARBON = [0.10, 0.105, 0.118], BELT = [0.14, 0.15, 0.17], BELT_R = [0.76, 0.08, 0.07], METAL = [0.78, 0.80, 0.84];
+
+  // pecho y hombros en tejido Nomex del color del equipo (aPart = 1), siempre por debajo del casco
+  c.part = 1;
+  blob([0.14, 0.095, 0.21], -0.52, -0.155, 0, SUIT);
+  blob([0.13, 0.085, 0.17], -0.40, -0.215, 0, SUIT_D);
+  for (const sg of [1, -1]) {
+    blob([0.075, 0.062, 0.088], -0.54, -0.065, 0.215 * sg, SUIT); // deltoides/hombro alineado con el brazo
+  }
+
+  // charreteras FIA de extracción sobre los hombros (aPart = 0)
+  c.part = 0;
+  for (const sg of [1, -1]) {
+    c.add(new THREE.BoxGeometry(0.095, 0.010, 0.032).rotateZ(-0.22).translate(-0.535, -0.012, 0.212 * sg), EPAUL);
+  }
+
+  // collarín HANS de fibra de carbono (aPart = 3): yugo curvo bajo la base del casco, apoyado sobre los hombros
+  c.part = 3;
+  loft([
+    [-0.39, -0.095, 0.142], [-0.47, -0.042, 0.140], [-0.56, -0.018, 0.125],
+    [-0.63, -0.012, 0.070], [-0.65, -0.010, 0.0],
+    [-0.63, -0.012, -0.070], [-0.56, -0.018, -0.125], [-0.47, -0.042, -0.140], [-0.39, -0.095, -0.142],
+  ], [[0.013, 1.8], [0.016, 1.8], [0.017, 1.6], [0.018, 1.3], [0.018, 1.2], [0.018, 1.3], [0.017, 1.6], [0.016, 1.8], [0.013, 1.8]], CARBON, 18, 10);
+
+  // arneses de 6 puntos (cintas sobre el HANS bajando por el pecho) + almohadillas rojas FIA
+  c.part = 0;
+  for (const sg of [1, -1]) {
+    loft([[-0.56, -0.010, 0.122 * sg], [-0.47, -0.032, 0.132 * sg], [-0.38, -0.105, 0.118 * sg], [-0.30, -0.195, 0.068 * sg]], [[0.011, 2.4], [0.012, 2.4], [0.011, 2.3], [0.010, 2.1]], BELT, 12, 8);
+    // almohadilla roja de hombro sobre la cinta
+    loft([[-0.51, -0.016, 0.128 * sg], [-0.42, -0.065, 0.128 * sg]], [[0.014, 2.3], [0.014, 2.3]], BELT_R, 5, 8);
+  }
+
+  // reguladores metálicos de los arneses y cierre central giratorio (aPart = 2)
+  c.part = 2;
+  for (const sg of [1, -1]) {
+    c.add(new THREE.BoxGeometry(0.024, 0.010, 0.048).rotateZ(-0.55).translate(-0.395, -0.092, 0.122 * sg), METAL);
+  }
+  c.keep(new THREE.CylinderGeometry(0.028, 0.030, 0.014, 14).rotateZ(-0.75).translate(-0.295, -0.215, 0), METAL);
+
   return c.done();
 }
 
@@ -711,11 +813,16 @@ export function extractCarFromGltf(root, separateWheel = false) {
     }
     carC.part = tag.part;
     if (tag.col === HELM) {
-      // el casco con su franja: una banda por arriba, de delante atrás, como en el integrado
+      // el casco con su visera espejo frontal y franja superior, como en el integrado
       ni.computeBoundingBox();
       const bb = ni.boundingBox, p = ni.attributes.position, cl = new Float32Array(p.count * 3);
-      const zc = (bb.min.z + bb.max.z) / 2, yc = (bb.min.y + bb.max.y) / 2, w = (bb.max.z - bb.min.z) * 0.13;
-      for (let i = 0; i < p.count; i++) cl.set(Math.abs(p.getZ(i) - zc) < w && p.getY(i) > yc ? HELM2 : HELM, i * 3);
+      const xc = (bb.min.x + bb.max.x) / 2, yc = (bb.min.y + bb.max.y) / 2, zc = (bb.min.z + bb.max.z) / 2;
+      const rx = (bb.max.x - bb.min.x) * 0.5, ry = (bb.max.y - bb.min.y) * 0.5, w = (bb.max.z - bb.min.z) * 0.13;
+      for (let i = 0; i < p.count; i++) {
+        const px = p.getX(i), py = p.getY(i), pz = p.getZ(i);
+        const isVis = px > xc + rx * 0.24 && py > yc - ry * 0.22 && py < yc + ry * 0.42;
+        cl.set(isVis ? VISOR : Math.abs(pz - zc) < w && py > yc ? HELM2 : HELM, i * 3);
+      }
       ni.setAttribute("color", new THREE.BufferAttribute(cl, 3));
       carC.raw(ni);
     } else carC.keep(ni, tag.col);
@@ -725,8 +832,15 @@ export function extractCarFromGltf(root, separateWheel = false) {
   if (hasCar) {
     carBase = carC.done();
     normalizeCarBounds(carBase);
-    // etiquetar el plano superior del alerón trasero (aPart = 2) para animar DRS/MO sin romper las derivas
-    const pos = carBase.attributes.position, prt = carBase.attributes.aPart;
+    // etiquetar la cámara en T (parte superior de la toma de aire) y el plano superior del alerón trasero (DRS/MO)
+    const pos = carBase.attributes.position, prt = carBase.attributes.aPart, colAttr = carBase.attributes.color;
+    if (pos && colAttr) {
+      for (let i = 0; i < pos.count; i++) {
+        const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+        if (y > 1.07 && x > -0.68 && x < 0.18 && Math.abs(z) < 0.26) colAttr.setXYZ(i, TCAM[0], TCAM[1], TCAM[2]);
+      }
+      colAttr.needsUpdate = true;
+    }
     if (pos && prt) {
       let hasFlap = false;
       for (let i = 0; i < prt.count; i++) if (prt.getX(i) > 1.5) { hasFlap = true; break; }
@@ -754,6 +868,7 @@ export function extractCarFromGltf(root, separateWheel = false) {
     wheelBase = whlC.done();
     normalizeWheelBounds(wheelBase);
     wheelBase.setAttribute("aBrake", new THREE.BufferAttribute(new Float32Array(wheelBase.attributes.position.count), 1));
+    wheelBase.setAttribute("aWheelFx", new THREE.BufferAttribute(new Float32Array(wheelBase.attributes.position.count * 2), 2));
   }
   return { carBase, wheelBase };
 }
@@ -806,6 +921,7 @@ export function loadCarAssets(onReady) {
             wheelBase = wC.done();
             normalizeWheelBounds(wheelBase);
             wheelBase.setAttribute("aBrake", new THREE.BufferAttribute(new Float32Array(wheelBase.attributes.position.count), 1));
+            wheelBase.setAttribute("aWheelFx", new THREE.BufferAttribute(new Float32Array(wheelBase.attributes.position.count * 2), 2));
           }
         }
         const steer = Array.isArray(man.steer) && man.steer.length === 3 ? man.steer.map(Number) : null;
