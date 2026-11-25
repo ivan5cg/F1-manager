@@ -74,6 +74,14 @@ const ENGINE_FAIL = [0.6, 1, 2.2];
 const DEPLOY_TRIM: Record<SessionKind, number> = { FP1: 0.04, FP2: 0.04, FP3: 0.04, SQ: 0.04, Q: 0.04, SPRINT: 0.02, RACE: 0.04 };
 /** Vueltas lanzadas de libres: sin el modo de clasificación entero y con algo más de combustible. */
 const PRACTICE_PUSH_TRIM: Partial<Record<SessionKind, number>> = { FP1: 0.01, FP2: 0.005, FP3: 0.003 };
+/**
+ * Evolución de la clasificación: al empezar la pista está más verde (aún sin la goma de veinte coches a fondo con
+ * blandos) y los pilotos van cogiendo el límite parte a parte. Es lo que le falta a la vuelta al empezar la sesión, en
+ * tanto por uno, y baja en línea recta con el reloj de las partes hasta cero al empezar la última salida: la pole
+ * (calibrada con la real) no cambia. En 2026 el poleman mejora 0,8-1,7 s de Q1 a Q3. Pesa más en curva que en recta.
+ */
+const QUALI_EVO: Partial<Record<SessionKind, number>> = { Q: 0.015, SQ: 0.01 };
+const QUALI_EVO_END = 180;
 /** De los errores en curva, cuántos acaban contra las barreras (en seco). */
 const CRASH_P = 0.11;
 /**
@@ -389,6 +397,8 @@ export interface Car {
   lapStart: number;
   best: number; // mejor vuelta válida de la sesión (o de la parte en curso)
   bestByPart: number[];
+  /** Evolución de la pista que faltaba cuando hizo su mejor vuelta de la parte (ver Session.qualiEvoGain). */
+  bestEvo?: { part: number; evo: number };
   lapValid: boolean;
   noise: number;
   followGap: number;
@@ -687,6 +697,7 @@ export class Session {
   private wasRaining = false;
   private tRef: number[];
   private trimW: number[];
+  private cornerW: number[];
   private estimating = false;
   /** Energía recuperada por vuelta (MJ) y cómo se reparten la recarga y el gasto entre los minisectores. */
   ersLap = 6;
@@ -729,6 +740,9 @@ export class Session {
       const w = this.track.ms.map((m) => 0.3 + 0.7 * m.throttle);
       const k = this.tRef.reduce((a, t) => a + t, 0) / this.tRef.reduce((a, t, i) => a + t * w[i], 0);
       this.trimW = w.map((x) => x * k);
+      const wc = this.track.ms.map((m) => 0.3 + 0.7 * (1 - m.throttle));
+      const kc = this.tRef.reduce((a, t) => a + t, 0) / this.tRef.reduce((a, t, i) => a + t * wc[i], 0);
+      this.cornerW = wc.map((x) => x * kc);
     }
     // Batería dentro de la vuelta: se recupera donde se frena o se levanta y se gasta donde se va a fondo
     // (menos al final de las rectas, donde el reglamento recorta la potencia eléctrica). El saldo de la
@@ -1572,9 +1586,30 @@ export class Session {
     t -= scale * (m.dPower * power + m.dDrag * dragCut);
     t += m.dMass * (MIN_MASS + c.fuel - REF_CAR.mass);
     if (su) t *= 1 + su.pen;
-    t *= 1 + this.deployTrim(c) * this.trimW[m.i];
+    t *= 1 + this.deployTrim(c) * this.trimW[m.i] + this.qualiEvo() * this.cornerW[m.i];
     t *= 1 + c.noise;
     return { t, grip };
+  }
+
+  /** Lo que le falta a la pista (y a los pilotos) en este momento de la clasificación (ver QUALI_EVO). */
+  private qualiEvo(partT = this.partT): number {
+    const D = QUALI_EVO[this.kind];
+    if (!D || !this.parts.length) return 0;
+    let total = 0, done = 0;
+    this.parts.forEach((p, i) => { total += p.minutes * 60; if (i < this.part) done += p.minutes * 60; });
+    done += Math.min(partT, this.durationS);
+    // llega a cero al empezar la última salida (unos 3 min antes del final), no con la bandera: si no, la vuelta de la
+    // pole aún arrastraría un poco y la pole saldría más lenta que la real
+    return D * Math.max(0, 1 - done / (total - QUALI_EVO_END));
+  }
+
+  /**
+   * Lo que va a mejorar la pista hasta el final de esta parte (fracción de la vuelta) desde la mejor vuelta de `c` en
+   * ella (o desde ahora): lo que le queda por bajar a ese tiempo si vuelve a salir al final. Lo mira el muro.
+   */
+  qualiEvoGain(c?: Car): number {
+    const from = c && c.bestEvo?.part === this.part ? c.bestEvo.evo : this.qualiEvo();
+    return Math.max(0, from - this.qualiEvo(this.durationS));
   }
 
   /** Lo que se pierde por no ir en modo de clasificación (ver DEPLOY_TRIM). */
@@ -2077,6 +2112,7 @@ export class Session {
         if (lt < this.bestLap) this.bestLap = lt;
         if (lt < prevBest) {
           c.bestByPart[p] = lt; c.bestTyreByPart[p] = c.tyres!.c; c.bestSecsByPart[p] = [...c.secLast];
+          c.bestEvo = { part: p, evo: this.qualiEvo() };
           c.bestWaterByPart[p] = ((c.lapW0 ?? this.avgWater()) + this.avgWater()) / 2;
         }
         if (run.phase === "push") this.lapRadio(c, lt);
