@@ -558,14 +558,16 @@ const signTex = new THREE.CanvasTexture(signCanvas); signTex.colorSpace = THREE.
 U.uAds = { value: adsTex };
 
 // ------------------------------------------------------------------ material de las cintas (asfalto, hierba, grava, muros)
+// aGeo empaqueta (aLat, aLatM, aY, aBank) en un solo vec4 para mantenerse por debajo del límite WebGL de 16 atributos
 const RIB_VH = `
-attribute vec3 aSide; attribute float aLat, aLatM, aY, aU, aV, aWet, aWetOff, aKerb, aDash, aLine, aWr; attribute vec3 aEdge;
+attribute vec3 aSide; attribute vec4 aGeo; attribute float aU, aV, aWet, aWetOff, aKerb, aDash, aLine, aWr; attribute vec3 aEdge;
 uniform float uW;
 varying float vU, vV, vWet, vWetOff, vKerb, vDash, vLine, vWY; varying vec3 vEdge; varying vec2 vXZ, vSide;
 `;
 const RIB_VB = `
-vec3 transformed = position + aSide * (uW * aLat * aWr + aLatM);
-transformed.y += aY * (aY > 0.0 ? uW / 6.5 : 1.0);
+vec3 transformed = position + aSide * (uW * aGeo.x * aWr + aGeo.y);
+float bankLat = clamp(aGeo.x * aWr, -1.65, 1.65) * 7.0 + clamp(aGeo.y, -16.0, 16.0) * 0.45;
+transformed.y += aGeo.z * (aGeo.z > 0.0 ? uW / 6.5 : 1.0) + bankLat * aGeo.w;
 vU = aU; vV = aV; vWet = aWet; vWetOff = aWetOff; vKerb = aKerb; vDash = aDash; vLine = aLine; vEdge = aEdge; vXZ = transformed.xz; vWY = transformed.y; vSide = aSide.xz;
 `;
 const RIB_FH = `` + GLSL_NOISE + `
@@ -1374,12 +1376,33 @@ function buildTrackData(tr, id, envData) {
   let H = new Float32Array(n);
   for (let i = 0; i < n; i++) { X[i] = tr.xs[i] - cx; Z[i] = -(tr.ys[i] - cy); }
   // altitud real (data/circuitos/*.json, campo «relieve»): muestras a distancia constante a lo largo de la vuelta
+  const vis0 = getTrackVisual(id);
   const rel = tr.def.relieve?.m, lerpLap = (a, f) => { const x = f * a.length, i0 = Math.floor(x); return a[i0 % a.length] + (a[(i0 + 1) % a.length] - a[i0 % a.length]) * (x - i0); };
   if (rel) for (let i = 0; i < n; i++) H[i] = lerpLap(rel, i / n);
   H = blur(H, Math.round(25 / ds), n);
+  // cruce en «8» (Suzuka): separación vertical real entre el tablero superior y el paso inferior
+  const ovp = vis0.overpass;
+  const dCirc = (a, b) => Math.min(mod(a - b, L), mod(b - a, L));
+  if (ovp) {
+    const lift = ovp.liftOver ?? 4.4, dip = ovp.dipUnder ?? 2.6;
+    for (let i = 0; i < n; i++) {
+      const s = i * ds;
+      H[i] += lift * (1 - sstep(35, 165, dCirc(s, ovp.sOver)));
+      H[i] -= dip * (1 - sstep(25, 130, dCirc(s, ovp.sUnder)));
+    }
+  }
   let hmin = 1e9, hmean = 0;
   for (let i = 0; i < n; i++) hmin = Math.min(hmin, H[i]);
   for (let i = 0; i < n; i++) { H[i] -= hmin; hmean += H[i] / n; }
+  // peraltes transversales visibles por circuito (Zandvoort, Madrid…)
+  const bank = new Float32Array(n);
+  if (vis0.bankings) for (const bk of vis0.bankings) {
+    const rp = bk.ramp ?? 45;
+    for (let i = 0; i < n; i++) {
+      const s = i * ds;
+      if (s >= bk.s0 && s <= bk.s1) bank[i] += bk.angle * sstep(bk.s0, bk.s0 + rp, s) * (1 - sstep(bk.s1 - rp, bk.s1, s));
+    }
+  }
   // cambios de rasante: donde la pista pasa de bajar a subir el coche se aplasta y toca abajo (chispas)
   const dip = new Float32Array(n);
   for (let i = 0; i < n; i++) dip[i] = Math.max(0, (H[(i + 3) % n] - 2 * H[i] + H[(i - 3 + n) % n]) / (9 * ds * ds));
@@ -1445,9 +1468,10 @@ function buildTrackData(tr, id, envData) {
     const r = street ? 0 : clamp((Math.abs(sw[i]) - 0.1) * 60, 0, 26);
     if (sw[i] > 0) rR[i] = r; else rL[i] = r; // a izquierdas: el exterior es la derecha
     if (inPit) (PS > 0 ? rR : rL)[i] = 0;
+    if (ovp && dCirc(s, ovp.sOver) < (ovp.halfSpan ?? 52) + 14) { rL[i] = 0; rR[i] = 0; }
   }
   const rP = PS > 0 ? rR : rL, rO = PS > 0 ? rL : rR; // escapatoria del lado de boxes y del otro
-  return { dip, env, SH: street ? 1.22 : 1.7, n, ds, L, E, Ex: maxx - minx, Ez: maxy - miny, cx, cy, X, Z, H, hmean, axis, line, rP, rO, PS, wr, street, Wov: Math.max(16, E * 0.0115) };
+  return { dip, env, bank, SH: street ? 1.22 : 1.7, n, ds, L, E, Ex: maxx - minx, Ez: maxy - miny, cx, cy, X, Z, H, hmean, axis, line, rP, rO, PS, wr, street, Wov: Math.max(16, E * 0.0115) };
 }
 const _cr = { v: 0, d: 0 };
 function cr(a, i, t, n) {
@@ -2097,20 +2121,21 @@ function buildWorld() {
   /** Cinta a lo largo de la pista. cols(i, s) devuelve, por columna, [lado en anchuras, lado en metros, altura, u]. */
   function ribbon(i0, count, cols, mat, order, road, extra) {
     const N = count + 1, C = cols(0, 0).length, V = N * C;
-    const P = new Float32Array(V * 3), NO = new Float32Array(V * 3), S = new Float32Array(V * 3), ED = new Float32Array(V * 3);
-    const f1 = () => new Float32Array(V), LAT = f1(), LATM = f1(), Y = f1(), UU = f1(), VV = f1(), WET = f1(), WETO = f1(), KE = f1(), DA = f1(), LI = f1(), WR = f1();
+    const P = new Float32Array(V * 3), NO = new Float32Array(V * 3), S = new Float32Array(V * 3), ED = new Float32Array(V * 3), GEO = new Float32Array(V * 4);
+    const f1 = () => new Float32Array(V), UU = f1(), VV = f1(), WET = f1(), WETO = f1(), KE = f1(), DA = f1(), LI = f1(), WR = f1();
     const msIdx = new Int16Array(N);
     for (let k = 0; k < N; k++) {
       const i = mod(i0 + k, n), s = (i0 + k) * T.ds;
       sample(s, tmp);
-      const m = track.ms[track.msOfPoint[i]], cs = cols(i, s);
+      const m = track.ms[track.msOfPoint[i]], cs = cols(i, s), bSin = Math.sin(T.bank[i]);
       msIdx[k] = m.i;
       for (let j = 0; j < C; j++) {
         const v = k * C + j, c = cs[j];
         P[v * 3] = tmp.x; P[v * 3 + 1] = tmp.y; P[v * 3 + 2] = tmp.z; NO[v * 3 + 1] = 1;
         S[v * 3] = tmp.rx; S[v * 3 + 2] = tmp.rz;
         const ps = road ? 1 : T.PS;
-        LAT[v] = c[0] * ps; LATM[v] = c[1] * ps; Y[v] = c[2]; UU[v] = c[3]; VV[v] = s; WR[v] = T.wr[i];
+        GEO[v * 4] = c[0] * ps; GEO[v * 4 + 1] = c[1] * ps; GEO[v * 4 + 2] = c[2]; GEO[v * 4 + 3] = bSin;
+        UU[v] = c[3]; VV[v] = s; WR[v] = T.wr[i];
         if (road) {
           const ot = m.overtake >= 0.15;
           ED[v * 3] = ot ? 1 : 0.93; ED[v * 3 + 1] = ot ? 0.58 : 0.95; ED[v * 3 + 2] = ot ? 0.16 : 0.97;
@@ -2122,8 +2147,8 @@ function buildWorld() {
     for (let k = 0; k < count; k++) for (let j = 0; j < C - 1; j++) { const a = k * C + j, b = a + C; idx.push(a, a + 1, b, a + 1, b + 1, b); }
     const g = new THREE.BufferGeometry();
     const set = (name, arr, size) => g.setAttribute(name, new THREE.BufferAttribute(arr, size));
-    set("position", P, 3); set("normal", NO, 3); set("aSide", S, 3); set("aEdge", ED, 3);
-    set("aLat", LAT, 1); set("aLatM", LATM, 1); set("aY", Y, 1); set("aU", UU, 1); set("aV", VV, 1);
+    set("position", P, 3); set("normal", NO, 3); set("aSide", S, 3); set("aEdge", ED, 3); set("aGeo", GEO, 4);
+    set("aU", UU, 1); set("aV", VV, 1);
     set("aWet", WET, 1); set("aWetOff", WETO, 1); set("aWr", WR, 1); set("aKerb", KE, 1); set("aDash", DA, 1); set("aLine", LI, 1);
     g.setIndex(idx);
     const mesh = new THREE.Mesh(g, mat);
@@ -2150,8 +2175,16 @@ function buildWorld() {
   const rightEdge = (s) => Math.max(SH, ramp(s) * (PIT_OFF + 4.2));
   const grassCol = street ? 0x7c8187 : bio.grass;
   // arcén con su talud suave (aU = 1 abajo: pasa a tierra/roca triplanar sin estirar la hierba), escapatoria (grava o asfalto pintado), boxes, asfalto y muros
+  // En el puente de Suzuka, el talud se recoge para dejar totalmente libre el paso inferior.
+  const ovp = vis.overpass, dCirc = (a, b) => Math.min(mod(a - b, T.L), mod(b - a, T.L));
+  const bridgeK = (s) => (ovp ? 1 - sstep((ovp.halfSpan ?? 52) - 8, (ovp.halfSpan ?? 52) + 14, dCirc(s, ovp.sOver)) : 0);
   const bankW = street ? 10 : 24, bankH = street ? -28 : -26;
-  ribbon(0, n, (i, s) => { const re = rightEdge(s); return [[-(SH + 1.3), -(T.rO[i] + bankW), bankH, 1], [-SH, -T.rO[i], 0, 0], [re, T.rP[i], 0, 0], [re + 1.3, T.rP[i] + bankW, bankH, 1]]; }, ribbonMat(grassCol, street || bio.arid ? 4 : 3, 0), 1);
+  ribbon(0, n, (i, s) => {
+    const re = rightEdge(s), bk = bridgeK(s);
+    const shL = SH * (1 - bk) + 1.12 * bk, shR = re * (1 - bk) + 1.12 * bk;
+    const bw = bankW * (1 - bk), bh = bankH * (1 - bk) - 1.3 * bk;
+    return [[-(shL + 1.3 * (1 - bk)), -(T.rO[i] + bw), bh, 1 - bk], [-shL, -T.rO[i], 0, 0], [shR, T.rP[i], 0, 0], [shR + 1.3 * (1 - bk), T.rP[i] + bw, bh, 1 - bk]];
+  }, ribbonMat(grassCol, street || bio.arid ? 4 : 3, 0), 1);
   if (!street) {
     const painted = vis.runoff.mode === "asfalto";
     const rMat = ribbonMat(vis.runoff.color || bio.gravel, painted ? 9 : 4, -1);
@@ -2456,6 +2489,81 @@ function buildWorld() {
     return true;
   };
   const busy = [[], []]; // tramos ya ocupados: [0] lado de boxes, [1] el otro
+  // ---- Estructuras especiales del trazado (Bloque 5.3): túnel de Mónaco y puente en «8» de Suzuka
+  if (vis.tunnel) {
+    const tun = vis.tunnel, hT = tun.height ?? 6.4, openS = tun.openSide ?? -1;
+    busy[0].push([tun.s0 - 18, tun.s1 + 18]);
+    busy[1].push([tun.s0 - 18, tun.s1 + 18]);
+    const nSeg = Math.max(8, Math.round((tun.s1 - tun.s0) / 14)), segL = (tun.s1 - tun.s0) / nSeg;
+    const lwWall = T.SH - 0.02, lwRoof = T.SH + 0.06;
+    const Q = (x, y, z, lw, u, v) => [x, y, z, lw, 0, u, v];
+    for (let k = 0; k < nSeg; k++) {
+      const sc = tun.s0 + (k + 0.5) * segL, x0 = -segL / 2 - 0.35, x1 = segL / 2 + 0.35, uo = k * segL;
+      B.at(sc, 1);
+      // pared sólida del lado de la ladera (o ambos lados si openSide === 0)
+      for (const sg of [-1, 1]) {
+        if (sg === openS) {
+          // galería abierta hacia el mar con murete inferior, dintel superior y pilares cada tramo
+          B.box(x0, x1, -1.5, 1.45, -0.55, 0.55, lwWall * sg, 0, 0xcfd4db, { front: [9, 0], top: [9, 0] }, uo);
+          B.box(x0, x1, hT - 1.15, hT + 1.15, -0.65, 0.65, lwWall * sg, 0, 0xd8d2c6, { front: [9, 0], top: [9, 0] }, uo);
+          B.box(-1.05, 1.05, 1.3, hT - 1.0, -0.62, 0.62, lwWall * sg, 0, 0xd8d2c6, { front: [9, 0], top: [9, 0] }, uo);
+        } else {
+          B.box(x0, x1, -1.5, hT + 1.15, -0.55, 0.75, lwWall * sg, 0, 0x5c6169, { front: [9, 0], top: [9, 0] }, uo);
+          B.near(() => B.box(-0.55, 0.55, 0, hT, -0.95, -0.45, lwWall * sg, 0, 0x707680, { front: [9, 0] }, uo));
+        }
+      }
+      // techo del túnel + paseo superior (se ensancha automáticamente con uW en la vista general)
+      B.quad(Q(x0, hT, 0, -lwRoof, uo, 0), Q(x1, hT, 0, -lwRoof, uo + segL, 0), Q(x1, hT, 0, lwRoof, uo + segL, 12), Q(x0, hT, 0, lwRoof, uo, 12), 0x2c3037, 9, 0);
+      B.quad(Q(x0, hT + 1.15, 0, -lwRoof, uo, 0), Q(x1, hT + 1.15, 0, -lwRoof, uo + segL, 0), Q(x1, hT + 1.15, 0, lwRoof, uo + segL, 12), Q(x0, hT + 1.15, 0, lwRoof, uo, 12), 0xd8ccb6, 9, 0);
+      // pretiles del paseo superior
+      B.box(x0, x1, hT + 1.15, hT + 2.05, -0.35, 0.35, -lwRoof, 0, 0xe2d8c5, { front: [9, 0], top: [9, 0] }, uo);
+      B.box(x0, x1, hT + 1.15, hT + 2.05, -0.35, 0.35, lwRoof, 0, 0xe2d8c5, { front: [9, 0], top: [9, 0] }, uo);
+      // doble fila de luces interiores encendidas en el techo del túnel
+      for (const lx of [-0.46, 0.46]) {
+        B.quad(Q(x0 + 1.2, hT - 0.08, -0.32, lx, 0, 0), Q(x1 - 1.2, hT - 0.08, -0.32, lx, 1, 0), Q(x1 - 1.2, hT - 0.08, 0.32, lx, 1, 1), Q(x0 + 1.2, hT - 0.08, 0.32, lx, 0, 1), 0xffffff, 10, 0);
+      }
+      // embocaduras arquitectónicas en la entrada y la salida
+      if (k === 0 || k === nSeg - 1) {
+        const xe = k === 0 ? x0 : x1;
+        B.quad(Q(xe, hT - 0.1, 0, -lwRoof, 0, 0), Q(xe, hT - 0.1, 0, lwRoof, 14, 0), Q(xe, hT + 2.05, 0, lwRoof, 14, 2.2), Q(xe, hT + 2.05, 0, -lwRoof, 0, 2.2), 0xe4dac8, 9, 0);
+      }
+    }
+  }
+  if (ovp) {
+    const hs = ovp.halfSpan ?? 52;
+    busy[0].push([ovp.sOver - hs - 20, ovp.sOver + hs + 20], [ovp.sUnder - 50, ovp.sUnder + 50]);
+    busy[1].push([ovp.sOver - hs - 20, ovp.sOver + hs + 20], [ovp.sUnder - 50, ovp.sUnder + 50]);
+    const nSeg = Math.max(6, Math.round((hs * 2) / 13)), segL = (hs * 2) / nSeg;
+    const lwDeck = 1.18;
+    const Q = (x, y, z, lw, u, v) => [x, y, z, lw, 0, u, v];
+    for (let k = 0; k < nSeg; k++) {
+      const sc = ovp.sOver - hs + (k + 0.5) * segL, x0 = -segL / 2 - 0.25, x1 = segL / 2 + 0.25, uo = k * segL;
+      B.at(sc, 1);
+      // cara inferior del tablero (viga cajón de hormigón)
+      B.quad(Q(x0, -1.65, 0, -lwDeck, uo, 0), Q(x1, -1.65, 0, -lwDeck, uo + segL, 0), Q(x1, -1.65, 0, lwDeck, uo + segL, 12), Q(x0, -1.65, 0, lwDeck, uo, 12), 0x626870, 9, 0);
+      // vigas laterales blancas/grises, pretiles de seguridad y barandillas metálicas
+      for (const sg of [-1, 1]) {
+        B.box(x0, x1, -1.7, 0.08, -0.45, 0.45, lwDeck * sg, 0, 0xc8cdd4, { front: [9, 0], top: [9, 0] }, uo);
+        B.box(x0, x1, 0.08, 1.15, -0.28, 0.28, lwDeck * sg, 0, 0xd8dce2, { front: [9, 0], top: [9, 0] }, uo);
+        B.near(() => B.quad(Q(x0, 1.15, 0, lwDeck * sg, uo, 0), Q(x1, 1.15, 0, lwDeck * sg, uo + segL, 0), Q(x1, 2.35, 0, lwDeck * sg, uo + segL, 1), Q(x0, 2.35, 0, lwDeck * sg, uo, 1), 0xffffff, 13, 0));
+      }
+      // estribos de hormigón en los extremos del puente
+      if (k === 0 || k === nSeg - 1) {
+        const xe = k === 0 ? x0 : x1;
+        B.quad(Q(xe, -12, 0, -lwDeck, 0, 0), Q(xe, -12, 0, lwDeck, 14, 0), Q(xe, -1.65, 0, lwDeck, 14, 10), Q(xe, -1.65, 0, -lwDeck, 0, 10), 0x8b9199, 9, 0);
+      }
+    }
+    // pilares de hormigón a ambos lados del paso inferior (anclados en sUnder: se abren con uW para no pisar nunca la pista)
+    const hO = sample(ovp.sOver, mkS()).y, hU = sample(ovp.sUnder, mkS()).y, pierH = Math.max(6.5, hO - hU - 1.3);
+    for (const sg of [-1, 1]) {
+      B.at(ovp.sUnder, sg);
+      for (const px of [-6.2, 6.2]) {
+        B.box(px - 1.1, px + 1.1, -2.5, pierH, 0.4, 2.8, T.SH + 0.14, 1.4, 0xb8bec6, { front: [9, 0], top: [9, 0] });
+      }
+      // viga cabezal uniendo los dos pilares de cada lado
+      B.box(-8.0, 8.0, pierH - 1.35, pierH + 0.15, 0.2, 3.0, T.SH + 0.14, 1.4, 0xc9ced6, { front: [9, 0], top: [9, 0] });
+    }
+  }
   const isBusy = (sg, s0, s1) => busy[sg === PS ? 0 : 1].some(([a, b]) => mod(s0 - a, T.L) < b - a || mod(a - s0, T.L) < s1 - s0);
   let rs = 4321 + n; const rnd2 = () => ((rs = (rs * 1664525 + 1013904223) >>> 0) / 4294967296);
   // el detalle fino tira de otro azar: así lo de siempre sale igual que antes
@@ -3715,7 +3823,10 @@ function placeCars(list, W) {
     }
     if (p.rp) { l0 = p.rp.l * W * arrAt(T.wr, p.s); p.yaw = p.rp.yaw; p.gnd = p.rp.gnd; p.yUp = p.rp.yUp * Math.max(1, W / W_REAL); }
     p.l0 = l0;
-    p.px = p.x + p.rx * l0; p.py = p.y; p.pz = p.z + p.rz * l0;
+    const bk = arrAt(T.bank, p.s);
+    p.bank = bk;
+    const bankY = Math.abs(bk) > 1e-4 ? clamp(l0 / Math.max(1, W / W_REAL), -10, 10) * Math.sin(bk) : 0;
+    p.px = p.x + p.rx * l0; p.py = p.y + bankY; p.pz = p.z + p.rz * l0;
     sample(p.s + 2.5, _a); sample(p.s - 2.5, _b);
     const la = latAt(p, p.s + 2.5, W, far) * W * arrAt(T.wr, p.s + 2.5), lb = latAt(p, p.s - 2.5, W, far) * W * arrAt(T.wr, p.s - 2.5);
     let fx = _a.x + _a.rx * la - (_b.x + _b.rx * lb), fy = _a.y - _b.y, fz = _a.z + _a.rz * la - (_b.z + _b.rz * lb);
@@ -3908,17 +4019,20 @@ function updateCamera(dt, now) {
     want.pos.set(want.look.x - cx * D * Math.cos(el), want.look.y + D * Math.sin(el), want.look.z - cz * D * Math.cos(el));
     want.fov = T.street ? 40 : 38;
   } else if (mode === "seguir" && T.street) {
-    // en urbanos, la cámara sigue el corredor abierto de la calzada para que ningún edificio tape al coche
-    sample(p.s - 26 * fast, _tq);
+    // en urbanos, la cámara sigue el corredor abierto de la calzada (y se agacha suavemente dentro del túnel de Mónaco)
+    const tun = getTrackVisual(track.id).tunnel;
+    const inTun = tun && p.s >= tun.s0 - 14 && p.s <= tun.s1 + 14;
+    sample(p.s - (inTun ? 14 : 26 * fast), _tq);
     sample(p.s + 18, _tp);
     const lat = clamp(p.l0, -W_REAL * 0.6, W_REAL * 0.6) * 0.4;
-    _hv.set(_tq.x + _tq.rx * lat, _tq.y + 13.5 * fast, _tq.z + _tq.rz * lat);
+    const camH = inTun ? Math.min(3.8, (tun.height ?? 6.4) - 2.2) : 13.5 * fast;
+    _hv.set(_tq.x + _tq.rx * lat, _tq.y + camH, _tq.z + _tq.rz * lat);
     if (!segOn || camSnap || (camT < 0.02 && camFrom)) { segPos.copy(_hv); segOn = true; }
     else segPos.lerp(_hv, 1 - Math.exp(-dt / 0.35));
     const h = Math.hypot(_tp.x - p.px, _tp.z - p.pz) || 1;
     want.pos.copy(segPos);
     want.look.set(p.px + ((_tp.x - p.px) / h) * 8, p.py + 0.9, p.pz + ((_tp.z - p.pz) / h) * 8);
-    want.fov = 40;
+    want.fov = inTun ? 48 : 40;
   } else if (mode === "seguir") {
     sample(p.s + 28, _tp);
     const yt = Math.atan2(_tp.tz, _tp.tx);
@@ -4040,6 +4154,12 @@ function updateCamera(dt, now) {
     cur.pos.copy(want.pos); cur.look.lerp(want.look, 1 - Math.exp(-dt / 0.08)); cur.fov += (want.fov - cur.fov) * (1 - Math.exp(-dt / 0.3));
   } else { cur.pos.copy(want.pos); cur.look.copy(want.look); cur.fov = want.fov; }
   camera.position.copy(cur.pos); camera.fov = cur.fov;
+  if (onboard && p && Math.abs(p.bank || 0) > 0.005 && !opt.debug?.view) {
+    const camTilt = p.bank * 0.55;
+    camera.up.set(-p.sx * Math.sin(camTilt), Math.cos(camTilt), -p.sz * Math.sin(camTilt));
+  } else {
+    camera.up.set(0, 1, 0);
+  }
   const dist = cur.pos.distanceTo(cur.look);
   camera.near = onboard ? 0.25 : Math.max(0.35, dist * 0.04);
   camera.far = Math.max(dist * 6, Math.min(18000, T.E * 4.5));
@@ -4383,10 +4503,13 @@ function draw3d(dt, now) {
     const lift = stop ? sstep(0, 0.1, u) * (1 - sstep(0.86, 0.95, u)) : 0, off = stop && u >= 0.12 && u <= 0.62, crewOn = u > -0.45 && u < 1.35;
     let ux = -rz * fy, uy = rz * fx - rx * fz, uz = rx * fy;
     const bx = rx, bz = rz;
-    const th = clamp(p.acc / 55, -1, 0.4) * 0.05, ph = p.roll * 0.04;
+    const th = clamp(p.acc / 55, -1, 0.4) * 0.05;
+    const bAng = p.roll * 0.04 - (p.bank || 0) * (1 - p.gar);
+    const cb = Math.cos(bAng), sb = Math.sin(bAng);
     const f2x = fx + ux * th, f2y = fy + uy * th, f2z = fz + uz * th;
-    const u2x = ux - fx * th + rx * ph, u2y = uy - fy * th + ry * ph, u2z = uz - fz * th + rz * ph;
-    rx -= ux * ph; ry -= uy * ph; rz -= uz * ph;
+    const u2x = ux * cb + rx * sb - fx * th, u2y = uy * cb + ry * sb - fy * th, u2z = uz * cb + rz * sb - fz * th;
+    const r2x = rx * cb - ux * sb, r2y = ry * cb - uy * sb, r2z = rz * cb - uz * sb;
+    rx = r2x; ry = r2y; rz = r2z;
     m4.set(f2x * k, u2x * k, rx * k, p.px,
       f2y * k, u2y * k, ry * k, p.py + (0.03 + 0.09 * lift + (p.gar >= 0.999 ? 0.08 : 0)) * k + (p.yUp || 0),
       f2z * k, u2z * k, rz * k, p.pz,

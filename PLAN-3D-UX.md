@@ -20,7 +20,7 @@ Tamaño: **P** pequeño (un PR corto), **M** medio, **G** grande (varios PR).
 | 2. Control 3D interactivo, realización TV y HUD móvil vertical | ✅ Hecho | `map3d.ts`, `sessionView.ts`, `store.ts`, `style.css` |
 | 3. Ergonomía táctil y sensación de app móvil | ✅ Hecho | `common.ts`, `sessionView.ts`, `store.ts`, `style.css` |
 | 4. Realismo 3D dinámico y capas tácticas | ✅ Hecho | `map3d.ts`, `car3d.ts`, `sessionView.ts`, `store.ts`, `style.css` |
-| 5. Identidad visual de los 24 circuitos en 3D | 🟡 En curso (5.1 y 5.2 hechos) | `src/ui/trackVisuals.ts`, `map3d.ts`, `scripts/entorno.py`, `public/assets/env-tracks/`, `public/assets/landmarks/` |
+| 5. Identidad visual de los 24 circuitos en 3D | 🟡 En curso (5.1–5.3 hechos) | `src/ui/trackVisuals.ts`, `map3d.ts`, `scripts/entorno.py`, `public/assets/env-tracks/`, `public/assets/landmarks/` |
 
 ---
 
@@ -129,10 +129,11 @@ Objetivo: que cada uno de los 24 circuitos del calendario sea reconocible al pri
 - Generados los 20 `public/assets/env-tracks/<id>.json` restantes, completando los **24 circuitos** (`401,1 KB` en total, ~10–25 KB cada uno cargados solo al abrir ese GP), con montañas y valles reales (Spielberg hasta 1066 m, Spa 544 m, Hungaroring 317 m, Madrid, México, Barcelona, Austin, Suzuka, etc.).
 - Verificados `npm run check`, `npx vite build`, determinismo idéntico en `scripts/finde.ts` (Silverstone 42 y Mónaco 42) y 0 errores de consola/WebGL/red en Melbourne, Montreal, Spielberg, Zandvoort y Yas Marina.
 
-### 5.3 Estructuras especiales del trazado (M/G)
-- **Túnel de Mónaco:** estructura cubierta con pilares, iluminación interior y adaptación automática al ensanchado de la pista en la vista general.
-- **Puente del cruce en «8» de Suzuka:** paso elevado con tablero, pilares y barreras claramente visibles sobre la recta inferior.
-- **Peraltes visibles:** inclinación transversal (*banking*) en las curvas peraltadas características (Zandvoort, Madrid).
+### 5.3 Estructuras especiales del trazado (M/G) · ✅ Hecho
+- **Túnel de Mónaco (`vis.tunnel`):** galería curva de 340 m tras Portier (`s = 1560..1900 m`) construida en `propBuilder()` (`src/ui/map3d.ts`) sin llamadas de dibujo extra, con pared maciza del lado de la ladera, columnata abierta con pilares hacia el mar, doble fila de luces de techo (`P = 10`), paseo superior, embocaduras en entrada/salida, ensanchado automático con `uW` en la vista general y cámara *Seguir* que se agacha suavemente dentro del túnel.
+- **Puente del cruce en «8» de Suzuka (`vis.overpass`):** separación vertical real entre el paso superior (`s = 4919 m`, `+4,4 m`) y el inferior (`s = 2549 m`, `-2,6 m`), recogida del talud de hierba en el vano para dejar libre el paso inferior, tablero cajón de hormigón con vigas laterales, pretiles, barandillas caladas (`P = 13`), estribos y pilares anclados en `sUnder` que se abren con `uW` para no invadir la pista de abajo.
+- **Peraltes visibles (`vis.bankings`):** inclinación transversal (*banking*) sin triángulos ni llamadas de dibujo extra (empaquetada en `vec4 aGeo` en `RIB_VB` para mantener las cintas en 13 atributos WebGL) en **Zandvoort** (Hugenholtzbocht T3 ~19° y Arie Luyendykbocht T14 ~18°) y **Madrid** (*La Monumental* T12 ~22°), inclinando asfalto, pianos, escapatorias, barreras, altura/balanceo rígido de los monoplazas y horizonte de las cámaras *A bordo* y *Alerón trasero*.
+- Verificados `npm run check`, `npx vite build`, determinismo idéntico en `scripts/finde.ts` (Silverstone 42 y Mónaco 42) y 0 errores de consola/WebGL/red en las 6 vistas de Mónaco, Suzuka, Zandvoort y Madrid.
 
 ### 5.4 Hitos icónicos `.glb` bajo demanda, placeholders y pipeline de Google Colab (G)
 - **Manifiesto de hitos de los 24 circuitos:** 1–2 elementos emblemáticos por GP con coordenadas `(s, lado, dist)` o `(x, z)`, rotación, altura objetivo en metros y metadatos de colocación (con margen seguro respecto a la vista general).

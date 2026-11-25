@@ -603,6 +603,7 @@ La carrera se lee como en la tele:
 - Al terminar, un comisario agita la bandera a cuadros sobre el muro, los coches dan la vuelta de honor despacio (los tres
   primeros con el puño en alto) y entran a su garaje.
 - Saltan chispas de debajo de los coches en las rectas rápidas y en los cambios de rasante, sobre todo de noche.
+- **Estructuras singulares del trazado:** Mónaco cuenta con su túnel cubierto tras Portier (pared maciza hacia la ladera, columnata abierta hacia el mar, doble fila de luces interiores y ensanchado automático en la vista general); Suzuka tiene su puente del cruce en «8» con tablero de hormigón, pilares a los lados del paso inferior y barandillas; y Zandvoort (Hugenholtzbocht y Arie Luyendykbocht) y Madrid (*La Monumental*) inclinan la pista, escapatorias, barreras, coches y cámara a bordo con peralte real.
 - A bordo y desde el alerón trasero hay una ligera micro-vibración según velocidad, frenada y paso por pianos (se desactiva con movimiento reducido del sistema); con lluvia, las gotas se quedan en la cámara y se escurren, y con las vueltas y cada salida se ensucia.
 - El flap superior del alerón trasero se abre al activar DRS o Modo Adelantamiento, y la luz trasera distingue el parpadeo rápido de recarga ERS de la luz de lluvia. Las barandillas y celosías proyectan sombras caladas y los charcos del asfalto mojado reflejan el cielo y el sol.
 - Un alerón tocado se ve descolgado, y en el cambio de morro se quita y se pone.

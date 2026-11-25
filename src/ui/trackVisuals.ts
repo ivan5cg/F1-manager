@@ -17,6 +17,37 @@ export interface TrackRunoff {
   pattern?: 0 | 1 | 2;
 }
 
+export interface TrackTunnel {
+  /** Inicio y fin del túnel en metros a lo largo de la vuelta (s). */
+  s0: number;
+  s1: number;
+  /** Altura libre interior en metros (por defecto 6,4). */
+  height?: number;
+  /** Lado con pilares abiertos al exterior/mar (-1 izquierda, +1 derecha, 0 ambos cerrados). */
+  openSide?: -1 | 0 | 1;
+}
+
+export interface TrackOverpass {
+  /** Distancia s del paso superior (puente) y del paso inferior en el cruce en «8». */
+  sOver: number;
+  sUnder: number;
+  /** Semilongitud del tablero del puente en metros (por defecto 52). */
+  halfSpan?: number;
+  /** Elevación visual del paso superior y rebaje del inferior (m) para garantizar gálibo real. */
+  liftOver?: number;
+  dipUnder?: number;
+}
+
+export interface TrackBank {
+  /** Inicio y fin de la curva peraltada en metros (s). */
+  s0: number;
+  s1: number;
+  /** Ángulo de peralte en radianes (+ sube el lado derecho en curva a izquierdas; - sube el izquierdo en curva a derechas). */
+  angle: number;
+  /** Longitud de transición suave a entrada y salida en metros. */
+  ramp?: number;
+}
+
 export interface TrackVisualProfile {
   biome: BiomeId;
   /** Colores de los bloques del piano (2 o 3 tonos en hex sRGB). */
@@ -30,6 +61,12 @@ export interface TrackVisualProfile {
   floodlights?: boolean;
   /** Yates amarrados en puerto deportivo junto al trazado (Mónaco, Singapur, Yas Marina). */
   yachts?: boolean;
+  /** Túnel cubierto sobre el trazado (p. ej. Mónaco). */
+  tunnel?: TrackTunnel;
+  /** Puente de cruce en «8» sobre la propia pista (p. ej. Suzuka). */
+  overpass?: TrackOverpass;
+  /** Curvas con peralte transversal visible (p. ej. Zandvoort y Madrid). */
+  bankings?: readonly TrackBank[];
 }
 
 export const DEFAULT_TRACK_VISUAL: TrackVisualProfile = {
@@ -54,6 +91,7 @@ export const TRACK_VISUALS: Record<string, TrackVisualProfile> = {
     biome: "bosque",
     kerbs: [0xc21f24, 0xdeddd8],
     runoff: { mode: "grava", color: 0xc0b08a },
+    overpass: { sOver: 4919, sUnder: 2549, halfSpan: 52, liftOver: 4.4, dipUnder: 2.6 },
   },
   sepang: {
     biome: "tropical",
@@ -99,6 +137,7 @@ export const TRACK_VISUALS: Record<string, TrackVisualProfile> = {
     runoff: { mode: "asfalto", color: 0x4c5159, pattern: 0 },
     urban: "mediterraneo",
     yachts: true,
+    tunnel: { s0: 1560, s1: 1900, height: 6.4, openSide: -1 },
   },
   barcelona: {
     biome: "seco",
@@ -129,6 +168,10 @@ export const TRACK_VISUALS: Record<string, TrackVisualProfile> = {
     biome: "dunas",
     kerbs: [0x1a5cb8, 0xe2bc1c],
     runoff: { mode: "grava", color: 0xd8c89e },
+    bankings: [
+      { s0: 825, s1: 985, angle: 0.34, ramp: 35 },   // Hugenholtzbocht (Curva 3, ~19°)
+      { s0: 3710, s1: 4010, angle: -0.32, ramp: 55 }, // Arie Luyendykbocht (Curva 14, ~18°)
+    ],
   },
   monza: {
     biome: "bosque",
@@ -139,6 +182,9 @@ export const TRACK_VISUALS: Record<string, TrackVisualProfile> = {
     biome: "seco",
     kerbs: [0xc21e26, 0xdeddd8],
     runoff: { mode: "asfalto", color: 0x444952, accent: 0xb62a24, pattern: 2 },
+    bankings: [
+      { s0: 2285, s1: 2750, angle: -0.38, ramp: 65 }, // La Monumental (Curva 12, ~22°)
+    ],
   },
   baku: {
     biome: "seco",
