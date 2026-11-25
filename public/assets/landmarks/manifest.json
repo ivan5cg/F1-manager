@@ -2,6 +2,27 @@
   "version": 1,
   "nota": "Registra los hitos .glb (Draco + WebP 512px, <300 KB) disponibles en public/assets/landmarks/<circuito>/<id>.glb. Mientras un hito no figure aquí, map3d.ts dibuja su silueta procedural ligera sin peticiones 404.",
   "glb": {
-    "spielberg/toro_acero": true
+    "austin/torre_cota": true,
+    "bahrein/torre_sakhir": true,
+    "baku/flame_towers": true,
+    "baku/torre_doncella": true,
+    "lasvegas/esfera": true,
+    "lasvegas/torre_paris": true,
+    "melbourne/skyline_melbourne": true,
+    "mexico/foro_sol": true,
+    "miami/hard_rock_stadium": true,
+    "monaco/casino_montecarlo": true,
+    "monaco/palacio_roca": true,
+    "montreal/biosfera": true,
+    "monza/villa_parco": true,
+    "sepang/cubierta_sepang": true,
+    "shanghai/puente_shanghai": true,
+    "silverstone/the_wing": true,
+    "singapur/marina_sands": true,
+    "singapur/singapore_flyer": true,
+    "spielberg/toro_acero": true,
+    "spielberg/voestalpine_wing": true,
+    "suzuka/noria": true,
+    "yasmarina/hotel_w": true
   }
 }
