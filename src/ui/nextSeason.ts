@@ -141,6 +141,8 @@ export function buildNextSeason(s: SeasonState, choices: { keep: boolean; sign?:
     calendar: s.calendar ? [...s.calendar] : [...CALENDARS.corta.ids], ...(s.formatos ? { formatos: { ...s.formatos } } : {}),
     year: y, trueSeed: s.trueSeed ?? s.seed, pool: out.pool, contracts: out.contracts, salaries: out.salaries, news: out.news,
     history: [...(s.history ?? []), rec],
+    // el reparto ATR del año que viene sale de la clasificación de constructores de este
+    atrOrder: teamStandings(s, fin).map((x) => x.team.id),
     // los objetivos suben o bajan el presupuesto; las cláusulas que has pagado salen de él
     devBonus: (rec.objetivos.length ? objectivesBonus(done, rec.objetivos.length) : 0) - out.cost,
     aviso: rec.objetivos.length && done === 0 ? (s.aviso ?? 0) + 1 : 0,

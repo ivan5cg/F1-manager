@@ -57,17 +57,19 @@ export const newDev = (leftOfCap: number | null): DevState => ({ budget: devBudg
 export const devSpent = (d: DevState) => d.parts.reduce((a, p) => a + p.cost, 0);
 export const devLeft = (d: DevState) => Math.round((d.budget - devSpent(d)) * 10) / 10;
 
-/** Lo que se espera de una pieza (con el ritmo de desarrollo del equipo, 1 = medio). */
-export const devExpect = (area: DevArea, size: DevSize, devK: number) => DEV_RATE[area] * DEV_SIZES[size].cost * devK;
+/** Lo que se espera de una pieza (con el ritmo de desarrollo del equipo, 1 = medio). aeroK: el multiplicador ATR de
+ *  túnel de viento y CFD del equipo cuando se pide (solo cuenta en aerodinámica). */
+export const devExpect = (area: DevArea, size: DevSize, devK: number, aeroK = 1) => DEV_RATE[area] * DEV_SIZES[size].cost * devK * (area === "aero" ? aeroK : 1);
 
 /** Pide una pieza en la ronda `round`. Lo que rinde de verdad sale de la semilla (una de cada cuatro decepciona).
- *  devK: ritmo de desarrollo del equipo según el informe (1 = medio); realK: el de verdad. */
-export function orderPart(d: DevState, area: DevArea, size: DevSize, round: number, seed: number, devK = 1, realK = devK): DevPart | null {
+ *  devK: ritmo de desarrollo del equipo según el informe (1 = medio); realK: el de verdad; aeroK: multiplicador ATR
+ *  del equipo en esa ronda (las piezas aerodinámicas se diseñan con las horas de túnel y CFD que le tocan). */
+export function orderPart(d: DevState, area: DevArea, size: DevSize, round: number, seed: number, devK = 1, realK = devK, aeroK = 1): DevPart | null {
   const sz = DEV_SIZES[size];
   if (devLeft(d) < sz.cost - 1e-9) return null;
   const id = d.parts.length ? Math.max(...d.parts.map((p) => p.id)) + 1 : 1;
   const r = new Rng(((seed * 2654435761) ^ (id * 40503 + 0x9e37)) >>> 0);
-  const expect = devExpect(area, size, devK);
+  const expect = devExpect(area, size, devK, aeroK);
   const f = r.chance(0.25) ? r.range(0.2, 0.7) : clamp(r.gauss(1.02, 0.15), 0.75, 1.35);
   // el director técnico puede ser mejor o peor de lo que decía su informe (realK frente a devK)
   const p: DevPart = { id, area, size, cost: sz.cost, ordered: round, ready: round + sz.delay, expect, real: expect * f * (realK / Math.max(0.01, devK)) };
@@ -129,8 +131,43 @@ export const atrMult = (atr: number) => 0.84 + 0.34 * clamp((atr - 70) / 50, 0, 
 const rivalCarLevel = (t: TeamDef) => t.agarre + 0.4 * t.potencia - 0.3 * t.resistencia;
 
 /**
+ * Reparto ATR de una temporada, como el de la FIA: el orden (ids de equipo, del 1.º al último) con el que empieza,
+ * que es la clasificación de constructores del año anterior (en la primera temporada, el nivel de los coches), y el
+ * de la revisión de mitad de año (a 30 de junio en la real): la clasificación tras `mid.round` carreras, que vale
+ * desde esa ronda (índice) hasta el final. Un equipo que no está en el orden cuenta como el último.
+ */
+export interface AtrPlan { start: string[]; mid?: { round: number; order: string[] } }
+
+/** Ronda (índice) de la revisión de mitad de año: tras ~el 45 % del calendario (Austria, la 11.ª de 24); sin ella en
+ *  calendarios de menos de 4 carreras. */
+export const atrMidRound = (totalRounds: number) => (totalRounds >= 4 ? Math.round(totalRounds * 0.45) : null);
+
+/** Orden de partida si no hay clasificación del año anterior: por nivel del coche (y los `last`, equipos nuevos, al final). */
+export function atrCarOrder(base: TeamDef[], last: string[] = []): string[] {
+  return [...base.slice().sort((a, b) => rivalCarLevel(b) - rivalCarLevel(a)).map((t) => t.id).filter((id) => !last.includes(id)), ...last];
+}
+
+/** Orden por puntos (los empates, como en el orden `prev`). */
+export function atrOrderByPoints(points: Map<string, number>, prev: string[]): string[] {
+  const ids = [...new Set([...prev, ...points.keys()])];
+  const at = (id: string) => { const i = prev.indexOf(id); return i < 0 ? ids.length : i; };
+  return ids.sort((a, b) => (points.get(b) ?? 0) - (points.get(a) ?? 0) || at(a) - at(b));
+}
+
+/** Cuota ATR (%) de un equipo en una ronda (índice). */
+export function atrAt(plan: AtrPlan, teamId: string, round: number): number {
+  const order = plan.mid && round >= plan.mid.round ? plan.mid.order : plan.start;
+  const i = order.indexOf(teamId);
+  return atrPercent(i < 0 ? order.length - 1 : i, order.length);
+}
+
+/** Las piezas y paquetes aerodinámicos se diseñan con el túnel de unas rondas antes de llegar. */
+const ATR_LAG = 2;
+
+/**
  * Evolución asimétrica determinista de cada rival hasta la ronda `round` (de un calendario de `totalRounds` carreras):
- *  - Escala ATR según el nivel de partida del coche (los de atrás recuperan algo más de terreno).
+ *  - Escala ATR según el reparto `plan` (clasificación del año anterior y revisión de mitad de año; sin él, el nivel
+ *    de partida del coche): los de atrás recuperan algo más de terreno.
  *  - Factor de temporada propio de cada equipo (varianza entre temporadas) + 2–4 paquetes aerodinámicos discretos
  *    (con ~22 % de probabilidad de fallo de correlación y ~18 % de gran salto, igual que las piezas del jugador).
  *  - Evolución de unidad de potencia compartida por motorista (100 % para equipo oficial, 55 % para clientes) y
@@ -138,17 +175,15 @@ const rivalCarLevel = (t: TeamDef) => t.agarre + 0.4 * t.potencia - 0.3 * t.resi
  * La media de la parrilla sigue rondando DEV_RIVAL · 8 (~0,48 de agarre en una temporada completa) para mantener
  * equilibrado el presupuesto de 40 M del jugador.
  */
-export function rivalDevAt(base: TeamDef[], seed: number, round: number, totalRounds: number, techMult?: Map<string, number>): Map<string, RivalDevAt> {
+export function rivalDevAt(base: TeamDef[], seed: number, round: number, totalRounds: number, techMult?: Map<string, number>, plan?: AtrPlan): Map<string, RivalDevAt> {
   const out = new Map<string, RivalDevAt>();
-  const n = base.length;
   const maxR = Math.max(0, totalRounds - 1);
   const rNow = clamp(Math.floor(round), 0, maxR);
-  // Orden inicial por nivel del coche para asignar el ATR de la temporada
-  const ranked = base.slice().sort((a, b) => rivalCarLevel(b) - rivalCarLevel(a));
-  const rankOf = new Map(ranked.map((t, i) => [t.id, i]));
+  // sin reparto, el de la primera temporada: por nivel del coche y sin revisión
+  const atrPlan: AtrPlan = plan ?? { start: atrCarOrder(base) };
 
   if (maxR <= 0) {
-    for (const t of base) out.set(t.id, { teamId: t.id, team: t.nombre, atr: atrPercent(rankOf.get(t.id) ?? 0, n), aero: 0, motor: 0, fuel: 0, fiab: 0, arrivals: [] });
+    for (const t of base) out.set(t.id, { teamId: t.id, team: t.nombre, atr: atrAt(atrPlan, t.id, 0), aero: 0, motor: 0, fuel: 0, fiab: 0, arrivals: [] });
     return out;
   }
 
@@ -164,7 +199,8 @@ export function rivalDevAt(base: TeamDef[], seed: number, round: number, totalRo
     const anchors = maxR >= 6 ? [0.35, 0.72] : [0.5];
     for (const a of anchors) {
       const wr = clamp(Math.round(a * maxR + rng.range(-0.08, 0.08) * maxR), 1, maxR);
-      const expect = (0.075 * seasonScale) / (anchors.length === 1 ? 1 : 1);
+      // ~0,15 de potencia en la temporada (repartida entre sus olas), menos en calendarios cortos
+      const expect = (0.15 * seasonScale) / anchors.length;
       const f = rng.chance(0.2) ? rng.range(0.35, 0.65) : clamp(rng.gauss(1.0, 0.2), 0.7, 1.4);
       const gain = expect * f;
       waves.push({ round: wr, gain, expect, verdict: f < 0.7 ? "fallo" : f > 1.2 ? "salto" : "ok" });
@@ -173,18 +209,22 @@ export function rivalDevAt(base: TeamDef[], seed: number, round: number, totalRo
   }
 
   for (const t of base) {
-    const rank = rankOf.get(t.id) ?? Math.floor(n / 2);
-    const atr = atrPercent(rank, n);
+    const atr = atrAt(atrPlan, t.id, rNow);
+    // multiplicador ATR con el que se trabajó para lo que llega en la ronda r
+    const kAt = (r: number) => atrMult(atrAt(atrPlan, t.id, Math.max(0, r - ATR_LAG)));
     const rng = new Rng(((seed * 2654435761) ^ hashId("dev:" + t.id)) >>> 0);
     const orgK = (t.estrategia - 80) * 0.002; // ligera ventaja organizativa (±3 %)
     const techK = clamp(techMult?.get(t.id) ?? 1, 0.35, 1.85); // en «crear equipo», peso del director técnico real
     const teamK = clamp(rng.gauss(1.0, 0.15) + orgK, 0.68, 1.35);
-    const totalAeroExp = DEV_RIVAL * 8 * seasonScale * atrMult(atr) * teamK * techK;
+    // lo que ganaría en la temporada con un ATR medio (×1); cada parte se multiplica por el ATR de cuando se hizo
+    const totalAeroExp = DEV_RIVAL * 8 * seasonScale * teamK * techK;
 
     // 20 % refinamiento continuo (puesta a punto, pequeños apéndices) + 80 % en paquetes discretos
-    let aero = rNow > 0 ? totalAeroExp * 0.2 * prog : 0;
-    const nPkg = maxR >= 12 ? 4 : maxR >= 6 ? 3 : 2;
-    const weights = nPkg === 4 ? [0.24, 0.30, 0.28, 0.18] : nPkg === 3 ? [0.32, 0.40, 0.28] : [0.52, 0.48];
+    let aero = 0;
+    for (let r = 1; r <= rNow; r++) aero += (totalAeroExp * 0.2 * kAt(r)) / maxR;
+    // en un calendario de 2 carreras solo cabe un paquete (los dos acababan en una ronda que no existe)
+    const nPkg = maxR >= 12 ? 4 : maxR >= 6 ? 3 : maxR >= 2 ? 2 : 1;
+    const weights = nPkg === 4 ? [0.24, 0.30, 0.28, 0.18] : nPkg === 3 ? [0.32, 0.40, 0.28] : nPkg === 2 ? [0.52, 0.48] : [1];
     const arrivals: RivalPackage[] = [];
     let prevR = 0;
 
@@ -193,7 +233,7 @@ export function rivalDevAt(base: TeamDef[], seed: number, round: number, totalRo
       const hi = Math.max(lo, Math.min(maxR, Math.round(((i + 1.1) / (nPkg + 0.35)) * maxR)));
       const pkgR = rng.int(lo, hi);
       prevR = pkgR;
-      const expect = totalAeroExp * 0.8 * weights[i];
+      const expect = totalAeroExp * 0.8 * weights[i] * kAt(pkgR);
       const f = rng.chance(0.22) ? rng.range(0.25, 0.65) : clamp(rng.gauss(1.03, 0.18), 0.72, 1.42);
       const real = expect * f;
       const verdict: RivalPackage["verdict"] = f < 0.7 ? "fallo" : f > 1.2 ? "salto" : "ok";
@@ -225,8 +265,8 @@ export function rivalDevAt(base: TeamDef[], seed: number, round: number, totalRo
 }
 
 /** Aplica el desarrollo del jugador (`applyDev`) y las curvas asimétricas ATR de los rivales para una ronda. */
-export function applyGridDev(base: TeamDef[], seed: number, round: number, totalRounds: number, playerTeamId: string, playerDev?: DevState): TeamDef[] {
-  const rivals = rivalDevAt(base, seed, round, totalRounds);
+export function applyGridDev(base: TeamDef[], seed: number, round: number, totalRounds: number, playerTeamId: string, playerDev?: DevState, plan?: AtrPlan): TeamDef[] {
+  const rivals = rivalDevAt(base, seed, round, totalRounds, undefined, plan);
   return base.map((t) => {
     if (t.id === playerTeamId) return applyDev(t, playerDev, round);
     const g = rivals.get(t.id);

@@ -1,8 +1,8 @@
 import type { SessionSnapshot } from "../sim/snapshot";
-import { TEAMS, BASE_TEAMS, MARKET, CIRCUITS, ROUNDS, DRIVERS, GRID_CHANGES, getTrack, calendarOf, devContext, gridOf, CALENDARS, circuitOf, devRounds, person, whoAt, useSeason } from "./data";
+import { TEAMS, BASE_TEAMS, MARKET, CIRCUITS, ROUNDS, DRIVERS, GRID_CHANGES, getTrack, calendarOf, devContext, atrPlan, myAtr, gridOf, CALENDARS, circuitOf, devRounds, person, whoAt, useSeason } from "./data";
 import { rivalTechMult } from "../sim/market";
 import { objectivesFor, objectiveStatus } from "../sim/objectives";
-import { DEV_AREAS, DEV_SIZES, MOTOR_CAP, DevArea, DevSize, devLeft, devExpect, orderPart, newDev, isWorks, devGains, rivalDevAt } from "../sim/development";
+import { DEV_AREAS, DEV_SIZES, MOTOR_CAP, DevArea, DevSize, devLeft, devExpect, orderPart, newDev, isWorks, devGains, rivalDevAt, atrMult, atrMidRound } from "../sim/development";
 import { myTeamPanel, puSummary, puPanel, wirePu, PLAYER_TEAM_ID } from "./teamBuilder";
 import { $, esc, fmtLap, fmtRace, tyreHtml, fmtDate, sheet, setLabel, groupSets, flagHtml, setBack } from "./common";
 import { SeasonState, RoundResult, RaceSummary, driverStandings, teamStandings, RACE_POINTS, SPRINT_POINTS } from "../sim/season";
@@ -386,11 +386,16 @@ function devPanel(s: SeasonState, team: TeamDef, cal: string[], done: boolean): 
   if (!d) return "";
   const ctx = devContext(s), left = devLeft(d);
   const gp = (r: number) => (r < cal.length ? esc(CIRCUITS[cal[r]].gp.replace("Gran Premio de ", "GP de ").replace(/ \(.*\)$/, "")) : "después de la última carrera");
+  const atrNow = myAtr(s, s.round), aeroK = atrMult(atrNow);
+  const midR = atrMidRound(cal.length);
+  const atrNext = midR !== null && s.round < midR ? null : atrNow;
+  const atrText = `Tu cuota ATR de túnel de viento y CFD: <b>${atrNow} %</b> (las piezas aerodinámicas rinden ×${aeroK.toFixed(2).replace(".", ",")}). ${
+    midR === null ? "" : atrNext === null ? `Se revisa con la clasificación de constructores tras el ${gp(midR - 1)}: cuanto peor vayas, más túnel.` : "Revisada a mitad de año con la clasificación de constructores."}`;
   const now = devGains(d, s.round, isWorks(team));
   const cap = isWorks(team) ? MOTOR_CAP.works : MOTOR_CAP.client;
   const order = done ? "" : `<div class="devorder">${(Object.keys(DEV_AREAS) as DevArea[]).map((a) => `<div class="devrow"><div><b>${DEV_AREAS[a].name}</b><br><span class="small dim">${DEV_AREAS[a].what}${a === "motor" ? ` (tope de la temporada: ${devGainText("motor", cap)}${isWorks(team) ? "" : ", eres cliente"})` : ""}</span></div><div class="seg">${([1, 2, 3] as DevSize[]).map((z) => {
       const sz = DEV_SIZES[z], ready = s.round + sz.delay, ok = left >= sz.cost && ready < cal.length;
-      return `<button data-dev="${a}" data-size="${z}"${ok ? "" : " disabled"} title="${sz.name}: ${sz.cost} M, llega para el ${gp(ready)}">${sz.name}<br><span class="small">${sz.cost} M · ${devGainText(a, devExpect(a, z, ctx.pubK))}</span></button>`;
+      return `<button data-dev="${a}" data-size="${z}"${ok ? "" : " disabled"} title="${sz.name}: ${sz.cost} M, llega para el ${gp(ready)}">${sz.name}<br><span class="small">${sz.cost} M · ${devGainText(a, devExpect(a, z, ctx.pubK, aeroK))}</span></button>`;
     }).join("")}</div></div>`).join("")}</div>`;
   const parts = d.parts.slice().sort((a, b) => b.id - a.id);
   let rivalHtml = "";
@@ -398,7 +403,7 @@ function devPanel(s: SeasonState, team: TeamDef, cal: string[], done: boolean): 
     const base = s.grid ?? BASE_TEAMS;
     const seed = s.equipo ? (s.trueSeed ?? s.seed) : s.seed;
     const techM = s.equipo ? rivalTechMult(base, MARKET, s.equipo, seed) : undefined;
-    const rMap = rivalDevAt(base, seed, Math.min(s.round, cal.length - 1), cal.length, techM);
+    const rMap = rivalDevAt(base, seed, Math.min(s.round, cal.length - 1), cal.length, techM, atrPlan(s));
     const rivals = [...rMap.values()].filter((x) => x.teamId !== s.playerTeam);
     const arrivals = rivals.flatMap((x) => x.arrivals);
     const byGain = rivals.slice().sort((a, b) => (b.aero * AERO_S + b.motor * POWER_S) - (a.aero * AERO_S + a.motor * POWER_S));
@@ -415,7 +420,7 @@ function devPanel(s: SeasonState, team: TeamDef, cal: string[], done: boolean): 
     </div>`;
   }
   return `<div class="panel"><div class="hd"><span class="t">Desarrollo del coche</span><span class="small">Quedan <b>${String(left).replace(".", ",")} M</b> de ${d.budget} M</span></div><div class="bd">
-    <div class="small" style="margin-bottom:6px">Pide piezas con el presupuesto de la temporada: las pequeñas y medianas tardan 2 rondas en llegar y las grandes, 3. Una de cada cuatro rinde menos de lo que esperaban tus ingenieros. ${s.equipo ? "Los rivales traen paquetes discretos según su director técnico y su cuota ATR de túnel de viento (70–120 %)." : "Los rivales traen paquetes discretos a lo largo del año según su cuota ATR de túnel de viento (70–120 %): unos aciertan grandes saltos y otros tropiezan."}</div>
+    <div class="small" style="margin-bottom:6px">Pide piezas con el presupuesto de la temporada: las pequeñas y medianas tardan 2 rondas en llegar y las grandes, 3. Una de cada cuatro rinde menos de lo que esperaban tus ingenieros. ${cal.length > 1 ? atrText + " " : ""}${s.equipo ? "Los rivales traen paquetes discretos según su director técnico y su cuota ATR de túnel de viento (70–120 %)." : "Los rivales traen paquetes discretos a lo largo del año según su cuota ATR de túnel de viento (70–120 %): unos aciertan grandes saltos y otros tropiezan."}</div>
     ${devPlanoHtml(d, s.round, (r) => (r < cal.length ? CIRCUITS[cal[r]].gp.replace("Gran Premio de ", "GP de ").replace(/ \(.*\)$/, "") : "después de la última carrera"))}
     ${now.aero || now.motor || now.fiab ? `<div class="small" style="margin-bottom:6px">Ya en el coche: ${[now.aero ? `aerodinámica ${devGainText("aero", now.aero)}` : "", now.motor ? `motor ${devGainText("motor", now.motor)}` : "", now.fiab ? `fiabilidad ${devGainText("fiab", now.fiab)}` : ""].filter(Boolean).join(" · ")}.</div>` : ""}
     ${order}
@@ -433,7 +438,7 @@ function wireDev(s: SeasonState, redraw: () => void) {
   document.querySelectorAll<HTMLButtonElement>("[data-dev]").forEach((b) => (b.onclick = () => {
     const a = b.dataset.dev as DevArea, z = Number(b.dataset.size) as DevSize, sz = DEV_SIZES[z];
     if (!confirm(`¿Pedir una pieza ${sz.name.toLowerCase()} de ${DEV_AREAS[a].name.toLowerCase()} por ${sz.cost} M? Llega en ${sz.delay} rondas.`)) return;
-    if (orderPart(s.dev!, a, z, s.round, s.seed, ctx.pubK, ctx.realK)) { saveSeason(s); redraw(); }
+    if (orderPart(s.dev!, a, z, s.round, s.seed, ctx.pubK, ctx.realK, atrMult(myAtr(s, s.round)))) { saveSeason(s); redraw(); }
   }));
 }
 

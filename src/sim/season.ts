@@ -93,6 +93,9 @@ export interface SeasonState {
   aviso?: number;
   /** Cambios de piloto a mitad de temporada (lesiones, destituciones, tus fichajes), en orden. */
   swaps?: SeatSwap[];
+  /** Reparto ATR de túnel de viento y CFD con el que empieza la temporada: ids de equipo en el orden de la
+   *  clasificación de constructores del año anterior (en la primera, sin él: por nivel del coche). */
+  atrOrder?: string[];
   /** Modo gran premio: un solo fin de semana (calendario de un circuito), con el tiempo que se eligió. */
   gp?: { tiempo: GpWeather };
 }
