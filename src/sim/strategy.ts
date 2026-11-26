@@ -657,6 +657,18 @@ export function aiDecide(sess: Session, car: Car, adviceOnly = false): string | 
       const fg = freshGain();
       if (rival(a) && a.stops === car.stops && !a.pitRequest && g < 1.6 && (car.stuck?.n ?? 0) >= 1 && fg > 0.5 && g < fg * 2.2 + 0.3 && traffic(lossGreen) < 1.6 && stack < 0.5 && sess.rng.chance(0.25 + 0.6 * sharp)) { box = true; why = "undercut"; say = `no pasamos a ${a.d.abrev} en pista: podemos ganarle el puesto en boxes`; }
     }
+    // prioridad del de delante: con un rival de su vuelta a tiro de undercut detrás, con gomas de la misma edad (le
+    // toca parar como a él) y la ventana abierta, el muro no espera a que pare el otro: para primero. Esperar a
+    // reaccionar no sirve, porque el undercut de una vuelta vale ~2 s (banco de auditoría) y el rival suele ir
+    // a menos de eso. Sin esto, la pole solo acababa delante de su compañero en dos de cada tres carreras (en 2026,
+    // 17 de 18): casi todos los que le ganaban en boxes habían parado antes.
+    if (!box && early >= 1 && early <= 3 && nextLasts() && traffic(lossGreen) < 1.6 && stack < 0.5) {
+      const b = ord[me + 1];
+      const threat = clamp(2 * freshGain() + 0.5, 1, 4);
+      if (b && rival(b) && b.team !== car.team && b.stops === car.stops && !b.pitRequest && (b.tyres?.laps ?? 0) >= car.tyres.laps - 4 && sess.gapBetween(car, b) < threat && sess.rng.chance(0.6 * sharp)) {
+        box = true; why = "cubrir"; say = `${b.d.abrev} viene a ${sess.gapBetween(car, b).toFixed(1)} s y nos puede hacer el undercut: paramos antes que él`;
+      }
+    }
   }
   if (needRule && left <= 6 && !fresh) { box = true; why = "regla"; say = "falta el segundo compuesto"; }
   if (!box || !anyDry) return null;
