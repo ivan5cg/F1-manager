@@ -69,6 +69,9 @@ export interface WeatherState {
   history: RadarFrame[]; // últimos 30 min, un fotograma cada 3 min
 }
 
+/** Células nuevas por minuto en un día estable (por la convección de tarde, algo más): ~5 % de los días con un
+ * chaparrón a la hora de la clasificación (el 1 % en el desierto y el 10 % en Singapur), `tiempo.ts`. */
+const SECO_BIRTH = 0.005;
 const GROW = 0.3, DECAY = 0.55;
 const smooth = (x: number) => x * x * (3 - 2 * x);
 /** Intensidad relativa según la fase: casi nada al nacer, máxima en la madurez, se apaga al final. */
@@ -328,13 +331,16 @@ export function stepWeather(w: WeatherState, dtMin: number): void {
   w.cells = w.cells.filter((c) => c.age < c.life && Math.hypot(c.x, c.y) < 140);
   // nacimientos: los chubascos dependen de la hora (convección de tarde)
   const conv = 1 - cl.tardeConvectiva + cl.tardeConvectiva * 1.8 * convection(w.clock);
-  const base = { seco: 0.014 * (cl.celulasSeco ?? 1), chubascos: 0.42, frente: 0.03, llovizna: 0.07 }[w.scenario];
+  // (en un día estable, pocas y flojas, como las del principio del día: antes nacían ~0,014 por minuto con toda su
+  // fuerza y el 17 % de los días «Estable» llovía un rato sobre el circuito a la hora de la clasificación)
+  const base = { seco: SECO_BIRTH * (cl.celulasSeco ?? 1), chubascos: 0.42, frente: 0.03, llovizna: 0.07 }[w.scenario];
   if (r.chance(base * conv * dtMin)) {
     const small = r.chance(cl.pequenas);
     // la mayoría brota junto a una célula que ya llueve (frente de racha); si no, nace sola
     const parent = r.chance(0.6) ? parentCell(w) : null;
-    if (parent) w.cells.push(spawnCell(w, "inplace", 0, small, parent));
-    else w.cells.push(spawnCell(w, small || r.chance(0.5) ? "inplace" : "upwind", 0, small));
+    const c = parent ? spawnCell(w, "inplace", 0, small, parent) : spawnCell(w, small || r.chance(0.5) ? "inplace" : "upwind", 0, small);
+    if (w.scenario === "seco") { c.peak *= 0.4; c.x *= 1.8; c.y *= 1.8; }
+    w.cells.push(c);
   }
   // incluso en días estables puede saltar un chubasco aislado por la tarde
   if (w.scenario === "seco" && r.chance(0.004 * cl.pequenas * convection(w.clock) * cl.tardeConvectiva * dtMin * 3)) {
