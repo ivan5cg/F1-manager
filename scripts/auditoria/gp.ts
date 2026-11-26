@@ -17,6 +17,8 @@ if (fmtArg && fmtArg !== def.formato) {
 }
 const teams = JSON.parse(readFileSync("data/equipos-2026.json", "utf8")).equipos as TeamDef[];
 const track = buildTrack(def);
+// sprint forzada en un circuito sin sprint: la distancia del reglamento (100 km)
+if (def.formato === "sprint" && !def.vueltasSprint) def.vueltasSprint = Math.ceil(100000 / track.length);
 const st = newWeekend(def.ronda, def, teams, seed);
 const sc = st.days;
 if (clima === "seco") for (const d of sc) d.scenario = "seco";
