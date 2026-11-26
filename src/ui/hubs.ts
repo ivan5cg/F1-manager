@@ -25,6 +25,7 @@ import { headlines, portadaHtml, boardHtml } from "./prensa";
 import { moodPanel, syncMood, prensaHtml, wirePrensa } from "./vestuario";
 import { previaHtml, galaHtml, galaOf, trophyRoomHtml, hitosHtml } from "./ritual";
 import { devPlanoHtml, setupPlanoHtml } from "./planos";
+import { perfPanel, drawPerfChart } from "./rendimiento";
 
 export interface Nav {
   home(): void;
@@ -302,6 +303,7 @@ export function seasonScreen(nav: Nav, s: SeasonState) {
         </div>`;
       }).join("")}</div>
     </div></div>
+    ${perfPanel(s)}
     <div class="panel"><div class="hd"><span class="t">Mundial de pilotos</span></div><div class="bd" style="padding:0">
       ${s.rounds.length ? `<canvas class="champchart" id="champchart"></canvas><div class="small dim" style="padding:0 10px 6px">Puntos acumulados ronda a ronda: los cinco primeros y tus pilotos (línea gruesa).</div>` : ""}
       <table class="tv">${ds.map((x, i) => {
@@ -326,6 +328,8 @@ export function seasonScreen(nav: Nav, s: SeasonState) {
   if (strip && nextCard) strip.scrollLeft = Math.max(0, nextCard.offsetLeft - 12);
   const cc = document.getElementById("champchart") as HTMLCanvasElement | null;
   if (cc) requestAnimationFrame(() => drawChampChart(cc, s, ROUNDS_S));
+  const pc = document.getElementById("perfchart") as HTMLCanvasElement | null;
+  if (pc) requestAnimationFrame(() => drawPerfChart(pc, s));
   document.querySelectorAll<HTMLElement>("[data-round]").forEach((el) => (el.onclick = () => { const r = s.rounds.find((x) => x.round === Number(el.dataset.round)); if (r) roundSheet(r, s.playerTeam, (s.hitos ?? []).filter((h) => h.year === yearOf(s))); }));
   if (!done) $("#go").onclick = () => {
     if (!s.weekend || s.weekend.round !== s.round + 1) {

@@ -741,6 +741,7 @@ td.hcell svg.helmet { margin-right: 6px; }
 .cc-next { color: #ff6b5f; text-transform: uppercase; font-size: 11px; letter-spacing: .06em; }
 /* mundial: gráfica y barras de constructores */
 canvas.champchart { display: block; width: 100%; height: 200px; margin: 6px 0 2px; }
+.perfdot { display: inline-block; width: 4px; height: 12px; margin-right: 6px; vertical-align: -1px; }
 .cbars { padding: 6px 10px !important; }
 .cbar { display: grid; grid-template-columns: 22px minmax(0, 104px) 1fr 40px; align-items: center; gap: 6px; padding: 3px 0; font-size: 12.5px; }
 .cbar.me .cn { color: var(--gold1); font-weight: 900; }
