@@ -42,8 +42,12 @@ npx tsx scripts/auditoria/gp.ts silverstone 1 seco > fin.json
   todas las de otra). Las medias de ritmo, neumáticos o neutralizaciones apenas cambian, pero lo que dependa de la
   salida o del orden en cabeza (gana la pole, gana desde P4+, la sprint) medido antes de esa fecha está sesgado, y la
   referencia `base-2026-11/` también.
-- **Referencia:** `base-2026-11/` tiene la salida de los analizadores con el código de noviembre de 2026 (antes de
-  cualquier arreglo). Sirve para comparar el antes y el después de un cambio. El lote en seco de la referencia se jugó
+- **Referencia actual:** `base-2026-11b/` (26 de noviembre de 2026, con el punto 6 hecho y una semilla por circuito):
+  `seco.txt` (`lote.mjs ref-seco seco 1-4`, con `--por-circuito`), `lluvia-agregado.txt` y `lluvia-sesiones.txt` (los
+  tres lotes de lluvia de arriba, juntos), `sprint.txt` (`--formato=sprint`, semillas 1-2), `cabeza.txt` y
+  `curvas-neumaticos.txt` (`deg.ts`).
+- **Referencia antigua:** `base-2026-11/` tiene la salida de los analizadores con el código de noviembre de 2026 (antes de
+  cualquier arreglo), jugada con la misma semilla en todos los circuitos (ver «Semillas»). Sirve para comparar el antes y el después de un cambio. El lote en seco de la referencia se jugó
   con una versión anterior de `gp.ts` que aún no apuntaba las banderas de cada vuelta: por eso ahí salen sin dato las
   vueltas enteras con SC/VSC (en el de lluvia sí están: 1,87 y 1,53).
 
@@ -114,9 +118,24 @@ impacto (detalle y líneas de código en el informe):
    (`src/sim/strategy.ts:655-658` anula la parada de `strategy.ts:650`). Se reproduce con
    `npx tsx scripts/auditoria/gp.ts spa 32 chubD` (HAM, NOR, LAW y BEA descalificados; con `DEPURAR=1` sale por qué para
    cada uno).~~ **Hecho** (PR #41).
-8. Coche de seguridad y virtual demasiado lentos, y la mitad de vueltas en libres.
+8. ~~Coche de seguridad y virtual demasiado lentos, y la mitad de vueltas en libres.~~ **Hecho:**
+   - **Neutralizaciones:** tope de velocidad por circuito (`NEUTRAL_LAP`), y lo que cuesta parar con ellas, calculado con
+     esos topes (`pitLossUnder`). La vuelta con coche de seguridad dura 1,43 veces la verde y con virtual 1,33 (antes
+     1,89 y 1,58).
+   - **Libres:** programas más largos y variados, con 24 / 23 / 14 vueltas por piloto (antes 15 / 15 / 6). La goma de
+     cada vuelta de libres baja en proporción (`RUBBER_FP_LAP`).
+   - **Q3:** el que va justo en Q2 ya no gasta uno de los dos juegos nuevos de Q3. Q3 peor que su Q2: de 3,2 a 1,3 de
+     cada 10.
+   - **Lluvia en «Estable»:** las células que nacen durante el día son flojas y pocas (`SECO_BIRTH`). Llueve a la hora
+     de la clasificación el 5 % de los días (antes, el 17 %).
 
-Siguiente: el punto 8 (coche de seguridad y libres) y lo que queda del 6 (el azar de la carrera en cabeza), midiendo con este banco y con `scripts/realismo.ts`. Con el punto 1 la
+Pendiente, con lo que se ha medido, en la sección «Pendiente» del informe:
+- el duro en las pistas frías;
+- los pocos doblados (los lentos se quedan cerca en carrera);
+- la pole, 0,3-0,5 s más rápida que la real con el banco corregido;
+- el azar en cabeza (punto 6).
+
+Siguiente (antes del punto 8): lo que queda del 6 (el azar de la carrera en cabeza), midiendo con este banco y con `scripts/realismo.ts`. Con el punto 1 la
 vuelta media del ganador sube a ~1,10-1,12 de la pole (real 1,11), pero las carreras con coche de seguridad largo se
 alargan: el punto 8 (coche de seguridad demasiado lento) pesa ahora algo más. Tras los puntos 2 y 3 los libres siguen a
 1,1-1,3 / 0,8 / 0,4-0,65 s de la pole.

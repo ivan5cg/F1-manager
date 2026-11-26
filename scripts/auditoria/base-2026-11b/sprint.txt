@@ -1,0 +1,62 @@
+
+===== LIBRES 1 (48) mojadas 2: vueltas por piloto med 15 [p10 13 p90 17] · P1-P20 3.225 · tandas largas 21.3 · rojas 8 %
+  pendiente tandas largas (s/v, ya corregida): S 0.166 (n394) · M 0.083 (n599) · I -0.464 (n13)
+
+===== CLASIFICACIÓN SPRINT (48)
+pole - objetivo: med 0.034 [-0.830 … 1.578]
+P2-P1 0.084 · P3 0.186 · P10 0.887 · Q1 P1-P20 1.943 · Q1 todos 2.526
+corte Q1 (P16-P17) 0.216 · corte Q2 0.053 · mejora Q1→Q3 top10 0.868 s · Q3 más lento que su Q2: 2.7/10 · Q2>Q1: 2.2/16
+(en seco: 46) de los 8 de cabeza caen en Q1: 0.28 por sesión (26 % de sesiones) · en Q2: 0.59 (52 %) · mejora Q1→Q3 en seco 0.868 · pole−objetivo en seco med 0.001 σ 0.661
+compañeros |Δ| med 0.282 media 0.454 · vueltas por piloto med 6 · banderas rojas 6 %
+puesto medio: RUS 4.4, ANT 5.0, VER 5.3, LEC 5.5, NOR 6.0, HAM 6.0, PIA 6.1, HAD 7.7, BOR 10.3, GAS 10.5, HUL 11.2, LIN 11.6, LAW 11.9, COL 12.4, BEA 12.6, OCO 13.8, SAI 16.9, ALB 17.6, BOT 18.9, PER 18.9, ALO 19.6, STR 21.2
+poles: {"HAM":7,"RUS":12,"LEC":6,"ANT":10,"NOR":3,"VER":6,"PIA":4}
+neumáticos de los 10 por parte: {"MMS":443,"MM":17,"MIS":10,"MS":10}
+
+===== CLASIFICACIÓN (48)
+pole - objetivo: med -0.253 [-0.971 … 1.907]
+P2-P1 0.095 · P3 0.219 · P10 1.231 · Q1 P1-P20 2.171 · Q1 todos 2.673
+corte Q1 (P16-P17) 0.189 · corte Q2 0.050 · mejora Q1→Q3 top10 0.798 s · Q3 más lento que su Q2: 4.1/10 · Q2>Q1: 1.6/16
+(en seco: 42) de los 8 de cabeza caen en Q1: 0.24 por sesión (12 % de sesiones) · en Q2: 0.98 (64 %) · mejora Q1→Q3 en seco 0.845 · pole−objetivo en seco med -0.293 σ 0.795
+compañeros |Δ| med 0.321 media 0.467 · vueltas por piloto med 10 · banderas rojas 10 %
+puesto medio: RUS 3.5, VER 5.1, LEC 5.4, PIA 5.6, ANT 6.0, NOR 6.2, HAM 7.3, HAD 9.2, HUL 10.3, LAW 10.6, GAS 10.6, BOR 11.5, OCO 11.5, COL 12.3, LIN 12.3, BEA 12.4, SAI 16.7, ALB 17.9, BOT 19.0, PER 19.0, ALO 19.9, STR 20.8
+poles: {"NOR":6,"RUS":12,"LEC":12,"COL":1,"PIA":5,"HAM":2,"ANT":7,"VER":2,"HAD":1}
+neumáticos de los 10 por parte: {"SSS":456,"SSI":10,"SS":2,"SIS":10,"ISS":2}
+
+===== SPRINT (48) mojadas 0
+vuelta rápida / pole: media 1.0234 med 1.0242 [p10 1.0169 p90 1.0310]
+vuelta verde típica top10 / pole: med 1.0428 · media del ganador/pole (incl. boxes, SC) 1.0691 · duración 31.5 min
+vuelta 1 / vuelta verde: 1.112 · cambios de puesto en V1 (suma |Δ|): 35.4 · adelantamientos V1 1.1 resto 14.3
+consistencia (σ residuo, aire limpio): med 0.209 s  p90 0.428
+  degradación S (s/vuelta, corregida de combustible, mismo modo): med 0.153 [con cambios de modo 0.068] p10 0.030 p90 0.183 (n=11) · tanda media 19.0 v
+  degradación M (s/vuelta, corregida de combustible, mismo modo): med 0.061 [con cambios de modo 0.051] p10 -0.029 p90 0.162 (n=70) · tanda media 20.7 v
+  degradación H (s/vuelta, corregida de combustible, mismo modo): med 0.042 [con cambios de modo 0.026] p10 -0.088 p90 0.129 (n=7) · tanda media 23.1 v
+pérdida en boxes medida: med 80.5 s · vuelta SC/VSC ÷ verde: med 1.92 · vuelta entera con SC 1.94 (n385) · con VSC 1.63 (n22)
+vuelta rápida: en el 23 % de la carrera (med), edad del neumático 5 v, combustible 19.8 kg, compuesto {"H":1,"M":40,"S":7}
+paradas: media 0.00 reparto {"0":997,"1":4} · usa duro 14 % · usa blando 14 %
+estrategias: M:714 H:145 S:138 SS:2 HM:1 MM:1
+neumático de salida: {"H":154,"M":755,"S":147}
+SC: 35 % carreras (0.46/carrera, 5.4 v de media) · VSC 29 % (147 s) · roja 0 %
+abandonos 1.15 · dsq 0.00 · toques 0.15 · salidas/trompos 0.63 · sanciones 0.15
+  motivos de abandono: {"avería":18,"avería , se retira en boxes":16,"accidente con X":2,"accidente":19}
+  sanciones por motivo: {"toque":3,"limites":1,"frenada":3}
+gana la pole 71 % · gana desde P4+ 2 % · margen 3.5 s (media 4.4) · 1.º-10.º 24.5 s · doblados 0.0 · Spearman parrilla-final 0.90
+
+===== CARRERA (48) mojadas 2
+vuelta rápida / pole: media 1.0461 med 1.0482 [p10 1.0354 p90 1.0595]
+vuelta verde típica top10 / pole: med 1.0741 · media del ganador/pole (incl. boxes, SC) 1.1427 · duración 94.1 min
+vuelta 1 / vuelta verde: 1.093 · cambios de puesto en V1 (suma |Δ|): 38.6 · adelantamientos V1 1.5 resto 76.2
+consistencia (σ residuo, aire limpio): med 0.208 s  p90 0.361
+  degradación S (s/vuelta, corregida de combustible, mismo modo): med 0.091 [con cambios de modo 0.069] p10 -0.031 p90 0.231 (n=48) · tanda media 16.2 v
+  degradación M (s/vuelta, corregida de combustible, mismo modo): med 0.058 [con cambios de modo 0.045] p10 0.007 p90 0.130 (n=180) · tanda media 22.2 v
+  degradación H (s/vuelta, corregida de combustible, mismo modo): med 0.036 [con cambios de modo 0.030] p10 -0.019 p90 0.101 (n=261) · tanda media 31.4 v
+  degradación I (s/vuelta, corregida de combustible, mismo modo): med -0.504 [con cambios de modo -0.200] p10 -0.504 p90 -0.504 (n=1) · tanda media 9.7 v
+pérdida en boxes medida: med 18.4 s · vuelta SC/VSC ÷ verde: med 1.88 · vuelta entera con SC 1.89 (n719) · con VSC 1.58 (n45)
+vuelta rápida: en el 72 % de la carrera (med), edad del neumático 5 v, combustible 21.9 kg, compuesto {"M":19,"S":17,"H":12}
+paradas: media 1.32 reparto {"0":12,"1":612,"2":252,"3":26} · usa duro 76 % · usa blando 26 %
+estrategias: MH:391 HM:118 MS:59 MHM:52 MHH:47 MSM:35 SM:33 MSS:27 SMM:25 HMH:17 SSM:16 MIHM:11
+neumático de salida: {"M":757,"H":182,"S":117}
+SC: 52 % carreras (0.85/carrera, 5.5 v de media) · VSC 48 % (152 s) · roja 6 %
+abandonos 3.21 · dsq 0.00 · toques 0.81 · salidas/trompos 1.19 · sanciones 2.02
+  motivos de abandono: {"avería , se retira en boxes":58,"accidente":39,"accidente con X":1,"avería":52,"daños tras el toque":4}
+  sanciones por motivo: {"toque":27,"limites":35,"pitlane":5,"insegura":4,"azules":23,"frenada":3}
+gana la pole 23 % · gana desde P4+ 42 % · margen 5.2 s (media 7.1) · 1.º-10.º 37.0 s · doblados 2.9 · Spearman parrilla-final 0.74

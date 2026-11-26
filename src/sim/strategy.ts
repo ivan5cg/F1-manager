@@ -137,6 +137,21 @@ export function pitLoss(sess: Session): number {
   return tr.pit.laneLength / tr.pit.limit - tPortion * 1.05 + 2;
 }
 
+/**
+ * Lo que cuesta parar con el virtual o con el coche de seguridad, en veces lo que cuesta en verde: el pit-lane va a la
+ * velocidad de siempre y el tramo que se salta, con los topes del circuito (Session.neutralCap).
+ */
+export function pitLossUnder(sess: Session, flag: "vsc" | "sc"): number {
+  const tr = sess.track, cap = sess.neutralCap[flag];
+  let tG = 0, tN = 0;
+  for (let i = 0; i < tr.vref.length; i++) {
+    const s = i * tr.ds;
+    if (s >= tr.pit.entry || s < tr.pit.exit) { tG += tr.ds / tr.vref[i]; tN += tr.ds / Math.min(tr.vref[i], cap); }
+  }
+  const lane = tr.pit.laneLength / tr.pit.limit + 2;
+  return clamp((lane - tN * 1.05) / Math.max(1, lane - tG * 1.05), 0.2, 1);
+}
+
 /** Juegos disponibles (sin el montado), del menos al más gastado. */
 export function availableSets(car: Car): Record<Compound, TyreSet[]> {
   const out = { S: [], M: [], H: [], I: [], W: [] } as Record<Compound, TyreSet[]>;
@@ -627,7 +642,7 @@ export function aiDecide(sess: Session, car: Car, adviceOnly = false): string | 
   // neutralización: la parada cuesta la mitad. Se compara parar ahora con seguir con el plan (con lo que cree
   // saber el equipo de sus neumáticos), contando los puestos que se pierden en pista y la cola en el box
   if ((sess.flag === "sc" || sess.flag === "vsc") && left > 3 && !fresh && anyDry && !box) {
-    const lossNow = lossGreen * (sess.flag === "sc" ? 0.45 : 0.6) + stack;
+    const lossNow = lossGreen * pitLossUnder(sess, sess.flag) + stack;
     const stay = enumeratePlans(sess, car, k, done, cur, age, 0)[0];
     const pit = enumeratePlans(sess, car, k, done, null, 0, 0, true)[0];
     if (stay && pit) {
@@ -853,16 +868,29 @@ export function practiceProgram(sess: Session, car: Car): Run[] {
     const run = makeRun(sess, car, kind, c, laps, atMin * 60);
     if (run) runs.push(run);
   };
+  // Lo de un equipo de verdad en una hora: vueltas de instalación, salidas cortas con medio para los reglajes, tandas
+  // de clasificación con blando y tandas largas con el depósito lleno; cada uno con su orden y su número de salidas.
+  // (Antes, 15 / 15 / 6 vueltas por piloto y los 22 con el mismo programa en los libres 3; en la F1 real, ~25 / ~28 / ~18.)
+  const other = (c: Compound): Compound => (c === "M" ? (r.chance(0.6) ? "S" : "H") : "M");
   if (sess.kind === "FP1") {
-    add("inst", "M", 1, r.range(0, 6));
-    add("long", r.chance(0.6) ? "M" : "S", r.int(7, 11), r.range(14, 26));
-    add("qsim", "S", 2, r.range(36, 46));
+    add("inst", "M", 1, r.range(0, 4));
+    add("qsim", "M", r.int(2, 3), r.range(6, 12)); // reglajes
+    const lc: Compound = r.chance(0.55) ? "M" : r.chance(0.6) ? "H" : "S";
+    add("long", lc, r.int(9, 13), r.range(16, 26));
+    add("qsim", "S", 2, r.range(34, 42));
+    if (r.chance(0.55)) add("long", other(lc), r.int(4, 7), r.range(45, 51));
   } else if (sess.kind === "FP2") {
-    add("qsim", "S", 2, r.range(5, 14));
-    add("long", r.chance(0.5) ? "S" : "M", r.int(9, 13), r.range(24, 34));
+    if (r.chance(0.5)) add("qsim", "M", 2, r.range(1, 5)); // reglajes
+    add("qsim", "S", 2, r.range(6, 12));
+    if (r.chance(0.5)) add("qsim", "S", r.int(1, 2), r.range(14, 20));
+    const lc: Compound = r.chance(0.5) ? "S" : "M";
+    add("long", lc, r.int(12, 16), r.range(24, 30));
+    if (r.chance(0.75)) add("long", other(lc), r.int(6, 9), r.range(44, 49));
   } else {
-    add("qsim", "S", 2, r.range(8, 16));
-    add("qsim", "S", 1, r.range(38, 48));
+    add("qsim", "M", r.int(2, 3), r.range(2, 8)); // reglajes
+    add("qsim", "S", 2, r.range(12, 20));
+    if (r.chance(0.6)) add("long", "M", r.int(5, 7), r.range(24, 32));
+    add("qsim", "S", r.int(1, 2), r.range(38, 46));
   }
   for (let i = 1; i < runs.length; i++) runs[i].at = Math.max(runs[i].at ?? 0, (runs[i - 1].at ?? 0) + 60);
   return runs;
@@ -1095,8 +1123,10 @@ function qualiSet(sess: Session, car: Car, c: Compound, lastRun: boolean, risk: 
   const reserve = later.length + (later.some((p) => p.advance === null) ? 1 : 0);
   if (final) return lastRun || fresh.length >= 2 || !used.length ? fresh[0] : used[0];
   // última salida de Q1/Q2: nuevo si está fuera o si aún quedan los de reserva (dos para la última parte); si solo va
-  // justo, también, pero guardando al menos uno nuevo para la última parte
-  if (lastRun) return risk >= 2 || fresh.length > (risk === 1 ? Math.min(reserve, 1) : reserve) || !used.length ? fresh[0] : used[0];
+  // justo, también en Q1, pero en Q2 sin tocar los dos de la última parte. (Antes el que iba justo en Q2 gastaba uno de
+  // los dos y la mayoría llegaba a Q3 con un solo juego nuevo: 3 de cada 10 hacían la Q3 peor que su Q2; 2026: 1.)
+  const justOk = later.length > 1 ? Math.min(reserve, 1) : reserve;
+  if (lastRun) return risk >= 2 || fresh.length > (risk === 1 ? justOk : reserve) || !used.length ? fresh[0] : used[0];
   // primera salida: nuevo si sobran; si no, usado (salvo que el coche no dé para pasar con uno usado). El usado, poco
   // gastado: ese tiempo es el que queda si luego se anula la vuelta buena
   const light = used.filter((x) => setWear(x) < 0.12);

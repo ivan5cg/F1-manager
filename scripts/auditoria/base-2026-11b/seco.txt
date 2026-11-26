@@ -1,0 +1,95 @@
+
+===== LIBRES 1 (96) mojadas 3: vueltas por piloto med 15 [p10 13 p90 17] · P1-P20 3.291 · tandas largas 21.7 · rojas 5 %
+  pendiente tandas largas (s/v, ya corregida): S 0.169 (n824) · M 0.082 (n1209) · I -0.464 (n13)
+
+===== LIBRES 2 (72) mojadas 6: vueltas por piloto med 15 [p10 11 p90 18] · P1-P20 2.444 · tandas largas 21.3 · rojas 8 %
+  pendiente tandas largas (s/v, ya corregida): M 0.077 (n766) · S 0.218 (n689) · I -0.342 (n26)
+
+===== LIBRES 3 (72) mojadas 0: vueltas por piloto med 6 [p10 6 p90 6] · P1-P20 2.252 · tandas largas 0.0 · rojas 4 %
+  pendiente tandas largas (s/v, ya corregida): 
+mejor de libres − pole: L1 1.284 · L2 0.760 · L3 0.483 · L3 más rápido que la pole en 13 % · L2 en 11 %
+
+===== CLASIFICACIÓN SPRINT (24)
+pole - objetivo: med -0.063 [-0.639 … 2.356]
+P2-P1 0.110 · P3 0.220 · P10 0.907 · Q1 P1-P20 2.057 · Q1 todos 2.291
+corte Q1 (P16-P17) 0.229 · corte Q2 0.056 · mejora Q1→Q3 top10 0.772 s · Q3 más lento que su Q2: 2.8/10 · Q2>Q1: 4.2/16
+(en seco: 22) de los 8 de cabeza caen en Q1: 0.23 por sesión (23 % de sesiones) · en Q2: 0.77 (59 %) · mejora Q1→Q3 en seco 0.801 · pole−objetivo en seco med -0.119 σ 0.742
+compañeros |Δ| med 0.258 media 0.400 · vueltas por piloto med 7 · banderas rojas 4 %
+puesto medio: VER 4.8, RUS 4.9, ANT 5.0, PIA 5.7, HAM 5.8, LEC 6.1, NOR 6.1, HAD 7.0, HUL 10.3, BOR 10.6, GAS 11.1, LIN 11.8, LAW 12.1, BEA 12.4, COL 13.3, OCO 13.5, ALB 17.0, SAI 17.3, ALO 19.1, BOT 19.1, PER 19.1, STR 21.1
+poles: {"RUS":6,"ANT":4,"NOR":2,"HAM":5,"VER":4,"PIA":2,"HAD":1}
+neumáticos de los 10 por parte: {"MMS":227,"MM":3,"MIS":10}
+
+===== CLASIFICACIÓN (96)
+pole - objetivo: med -0.168 [-0.917 … 1.709]
+P2-P1 0.094 · P3 0.226 · P10 1.126 · Q1 P1-P20 2.056 · Q1 todos 2.582
+corte Q1 (P16-P17) 0.264 · corte Q2 0.043 · mejora Q1→Q3 top10 0.902 s · Q3 más lento que su Q2: 3.2/10 · Q2>Q1: 2.2/16
+(en seco: 84) de los 8 de cabeza caen en Q1: 0.15 por sesión (10 % de sesiones) · en Q2: 0.73 (56 %) · mejora Q1→Q3 en seco 0.922 · pole−objetivo en seco med -0.267 σ 1.038
+compañeros |Δ| med 0.285 media 0.394 · vueltas por piloto med 10 · banderas rojas 5 %
+puesto medio: RUS 3.7, ANT 3.9, VER 4.4, LEC 5.2, HAM 6.1, PIA 6.4, NOR 6.5, HAD 8.9, LAW 10.5, HUL 10.7, GAS 10.9, LIN 11.3, BOR 11.6, OCO 12.5, COL 12.6, BEA 13.1, SAI 17.3, ALB 17.9, PER 19.2, BOT 19.3, ALO 20.1, STR 21.1
+poles: {"ANT":23,"RUS":27,"VER":17,"PIA":5,"NOR":7,"HAM":3,"LEC":10,"HAD":2,"HUL":1,"LIN":1}
+neumáticos de los 10 por parte: {"SSS":886,"SS":7,"SSI":30,"SIS":16,"ISS":11,"SII":10}
+
+===== SPRINT (24) mojadas 1
+vuelta rápida / pole: media 1.0250 med 1.0239 [p10 1.0171 p90 1.0340]
+vuelta verde típica top10 / pole: med 1.0446 · media del ganador/pole (incl. boxes, SC) 1.0877 · duración 31.4 min
+vuelta 1 / vuelta verde: 1.110 · cambios de puesto en V1 (suma |Δ|): 53.4 · adelantamientos V1 1.2 resto 16.0
+consistencia (σ residuo, aire limpio): med 0.183 s  p90 0.460
+  degradación S (s/vuelta, corregida de combustible, mismo modo): med 0.152 [con cambios de modo 0.041] p10 0.030 p90 0.197 (n=4) · tanda media 18.4 v
+  degradación M (s/vuelta, corregida de combustible, mismo modo): med 0.047 [con cambios de modo 0.050] p10 0.005 p90 0.094 (n=35) · tanda media 22.5 v
+  degradación H (s/vuelta, corregida de combustible, mismo modo): med -0.080 [con cambios de modo -0.105] p10 -0.080 p90 -0.080 (n=1) · tanda media 21.2 v
+pérdida en boxes medida: med 80.5 s · vuelta SC/VSC ÷ verde: med 1.91 · vuelta entera con SC 1.95 (n219) · con VSC 1.62 (n12)
+vuelta rápida: en el 16 % de la carrera (med), edad del neumático 5 v, combustible 21.5 kg, compuesto {"M":18,"S":6}
+paradas: media 0.08 reparto {"0":472,"1":4,"2":18} · usa duro 14 % · usa blando 22 %
+estrategias: M:321 S:83 H:68 WIS:18 SS:2 HM:1 MS:1
+neumático de salida: {"M":338,"H":77,"S":91,"W":22}
+SC: 38 % carreras (0.54/carrera, 5.5 v de media) · VSC 33 % (157 s) · roja 0 %
+abandonos 1.42 · dsq 0.00 · toques 0.13 · salidas/trompos 0.50 · sanciones 0.29
+  motivos de abandono: {"avería , se retira en boxes":9,"accidente":16,"avería":9}
+  sanciones por motivo: {"toque":2,"limites":3,"frenada":2}
+gana la pole 75 % · gana desde P4+ 0 % · margen 3.7 s (media 3.9) · 1.º-10.º 23.8 s · doblados 0.0 · Spearman parrilla-final 0.85
+
+===== CARRERA (96) mojadas 4
+vuelta rápida / pole: media 1.0440 med 1.0446 [p10 1.0354 p90 1.0562]
+vuelta verde típica top10 / pole: med 1.0705 · media del ganador/pole (incl. boxes, SC) 1.1154 · duración 93.8 min
+vuelta 1 / vuelta verde: 1.082 · cambios de puesto en V1 (suma |Δ|): 38.2 · adelantamientos V1 1.6 resto 71.9
+consistencia (σ residuo, aire limpio): med 0.209 s  p90 0.405
+  degradación S (s/vuelta, corregida de combustible, mismo modo): med 0.093 [con cambios de modo 0.071] p10 -0.001 p90 0.192 (n=76) · tanda media 15.7 v
+  degradación M (s/vuelta, corregida de combustible, mismo modo): med 0.059 [con cambios de modo 0.049] p10 -0.007 p90 0.136 (n=419) · tanda media 22.9 v
+  degradación H (s/vuelta, corregida de combustible, mismo modo): med 0.041 [con cambios de modo 0.030] p10 -0.019 p90 0.108 (n=555) · tanda media 30.7 v
+  degradación I (s/vuelta, corregida de combustible, mismo modo): med -1.428 [con cambios de modo -0.153] p10 -1.626 p90 0.555 (n=7) · tanda media 11.4 v
+pérdida en boxes medida: med 18.6 s · vuelta SC/VSC ÷ verde: med 1.87 · vuelta entera con SC 1.89 (n1076) · con VSC 1.58 (n58)
+vuelta rápida: en el 70 % de la carrera (med), edad del neumático 3 v, combustible 24.2 kg, compuesto {"M":54,"S":20,"H":22}
+paradas: media 1.35 reparto {"0":13,"1":1210,"2":571,"3":42} · usa duro 73 % · usa blando 31 %
+estrategias: MH:785 HM:205 MHM:116 MSM:111 MS:95 MHH:77 SM:71 SMM:63 MSS:49 MHS:46 SMS:40 SSM:33
+neumático de salida: {"M":1531,"H":323,"S":258}
+SC: 48 % carreras (0.67/carrera, 5.5 v de media) · VSC 52 % (138 s) · roja 6 %
+abandonos 2.88 · dsq 0.00 · toques 0.73 · salidas/trompos 1.25 · sanciones 2.18
+  motivos de abandono: {"avería":97,"accidente con X":8,"accidente":55,"avería , se retira en boxes":110,"daños tras el toque":6}
+  sanciones por motivo: {"toque":41,"azules":49,"limites":93,"pitlane":8,"insegura":8,"frenada":10}
+gana la pole 34 % · gana desde P4+ 30 % · margen 5.3 s (media 7.5) · 1.º-10.º 38.4 s · doblados 3.2 · Spearman parrilla-final 0.80
+
+Por circuito (carrera): FL/pole · verde/pole · paradas · usa H % · adelant. · SC% · margen · pole err
+  austin       1.0410 1.0656 1.49   75  78.0   50  15.5 0.273 · deg S – M 0.119 H 0.037 · boxes 18.7
+  bahrein      1.0496 1.0766 1.57   57  99.0   25   3.3 -0.158 · deg S 0.180 M 0.106 H 0.133 · boxes 20.3
+  baku         1.0418 1.0695 1.21   93  51.5   25  13.5 0.720 · deg S – M 0.061 H 0.053 · boxes 18.0
+  barcelona    1.0441 1.0730 1.29  100  56.0   50   5.9 3.615 · deg S – M 0.069 H 0.048 · boxes 19.8
+  hungaroring  1.0416 1.0678 1.64   99  22.5   50   3.0 0.155 · deg S – M 0.054 H 0.018 · boxes 17.6
+  interlagos   1.0470 1.0744 1.27  100  89.3   75  10.9 2.437 · deg S – M 0.052 H 0.033 · boxes 18.2
+  lasvegas     1.0402 1.0752 1.38    0 136.5   50   7.2 -0.260 · deg S 0.091 M 0.070 H – · boxes 16.6
+  lusail       1.0486 1.0793 1.08   95  58.3   50   7.6 -0.634 · deg S – M 0.057 H 0.058 · boxes 22.3
+  madrid       1.0440 1.0702 1.46   52  48.5   25  20.0 3.141 · deg S 0.134 M 0.075 H 0.044 · boxes 18.5
+  melbourne    1.0483 1.0703 1.06   93  57.0   25   6.7 -0.297 · deg S 0.261 M 0.030 H 0.026 · boxes 17.1
+  mexico       1.0427 1.0714 1.62  100  40.0   50   6.7 0.286 · deg S – M 0.058 H 0.018 · boxes 20.1
+  miami        1.0426 1.0653 1.46  100  56.3   75   3.5 0.135 · deg S – M 0.043 H 0.023 · boxes 17.6
+  monaco       1.0526 1.0748 1.39   67  24.5   75   9.5 -0.224 · deg S -0.162 M 0.033 H 0.076 · boxes 17.9
+  montreal     1.0512 1.0810 1.32   36 115.8   50  15.2 -0.153 · deg S 0.064 M 0.054 H 0.050 · boxes 15.3
+  monza        1.0433 1.0642 1.04   98 128.3   25   3.8 -0.326 · deg S – M 0.057 H 0.046 · boxes 22.8
+  sepang       1.0411 1.0715 1.39  100  95.5   25   4.5 -0.210 · deg S – M 0.072 H 0.044 · boxes 18.5
+  shanghai     1.0469 1.0883 1.85    6 128.3   25   9.0 -0.846 · deg S 0.112 M 0.084 H 0.072 · boxes 18.2
+  silverstone  1.0496 1.0784 1.45   54  66.8   75   5.4 -0.967 · deg S 0.139 M 0.068 H 0.067 · boxes 17.5
+  singapur     1.0408 1.0665 1.03  100  41.0   50   1.0 0.517 · deg S – M 0.050 H 0.067 · boxes 25.7
+  spa          1.0095 1.0752 1.10   39 100.5   50   5.7 -0.866 · deg S 0.102 M 0.056 H 0.107 · boxes 16.1
+  spielberg    1.0409 1.0613 1.06  100  75.0   25   5.6 1.454 · deg S – M 0.042 H 0.022 · boxes 18.9
+  suzuka       1.0422 1.0804 1.71    8 112.8   75   8.6 5.886 · deg S 0.139 M 0.107 H 0.105 · boxes 18.3
+  yasmarina    1.0442 1.0739 1.37   95  51.0   75   1.5 -0.118 · deg S – M 0.034 H 0.038 · boxes 20.3
+  zandvoort    1.0616 1.0856 1.14   94  31.8   50   5.9 -0.627 · deg S 0.077 M 0.063 H 0.047 · boxes 18.6
