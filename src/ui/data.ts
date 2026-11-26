@@ -28,7 +28,7 @@ import market from "../../data/mercado-2026.json";
 import { buildTrack, Track } from "../sim/track";
 import type { TeamDef, DriverDef } from "../sim/session";
 import { buildGrid, GridChange, Market, PLAYER_TEAM_ID, costOf, trueTech } from "../sim/market";
-import { applyDev, DEV_RIVAL } from "../sim/development";
+import { applyDev, applyGridDev } from "../sim/development";
 import { type SeasonState, type SeatSwap, personId } from "../sim/season";
 
 /** Los 11 equipos reales (modo clásico y base del modo «crear equipo»). */
@@ -118,13 +118,14 @@ export function whoAt(s: SeasonState | null, round: number, seat: number): { id:
 }
 
 function gridBase(s: SeasonState, round: number): { teams: TeamDef[]; changes: GridChange[] } {
-  const r = Math.min(round, calendarOf(s).length - 1);
+  const calLen = calendarOf(s).length;
+  const r = Math.min(round, calLen - 1);
   // temporadas siguientes: los equipos tal como empiezan ese año (career.ts)
   const base = s.grid ?? BASE_TEAMS;
   if (!s.equipo) {
-    // equipo real: con desarrollo por piezas, los rivales mejoran a un ritmo fijo y el tuyo, con lo que pidas
+    // equipo real: con desarrollo por piezas, el tuyo evoluciona con lo que pidas y los rivales con curvas ATR + paquetes
     if (!s.dev) return { teams: base, changes: [] };
-    return { teams: base.map((t) => (t.id === s.playerTeam ? applyDev(t, s.dev, r) : { ...t, agarre: t.agarre + DEV_RIVAL * devRounds(s, r) })), changes: [] };
+    return { teams: applyGridDev(base, s.seed, r, calLen, s.playerTeam, s.dev), changes: [] };
   }
   const g = buildGrid(base, MARKET, s.equipo, s.trueSeed ?? s.seed, devRounds(s, r), !!s.dev, s.grid ? { agarre: s.carry ?? 0, extra: s.misPilotos } : undefined);
   if (s.dev) g.teams = g.teams.map((t) => (t.id === PLAYER_TEAM_ID ? applyDev(t, s.dev, r) : t));

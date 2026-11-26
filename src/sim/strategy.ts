@@ -406,7 +406,7 @@ function weatherCall(sess: Session, car: Car): Compound | null {
   };
   const bestAt = (w: number) => kinds.reduce((b, x) => (steadyGrip(x, w, tT) > steadyGrip(b, w, tT) ? x : b));
   const stopT = pitLoss(sess) + car.team.boxes + 1;
-  const stop = stopT * (sess.flag === "sc" || sess.flag === "sc_in" ? 0.45 : sess.flag === "vsc" ? 0.6 : 1);
+  const stop = stopT * (sess.flag === "sc" || sess.flag === "sc_in" ? pitLossUnder(sess, "sc") : sess.flag === "vsc" ? pitLossUnder(sess, "vsc") : 1);
   const beyond = left * lapMin > H + 2; // queda carrera después de lo que se mira
   const endBest = bestAt(water[water.length - 1] * bias);
   // el juego con el que se haría cada tipo (el montado, o el menos gastado del garaje) y lo que se gasta por minuto
@@ -432,16 +432,15 @@ function weatherCall(sess: Session, car: Car): Compound | null {
   let best: Compound = kindOf(cur), bestT = stay;
   for (const c of kinds) { const t = total(c); if (t < bestT - 1e-6) { bestT = t; best = c; } }
   if (best === kindOf(cur)) return null;
-  // margen para no cambiar por nada (más si acaba de parar) y algo de duda según el muro
-  const margin = (car.lastPitLap >= done - 3 ? 8 : 3) + Math.abs(sess.rng.gauss(0, (100 - k.strategy) / 12));
+  // margen para no cambiar por nada (más si acaba de parar, evita el ping-pong en chubascos) y algo de duda según el muro
+  const margin = (car.lastPitLap >= done - 4 ? 12 : 5.5) + Math.abs(sess.rng.gauss(0, (100 - k.strategy) / 12));
   if (stay - bestT < margin) return null;
-  // parar ahora solo si el otro neumático ya va a ser más rápido en las dos primeras vueltas con él; si la lluvia
-  // (o la pista seca) aún está lejos, se espera: se decide otra vez la vuelta que viene
+  // parar ahora solo si el otro neumático ya va a ser claramente más rápido en las dos primeras vueltas con él
   const soon = Math.min(water.length, Math.max(2, Math.ceil(lapMin * 2.2)));
   const wCur = setWear(car.tyres!), wNew = setWear(avail[best][0]);
   let dSoon = 0;
   for (let m = 1; m < soon; m++) dSoon += lapLoss(kindOf(cur), water[m] * bias, wCur) - lapLoss(best, water[m] * bias, wNew);
-  if (dSoon <= 0) return null;
+  if (dSoon <= 0.5) return null;
   return best;
 }
 
@@ -735,8 +734,8 @@ export function aiDecide(sess: Session, car: Car, adviceOnly = false): string | 
   return id;
 }
 
-/** Desgaste relativo de cada modo de ritmo (el mismo reparto que usa la sesión). */
-const PUSH_WEAR = [0.74, 0.87, 1, 1.12, 1.25];
+/** Desgaste relativo de cada modo de ritmo (PUSH_ENERGY^1,6, el mismo exponente que usa tyres.ts). */
+const PUSH_WEAR = [0.74, 0.87, 1, 1.12, 1.25].map((x) => Math.pow(x, 1.6));
 
 /**
  * Modos de ritmo y motor de la IA, una vez por vuelta. Decide como un piloto con su ingeniero:
@@ -843,12 +842,23 @@ function reserveSoft(sess: Session) {
 }
 
 function setForPractice(sess: Session, car: Car, c: Compound): TyreSet | undefined {
-  const sets = car.e.sets.filter((s) => s.c === c && !s.returned && !s.punctured);
+  const avail = (x: Compound) => car.e.sets.filter((s) => s.c === x && !s.returned && !s.punctured);
+  const sets = avail(c);
   const fresh = sets.filter((s) => s.laps === 0);
   const usedOk = sets.filter((s) => s.laps > 0 && setWear(s) < 0.55).sort((a, b) => setWear(a) - setWear(b));
   if (c === "S") return fresh.length > reserveSoft(sess) ? fresh[0] : usedOk[0];
-  if (c === "M") return usedOk[0] ?? (fresh.length > (sess.sprintWeekend ? 3 : 2) ? fresh[0] : undefined);
-  if (c === "H") return usedOk[0];
+  // en finde normal hay que devolver 6 juegos tras libres y llegar a carrera con ≥3 M+H (≥1 M y ≥1 H)
+  const freshM = avail("M").filter((s) => s.laps === 0).length;
+  const freshH = avail("H").filter((s) => s.laps === 0).length;
+  if (c === "M") {
+    if (usedOk.length) return usedOk[0];
+    if (sess.sprintWeekend) return freshM > 3 ? fresh[0] : undefined;
+    return freshM > 1 && freshM + freshH > 3 ? fresh[0] : undefined;
+  }
+  if (c === "H") {
+    if (usedOk.length) return usedOk[0];
+    return !sess.sprintWeekend && freshH > 1 && freshM + freshH > 3 ? fresh[0] : undefined;
+  }
   return usedOk[0] ?? fresh[0];
 }
 

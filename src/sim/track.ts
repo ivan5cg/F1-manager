@@ -39,6 +39,9 @@ export interface Minisector {
   overtake: number; // 0 = no se adelanta; >0 dificultad inversa (zona de frenada)
   drs: boolean;
   drsDetect: boolean;
+  /** Aero activa 2026: recta habilitada para Modo X (baja resistencia) y punto único de detección del Modo Adelantamiento. */
+  xZone: boolean;
+  moDetect: boolean;
   x: number; y: number; // punto medio para el tiempo/radar
 }
 
@@ -60,6 +63,8 @@ export interface Track {
   refLap: number;
   /** Urbano (Mónaco, Singapur, Bakú, Las Vegas): sin escapatorias y, sin anchura real, más estrecho. */
   street: boolean;
+  /** Grado urbano: 0 permanente, 0.5 semiurbano (Madrid, Melbourne, Montreal, Miami), 1 urbano puro. */
+  urban: number;
   /** Media anchura media de la pista (m). */
   wReal: number;
   /** Anchura en cada punto `ds`, como proporción de la media (media anchura = wReal · wr). */
@@ -79,16 +84,27 @@ export interface Track {
    * 3D. En los urbanos, 0 (muro). Decide en qué acaba un error: aquí un susto, allí el fondo roto o las barreras.
    */
   runoff: Float32Array;
+  /** Distancia (m) desde la meta hasta la primera frenada fuerte (para no dejar coches «fantasma» dentro de T1). */
+  t1Dist: number;
 }
 
-function runoffProfile(curv: Float64Array, ds: number, street: boolean): Float32Array {
+/** Grado urbano de un circuito: 1 urbano puro, 0.5 semiurbano, 0 permanente. */
+export function urbanLevel(def: any): number {
+  if (def?.urbano === true) return 1;
+  if (def?.urbano === "semi") return 0.5;
+  if (typeof def?.urbano === "number") return Math.max(0, Math.min(1, def.urbano));
+  return def?.entorno ? 1 : 0;
+}
+
+function runoffProfile(curv: Float64Array, ds: number, urban: number): Float32Array {
   const n = curv.length, out = new Float32Array(n);
-  if (street) return out;
+  const scale = Math.max(0, 1 - urban);
+  if (scale <= 0) return out;
   const nk = new Float32Array(n);
   for (let i = 0; i < n; i++) nk[i] = Math.tanh(curv[i] / 0.011);
   const wide = blurLap(blurLap(nk, Math.round(110 / ds), n), Math.round(110 / ds), n);
   const sw = blurLap(wide, Math.round(40 / ds), n);
-  for (let i = 0; i < n; i++) out[i] = Math.max(0, Math.min(26, (Math.abs(sw[i]) - 0.1) * 60));
+  for (let i = 0; i < n; i++) out[i] = Math.max(0, Math.min(26, (Math.abs(sw[i]) - 0.1) * 60)) * scale;
   return out;
 }
 
@@ -127,9 +143,9 @@ function racingLine(curv: Float64Array, ds: number): Float32Array {
 }
 
 /** Anchura de la pista: la real por punto (campo «ancho», 256 muestras por vuelta) o, si no hay, la de por defecto. */
-function widthProfile(def: any, n: number, ds: number, street: boolean): { wReal: number; wr: Float32Array } {
+function widthProfile(def: any, n: number, ds: number, urban: number): { wReal: number; wr: Float32Array } {
   const an: number[] | undefined = def.ancho;
-  let wr = new Float32Array(n).fill(1), wReal = street ? 5 : 6.5;
+  let wr = new Float32Array(n).fill(1), wReal = 6.5 - 1.5 * urban;
   if (an) {
     const lerpLap = (a: number[], f: number) => { const x = f * a.length, i0 = Math.floor(x); return a[i0 % a.length] + (a[(i0 + 1) % a.length] - a[i0 % a.length]) * (x - i0); };
     wReal = an.reduce((a, b) => a + b, 0) / an.length / 2;
@@ -392,6 +408,8 @@ export function buildTrack(def: any): Track {
       overtake: 0,
       drs: false,
       drsDetect: false,
+      xZone: false,
+      moDetect: false,
       x: xs[mid],
       y: ys[mid],
     });
@@ -430,6 +448,13 @@ export function buildTrack(def: any): Track {
     for (let j = 0; j < r.len; j++) ms[(r.start + j) % N].drs = true;
     ms[(r.start - 1 + N) % N].drsDetect = true;
   }
+  // Aero activa 2026 (Modo X): todas las rectas rápidas donde se va mayormente a fondo (no solo las 2 zonas DRS)
+  for (let i = 0; i < N; i++) {
+    if (ms[i].drs || (ms[i].throttle > 0.72 && ms[i].vAvg > 180)) ms[i].xZone = true;
+  }
+  // Modo Adelantamiento 2026: un único punto de detección por vuelta (antes de la recta principal / final de vuelta)
+  const mainDetect = runs[0] ? (runs[0].start - 1 + N) % N : N - 1;
+  ms[mainDetect].moDetect = true;
 
   // calle de boxes: longitud para que la pérdida (sin la parada) sea la real del circuito
   const pitLim = def.boxes.limite / 3.6;
@@ -439,8 +464,15 @@ export function buildTrack(def: any): Track {
     if (s >= length - def.boxes.entrada || s < def.boxes.salida) tPortion += base.dt[i];
   }
   const laneLength = (def.boxes.perdida - 2.4 - 1.0 + tPortion) * pitLim;
-  const street = !!def.urbano;
-  const { wReal, wr } = widthProfile(def, n, ds, street);
+  const urban = urbanLevel(def);
+  const street = urban >= 1;
+  const { wReal, wr } = widthProfile(def, n, ds, urban);
+  // primera frenada fuerte desde la salida (aceleración < -12 m/s² o curva cerrada tras los primeros 80 m)
+  let t1Dist = 330;
+  const i0 = Math.round(80 / ds), i1 = Math.min(n - 1, Math.round(900 / ds));
+  for (let i = i0; i < i1; i++) {
+    if (base.ax[i] < -12 || Math.abs(curv[i]) > 0.008) { t1Dist = i * ds; break; }
+  }
   return {
     id: def.id,
     car,
@@ -457,10 +489,11 @@ export function buildTrack(def: any): Track {
     pit: { entry: length - def.boxes.entrada, exit: def.boxes.salida, laneLength, limit: pitLim },
     abrasiveness: def.abrasividad,
     refLap: base.time,
-    street, wReal, wr,
+    street, urban, wReal, wr,
     line: racingLine(curv, ds),
     inside: insideSide(curv, ds),
-    runoff: runoffProfile(curv, ds, street),
+    runoff: runoffProfile(curv, ds, urban),
+    t1Dist,
   };
 }
 

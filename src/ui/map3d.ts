@@ -1648,7 +1648,7 @@ function buildTrackData(tr, id, envData) {
   // la trazada y la anchura las calcula la simulación (track.ts): los coches van donde ella dice
   const line = tr.line;
   // trazado urbano de competición (muros pegados y calles) separado del entorno visual ("urbano" | "semiurbano" | "circuito")
-  const street = tr.def.urbano !== undefined ? !!tr.def.urbano : en?.tipo === "urbano";
+  const street = tr.def.urbano !== undefined ? tr.def.urbano === true : en?.tipo === "urbano";
   // anchura real por punto (campo «ancho»), como proporción de la media: también de la simulación
   const wr = tr.wr;
   W_REAL = tr.wReal;
@@ -5522,8 +5522,8 @@ function draw3d(dt, now) {
     // daños: el alerón tocado se ve descolgado; en un cambio de morro se quita mientras trabajan
     const nose = stop && c.pit?.noseChange && u > 0.18 && u < 0.7;
     const dmgVal = nose ? -1 : clamp(c.wing / 0.025, 0, 1) * (c.wing > 0.004 ? 1 : 0);
-    // alerón trasero móvil (DRS / MO): apertura suave del flap cuando c.drs está activo
-    const drsT = c.loc === "track" && !!c.drs ? 1 : 0;
+    // alerón móvil: en 2026 (aero activa) abre en Modo X en rectas secas y cierra en Modo Z en curvas/lluvia; en 2011-2025, con DRS
+    const drsT = c.loc === "track" && (sess.era.activeAero ? !!c.xMode : !!c.drs) ? 1 : 0;
     p.drs = p.drs === undefined || dt <= 0 ? drsT : p.drs + (drsT - p.drs) * (1 - Math.exp(-dt / 0.12));
     // luz trasera: parpadeo rápido de recarga ERS (~4,5 Hz) distinto de la luz de lluvia (~1,5 Hz con base fija)
     const miL = track.msOfPoint[Math.min(T.n - 1, Math.floor(mod(p.s, T.L) / T.ds))];

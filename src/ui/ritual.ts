@@ -52,7 +52,8 @@ function keyOf(def: any): string[] {
   const loss = def.boxes?.perdida;
   if (loss >= 24) out.push(`Parar cuesta mucho (unos ${Math.round(loss)} s): cada parada pesa.`);
   else if (loss && loss <= 18) out.push(`Parar sale barato (unos ${Math.round(loss)} s): ojo al undercut.`);
-  if (def.urbano ?? def.entorno) out.push("Urbano, con los muros cerca: coche de seguridad probable.");
+  if (def.urbano === true || (def.urbano === undefined && def.entorno)) out.push("Urbano, con los muros cerca: coche de seguridad probable.");
+  else if (def.urbano === "semi") out.push("Semiurbano, con muros cerca en varios tramos: escapatorias justas y coche de seguridad frecuente.");
   if (def.formato === "sprint") out.push("Fin de semana sprint: una sola sesión de libres antes de que cuente.");
   return out;
 }

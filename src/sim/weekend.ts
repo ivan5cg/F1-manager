@@ -3,7 +3,7 @@
 // clasificación hereda el agua y las nubes de la mañana).
 import { Rng, clamp } from "./rng";
 import { Track } from "./track";
-import { HiddenTyre, TyreSet, allocation, setWear, DRY, applyNomination } from "./tyres";
+import { Compound, HiddenTyre, TyreSet, allocation, setWear, DRY, applyNomination } from "./tyres";
 import { Climate, Scenario, WeatherState, createDayWeather, stepWeather, rainAt, pickScenario, evaporation, waterStep } from "./weather";
 import { Session, SessionKind, Entrant, TeamDef, ResultRow, isRaceKind, LongRun } from "./session";
 import { TeamKnowledge, buildKnowledge } from "./strategy";
@@ -83,7 +83,11 @@ export function weekendForm(seed: number, who: string): number {
   return FORM * Math.sqrt(-2 * Math.log(u[0])) * Math.cos(2 * Math.PI * u[1]);
 }
 
-export const horarioFor = (def: any, sprint: boolean) => (sprint === (def.formato === "sprint") ? def.horario : def.horarioOtro ?? def.horario);
+export const horarioFor = (def: any, sprint: boolean) => {
+  const h = def.horario, o = def.horarioOtro;
+  if (o && Boolean(h?.sq) !== sprint) return o;
+  return h;
+};
 
 export function newWeekend(round: number, def: any, teams: TeamDef[], seed: number): WeekendState {
   applyNomination(def.compuestos);
@@ -280,13 +284,45 @@ export class Weekend {
     const table = sess.pointsTable();
     if (table) this.st.scoring = { ...this.st.scoring, [sess.kind]: table };
     this.st.rubber = sess.rubber;
+    if (sess.kind === "SPRINT" && this.st.setup) {
+      // reglamento 2024-2026: tras la sprint se reabre el parque cerrado antes de la clasificación principal,
+      // y las vueltas de la sprint afinan la estimación del reglaje
+      for (const c of sess.cars) { const k = this.st.setup.teams[c.team.id]; if (k) k.laps += Math.round(c.sessionLaps * 0.5 || c.lapTimes.length * 0.5); }
+      this.st.setup.locked = undefined;
+    }
     if (sess.kind.startsWith("FP")) {
       // las vueltas de libres afinan lo que sabe cada equipo del reglaje
       if (this.st.setup) for (const c of sess.cars) { const k = this.st.setup.teams[c.team.id]; if (k) k.laps += c.sessionLaps; }
-      const n = sess.kind === "FP3" ? 2 : 1;
+      // reglamento FIA: en fin de semana normal se devuelven 2 juegos de seco tras cada libre (6 en total → 7 para Q+carrera);
+      // en sprint, 1 tras FP1 (quedan 11). Se priorizan los más usados sin tocar la reserva de carrera (≥1 H, ≥1 M y ≥3 M+H) ni los 4 blandos de Q.
+      const n = this.st.sprint ? 1 : 2;
       for (const sets of Object.values(this.st.sets)) {
-        const used = sets.filter((s) => !s.returned && s.laps > 0 && DRY.includes(s.c)).sort((a, b) => setWear(b) - setWear(a));
-        for (const s of used.slice(0, n)) s.returned = true;
+        for (let k = 0; k < n; k++) {
+          const left = (c: Compound) => sets.filter((s) => !s.returned && s.c === c).length;
+          const canReturn = (s: TyreSet) => {
+            if (s.c === "H") return left("H") > 1 && left("M") + left("H") > 3;
+            if (s.c === "M") return left("M") > 1 && left("M") + left("H") > 3;
+            return left("S") > (this.st.sprint ? 3 : 4);
+          };
+          const dry = sets.filter((s) => !s.returned && DRY.includes(s.c));
+          const pick = dry.filter((s) => s.laps > 0 && canReturn(s)).sort((a, b) => setWear(b) - setWear(a))[0]
+            ?? dry.filter((s) => canReturn(s)).sort((a, b) => setWear(b) - setWear(a) || b.laps - a.laps)[0]
+            ?? dry.filter((s) => s.laps > 0 && (s.c === "S" || left(s.c) > 1)).sort((a, b) => setWear(b) - setWear(a))[0]
+            ?? dry.filter((s) => s.c === "S" || left(s.c) > 1).sort((a, b) => setWear(b) - setWear(a))[0];
+          if (pick) pick.returned = true;
+        }
+      }
+    }
+    if (sess.kind === "Q" && !this.st.sprint) {
+      // reglamento FIA: los 10 que pasan a Q3 devuelven un juego blando usado tras la clasificación (6 juegos de seco para carrera; P11-P22 conservan 7)
+      for (const r of sess.results().slice(0, 10)) {
+        if (r.part !== "Q3") continue;
+        const sets = this.st.sets[r.id];
+        if (!sets) continue;
+        const softs = sets.filter((s) => !s.returned && s.c === "S");
+        if (softs.length <= 1) continue;
+        const used = softs.filter((s) => s.laps > 0).sort((a, b) => setWear(b) - setWear(a))[0];
+        if (used) used.returned = true;
       }
     }
     for (const k of Object.values(this.st.knowledge)) { k.fc = null; k.profile = {}; }

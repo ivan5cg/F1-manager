@@ -175,7 +175,7 @@ const CONF_PACE = 0.0015;
 /** Grados que gana cada compuesto en la vuelta de formación (con 25 °C de asfalto). */
 const FORMATION_GAIN: Partial<Record<Compound, number>> = { S: 17, M: 13, H: 9, I: 12, W: 10 };
 /** Rivalidades: cuando pelean entre ellos, ninguno levanta (más toques). */
-const RIVALS = [["VER", "NOR"], ["VER", "HAM"], ["VER", "RUS"], ["VER", "LEC"], ["NOR", "PIA"], ["ALO", "HAM"], ["LEC", "SAI"], ["GAS", "OCO"], ["STR", "ALO"]];
+const RIVALS = [["VER", "ANT"], ["ANT", "RUS"], ["VER", "NOR"], ["VER", "HAM"], ["VER", "RUS"], ["VER", "LEC"], ["NOR", "PIA"], ["LEC", "HAM"], ["ALO", "HAM"], ["GAS", "OCO"]];
 const pairKey = (a: number, b: number) => (a < b ? `${a}-${b}` : `${b}-${a}`);
 const rivals = (a: Car, b: Car) => RIVALS.some(([x, y]) => (a.d.abrev === x && b.d.abrev === y) || (a.d.abrev === y && b.d.abrev === x));
 /**
@@ -184,7 +184,7 @@ const rivals = (a: Car, b: Car) => RIVALS.some(([x, y]) => (a.d.abrev === x && b
  */
 const LAT_CLOSE = 5.6 * 1.3, LAT_SIDE = 0.4, LAT_YIELD = 0.3, LAT_TAU = 0.7, LAT_MAX = 0.82;
 /** Segundos de antelación con los que se aparta según lo deprisa que se acerca, y lo deprisa que se mueve si va pegado. */
-const LAT_LOOK = 0.8, LAT_TAU_QUICK = 0.25;
+const LAT_LOOK = 1.4, LAT_TAU_QUICK = 0.18;
 /**
  * Estela del de delante según el lado (fase 2): a cuántos metros de su eje queda e^-1 del aire sucio (WAKE_DIRTY) y del
  * rebufo (WAKE_TOW, que es más ancho). Justo detrás se lleva todo; a un coche de lado, bastante menos.
@@ -204,11 +204,11 @@ const OFFLINE_GRIP = 0.035;
  */
 const BREATHE_GAP = 1.0, BREATHE_MIN = 0.25, LAT_BREATHE = 0.25, BREATHE_AHEAD = 50;
 /**
- * Lo que se rebaja el umbral de adelantamiento de cada circuito (s/vuelta) para que, con la estela según el lado y el
- * coste de salirse de la trazada, se adelante lo mismo que antes (sin esto, un ~4,5 % menos: realismo.ts, semillas 1 y
- * 101, 400 carreras).
+ * Lo que se rebaja el umbral de adelantamiento de cada circuito (s/vuelta) para que, con la estela según el lado, el
+ * coste de salirse de la trazada, el duro usable en pistas frías y el modo adelantamiento con coste de batería, el
+ * volumen de adelantamientos siga calibrado a 2026 (~55-65 en seco).
  */
-const PASS_LAT = 0.05;
+const PASS_LAT = 0.26;
 /**
  * Adelantar como maniobra (fase 3). El que ataca se pone a un lado (MV_SIDE, fracción de la media anchura): por el
  * interior de la curva o, si el de delante le cierra el interior, por fuera. El de delante se aparta un poco hacia el
@@ -267,24 +267,31 @@ type IncidentKind = "crash" | "failure" | "debris";
 const ERS_POWER = [-3.5, 0, 2.0, 4.5];
 const ERS_NET = [1.1, 0, -0.9, -2.4];
 export const SOC_MAX = 4;
-const MO_POWER = 6; // % extra del modo adelantamiento (2026) o del DRS (2011-2025)
+const MO_POWER = 6; // % extra del modo adelantamiento (2026, escalado por velocidad) o del DRS (2011-2025)
+/**
+ * Aerodinámica activa 2026 (Modo X / Modo Z): en seco todos abren alerones (Modo X) en las rectas rápidas, que ya es
+ * la base calibrada con la pole de 2026. Cuando el Modo X se cierra a Modo Z (pista mojada, amarilla/SC o alerón
+ * delantero dañado), la resistencia en recta sube en XMODE_DRAG (%). Umbrales con histéresis para lluvia (mm).
+ */
+const XMODE_DRAG = 28;
+const XMODE_WET_OFF = 0.22, XMODE_WET_ON = 0.15;
 
 /**
  * Reglamento de la época (modo escenario: carreras reales de 2010 en adelante). Sin él, el de 2026.
- *  - ayuda: cómo se adelanta en recta: modo adelantamiento (2026), DRS (2011-2025, el mismo segundo en el punto de
- *    detección) o nada (2010);
+ *  - ayuda: cómo se adelanta en recta: modo adelantamiento (2026, 1 detección por vuelta), DRS (2011-2025) o nada (2010);
  *  - ers: lo que pesa la parte eléctrica en la potencia: 1 en 2026, ~0,45 con los híbridos de 2014-2025, ~0,12 con el
  *    KERS de 2011-2013 y 0 sin batería (2010);
- *  - vsc: hay coche de seguridad virtual (desde 2015).
+ *  - vsc: hay coche de seguridad virtual (desde 2015);
+ *  - activeAero: aerodinámica activa Modo X / Modo Z en rectas (desde 2026; desactivada por la FIA en mojado).
  */
-export interface Era { ayuda: "mo" | "drs" | "ninguna"; ers: number; vsc: boolean }
-export const ERA_2026: Era = { ayuda: "mo", ers: 1, vsc: true };
+export interface Era { ayuda: "mo" | "drs" | "ninguna"; ers: number; vsc: boolean; activeAero: boolean }
+export const ERA_2026: Era = { ayuda: "mo", ers: 1, vsc: true, activeAero: true };
 /** Reglamento de una temporada (de 2010 en adelante). */
 export function eraOf(year: number): Era {
   if (year >= 2026) return ERA_2026;
-  if (year >= 2014) return { ayuda: "drs", ers: 0.45, vsc: year >= 2015 };
-  if (year >= 2011) return { ayuda: "drs", ers: 0.12, vsc: false };
-  return { ayuda: "ninguna", ers: 0, vsc: false };
+  if (year >= 2014) return { ayuda: "drs", ers: 0.45, vsc: year >= 2015, activeAero: false };
+  if (year >= 2011) return { ayuda: "drs", ers: 0.12, vsc: false, activeAero: false };
+  return { ayuda: "ninguna", ers: 0, vsc: false, activeAero: false };
 }
 
 export type SessionKind = "FP1" | "FP2" | "FP3" | "SQ" | "Q" | "SPRINT" | "RACE";
@@ -450,8 +457,10 @@ export interface Car {
   lapNoise?: number;
   followGap: number;
   aheadId: number;
-  drs: boolean; // modo adelantamiento activo (MO)
+  drs: boolean; // modo adelantamiento activo (MO) o DRS abierto (2011-2025)
   drsEligible: boolean;
+  /** Aero activa 2026: true cuando los alerones van abiertos en Modo X en esta recta (false = Modo Z). */
+  xMode?: boolean;
   grant: number;
   grantUntil: number;
   finishT: number;
@@ -758,6 +767,13 @@ export class Session {
   ersLap = 6;
   private ersIn: number[] = [];
   private ersOut: number[] = [];
+  /** Tiempo de referencia (s) por vuelta en zonas DRS (2011-2025) y en zonas X/MO (2026). */
+  private drsTime = 12;
+  private moTime = 18;
+  /** Aero activa 2026 desactivada por dirección de carrera debido a pista mojada (todos corren en Modo Z). */
+  xModeWetOff = false;
+  /** Distancia (m) tras la meta en la que la salida en dos filas no aplica bloqueo longitudinal (antes de la primera frenada). */
+  private launchClear = 330;
   /** Reglajes: lo que no cambia en la sesión (ver setup.ts y setupAt). */
   private setupK: { opt: Setup; dragPerA: number; aeroMean: number; lapRef: number; mean: { wk: number; v: number }[] } | null = null;
 
@@ -821,7 +837,11 @@ export class Session {
       this.ersLap = clamp(0.35 * 0.55 * sOff, 2.5, 8.5);
       this.ersIn = off.map((x) => x / sOff);
       this.ersOut = on.map((x) => x / sOn);
+      this.drsTime = Math.max(4, ms.reduce((a, m, i) => a + (m.drs ? this.tRef[i] : 0), 0));
+      this.moTime = Math.max(4, ms.reduce((a, m, i) => a + (m.xZone ? this.tRef[i] : 0), 0));
+      this.launchClear = clamp(this.track.t1Dist - 15, 140, 330);
     }
+    this.xModeWetOff = this.era.activeAero && this.avgWater() > XMODE_WET_OFF;
     this.updateWind();
     // ¿compensa ir a rebufo de otro en una vuelta lanzada? (Monza sí; en circuitos de curvas, aire limpio)
     let bestG = 9, bestNet = 0;
@@ -1231,6 +1251,25 @@ export class Session {
       this.log({ kind: "weather", text: "🌤️ Deja de llover. La pista empezará a secarse por la trazada.", important: true, code: "seca" });
     }
     this.wasRaining = now;
+    if (this.era.activeAero) {
+      const aw = this.avgWater();
+      if (!this.xModeWetOff && aw > XMODE_WET_OFF) {
+        this.xModeWetOff = true;
+        this.log({ kind: "control", text: "⚡ Dirección de carrera: aerodinámica activa (Modo X) desactivada por pista mojada", important: true });
+      } else if (this.xModeWetOff && aw < XMODE_WET_ON) {
+        this.xModeWetOff = false;
+        this.log({ kind: "control", text: "🟢 Dirección de carrera: aerodinámica activa (Modo X) habilitada", important: false });
+      }
+    }
+  }
+
+  /** ¿Puede este coche abrir el Modo X (baja resistencia) en una recta? */
+  private xModeAllowed(c: Car): boolean {
+    if (!this.era.activeAero || this.xModeWetOff) return false;
+    if (this.flag !== "green") return false;
+    // alerón delantero dañado: no puede abrir completamente el sistema activo delantero/trasero
+    if (c.wing > 0.014) return false;
+    return true;
   }
 
   private updateFlags(dt: number) {
@@ -1288,9 +1327,38 @@ export class Session {
    * Cómo se defiende c: lo que pida el jugador o, en automático, lo que haría el equipo: cerrar la puerta en las
    * últimas vueltas cuando hay puntos en juego, y si no, defenderse sin más (lo normal).
    */
-  /** Pelea en duro: solo tus pilotos con la orden dada (en automático, el equipo va en limpio). */
-  hard(c: Car): boolean {
-    return c.player && !this.autoPlayers && c.risk === "duro";
+  /**
+   * Pelea en duro: para el jugador, solo con la orden dada; para la IA (y en automático), los pilotos agresivos
+   * endurecen su pilotaje en peleas clave: final de carrera con podio o zona de puntos en juego, duelos contra
+   * rivales directos o relanzadas tras SC/roja (salvo pista muy mojada, daños o compañero fuera de podio final).
+   */
+  hard(c: Car, other?: Car): boolean {
+    if (c.player && !this.autoPlayers) return c.risk === "duro";
+    if (!isRaceKind(this.kind) || this.flag !== "green") return false;
+    if (c.d.agresividad < 65) return false;
+    if (c.wing > 0 || c.slowPuncture || c.tyres?.punctured || (c.tyres && c.tyres.F.wear > 0.85)) return false;
+    if (this.avgWater() > 0.45) return false;
+    if (other && this.lapsDone(c) !== this.lapsDone(other)) return false;
+    const rem = this.laps - this.lapsDone(c);
+    const ord = this.lapOrder[this.leaderLap];
+    const pos = ord ? ord.indexOf(c.id) : -1;
+    // contra su compañero solo arriesga al límite si es muy agresivo luchando por podio en el tramo final
+    if (other && c.team === other.team) return c.d.agresividad >= 74 && rem <= 5 && pos >= 0 && pos < 3;
+    // 1. Duelo contra rival directo (emparejamiento clásico o rivalidad de temporada)
+    if (other && (rivals(c, other) || this.rivalOf(c, other) > 0.25) && (pos < 0 || pos < 12)) return true;
+    if (c.d.agresividad < 68) return false;
+    const sprint = this.kind === "SPRINT";
+    // 2. Final de carrera con victoria/podio o límite de puntos en juego
+    const lateWin = rem <= (sprint ? 4 : 10);
+    if (lateWin && pos >= 0) {
+      if (pos < (sprint ? 3 : 4)) return true; // victoria / podio
+      if (sprint ? (pos >= 6 && pos < 9) : (pos >= 8 && pos < 12)) return true; // frontera de puntos
+      if (c.d.agresividad >= 74 && rem <= (sprint ? 3 : 6) && pos < (sprint ? 8 : 10)) return true; // top puntos, pilotos muy agresivos
+    }
+    // 3. Relanzada tras coche de seguridad o bandera roja (las 2 vueltas antes de rehabilitar MO/DRS) en el top 10
+    const afterRestart = this.leaderLap >= 2 && this.leaderLap + 1 < this.drsEnabledFromLap;
+    if (afterRestart && c.d.agresividad >= 72 && pos >= 0 && pos < 10) return true;
+    return false;
   }
 
   fightMode(c: Car): "normal" | "defend" | "yield" {
@@ -1369,7 +1437,7 @@ export class Session {
         continue;
       }
       // la culpa suele ser del que se mete en el sitio del otro: el que ataca o el que cierra la puerta tarde
-      const blameC = clamp((p.byDef ? 0.3 : 0.62) + (c.d.agresividad - a.d.agresividad) / 120 + (this.hard(c) ? RISK_BLAME : 0) - (this.hard(a) ? RISK_BLAME : 0), 0.1, 0.9);
+      const blameC = clamp((p.byDef ? 0.3 : 0.62) + (c.d.agresividad - a.d.agresividad) / 120 + (this.hard(c, a) ? RISK_BLAME : 0) - (this.hard(a, c) ? RISK_BLAME : 0), 0.1, 0.9);
       const who = this.rng.chance(blameC) ? c : a, other = who === c ? a : c;
       if (who.loc === "out" || who.loc === "fin") continue;
       const closed = p.byDef && who === a;
@@ -1564,17 +1632,19 @@ export class Session {
       else this.yellow(ms, true, this.rng.range(40, 90), why);
       return;
     }
-    const urban = !!(this.track.def.urbano ?? this.track.def.entorno);
-    // un accidente fuerte (barreras dañadas) puede parar la carrera
-    if (kind === "crash" && severity >= 0.7 && this.rng.chance((urban ? 0.16 : 0.08) * severity)) { this.redFlag(`accidente de ${c.d.abrev}, reparación de barreras`); return; }
+    const u = this.track.urban;
+    // un accidente fuerte (barreras dañadas o pista bloqueada) puede parar la carrera; más en vuelta 1 y entre muros
+    const lap1Red = this.leaderLap === 0 ? 1.45 : 1;
+    if (kind === "crash" && severity >= 0.65 && this.rng.chance((0.19 + 0.16 * u) * severity * lap1Red)) { this.redFlag(`accidente de ${c.d.abrev}, reparación de barreras`); return; }
+    const lerp = (a: number, b: number) => a + (b - a) * u;
     let pSC: number, pVSC: number;
-    if (kind === "crash") { pSC = urban ? 0.75 : 0.45 + 0.4 * severity; pVSC = urban ? 0.2 : 0.4; }
-    else if (kind === "failure") { pSC = urban ? 0.45 : 0.18 + 0.3 * severity; pVSC = urban ? 0.4 : 0.42; }
-    else { pSC = urban ? 0.25 : 0.08; pVSC = urban ? 0.4 : 0.28; }
+    if (kind === "crash") { pSC = lerp(0.45 + 0.4 * severity, 0.75); pVSC = lerp(0.4, 0.2); }
+    else if (kind === "failure") { pSC = lerp(0.18 + 0.3 * severity, 0.45); pVSC = lerp(0.42, 0.4); }
+    else { pSC = lerp(0.08, 0.25); pVSC = lerp(0.28, 0.4); }
     // antes de 2015 no había virtual: algunas de esas veces salía el de verdad y el resto bastaba con amarillas
     if (!this.era.vsc) { pSC += pVSC * 0.35; pVSC = 0; }
     const r = this.rng.next();
-    if (r < pSC) this.deploy("sc", why, severity + (urban ? 0.2 : 0));
+    if (r < pSC) this.deploy("sc", why, severity + 0.2 * u);
     else if (r < pSC + pVSC) this.deploy("vsc", why, severity);
     else this.yellow(ms, kind !== "debris", this.rng.range(50, 140), why);
   }
@@ -1652,8 +1722,16 @@ export class Session {
     if (c.e.pu) power -= puPowerLoss(puLife(c.e.pu.km0 + c.puKm));
     // un motor o una batería tocados no dan todo
     if (c.fault && (c.fault.what === "motor" || c.fault.what === "unidad de potencia" || c.fault.what === "MGU-K" || c.fault.what === "batería")) power -= 1.2 * c.fault.lvl;
-    if (c.drs && m.drs) power += MO_POWER;
+    const moZone = this.era.ayuda === "mo" ? m.xZone : m.drs;
+    if (c.drs && moZone && (this.era.ayuda !== "mo" || c.soc > 0.05)) {
+      // en 2026 el modo adelantamiento mantiene los 350 kW hasta ~337 km/h cuando el modo normal recorta desde ~280 km/h:
+      // la ganancia real crece con la velocidad en recta
+      const moScale = this.era.ayuda === "mo" ? clamp((m.vAvg - 190) / 85, 0.35, 1.15) : 1;
+      power += MO_POWER * moScale;
+    }
     let dragCut = -c.team.resistencia - WATER_DRAG * Math.min(3, water);
+    // aero activa 2026: cuando el Modo X está cerrado en recta (pista mojada, neutralización o morro dañado), se corre en Modo Z (+resistencia)
+    if (this.era.activeAero && m.xZone && !this.xModeAllowed(c)) dragCut -= XMODE_DRAG * m.throttle;
     if (c.aheadId >= 0) dragCut += tow(c.followGap) * wake(c.aheadDl ?? 0, WAKE_TOW) * m.throttle;
     dragCut -= 100 * air;
     if (su) dragCut -= this.setupK!.dragPerA * su.ea;
@@ -1831,8 +1909,13 @@ export class Session {
     const underFlag = this.flag !== "green" || ph.speed < 1;
     c.fuel -= (this.fuelLap(c) * ENGINE_FUEL[c.engine] * PUSH_FUEL[c.push] * (underFlag ? 0.5 : 1) * move) / L;
     if (!underFlag) {
-      const dE = this.ersLap * this.ersIn[m.i] - (this.ersLap - ERS_NET[c.ers]) * this.ersOut[m.i]; // MJ en este minisector
-      c.soc = clamp(c.soc + (dE / (this.tRef[m.i] * trimK)) * dt, 0, SOC_MAX);
+      // eficiencia de cosecha eléctrica en 2026: ligeramente ligada a la unidad de potencia
+      const ersEff = this.era.ers >= 0.8 ? clamp(1 + (c.team.potencia - 0.3) * 0.035, 0.91, 1.05) : 1;
+      const dE = this.ersLap * ersEff * this.ersIn[m.i] - (this.ersLap - ERS_NET[c.ers]) * this.ersOut[m.i]; // MJ en este minisector
+      // en 2026 el modo adelantamiento tira de la batería (~0,35 MJ por vuelta de uso en rectas X)
+      const moDrain = this.era.ayuda === "mo" && c.drs && m.xZone && c.soc > 0.05 ? 0.35 / this.moTime : 0;
+      c.soc = clamp(c.soc + (dE / (this.tRef[m.i] * trimK) - moDrain) * dt, 0, SOC_MAX);
+      if (this.era.ayuda === "mo" && c.drs && c.soc <= 0.05) c.drs = false;
     } else c.soc = clamp(c.soc + (1.5 / this.lapRefRace) * dt, 0, SOC_MAX);
     // media de la última vuelta más o menos: es la que mira la IA para elegir modo, no el pico del momento
     c.socAvg = (c.socAvg ?? c.soc) + ((c.soc - (c.socAvg ?? c.soc)) * dt) / (this.lapRefRace * 0.6);
@@ -1925,11 +2008,21 @@ export class Session {
       else this.sessionLine(c, k);
       if (c.loc !== "track") return;
     }
-    if (m.drsDetect) {
-      c.drsEligible = isRaceKind(this.kind) && this.era.ayuda !== "ninguna" && this.flag === "green" && this.leaderLap + 1 >= this.drsEnabledFromLap && c.followGap < 1.0 && this.avgWater() < 0.35;
+    c.xMode = this.era.activeAero && m.xZone && this.xModeAllowed(c);
+    if (this.era.ayuda === "mo") {
+      // 2026: un único punto de detección por vuelta da derecho al Modo Adelantamiento toda la vuelta siguiente
+      if (m.moDetect) {
+        c.drsEligible = isRaceKind(this.kind) && this.flag === "green" && this.leaderLap + 1 >= this.drsEnabledFromLap && c.followGap < 1.0 && this.avgWater() < 0.35;
+      }
+      if (this.flag !== "green") { c.drsEligible = false; c.drs = false; }
+      else c.drs = c.drsEligible && m.xZone && c.soc > 0.05;
+    } else {
+      if (m.drsDetect) {
+        c.drsEligible = isRaceKind(this.kind) && this.era.ayuda !== "ninguna" && this.flag === "green" && this.leaderLap + 1 >= this.drsEnabledFromLap && c.followGap < 1.0 && this.avgWater() < 0.35;
+      }
+      if (m.drs) c.drs = c.drsEligible;
+      else if (!m.drsDetect) c.drs = false;
     }
-    if (m.drs) c.drs = c.drsEligible;
-    else if (!m.drsDetect) c.drs = false;
 
     if (isRaceKind(this.kind)) {
       // al simular hasta el final, el equipo también lleva a tus pilotos (con la estrategia elegida)
@@ -2451,7 +2544,8 @@ export class Session {
     const crashP = (CRASH_P + 0.06 * Math.min(1, water)) * (1.5 - Math.min(26, ro) / 26) / RUNOFF_NORM;
     if (r < crashP) {
       c.fx = { k: "crash", t: this.t };
-      this.retire(c, "accidente", 0.7);
+      const sev = clamp(0.62 + 0.24 * (m.vAvg / 220) + (ro < 5 ? 0.12 : 0) + (this.lapsDone(c) === 0 ? 0.08 : 0), 0.65, 1);
+      this.retire(c, "accidente", sev);
     } else if (r < crashP + 0.2) {
       const loss = this.rng.range(1.8, 6);
       c.delay += loss;
@@ -2537,10 +2631,11 @@ export class Session {
     // batería, motor, resistencia y peso
     const prev = this.track.ms[(m.i - 1 + this.N) % this.N];
     // (el que va a atacar se mete detrás en la recta a por el rebufo, aunque viniera abierto de la curva anterior)
-    const onStraight = (x: Car) => { const d = x.drs, dl = x.aheadDl, o = x.offLine; x.drs = x.drsEligible && prev.drs; if (x === c) { x.aheadDl = 0; x.offLine = 0; } const t = this.msTime(x, prev, this.water[prev.i]).t; x.drs = d; x.aheadDl = dl; x.offLine = o; return t; };
+    const prevAid = this.era.ayuda === "mo" ? prev.xZone : prev.drs;
+    const onStraight = (x: Car) => { const d = x.drs, dl = x.aheadDl, o = x.offLine; x.drs = x.drsEligible && prevAid && (this.era.ayuda !== "mo" || x.soc > 0.05); if (x === c) { x.aheadDl = 0; x.offLine = 0; } const t = this.msTime(x, prev, this.water[prev.i]).t; x.drs = d; x.aheadDl = dl; x.offLine = o; return t; };
     const straight = onStraight(a) - onStraight(c);
     const skill = (c.d.ataque - a.d.defensa) / 100;
-    const hardC = this.hard(c), hardA = this.hard(a);
+    const hardC = this.hard(c, a), hardA = this.hard(a, c);
     const adv = grip + PASS_KS * straight + skill + (hardC ? RISK_ADV : 0);
     const near = clamp((PASS_REACH - c.followGap) / (PASS_REACH - 0.2), 0.25, 1);
     // el de delante puede no pelear (deja pasar al que va más rápido) o cerrar la puerta (cuesta tiempo y gomas)
@@ -2560,10 +2655,15 @@ export class Session {
       a.tyres!.F.wear = Math.min(1, a.tyres!.F.wear + 0.0004);
     }
     const will = 1 / (1 + Math.exp(-(adv - (this.passT - PASS_LAT) - extra - (defend ? DEFEND_T : 0) - (mode === "yield" ? 0 : RIVAL_DEF * this.rivalOf(c, a) + (hardA ? RISK_DEF : 0))) / PASS_W));
-    const real = will > 0.1 && this.t - (c.lastTry ?? -99) > (hardC ? RISK_RETRY : 6);
+    const cooldownOk = this.t - (c.lastTry ?? -99) > (hardC ? RISK_RETRY : 6);
+    const real = will > 0.1 && cooldownOk;
+    // en mojado, la falta de visibilidad (spray) y la frenada delicada provocan toques incluso sin adelantamiento claro
+    const wetClose = wAtt > 0.22 && zone > 0 && c.followGap < 0.42 && cooldownOk;
     // se tocan sobre todo cuando el intento es de verdad y los dos son de no levantar
-    if (real || will > 0.5) {
-      const contactP = 0.004 * (0.5 + c.d.agresividad / 100) * (0.5 + a.d.agresividad / 120) * (lap1 ? 2.2 : 1) * (1 + Math.min(1, wAtt) * 1.5) * (1.4 - will) * (defend ? 1.4 : 1) * (rivals(c, a) ? 1.7 : 1) * (1 + RIVAL_CONTACT * this.rivalOf(c, a)) ;
+    if (real || will > 0.5 || wetClose) {
+      const wetSpray = wAtt > 0.18 ? 1 + Math.min(1.2, wAtt) * 1.9 * (1.25 - c.d.lluvia / 100) : 1 + Math.min(1, wAtt) * 1.5;
+      const wetScale = !real && will <= 0.5 ? 0.28 : 1;
+      const contactP = 0.004 * wetScale * (0.5 + c.d.agresividad / 100) * (0.5 + a.d.agresividad / 120) * (lap1 ? 2.2 : 1) * wetSpray * (1.4 - will) * (defend ? 1.4 : 1) * (rivals(c, a) ? 1.7 : 1) * (1 + RIVAL_CONTACT * this.rivalOf(c, a)) ;
       if (this.rng.chance(contactP)) { c.lastTry = this.t; this.duel(c, a).touch++; return this.startTouch(c, a); }
     }
     if (!this.rng.chance(Math.min(0.92, near * will))) {
@@ -2611,13 +2711,14 @@ export class Session {
     const water = this.water[m.i];
     const grip = clamp((this.msTime(c, m, water + 0.6 * Math.max(0, this.waterOff[m.i] - water)).grip / this.msTime(a, m, water).grip - 1) * 100 * this.secPerGrip, -3, 5);
     // la recta: él pegado al otro; el de delante, como vaya ahora (si va en tren también lleva el modo adelantamiento)
-    c.followGap = 0.3; c.aheadId = a.id; c.drs = moOn && prev.drs; c.aheadDl = 0; c.offLine = 0;
-    a.followGap = ka.fg; a.drs = a.drsEligible && prev.drs;
+    const prevAid = this.era.ayuda === "mo" ? prev.xZone : prev.drs;
+    c.followGap = 0.3; c.aheadId = a.id; c.drs = moOn && prevAid && (this.era.ayuda !== "mo" || c.soc > 0.05); c.aheadDl = 0; c.offLine = 0;
+    a.followGap = ka.fg; a.drs = a.drsEligible && prevAid && (this.era.ayuda !== "mo" || a.soc > 0.05);
     const straight = this.msTime(a, prev, this.water[prev.i]).t - this.msTime(c, prev, this.water[prev.i]).t;
     put(c, kc); put(a, ka);
-    const adv = grip + PASS_KS * straight + (c.d.ataque - a.d.defensa) / 100 + (this.hard(c) ? RISK_ADV : 0);
+    const adv = grip + PASS_KS * straight + (c.d.ataque - a.d.defensa) / 100 + (this.hard(c, a) ? RISK_ADV : 0);
     const mode = this.fightMode(a);
-    const need = this.passT - PASS_LAT + extra + (mode === "defend" ? DEFEND_T : 0) + (mode === "yield" ? 0 : RIVAL_DEF * this.rivalOf(c, a) + (this.hard(a) ? RISK_DEF : 0));
+    const need = this.passT - PASS_LAT + extra + (mode === "defend" ? DEFEND_T : 0) + (mode === "yield" ? 0 : RIVAL_DEF * this.rivalOf(c, a) + (this.hard(a, c) ? RISK_DEF : 0));
     if (mode === "yield" && adv > 0) return { adv, need, p: 1 };
     return { adv, need, p: 1 / (1 + Math.exp(-(adv - need) / PASS_W)) };
   }
@@ -2646,7 +2747,7 @@ export class Session {
       if (c.player || a.player || pos <= 5) this.log({ kind: "info", text: `🚪 ${a.d.abrev} le cierra la puerta a ${c.d.abrev}`, carId: a.id, other: c.id, n: pos, code: "cierra" });
     }
     // ¿se moverá otra vez en la frenada? (solo al empezar a tapar el interior, con su propio azar)
-    const weave = prev ? prev.weave : cover && isRaceKind(this.kind) && (this.moveRoll(MOVE2_P * (0.4 + a.d.agresividad / 100) * (this.hard(a) ? MOVE2_HARD : 1)) as boolean);
+    const weave = prev ? prev.weave : cover && isRaceKind(this.kind) && (this.moveRoll(MOVE2_P * (0.4 + a.d.agresividad / 100) * (this.hard(a, c) ? MOVE2_HARD : 1)) as boolean);
     c.maneuver = { a: a.id, side: prev ? prev.side : side, outside: prev ? prev.outside : outside, pass, cover, t0: prev ? prev.t0 : this.t, touch: prev?.touch, sbs: prev?.sbs, said: prev?.said, weave, weaved: prev?.weaved };
     return c.maneuver.outside;
   }
@@ -2677,7 +2778,7 @@ export class Session {
   private startTouch(c: Car, a: Car) {
     this.stats.touchStart++;
     this.startManeuver(c, a, false);
-    const pushC = c.d.agresividad + (this.hard(c) ? 25 : 0), pushA = a.d.agresividad + (this.hard(a) ? 25 : 0);
+    const pushC = c.d.agresividad + (this.hard(c, a) ? 25 : 0), pushA = a.d.agresividad + (this.hard(a, c) ? 25 : 0);
     c.maneuver!.touch = { byDef: c.maneuver!.cover && pushA > pushC };
     c.maneuver!.t0 = this.t;
     // el de delante frena un pelo antes de la cuenta (o el otro tarde): lo justo para que el que ataca le alcance
@@ -2776,7 +2877,7 @@ export class Session {
       if (done) { c.maneuver = undefined; continue; }
       // el intento que no sale: se mete, no le da y vuelve detrás
       const back = !mv.pass && age > MV_FAIL_T;
-      const hc = this.hard(c), ha = this.hard(a);
+      const hc = this.hard(c, a), ha = this.hard(a, c);
       c.latWant = back ? 0 : mv.side * (mv.blue ? BLUE_ON : hc ? MV_SIDE_HARD : MV_SIDE);
       // (en duro, el que tapa el interior espera a cerrarlo hasta tener al otro encima, y lo cierra más)
       const coverNow = mv.cover && (!ha || age > COVER_LATE);
@@ -2816,7 +2917,7 @@ export class Session {
       }
     }
     // salida: hasta la primera frenada cada uno sigue por su lado de la parrilla
-    if (isRaceKind(this.kind)) for (const c of on) if (c.gridSide && this.launching(c, 330)) c.latWant = c.gridSide * GRID_SIDE;
+    if (isRaceKind(this.kind)) for (const c of on) if (c.gridSide && this.launching(c, this.launchClear)) c.latWant = c.gridSide * GRID_SIDE;
     // boxes: el que va a parar se pone del lado de boxes antes de la entrada
     const ps = this.track.def.boxes.lado === "izquierda" ? -1 : 1;
     for (const c of on) {
@@ -2840,20 +2941,32 @@ export class Session {
       c.latWant = c.offWide.side * OFF_WIDE; c.latQuick = true; c.inMv = true;
     }
     for (let i = 0; i < n; i++) {
-      const me = on[i], front = on[(i - 1 + n) % n];
-      if (me === front || me.inMv) continue;
-      let gap = posOf(front) - posOf(me);
-      if (gap < 0) gap += L;
-      // se aparta antes cuanto más deprisa se le echa encima (así no lo atraviesa al pasarle)
-      if (gap < LAT_CLOSE + Math.max(0, me.v - front.v) * LAT_LOOK) {
-        // hacia el lado contrario al que ya se aparta el de delante; si no se aparta, por donde ya va cada uno (así no
-        // cambian de lado a mitad de un adelantamiento) y, si van en la misma línea, según el coche
-        const dl = (me.lat ?? 0) - (front.lat ?? 0);
-        const sgn = front.latWant! > 0 ? -1 : front.latWant! < 0 ? 1 : Math.abs(dl) > 0.3 ? Math.sign(dl) : (me.id & 1 ? 1 : -1);
-        if (front.latWant === 0) front.latWant = -sgn * LAT_YIELD;
-        me.latWant = sgn * LAT_SIDE;
-        // pegados (morro con caja de cambios o ya en paralelo): se apartan más deprisa
-        if (gap < 5.6) { me.latQuick = true; front.latQuick = true; }
+      const me = on[i];
+      if (me.maneuver?.touch) continue;
+      const checkMax = Math.min(2, n - 1);
+      for (let k = 1; k <= checkMax; k++) {
+        const front = on[(i - k + n) % n];
+        if (me === front) continue;
+        if (me.inMv && (!me.maneuver || front.id === me.maneuver.a)) continue;
+        let gap = posOf(front) - posOf(me);
+        if (gap < 0) gap += L;
+        const dv = Math.max(0, me.v - front.v);
+        const granted = me.grant === front.id && this.t < me.grantUntil;
+        // se aparta antes cuanto más deprisa se le echa encima (ej. intermedios alcanzando slicks en transición)
+        const lookDist = (granted ? 20 : LAT_CLOSE) + dv * LAT_LOOK;
+        if (gap < lookDist) {
+          // hacia el lado contrario al que ya se aparta el de delante; si no se aparta, por donde ya va cada uno (así no
+          // cambian de lado a mitad de un adelantamiento) y, si van en la misma línea, según el coche
+          const dl = (me.lat ?? 0) - (front.lat ?? 0);
+          const sgn = front.latWant! > 0.08 ? -1 : front.latWant! < -0.08 ? 1 : Math.abs(dl) > 0.3 ? Math.sign(dl) : (me.id & 1 ? 1 : -1);
+          const side = granted || dv > 6 ? 0.62 : LAT_SIDE;
+          const yld = granted || dv > 6 ? 0.38 : LAT_YIELD;
+          if (Math.abs(front.latWant!) < 0.08 && !front.inMv) front.latWant = -sgn * yld;
+          me.latWant = sgn * (gap < 8 && Math.abs(dl) < 2.2 ? Math.max(side, 0.72) : side);
+          // pegados o con gran diferencia de velocidad: se apartan rápido para evitar solapes geométricos
+          if (gap < 10 + dv * 0.65 || granted) { me.latQuick = true; if (!front.inMv) front.latQuick = true; }
+          break;
+        }
       }
     }
     const k = 1 - Math.exp(-dt / LAT_TAU), kq = 1 - Math.exp(-dt / LAT_TAU_QUICK);
@@ -2985,8 +3098,8 @@ export class Session {
       a.chased = b.followGap;
       // salida: la parrilla va en dos filas y hay sitio a los lados; hasta la primera frenada cada uno avanza con su
       // arrancada y los puestos se ganan o se pierden por pura tracción (sin empujar hacia atrás al que se queda)
-      if (race && this.flag === "green" && this.t < 14 && this.lapsDone(b) === 0 && b.s < 330 && a.s < 420) continue;
-      if (race && this.flag === "green" && this.launchT > 0 && this.t - this.launchT < 14 && b.gridS > 0 && b.s - b.gridS < 330) continue;
+      if (race && this.flag === "green" && this.t < 14 && this.lapsDone(b) === 0 && b.s < this.launchClear && a.s < this.launchClear + 90) continue;
+      if (race && this.flag === "green" && this.launchT > 0 && this.t - this.launchT < 14 && b.gridS > 0 && b.s - b.gridS < this.launchClear) continue;
       // coche de seguridad: el doblado que se desdobla pasa a todos hasta llegar a la vuelta del líder
       if (b.unlap && race && (this.flag === "sc" || this.flag === "sc_in")) {
         const lead = this.carById(this.leaderId);

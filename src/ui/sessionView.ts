@@ -1752,7 +1752,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       return cell(`▲ ${ahead ? ahead.d.abrev : ""}`, f(ga), gapTrend(c.id * 2, ahead?.id, ga, -1)) + cell(`▼ ${behind ? behind.d.abrev : ""}`, f(gb), gapTrend(c.id * 2 + 1, behind?.id, gb, 1))
         + cell("Última", lap1(lt), ltCls)
         + cell("Ruedas", temps, "tc") + cell("Gasolina", `${d >= 0 ? "+" : ""}${d.toFixed(1)} v`, d < 0 ? "redt" : d < 0.4 ? "yellow" : "")
-        + (sess.ersLabel ? cell(c.drs ? `${sess.ersLabel} · ${sess.aidShort}` : sess.ersLabel, `${soc} %`, c.drs ? "green" : soc < 20 ? "yellow" : "") : cell(c.drs ? sess.aidShort ?? "" : "Ayuda", c.drs ? "abierto" : "—", c.drs ? "green" : "dim"));
+        + (sess.ersLabel ? cell(c.drs ? `${sess.ersLabel} · ${sess.aidShort}` : sess.era.activeAero && sess.xModeWetOff ? `${sess.ersLabel} · Z` : sess.era.activeAero && c.xMode ? `${sess.ersLabel} · X` : sess.ersLabel, `${soc} %`, c.drs ? "green" : soc < 20 ? "yellow" : "") : cell(c.drs ? sess.aidShort ?? "" : "Ayuda", c.drs ? "abierto" : "—", c.drs ? "green" : "dim"));
     }
     const best = quali ? c.bestByPart[c.eliminated ? c.elimPart! : sess.part] : c.best;
     const secs = [0, 1, 2].map((j) => { const cur = !isNaN(c.secCur[j]); const v = cur ? c.secCur[j] : c.secLast[j]; return `<span class="${tcls(v, c.secBest[j], sess.secBest[j])}" style="${cur ? "" : "opacity:.6"}">●</span>`; }).join("");

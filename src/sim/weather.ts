@@ -268,10 +268,17 @@ function spawnFront(w: WeatherState) {
   }
 }
 
+/**
+ * Escala de los escenarios húmedos respecto a los pesos climáticos: las normales mensuales dan días con lluvia en 24 h,
+ * no lluvia justo en la ventana de 90 min de carrera. Con 0,58 salen ~18-20 % de carreras mojadas (un poco más que el
+ * ~12-15 % real, en vez del ~30 %).
+ */
+const WET_DAY_SCALE = 0.58;
 export function pickScenario(rng: Rng, climate: Climate, prev?: Scenario): Scenario {
   // persistencia: el tiempo de un día se parece al del anterior
   if (prev && rng.chance(0.45)) return prev;
-  return rng.weighted<Scenario>(Object.entries(climate.pesos) as [Scenario, number][]);
+  const entries = Object.entries(climate.pesos).map(([k, v]) => [k, k === "seco" ? v : v * WET_DAY_SCALE]) as [Scenario, number][];
+  return rng.weighted<Scenario>(entries);
 }
 
 /** Crea el tiempo de un día a la hora startMin (minutos locales). */
@@ -333,7 +340,7 @@ export function stepWeather(w: WeatherState, dtMin: number): void {
   const conv = 1 - cl.tardeConvectiva + cl.tardeConvectiva * 1.8 * convection(w.clock);
   // (en un día estable, pocas y flojas, como las del principio del día: antes nacían ~0,014 por minuto con toda su
   // fuerza y el 17 % de los días «Estable» llovía un rato sobre el circuito a la hora de la clasificación)
-  const base = { seco: SECO_BIRTH * (cl.celulasSeco ?? 1), chubascos: 0.42, frente: 0.03, llovizna: 0.07 }[w.scenario];
+  const base = { seco: SECO_BIRTH * (cl.celulasSeco ?? 1), chubascos: 0.25, frente: 0.03, llovizna: 0.07 }[w.scenario];
   if (r.chance(base * conv * dtMin)) {
     const small = r.chance(cl.pequenas);
     // la mayoría brota junto a una célula que ya llueve (frente de racha); si no, nace sola

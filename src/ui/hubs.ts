@@ -1,7 +1,7 @@
 import type { SessionSnapshot } from "../sim/snapshot";
 import { TEAMS, BASE_TEAMS, CIRCUITS, ROUNDS, DRIVERS, GRID_CHANGES, getTrack, calendarOf, devContext, gridOf, CALENDARS, circuitOf, devRounds, person, whoAt, useSeason } from "./data";
 import { objectivesFor, objectiveStatus } from "../sim/objectives";
-import { DEV_AREAS, DEV_SIZES, DEV_RIVAL, MOTOR_CAP, DevArea, DevSize, devLeft, devExpect, orderPart, newDev, isWorks, devGains } from "../sim/development";
+import { DEV_AREAS, DEV_SIZES, MOTOR_CAP, DevArea, DevSize, devLeft, devExpect, orderPart, newDev, isWorks, devGains, rivalDevAt } from "../sim/development";
 import { myTeamPanel, puSummary, puPanel, wirePu, PLAYER_TEAM_ID } from "./teamBuilder";
 import { $, esc, fmtLap, fmtRace, tyreHtml, fmtDate, sheet, setLabel, groupSets, flagHtml, setBack } from "./common";
 import { SeasonState, RoundResult, RaceSummary, driverStandings, teamStandings, RACE_POINTS, SPRINT_POINTS } from "../sim/season";
@@ -392,8 +392,26 @@ function devPanel(s: SeasonState, team: TeamDef, cal: string[], done: boolean): 
       return `<button data-dev="${a}" data-size="${z}"${ok ? "" : " disabled"} title="${sz.name}: ${sz.cost} M, llega para el ${gp(ready)}">${sz.name}<br><span class="small">${sz.cost} M · ${devGainText(a, devExpect(a, z, ctx.pubK))}</span></button>`;
     }).join("")}</div></div>`).join("")}</div>`;
   const parts = d.parts.slice().sort((a, b) => b.id - a.id);
+  let rivalHtml = "";
+  if (!s.equipo && cal.length > 1) {
+    const rMap = rivalDevAt(s.grid ?? BASE_TEAMS, s.seed, Math.min(s.round, cal.length - 1), cal.length);
+    const rivals = [...rMap.values()].filter((x) => x.teamId !== s.playerTeam);
+    const arrivals = rivals.flatMap((x) => x.arrivals);
+    const byGain = rivals.slice().sort((a, b) => (b.aero * AERO_S + b.motor * POWER_S) - (a.aero * AERO_S + a.motor * POWER_S));
+    const news = arrivals.map((p) => {
+      const icon = p.area === "motor" ? "⚡" : p.verdict === "salto" ? "🚀" : p.verdict === "fallo" ? "⚠️" : "📦";
+      const label = p.area === "motor" ? "mejora de unidad de potencia" : p.verdict === "salto" ? "gran salto aerodinámico" : p.verdict === "fallo" ? "paquete aerodinámico que decepciona" : "paquete aerodinámico";
+      return `${icon} <b>${esc(p.team)}</b>: ${label} (${devGainText(p.area, p.real)})`;
+    });
+    const top = byGain.slice(0, 3).map((x) => `${esc(x.team)} (${fmtS(x.aero * AERO_S + x.motor * POWER_S)} · ATR ${x.atr}%)`);
+    const tail = byGain.slice(-1)[0];
+    rivalHtml = `<div class="small" style="margin-top:8px;padding-top:6px;border-top:1px solid rgba(255,255,255,.08)">
+      ${news.length ? `<div style="margin-bottom:4px"><b>En el paddock (${gp(Math.min(s.round, cal.length - 1))}):</b><br>${news.join("<br>")}</div>` : ""}
+      ${s.round > 0 && byGain.length ? `<div class="dim"><b>Evolución rival (ATR):</b> más avanzan ${top.join(", ")}${tail ? ` · rezagado: ${esc(tail.team)} (${fmtS(tail.aero * AERO_S + tail.motor * POWER_S)} · ATR ${tail.atr}%)` : ""}.</div>` : ""}
+    </div>`;
+  }
   return `<div class="panel"><div class="hd"><span class="t">Desarrollo del coche</span><span class="small">Quedan <b>${String(left).replace(".", ",")} M</b> de ${d.budget} M</span></div><div class="bd">
-    <div class="small" style="margin-bottom:6px">Pide piezas con el presupuesto de la temporada: las pequeñas y medianas tardan 2 rondas en llegar y las grandes, 3. Una de cada cuatro rinde menos de lo que esperaban tus ingenieros. ${s.equipo ? "Los rivales evolucionan según su director técnico." : `Los rivales mejoran por su cuenta (unos ${fmtS(DEV_RIVAL * devRounds(s, 1) * AERO_S).slice(1)} por ronda): si no pides piezas, te quedas atrás.`}</div>
+    <div class="small" style="margin-bottom:6px">Pide piezas con el presupuesto de la temporada: las pequeñas y medianas tardan 2 rondas en llegar y las grandes, 3. Una de cada cuatro rinde menos de lo que esperaban tus ingenieros. ${s.equipo ? "Los rivales evolucionan según su director técnico." : "Los rivales traen paquetes discretos a lo largo del año según su cuota ATR de túnel de viento (70–120 %): unos aciertan grandes saltos y otros tropiezan."}</div>
     ${devPlanoHtml(d, s.round, (r) => (r < cal.length ? CIRCUITS[cal[r]].gp.replace("Gran Premio de ", "GP de ").replace(/ \(.*\)$/, "") : "después de la última carrera"))}
     ${now.aero || now.motor || now.fiab ? `<div class="small" style="margin-bottom:6px">Ya en el coche: ${[now.aero ? `aerodinámica ${devGainText("aero", now.aero)}` : "", now.motor ? `motor ${devGainText("motor", now.motor)}` : "", now.fiab ? `fiabilidad ${devGainText("fiab", now.fiab)}` : ""].filter(Boolean).join(" · ")}.</div>` : ""}
     ${order}
@@ -402,6 +420,7 @@ function devPanel(s: SeasonState, team: TeamDef, cal: string[], done: boolean): 
       const verdict = !arrived ? `<span class="dim">en fábrica: llega al ${gp(p.ready)}</span>` : `montada: <b class="${k < 0.75 ? "red" : k > 1.12 ? "green" : ""}">${devGainText(p.area, p.real)}</b>${k < 0.75 ? " (decepciona)" : k > 1.12 ? " (mejor de lo esperado)" : ""}`;
       return `<div class="devpart"><b>${DEV_AREAS[p.area].name}</b> <span class="dim">· ${DEV_SIZES[p.size].name.toLowerCase()} · se esperaba ${devGainText(p.area, p.expect)}</span><br><span class="small">${verdict}</span></div>`;
     }).join("")}</div>` : ""}
+    ${rivalHtml}
   </div></div>`;
 }
 function wireDev(s: SeasonState, redraw: () => void) {
