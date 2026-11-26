@@ -21,8 +21,10 @@ const ents = wk.entrants();
 for (let k = wk.nextKind(); k && k !== kind; k = wk.nextKind()) { const s = wk.build(k); while (!s.finished && s.wall < 5 * 3600) s.step(); wk.finish(s); }
 const runs: { win: string; order: string[]; wet: boolean; lead1: string }[] = [];
 let grid: string[] = [];
+const saved = structuredClone(st);
 for (let r = 0; r < K; r++) {
-  const s = wk.build(kind, r);
+  // cada carrera sale del estado de después de la clasificación (construir la sesión gasta juegos, unidades…)
+  const s = new Weekend(structuredClone(saved), track, teams, "-").build(kind, r);
   let maxW = 0;
   while (!s.finished && s.wall < 5 * 3600) { s.step(); if (Math.round(s.wall / 0.05) % 200 === 0) maxW = Math.max(maxW, s.avgWater()); }
   grid = s.lapOrder[0].map((i) => ents[i].d.abrev);
