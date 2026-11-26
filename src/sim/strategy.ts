@@ -172,6 +172,13 @@ export function planStrategy(sess: Session, car: Car, k: TeamKnowledge, fromLap 
  * igual y la mitad de la parrilla salía con duro.
  */
 const START_COST: Partial<Record<Compound, number>> = { H: 1.2 };
+/**
+ * Lo que se suma desde las primeras filas (en la pole entero, y menos cuanto más atrás; nada desde la undécima): delante, cada puesto que se pierde
+ * en la arrancada o en las primeras vueltas con el duro frío es uno que se había ganado en la clasificación y que luego
+ * hay que recuperar en pista o en boxes, y la primera tanda larga deja al de detrás el undercut. Sin esto, una de cada
+ * cuatro poles salía con duro y ganaba el 17 % de las veces (con medio, el 41 %; en 2026 la pole ganó el 71 %).
+ */
+const START_FRONT: Partial<Record<Compound, number>> = { H: 4 };
 /** En la sprint pesa más: es corta y sin paradas, lo que se pierde en la salida ya no se recupera. */
 const SPRINT_START_K = 2.5;
 
@@ -213,7 +220,8 @@ function enumeratePlans(sess: Session, car: Car, k: TeamKnowledge, fromLap = 0, 
     const c0 = st.c, a0 = st.age;
     const id0 = st.own ? avail[c0][0]?.id : undefined;
     // salida: con el duro se tracciona peor y, frío, se pierden puestos en la primera vuelta que luego cuesta recuperar
-    const startCost = st.own && fromLap === 0 && (isRace || sess.kind === "SPRINT") ? (START_COST[c0] ?? 0) * (isRace ? 1 : SPRINT_START_K) : 0;
+    const gridPos = Math.max(0, sess.lapOrder[0]?.indexOf(car.id) ?? 10);
+    const startCost = st.own && fromLap === 0 && (isRace || sess.kind === "SPRINT") ? ((START_COST[c0] ?? 0) + (START_FRONT[c0] ?? 0) * Math.max(0, 1 - gridPos / 10)) * (isRace ? 1 : SPRINT_START_K) : 0;
     const idx = (c: Compound, n: number) => n + (st.own && c === c0 ? 1 : 0); // índice del juego libre
     if (ruleOk([c0])) { const t = startCost + stintCost(sess, car, k, c0, a0, remain); if (keep(t)) options.push({ stints: [{ c: c0, endLap: total, setId: id0 }], total: t }); }
     for (const c2 of DRY) {
