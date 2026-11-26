@@ -77,6 +77,12 @@ const TEAM_SPREAD = 2.6;
  */
 const LAP_NOISE = 0.0065;
 /**
+ * En la clasificación, el ruido de cada vuelta (el de los minisectores y LAP_NOISE) se multiplica por esto: parte de
+ * lo que separa a dos pilotos con el mismo coche no es azar de esa vuelta sino su forma del fin de semana (FORM en
+ * weekend.ts), que sigue el domingo. Con las dos cosas, los compañeros quedan a ~0,3 s en clasificación, como en 2026.
+ */
+const QUALI_NOISE = 0.85;
+/**
  * Modo de clasificación del motor y la batería. Solo en las vueltas lanzadas de clasificación se despliega toda la
  * energía; en el resto (carrera, tandas largas, vueltas de salida) se gestiona y la vuelta sale más lenta. La pista
  * está calibrada con la pole, así que esto no acelera la clasificación: frena todo lo demás. Va en tanto por uno del
@@ -333,6 +339,8 @@ export interface Entrant {
   knowledge: TeamKnowledge;
   /** Modo «crear equipo»: kilómetros que lleva la unidad de potencia montada al empezar la sesión. */
   pu?: { km0: number };
+  /** Forma del piloto este fin de semana (fracción de agarre, ver FORM en weekend.ts); sin ella, 0. */
+  form?: number;
 }
 
 export type Loc = "garage" | "lane_out" | "track" | "lane_in" | "pit" | "out" | "fin";
@@ -831,7 +839,7 @@ export class Session {
         wing: 0, floor: 0, delay: 0, msK: -1, lat: 0, latOff: 0, latWant: 0, cross: [], lapTimes: [], lapStart: 0, best: Infinity, bestByPart: [], lapValid: true,
         noise: 0, followGap: 99, aheadId: -1, drs: false, drsEligible: false,
         grant: -1, grantUntil: 0, finishT: 0, plan: { stints: [] }, lastPitLap: -1,
-        ...this.carPace(d.ritmo, team),
+        ...this.carPace(d.ritmo, team, e.form ?? 0),
         wearMult: team.desgaste * (1.18 - d.neumaticos * 0.002),
         slowPuncture: false, autoPush: !e.player, autoErs: true, auto: true, gapWant: 2.5,
         queue: [], eliminated: false, sessionLaps: 0, stintW0: 0, stintL0: 0, learnedLap: -99, lastImpede: -1,
@@ -1626,8 +1634,8 @@ export class Session {
    * Ritmo del coche: el del piloto más el del coche en cada tipo de curva (agarre + curvas, con TEAM_SPREAD respecto al
    * mejor agarre de la parrilla); pace es la media con lo que pesa cada tipo de curva en este circuito.
    */
-  private carPace(ritmo: number, team: TeamDef): { pace: number; paceBand: [number, number, number] } {
-    const drv = (ritmo - 85) * 0.0007;
+  private carPace(ritmo: number, team: TeamDef, form = 0): { pace: number; paceBand: [number, number, number] } {
+    const drv = (ritmo - 85) * 0.0007 + form;
     const cv = team.curvas ?? [0, 0, 0];
     const paceBand = cv.map((x) => 1 + drv + (this.topTeam.agarre + (team.agarre + x - this.topTeam.agarre) * TEAM_SPREAD) / 180) as [number, number, number];
     const w = this.bandShare;
@@ -1864,10 +1872,11 @@ export class Session {
   private onMsEnter(c: Car, k: number) {
     const ms = k % this.N;
     const m = this.track.ms[ms];
-    const sigma = 0.0035 * (1.25 - c.d.regularidad / 100) * (1 + this.water[ms] * 0.6);
+    const qk = this.kind === "Q" || this.kind === "SQ" ? QUALI_NOISE : 1;
+    const sigma = 0.0035 * qk * (1.25 - c.d.regularidad / 100) * (1 + this.water[ms] * 0.6);
     // cada coche aparta agua de la trazada: así se abre la línea seca
     if (this.water[ms] > 0) this.water[ms] *= 1 - CAR_DRY * Math.min(1, c.v / 60);
-    if (ms === 0) c.lapNoise = this.rng.gauss(0, LAP_NOISE * (1.25 - c.d.regularidad / 100) * (1 + this.water[ms] * 0.6));
+    if (ms === 0) c.lapNoise = this.rng.gauss(0, LAP_NOISE * qk * (1.25 - c.d.regularidad / 100) * (1 + this.water[ms] * 0.6));
     c.noise = this.rng.gauss(0, sigma) + (c.lapNoise ?? 0);
     this.sectorTiming(c, k, ms);
 

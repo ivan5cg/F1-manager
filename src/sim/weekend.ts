@@ -64,6 +64,25 @@ const DAY_FULL: Record<string, string> = { J: "Jueves", V: "Viernes", S: "Sábad
 /** Los tres días del fin de semana de un circuito (letras): casi siempre viernes a domingo; en Bakú y Las Vegas, de jueves a sábado. */
 const daysOf = (def: any): string => def.dias ?? "VSD";
 /** Horario del circuito para un formato: el suyo, o el del otro formato si el calendario lo cambia (horarioOtro). */
+/**
+ * Forma de cada piloto en el fin de semana: σ en fracción de agarre (0,15 % ≈ 0,13 s por vuelta), la misma en libres,
+ * clasificación y carrera. Es lo que hace que el que va bien el sábado vaya bien el domingo: en 2026 la pole acabó
+ * delante de su compañero en 17 de 18 carreras, y en el juego, sin esto, en dos de cada tres (la clasificación era
+ * azar de esa vuelta y la carrera azar aparte). Sale de la semilla y del piloto, sin tocar el azar de las sesiones.
+ */
+const FORM = 0.0015;
+export function weekendForm(seed: number, who: string): number {
+  const u = [0, 1].map((k) => {
+    const txt = `${seed}:${who}:${k}`;
+    let h = 2166136261;
+    for (let i = 0; i < txt.length; i++) h = Math.imul(h ^ txt.charCodeAt(i), 16777619);
+    // mezcla final (murmur3): sin ella, semillas seguidas daban casi la misma forma
+    h ^= h >>> 16; h = Math.imul(h, 0x85ebca6b); h ^= h >>> 13; h = Math.imul(h, 0xc2b2ae35); h ^= h >>> 16;
+    return ((h >>> 0) + 0.5) / 4294967296;
+  });
+  return FORM * Math.sqrt(-2 * Math.log(u[0])) * Math.cos(2 * Math.PI * u[1]);
+}
+
 export const horarioFor = (def: any, sprint: boolean) => (sprint === (def.formato === "sprint") ? def.horario : def.horarioOtro ?? def.horario);
 
 export function newWeekend(round: number, def: any, teams: TeamDef[], seed: number): WeekendState {
@@ -132,7 +151,7 @@ export class Weekend {
     let id = 0;
     for (const t of this.teams) for (const d of t.pilotos) {
       const pu = this.st.pu?.[id];
-      out.push({ id, d, team: t, player: t.id === this.playerTeam, sets: this.st.sets[id], knowledge: this.st.knowledge[t.id], pu: pu ? { km0: pu.units[pu.cur].km } : undefined });
+      out.push({ id, d, team: t, player: t.id === this.playerTeam, sets: this.st.sets[id], knowledge: this.st.knowledge[t.id], pu: pu ? { km0: pu.units[pu.cur].km } : undefined, form: weekendForm(this.st.seed, d.abrev) });
       id++;
     }
     return out;

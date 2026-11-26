@@ -746,7 +746,9 @@ export function aiModes(sess: Session, car: Car, left: number) {
   let want = 2;
   const cooling = car.coolUntil !== undefined && done <= car.coolUntil;
   if (gapA < 1.3 && !cooling) want = 3;
-  if (gapB < 1.0) want = Math.max(want, 3);
+  // el de delante se defiende con el mismo margen con el que ataca el de detrás (antes, a 1,0 s): si no, entre 1,0 y
+  // 1,3 s el de detrás iba en Atacar y el de delante en Normal, y era lo que más adelantamientos al líder daba
+  if (gapB < 1.3) want = Math.max(want, 3);
   // pelea de boxes: alguien de su zona ha parado hace nada (o acaba de parar él): esas vueltas valen puestos
   if (car.lastPitLap >= done - 3 && car.stops > 0) want = Math.max(want, 3);
   else if (sess.flag === "green") {
