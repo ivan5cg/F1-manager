@@ -318,6 +318,13 @@ export interface TeamDef {
   agarre: number; potencia: number; resistencia: number; desgaste: number;
   /** Lo que gana (+) o pierde (−) el coche sobre su agarre en curva lenta, media y rápida (mismas unidades). */
   curvas?: [number, number, number];
+  /**
+   * Lo que el coche pierde en carrera (y en la sprint) además de lo del sábado, en % de agarre (negativo: pierde). En
+   * 2026 los cuatro de cabeza van en carrera tan cerca de Mercedes como en clasificación (rendimiento/race.py), pero la
+   * zona media acaba doblada en las carreras sin neutralizaciones, a ~1,8 % del ganador cuando el sábado va a ~1 %: se
+   * doblaban 6 coches por carrera (8 de mediana) y en el juego, con solo lo del sábado, 3-4.
+   */
+  ritmoCarrera?: number;
   boxes: number; fiabilidad: number; estrategia: number; meteo: number;
   pilotos: DriverDef[];
   /** Consumo de combustible frente al de referencia (1); lo baja el desarrollo del motor (development.ts). */
@@ -1660,12 +1667,14 @@ export class Session {
 
   /**
    * Ritmo del coche: el del piloto más el del coche en cada tipo de curva (agarre + curvas, con TEAM_SPREAD respecto al
-   * mejor agarre de la parrilla); pace es la media con lo que pesa cada tipo de curva en este circuito.
+   * mejor agarre de la parrilla y, en carrera, `ritmoCarrera`); pace es la media con lo que pesa cada tipo de curva en este circuito.
    */
   private carPace(ritmo: number, team: TeamDef, form = 0): { pace: number; paceBand: [number, number, number] } {
     const drv = (ritmo - 85) * 0.0007 + form;
     const cv = team.curvas ?? [0, 0, 0];
-    const paceBand = cv.map((x) => 1 + drv + (this.topTeam.agarre + (team.agarre + x - this.topTeam.agarre) * TEAM_SPREAD) / 180) as [number, number, number];
+    // en carrera, lo que el equipo pierde además de lo del sábado (`ritmoCarrera` en equipos-2026.json)
+    const extra = isRaceKind(this.kind) ? -(team.ritmoCarrera ?? 0) / 100 : 0;
+    const paceBand = cv.map((x) => 1 + drv - extra + (this.topTeam.agarre + (team.agarre + x - this.topTeam.agarre) * TEAM_SPREAD) / 180) as [number, number, number];
     const w = this.bandShare;
     return { pace: paceBand[0] * w[0] + paceBand[1] * w[1] + paceBand[2] * w[2], paceBand };
   }
@@ -2702,7 +2711,12 @@ export class Session {
     } else if (r < 0.62) {
       const victim = this.rng.chance(0.5) ? a : c;
       victim.slowPuncture = true;
-      victim.pitRequest = victim.pitRequest ?? this.bestSetFor(victim, this.avgWater() > WET.iw ? "W" : this.avgWater() > WET.si ? "I" : "M")?.id ?? null;
+      // a boxes con el juego que haya: en seco, mejor otro compuesto que el que llevaba (cumple la regla de los dos). Antes
+      // solo se pedía un medio y, sin ninguno libre, el coche seguía con el pinchazo hasta el final (y descalificado)
+      const w = this.avgWater();
+      const dry = (["M", "H", "S"] as Compound[]).sort((x, y) => Number(x === victim.tyres?.c) - Number(y === victim.tyres?.c));
+      const comps: Compound[] = w > WET.iw ? ["W", "I"] : w > WET.si ? ["I", "W"] : dry;
+      victim.pitRequest = victim.pitRequest ?? comps.map((k) => this.bestSetFor(victim, k)).find(Boolean)?.id ?? null;
       this.log({ kind: "incident", text: `💥 Toque ${c.d.abrev}–${a.d.abrev}: pinchazo para ${victim.d.abrev}${byDef ? ` (${a.d.abrev} cierra la puerta)` : ""}`, carId: victim.id, important: true, pause: victim.player, code: "toque", other: victim === c ? a.id : c.id, cierra: byDef ? a.id : undefined });
     } else if (r < 0.93) {
       c.delay += this.rng.range(2, 5);

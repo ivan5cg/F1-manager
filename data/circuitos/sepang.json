@@ -8,8 +8,8 @@
  "fecha": "2026-10-04",
  "formato": "normal",
  "vueltas": 55,
- "poleObjetivo": 93.75,
- "poleFuente": "Verstappen 1:35.130, clasificación del 3 de octubre de 2026 (el GP de Baréin, trasladado a Sepang); con mucho calor y asfalto de poco agarre",
+ "poleObjetivo":95.13,"poleAjuste":-0.111,
+ "poleFuente":"Verstappen 1:35.130, clasificación del 3 de octubre de 2026 (el GP de Baréin, trasladado a Sepang); con mucho calor y asfalto de poco agarre",
  "aero": {
   "cl": 1.05,
   "cd": 1.0
@@ -29,7 +29,7 @@
  },
  "adelantamientos": {
   "objetivo": 45.0,
-  "umbral": 1.6,
+  "umbral": 1.25,
   "fuente": "estimación: circuito de dos rectas largas con horquillas al final (73 en 2017, con DRS)"
  },
  "clima": {
