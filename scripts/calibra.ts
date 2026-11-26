@@ -1,7 +1,11 @@
 // Calibra el umbral de adelantamiento de cada circuito (`adelantamientos.umbral`): busca por bisección la ventaja
 // con la que salen, en carreras en seco, los adelantamientos del objetivo (sin contar la primera vuelta).
-//   npx tsx scripts/calibra.ts [circuito ...] [--carreras=6] [--escribe] [--clasif]
+//   npx tsx scripts/calibra.ts [circuito ...] [--carreras=6] [--escribe] [--clasif] [--objetivos=archivo.json]
 // --clasif: con la parrilla de la clasificación (como en el juego y en realismo.ts); más lento, pero más fiel.
+// --objetivos: {circuito: adelantamientos sin la primera vuelta} en vez de la media real por OBJ_K. Sirve para
+// recalibrar tras un cambio de física sin mover la calibración de antes: se mide cada circuito con el código viejo y
+// sus umbrales (en este mismo banco) y se busca el umbral con el que el código nuevo da lo mismo. La bisección
+// empieza entonces en el umbral actual.
 // El objetivo es la media real del circuito por OBJ_K. No se busca clavar el total histórico: con él, para que salieran
 // tan pocos habría que pedir tanta ventaja que no se pasaría ni con gomas mucho más nuevas (lo que tenía el juego
 // antes). Se fija la curva (en un circuito normal, ~35 % por vuelta con 1–1,5 s de ventaja) y los datos reales
@@ -15,6 +19,8 @@ const args = process.argv.slice(2);
 const n = Number(args.find((a) => a.startsWith("--carreras="))?.split("=")[1] ?? 6);
 const write = args.includes("--escribe");
 const quali = args.includes("--clasif");
+const objFile = args.find((a) => a.startsWith("--objetivos="))?.split("=")[1];
+const objs: Record<string, number> | null = objFile ? JSON.parse(readFileSync(objFile, "utf8")) : null;
 let ids = args.filter((a) => !a.startsWith("--"));
 if (!ids.length) ids = readdirSync("data/circuitos").filter((f) => f.endsWith(".json")).map((f) => f.replace(".json", ""));
 
@@ -28,9 +34,13 @@ function run(id: string, t: number): number {
 for (const id of ids) {
   const file = `data/circuitos/${id}.json`;
   const raw = readFileSync(file, "utf8");
-  const obj = Number(raw.match(/"objetivo":\s*([\d.]+)/)?.[1] ?? 35) * OBJ_K;
+  if (objs && objs[id] === undefined) continue;
+  const obj = objs ? objs[id] : Number(raw.match(/"objetivo":\s*([\d.]+)/)?.[1] ?? 35) * OBJ_K;
   // el resultado tiene ruido (pocas carreras): se queda con el umbral que más se ha acercado
-  let lo = 0.7, hi = 4.5, t = 1.6, bestT = t, bestGot = Infinity;
+  let lo = 0.7, hi = 4.5, t = 1.6;
+  // con --objetivos se parte del umbral actual y se busca cerca (el cambio suele ser de unas décimas)
+  if (objs) { t = Number(raw.match(/"umbral":\s*([\d.]+)/)?.[1] ?? 1.6); lo = Math.max(0.5, t - 0.7); hi = t + 0.7; }
+  let bestT = t, bestGot = Infinity;
   for (let i = 0; i < 6; i++) {
     const got = run(id, t);
     if (Math.abs(got - obj) < Math.abs(bestGot - obj)) { bestGot = got; bestT = t; }
