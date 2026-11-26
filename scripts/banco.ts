@@ -25,10 +25,15 @@ export function circuit(id: string) {
  */
 export function benchRace(id: string, seed: number, dry = true, quali = false): Session {
   const { def, track } = circuit(id);
-  const st = newWeekend(def.ronda, def, TEAMS, seed);
+  // una semilla por circuito, como el juego (una por ronda): con la misma en todos, las carreras de una semilla
+  // compartían los dados (en la salida, los mismos para cada puesto de parrilla en todos los circuitos)
+  let h = 7;
+  for (const ch of id) h = (h * 31 + ch.charCodeAt(0)) % 997;
+  const ws = seed * 1000 + h;
+  const st = newWeekend(def.ronda, def, TEAMS, ws);
   if (dry) for (const d of st.days) d.scenario = "seco";
   // lo que habrían aprendido en los libres
-  const kr = new Rng(seed * 77 + 5);
+  const kr = new Rng(ws * 77 + 5);
   for (const k of Object.values(st.knowledge)) {
     for (const c of ["S", "M", "H"] as const) { k.noise[c] = Math.max(0.03, k.noise[c] * 0.45); k.hidden.wearMult[c] = st.hidden.wearMult[c] * kr.logn(k.noise[c]); }
     k.hidden.thermalOffset = st.hidden.thermalOffset + kr.gauss(0, 1.5);

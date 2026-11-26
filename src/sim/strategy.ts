@@ -172,6 +172,13 @@ export function planStrategy(sess: Session, car: Car, k: TeamKnowledge, fromLap 
  * igual y la mitad de la parrilla salía con duro.
  */
 const START_COST: Partial<Record<Compound, number>> = { H: 1.2 };
+/**
+ * Lo que se suma desde las primeras filas (en la pole entero, y menos cuanto más atrás; nada desde la undécima): delante, cada puesto que se pierde
+ * en la arrancada o en las primeras vueltas con el duro frío es uno que se había ganado en la clasificación y que luego
+ * hay que recuperar en pista o en boxes, y la primera tanda larga deja al de detrás el undercut. Sin esto, una de cada
+ * cuatro poles salía con duro y ganaba el 17 % de las veces (con medio, el 41 %; en 2026 la pole ganó el 71 %).
+ */
+const START_FRONT: Partial<Record<Compound, number>> = { H: 4 };
 /** En la sprint pesa más: es corta y sin paradas, lo que se pierde en la salida ya no se recupera. */
 const SPRINT_START_K = 2.5;
 
@@ -213,7 +220,8 @@ function enumeratePlans(sess: Session, car: Car, k: TeamKnowledge, fromLap = 0, 
     const c0 = st.c, a0 = st.age;
     const id0 = st.own ? avail[c0][0]?.id : undefined;
     // salida: con el duro se tracciona peor y, frío, se pierden puestos en la primera vuelta que luego cuesta recuperar
-    const startCost = st.own && fromLap === 0 && (isRace || sess.kind === "SPRINT") ? (START_COST[c0] ?? 0) * (isRace ? 1 : SPRINT_START_K) : 0;
+    const gridPos = Math.max(0, sess.lapOrder[0]?.indexOf(car.id) ?? 10);
+    const startCost = st.own && fromLap === 0 && (isRace || sess.kind === "SPRINT") ? ((START_COST[c0] ?? 0) + (START_FRONT[c0] ?? 0) * Math.max(0, 1 - gridPos / 10)) * (isRace ? 1 : SPRINT_START_K) : 0;
     const idx = (c: Compound, n: number) => n + (st.own && c === c0 ? 1 : 0); // índice del juego libre
     if (ruleOk([c0])) { const t = startCost + stintCost(sess, car, k, c0, a0, remain); if (keep(t)) options.push({ stints: [{ c: c0, endLap: total, setId: id0 }], total: t }); }
     for (const c2 of DRY) {
@@ -657,6 +665,18 @@ export function aiDecide(sess: Session, car: Car, adviceOnly = false): string | 
       const fg = freshGain();
       if (rival(a) && a.stops === car.stops && !a.pitRequest && g < 1.6 && (car.stuck?.n ?? 0) >= 1 && fg > 0.5 && g < fg * 2.2 + 0.3 && traffic(lossGreen) < 1.6 && stack < 0.5 && sess.rng.chance(0.25 + 0.6 * sharp)) { box = true; why = "undercut"; say = `no pasamos a ${a.d.abrev} en pista: podemos ganarle el puesto en boxes`; }
     }
+    // prioridad del de delante: con un rival de su vuelta a tiro de undercut detrás, con gomas de la misma edad (le
+    // toca parar como a él) y la ventana abierta, el muro no espera a que pare el otro: para primero. Esperar a
+    // reaccionar no sirve, porque el undercut de una vuelta vale ~2 s (banco de auditoría) y el rival suele ir
+    // a menos de eso. Sin esto, la pole solo acababa delante de su compañero en dos de cada tres carreras (en 2026,
+    // 17 de 18): casi todos los que le ganaban en boxes habían parado antes.
+    if (!box && early >= 1 && early <= 3 && nextLasts() && traffic(lossGreen) < 1.6 && stack < 0.5) {
+      const b = ord[me + 1];
+      const threat = clamp(2 * freshGain() + 0.5, 1, 4);
+      if (b && rival(b) && b.team !== car.team && b.stops === car.stops && !b.pitRequest && (b.tyres?.laps ?? 0) >= car.tyres.laps - 4 && sess.gapBetween(car, b) < threat && sess.rng.chance(0.6 * sharp)) {
+        box = true; why = "cubrir"; say = `${b.d.abrev} viene a ${sess.gapBetween(car, b).toFixed(1)} s y nos puede hacer el undercut: paramos antes que él`;
+      }
+    }
   }
   if (needRule && left <= 6 && !fresh) { box = true; why = "regla"; say = "falta el segundo compuesto"; }
   if (!box || !anyDry) return null;
@@ -726,7 +746,9 @@ export function aiModes(sess: Session, car: Car, left: number) {
   let want = 2;
   const cooling = car.coolUntil !== undefined && done <= car.coolUntil;
   if (gapA < 1.3 && !cooling) want = 3;
-  if (gapB < 1.0) want = Math.max(want, 3);
+  // el de delante se defiende con el mismo margen con el que ataca el de detrás (antes, a 1,0 s): si no, entre 1,0 y
+  // 1,3 s el de detrás iba en Atacar y el de delante en Normal, y era lo que más adelantamientos al líder daba
+  if (gapB < 1.3) want = Math.max(want, 3);
   // pelea de boxes: alguien de su zona ha parado hace nada (o acaba de parar él): esas vueltas valen puestos
   if (car.lastPitLap >= done - 3 && car.stops > 0) want = Math.max(want, 3);
   else if (sess.flag === "green") {

@@ -9,10 +9,20 @@ import { pitLoss } from "../../src/sim/strategy";
 const [id, seedS, clima = "seco", fmtArg] = process.argv.slice(2);
 const seed = Number(seedS);
 const def = JSON.parse(readFileSync(`data/circuitos/${id}.json`, "utf8"));
-if (fmtArg) def.formato = fmtArg;
+if (fmtArg && fmtArg !== def.formato) {
+  // formato forzado: el horario del otro formato, o uno hecho con las mismas horas si el circuito no lo trae
+  const h = def.horario;
+  const otro = def.horarioOtro ?? (fmtArg === "sprint" ? { fp1: h.fp1, sq: h.fp2, sprint: h.fp3, q: h.q, carrera: h.carrera } : { fp1: h.fp1, fp2: h.sq, fp3: h.sprint, q: h.q, carrera: h.carrera });
+  def.horarioOtro = h; def.horario = otro; def.formato = fmtArg;
+}
 const teams = JSON.parse(readFileSync("data/equipos-2026.json", "utf8")).equipos as TeamDef[];
 const track = buildTrack(def);
-const st = newWeekend(def.ronda, def, teams, seed);
+// sprint forzada en un circuito sin sprint: la distancia del reglamento (100 km)
+if (def.formato === "sprint" && !def.vueltasSprint) def.vueltasSprint = Math.ceil(100000 / track.length);
+// semilla del fin de semana: una distinta en cada circuito (como en el juego, que usa una por ronda). Con la misma en
+// los 24, todas las sesiones de una semilla compartían los dados (en la salida, los mismos para cada puesto de parrilla)
+const weekendSeed = (seed: number, circuit: string) => { let h = 7; for (const ch of circuit) h = (h * 31 + ch.charCodeAt(0)) % 997; return seed * 1000 + h; };
+const st = newWeekend(def.ronda, def, teams, weekendSeed(seed, id));
 const sc = st.days;
 if (clima === "seco") for (const d of sc) d.scenario = "seco";
 else if (clima === "lluviaD") { sc[0].scenario = "seco"; sc[1].scenario = "seco"; sc[2].scenario = "frente"; }

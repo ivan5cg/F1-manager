@@ -17,6 +17,13 @@ node scripts/auditoria/lote.mjs lluviaS lluviaS 41-42 spa interlagos suzuka silv
 node scripts/auditoria/analiza.js auditoria-out/seco --por-circuito
 node scripts/auditoria/lluvia.js auditoria-out/lluviaD auditoria-out/chubD auditoria-out/lluviaS
 npx tsx scripts/auditoria/deg.ts silverstone bahrein monza         # curvas de neumático del modelo
+node scripts/auditoria/cabeza.js auditoria-out/seco                # cómo se decide la victoria (punto 6)
+# la sprint en los 24 circuitos (los que no la tienen, a 100 km y con su horario)
+node scripts/auditoria/lote.mjs sprint seco 1-2 --formato=sprint
+# solo salidas: muchas, con la parrilla de un lote (o una por ritmo si no se da PARRILLA)
+PARRILLA=auditoria-out/seco npx tsx scripts/auditoria/salida.ts RACE 1 8
+# la misma carrera con 6 semillas y la misma parrilla (lo que decide el azar de la carrera); una línea JSON
+npx tsx scripts/auditoria/repite.ts monaco 1 6
 # un solo fin de semana (JSON por la salida estándar)
 npx tsx scripts/auditoria/gp.ts silverstone 1 seco > fin.json
 ```
@@ -28,6 +35,13 @@ npx tsx scripts/auditoria/gp.ts silverstone 1 seco > fin.json
   tarda ~20 min. Con menos núcleos, usa menos circuitos o semillas.
 - **Salida:** `auditoria-out/<nombre>/<circuito>_<semilla>.json` (no se sube a git: ~200 KB por fin de semana). La
   simulación es determinista: las mismas semillas dan los mismos resultados mientras no cambie el código.
+- **Semillas:** cada circuito juega con su propia semilla de fin de semana (`semilla × 1000 + un número sacado del
+  nombre del circuito`), como el juego, que usa una por ronda. Hasta el 26 de noviembre de 2026, `gp.ts` usaba la misma
+  en los 24 circuitos, y con ella todas las sesiones de una semilla compartían los dados: en la salida, los mismos para
+  cada puesto de parrilla (la pole conservaba el liderato en 41 de 41 carreras de una semilla, o lo perdía en casi
+  todas las de otra). Las medias de ritmo, neumáticos o neutralizaciones apenas cambian, pero lo que dependa de la
+  salida o del orden en cabeza (gana la pole, gana desde P4+, la sprint) medido antes de esa fecha está sesgado, y la
+  referencia `base-2026-11/` también.
 - **Referencia:** `base-2026-11/` tiene la salida de los analizadores con el código de noviembre de 2026 (antes de
   cualquier arreglo). Sirve para comparar el antes y el después de un cambio. El lote en seco de la referencia se jugó
   con una versión anterior de `gp.ts` que aún no apuntaba las banderas de cada vuelta: por eso ahí salen sin dato las
@@ -83,16 +97,26 @@ impacto (detalle y líneas de código en el informe):
    Q1 P1-P20 2,1-2,3 s (real 2,13), P10 − P1 1,1-1,2 s (real 1,39), compañeros 0,30 s (real 0,31).
 5. ~~Regularidad de metrónomo (σ 0,05 s frente a 0,2-0,3 s).~~ **Hecho:** ruido por vuelta además del de cada
    minisector (`LAP_NOISE`): σ en aire limpio 0,19-0,20 s.
-6. Victorias demasiado abiertas en carrera y demasiado cerradas en la sprint (pole 83 %). Con los coches de 2026
-   recalibrados (los cuatro primeros a 0,2-0,4 %, como en la realidad) la pole gana el 33-50 % y desde P4+ el 29 %;
-   en 2026 fue 15 de 21 (71 %) y 2 de 21 (10 %). Es lo siguiente.
+6. Victorias demasiado abiertas en carrera y demasiado cerradas en la sprint (pole 83 %). **En parte hecho** (detalle
+   en el informe, sección 5, «Punto 6»):
+   - El 83 % de la sprint y el 33-50 % de la carrera venían de un fallo del banco: la misma semilla en los 24
+     circuitos (ver «Semillas»). Con el banco corregido, la pole ganaba el 61 % de las sprints (bien) y solo el 21 % de
+     las carreras, con un 44 % de victorias desde P4+.
+   - Cambios: salir con el duro desde delante cuesta más (`START_FRONT`), prioridad del de delante para cubrir el
+     undercut («cubrir» en `aiDecide`), defensa simétrica a 1,3 s (`aiModes`) y forma del fin de semana de cada piloto
+     (`FORM` en `weekend.ts`, con `QUALI_NOISE` en `session.ts`).
+   - Con 72 fines de semana: la pole gana el 34 % (real 71 %), desde P4+ el 32 % (real 10 %), y el compañero que sale
+     delante acaba delante el 66 % (real 70 %). En la sprint, la pole gana el 70 %.
+   - Pendiente: con la misma parrilla, la carrera cambia mucho de una semilla a otra (`repite.ts`: la pole gana el
+     28 %). Falta medir cuánto pone cada fuente (salida, ciclo de paradas, neutralizaciones) y si los de cabeza deben
+     separarse más en carrera que en clasificación.
 7. ~~**Fallo:** descalificaciones por la regla de los dos compuestos cuando se prevé lluvia que no llega
    (`src/sim/strategy.ts:655-658` anula la parada de `strategy.ts:650`). Se reproduce con
    `npx tsx scripts/auditoria/gp.ts spa 32 chubD` (HAM, NOR, LAW y BEA descalificados; con `DEPURAR=1` sale por qué para
    cada uno).~~ **Hecho** (PR #41).
 8. Coche de seguridad y virtual demasiado lentos, y la mitad de vueltas en libres.
 
-Siguiente: el punto 8 (coche de seguridad y libres) y lo que queda del 6 (la sprint), midiendo con este banco y con `scripts/realismo.ts`. Con el punto 1 la
+Siguiente: el punto 8 (coche de seguridad y libres) y lo que queda del 6 (el azar de la carrera en cabeza), midiendo con este banco y con `scripts/realismo.ts`. Con el punto 1 la
 vuelta media del ganador sube a ~1,10-1,12 de la pole (real 1,11), pero las carreras con coche de seguridad largo se
 alargan: el punto 8 (coche de seguridad demasiado lento) pesa ahora algo más. Tras los puntos 2 y 3 los libres siguen a
 1,1-1,3 / 0,8 / 0,4-0,65 s de la pole.
