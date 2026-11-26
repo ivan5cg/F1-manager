@@ -1,0 +1,40 @@
+
+===== CARRERA en seco (81)
+gana desde: P1 37 % · P2 26 % · P3 7 % · P4+ 30 %
+la pole lidera tras la V1 83 % (P2 o peor: 17 %) · gana el que lidera la V1 37 %
+cambios de líder por carrera 3.69: en pista 1.70 · boxes 1.95 · neutralización 0.04
+a la pole la pasan en pista estando en cabeza 44 % · abandona 7 % · acaba de media P4.3
+P1-P2 en clasificación: med 0.094 s · gana la pole con P2 a >0,15 s 24 % (n29) y a <0,05 s 35 % (n23)
+victorias por equipo {"redbull":16,"mercedes":38,"mclaren":14,"ferrari":12,"audi":1} · poles {"mercedes":42,"redbull":15,"mclaren":11,"ferrari":11,"audi":1,"racingbulls":1}
+
+===== SPRINT en seco (21)
+gana desde: P1 76 % · P2 19 % · P3 5 % · P4+ 0 %
+la pole lidera tras la V1 86 % (P2 o peor: 14 %) · gana el que lidera la V1 90 %
+cambios de líder por carrera 0.19: en pista 0.19 · boxes 0.00 · neutralización 0.00
+a la pole la pasan en pista estando en cabeza 14 % · abandona 0 % · acaba de media P1.3
+P1-P2 en clasificación: med 0.110 s · gana la pole con P2 a >0,15 s 89 % (n9) y a <0,05 s 67 % (n9)
+victorias por equipo {"mercedes":11,"mclaren":1,"ferrari":5,"redbull":4} · poles {"mercedes":9,"mclaren":4,"ferrari":5,"redbull":3}
+
+CARRERA: cuando no gana la pole (51), el ganador se le pone delante: salida 4 % · boxes 51 % · neutralización 4 % · pista 29 % · abandono de la pole 12 %
+
+SPRINT: cuando no gana la pole (5), el ganador se le pone delante: salida 40 % · boxes 0 % · neutralización 0 % · pista 60 % · abandono de la pole 0 %
+
+===== CARRERA en seco (41)
+gana desde: P1 24 % · P2 17 % · P3 15 % · P4+ 44 %
+la pole lidera tras la V1 83 % (P2 o peor: 17 %) · gana el que lidera la V1 29 %
+cambios de líder por carrera 3.98: en pista 1.61 · boxes 2.27 · neutralización 0.10
+a la pole la pasan en pista estando en cabeza 54 % · abandona 15 % · acaba de media P6.2
+P1-P2 en clasificación: med 0.108 s · gana la pole con P2 a >0,15 s 19 % (n16) y a <0,05 s 43 % (n14)
+victorias por equipo {"redbull":10,"mercedes":19,"mclaren":8,"ferrari":4} · poles {"mclaren":11,"mercedes":14,"ferrari":12,"alpine":1,"redbull":3}
+
+===== SPRINT en seco (46)
+gana desde: P1 70 % · P2 22 % · P3 7 % · P4+ 2 %
+la pole lidera tras la V1 80 % (P2 o peor: 20 %) · gana el que lidera la V1 87 %
+cambios de líder por carrera 0.26: en pista 0.26 · boxes 0.00 · neutralización 0.00
+a la pole la pasan en pista estando en cabeza 15 % · abandona 2 % · acaba de media P2.0
+P1-P2 en clasificación: med 0.089 s · gana la pole con P2 a >0,15 s 100 % (n13) y a <0,05 s 63 % (n19)
+victorias por equipo {"mercedes":27,"ferrari":10,"mclaren":2,"redbull":7} · poles {"ferrari":13,"mercedes":22,"mclaren":7,"redbull":4}
+
+CARRERA: cuando no gana la pole (31), el ganador se le pone delante: salida 13 % · boxes 32 % · neutralización 6 % · pista 29 % · abandono de la pole 19 %
+
+SPRINT: cuando no gana la pole (14), el ganador se le pone delante: salida 50 % · boxes 0 % · neutralización 0 % · pista 43 % · abandono de la pole 7 %

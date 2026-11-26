@@ -42,8 +42,12 @@ npx tsx scripts/auditoria/gp.ts silverstone 1 seco > fin.json
   todas las de otra). Las medias de ritmo, neumáticos o neutralizaciones apenas cambian, pero lo que dependa de la
   salida o del orden en cabeza (gana la pole, gana desde P4+, la sprint) medido antes de esa fecha está sesgado, y la
   referencia `base-2026-11/` también.
-- **Referencia:** `base-2026-11/` tiene la salida de los analizadores con el código de noviembre de 2026 (antes de
-  cualquier arreglo). Sirve para comparar el antes y el después de un cambio. El lote en seco de la referencia se jugó
+- **Referencia actual:** `base-2026-11b/` (26 de noviembre de 2026, con el punto 6 hecho y una semilla por circuito):
+  `seco.txt` (`lote.mjs ref-seco seco 1-4`, con `--por-circuito`), `lluvia-agregado.txt` y `lluvia-sesiones.txt` (los
+  tres lotes de lluvia de arriba, juntos), `sprint.txt` (`--formato=sprint`, semillas 1-2), `cabeza.txt` y
+  `curvas-neumaticos.txt` (`deg.ts`).
+- **Referencia antigua:** `base-2026-11/` tiene la salida de los analizadores con el código de noviembre de 2026 (antes de
+  cualquier arreglo), jugada con la misma semilla en todos los circuitos (ver «Semillas»). Sirve para comparar el antes y el después de un cambio. El lote en seco de la referencia se jugó
   con una versión anterior de `gp.ts` que aún no apuntaba las banderas de cada vuelta: por eso ahí salen sin dato las
   vueltas enteras con SC/VSC (en el de lluvia sí están: 1,87 y 1,53).
 
