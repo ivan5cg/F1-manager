@@ -1,0 +1,45 @@
+silverstone: vuelta ref 89.97 · s por 1 % de agarre 0.403 · s/kg 0.0251 · combustible 72.3 kg (0.035 s/vuelta) · asfalto 35.2° · abrasividad 1.08
+  S (Δ frente a S nuevo) 1:0.00 5:0.57 10:1.30 15:2.15 20:10.46 25:35.46 30:60.46 35:85.46 40:110.46 · precipicio en la vuelta 14 · deg media 2-12: 0.145 s/v
+  M (Δ frente a S nuevo) 1:0.31 5:0.51 10:0.83 15:1.14 20:1.46 25:1.78 30:2.10 35:2.43 40:3.02 · precipicio en la vuelta 36 · deg media 2-12: 0.062 s/v
+  H (Δ frente a S nuevo) 1:0.82 5:0.97 10:1.23 15:1.51 20:1.78 25:2.06 30:2.33 35:2.61 40:2.99 · precipicio en la vuelta 38 · deg media 2-12: 0.052 s/v
+  agarre estable nuevo S/M/H: 0.9994 / 0.9879 / 0.9757
+bahrein: vuelta ref 93.15 · s por 1 % de agarre 0.445 · s/kg 0.0200 · combustible 72.7 kg (0.026 s/vuelta) · asfalto 29.4° · abrasividad 1.25
+  S (Δ frente a S nuevo) 1:0.00 5:0.80 10:1.90 15:11.51 20:36.51 25:61.51 30:86.51 35:111.51 40:136.51 · precipicio en la vuelta 10 · deg media 2-12: 0.319 s/v
+  M (Δ frente a S nuevo) 1:0.45 5:0.70 10:1.04 15:1.37 20:1.70 25:2.03 30:2.37 35:2.70 40:3.07 · precipicio en la vuelta 38 · deg media 2-12: 0.069 s/v
+  H (Δ frente a S nuevo) 1:1.35 5:1.52 10:1.79 15:2.05 20:2.30 25:2.56 30:2.82 35:3.07 40:3.33 · precipicio en la vuelta 44 · deg media 2-12: 0.053 s/v
+  agarre estable nuevo S/M/H: 1.0000 / 0.9879 / 0.9748
+suzuka: vuelta ref 90.39 · s por 1 % de agarre 0.471 · s/kg 0.0274 · combustible 72.6 kg (0.037 s/vuelta) · asfalto 13.0° · abrasividad 1.15
+  S (Δ frente a S nuevo) 1:0.00 5:0.40 10:0.98 15:1.57 20:2.16 25:3.89 30:12.55 35:37.55 40:62.55 · precipicio en la vuelta 21 · deg media 2-12: 0.113 s/v
+  M (Δ frente a S nuevo) 1:0.59 5:0.80 10:1.16 15:1.53 20:1.91 25:2.28 30:2.66 35:3.03 40:3.69 · precipicio en la vuelta 37 · deg media 2-12: 0.071 s/v
+  H (Δ frente a S nuevo) 1:1.46 5:1.60 10:1.89 15:2.19 20:2.50 25:2.80 30:3.11 35:3.41 40:3.73 · precipicio en la vuelta 40 · deg media 2-12: 0.057 s/v
+  agarre estable nuevo S/M/H: 1.0000 / 0.9857 / 0.9655
+barcelona: vuelta ref 76.04 · s por 1 % de agarre 0.406 · s/kg 0.0224 · combustible 72.6 kg (0.025 s/vuelta) · asfalto 48.5° · abrasividad 1.2
+  S (Δ frente a S nuevo) 1:0.00 5:0.87 10:2.06 15:15.77 20:40.77 25:65.77 30:90.77 35:115.77 40:140.77 · precipicio en la vuelta 9 · deg media 2-12: 0.388 s/v
+  M (Δ frente a S nuevo) 1:0.10 5:0.33 10:0.67 15:1.02 20:1.36 25:1.71 30:2.05 35:2.45 40:3.77 · precipicio en la vuelta 34 · deg media 2-12: 0.067 s/v
+  H (Δ frente a S nuevo) 1:0.58 5:0.66 10:0.86 15:1.07 20:1.27 25:1.48 30:1.69 35:1.90 40:2.11 · precipicio en la vuelta 51 · deg media 2-12: 0.039 s/v
+  agarre estable nuevo S/M/H: 0.9925 / 0.9874 / 0.9760
+monza: vuelta ref 83.01 · s por 1 % de agarre 0.283 · s/kg 0.0150 · combustible 72.4 kg (0.021 s/vuelta) · asfalto 38.1° · abrasividad 0.92
+  S (Δ frente a S nuevo) 1:0.00 5:0.47 10:1.05 15:2.68 20:23.60 25:48.60 30:73.60 35:98.60 40:123.60 · precipicio en la vuelta 12 · deg media 2-12: 0.115 s/v
+  M (Δ frente a S nuevo) 1:0.01 5:0.21 10:0.49 15:0.77 20:1.05 25:1.33 30:1.75 35:3.27 40:19.24 · precipicio en la vuelta 28 · deg media 2-12: 0.055 s/v
+  H (Δ frente a S nuevo) 1:0.32 5:0.37 10:0.50 15:0.63 20:0.76 25:0.89 30:1.02 35:1.16 40:1.29 · precipicio en la vuelta 53 · deg media 2-12: 0.024 s/v
+  agarre estable nuevo S/M/H: 0.9959 / 0.9909 / 0.9792
+monaco: vuelta ref 73.28 · s por 1 % de agarre 0.381 · s/kg 0.0148 · combustible 61.3 kg (0.012 s/vuelta) · asfalto 24.2° · abrasividad 0.75
+  S (Δ frente a S nuevo) 1:0.00 5:0.54 10:1.21 15:2.04 20:10.38 25:35.38 30:60.38 35:85.38 40:110.38 · precipicio en la vuelta 14 · deg media 2-12: 0.134 s/v
+  M (Δ frente a S nuevo) 1:0.19 5:0.34 10:0.61 15:0.88 20:1.15 25:1.42 30:1.70 35:1.97 40:2.24 · precipicio en la vuelta 40 · deg media 2-12: 0.052 s/v
+  H (Δ frente a S nuevo) 1:0.71 5:0.69 10:0.78 15:0.88 20:0.97 25:1.07 30:1.17 35:1.27 40:1.37 · precipicio en la vuelta -1 · deg media 2-12: 0.012 s/v
+  agarre estable nuevo S/M/H: 1.0000 / 0.9911 / 0.9783
+lasvegas: vuelta ref 94.70 · s por 1 % de agarre 0.381 · s/kg 0.0189 · combustible 73.3 kg (0.028 s/vuelta) · asfalto 13.0° · abrasividad 0.6
+  S (Δ frente a S nuevo) 1:0.00 5:0.39 10:0.86 15:1.32 20:1.78 25:3.01 30:10.74 35:35.74 40:60.74 · precipicio en la vuelta 21 · deg media 2-12: 0.094 s/v
+  M (Δ frente a S nuevo) 1:0.40 5:0.52 10:0.73 15:0.93 20:1.12 25:1.30 30:1.47 35:1.65 40:1.82 · precipicio en la vuelta 67 · deg media 2-12: 0.040 s/v
+  H (Δ frente a S nuevo) 1:1.12 5:1.19 10:1.34 15:1.48 20:1.61 25:1.74 30:1.86 35:1.99 40:2.11 · precipicio en la vuelta -1 · deg media 2-12: 0.027 s/v
+  agarre estable nuevo S/M/H: 1.0000 / 0.9905 / 0.9730
+shanghai: vuelta ref 93.47 · s por 1 % de agarre 0.504 · s/kg 0.0248 · combustible 72.0 kg (0.032 s/vuelta) · asfalto 23.3° · abrasividad 1
+  S (Δ frente a S nuevo) 1:0.00 5:0.86 10:1.83 15:2.89 20:12.75 25:37.75 30:62.75 35:87.75 40:112.75 · precipicio en la vuelta 14 · deg media 2-12: 0.198 s/v
+  M (Δ frente a S nuevo) 1:0.59 5:1.02 10:1.51 15:1.98 20:2.43 25:2.89 30:3.34 35:3.89 40:6.01 · precipicio en la vuelta 33 · deg media 2-12: 0.101 s/v
+  H (Δ frente a S nuevo) 1:1.55 5:1.78 10:2.08 15:2.36 20:2.64 25:2.91 30:3.18 35:3.45 40:3.73 · precipicio en la vuelta 49 · deg media 2-12: 0.062 s/v
+  agarre estable nuevo S/M/H: 1.0000 / 0.9879 / 0.9725
+spa: vuelta ref 106.08 · s por 1 % de agarre 0.487 · s/kg 0.0270 · combustible 72.7 kg (0.045 s/vuelta) · asfalto 35.8° · abrasividad 1.02
+  S (Δ frente a S nuevo) 1:0.00 5:0.57 10:1.39 15:2.22 20:5.96 25:27.29 30:52.29 35:77.29 40:102.29 · precipicio en la vuelta 15 · deg media 2-12: 0.160 s/v
+  M (Δ frente a S nuevo) 1:0.34 5:0.57 10:0.98 15:1.39 20:1.81 25:2.23 30:2.64 35:3.13 40:4.76 · precipicio en la vuelta 33 · deg media 2-12: 0.078 s/v
+  H (Δ frente a S nuevo) 1:1.03 5:1.10 10:1.33 15:1.57 20:1.81 25:2.05 30:2.29 35:2.54 40:2.78 · precipicio en la vuelta 51 · deg media 2-12: 0.043 s/v
+  agarre estable nuevo S/M/H: 0.9991 / 0.9880 / 0.9759

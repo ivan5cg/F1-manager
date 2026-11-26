@@ -71,19 +71,19 @@ la cantidad de adelantamientos de 2026.
 Lo que más aleja la simulación de la F1 real, por orden de gravedad:
 
 1. **La carrera va casi al ritmo de la clasificación.** La vuelta rápida de carrera sale a +0,5 % de la pole; en 2026
-   es +4,1 %. Y los libres igualan o baten la pole.
+   es +4,1 %. Y los libres igualan o baten la pole. *Hecho (PR #42).*
 2. **La clasificación no evoluciona.** El poleman mejora 0,17 s de Q1 a Q3; en 2026, 1,27 s. En casi la mitad de los
-   casos el tiempo de Q3 es peor que el de Q2.
+   casos el tiempo de Q3 es peor que el de Q2. *Hecho (PR #43).*
 3. **Neumáticos: demasiada diferencia entre compuestos y casi nada de degradación progresiva.** ~1 s por escalón
-   (real 0,3-0,6 s) y el duro apenas cae hasta un precipicio brusco. De ahí salen el abuso del blando y el poco duro.
+   (real 0,3-0,6 s) y el duro apenas cae hasta un precipicio brusco. De ahí salen el abuso del blando y el poco duro. *Hecho (PR #44 y #45; el duro en las pistas frías, en «Pendiente»).*
 4. **La parrilla está demasiado apretada.** 1,2 s de primero a último en Q1 (real 2026: 3,2 s); 1,3 doblados por carrera
-   (real 2026: 6,0).
-5. **Los coches son metrónomos.** σ vuelta a vuelta en aire limpio de 0,05 s (real 0,2-0,3 s).
+   (real 2026: 6,0). *Hecho (PR #46; los doblados, en «Pendiente»).*
+5. **Los coches son metrónomos.** σ vuelta a vuelta en aire limpio de 0,05 s (real 0,2-0,3 s). *Hecho (PR #46).*
 6. **Resultados demasiado abiertos en cabeza.** La pole gana el 31 % (real 2026: 15 de 21) y el 35 % de las victorias
    salen de P4 o más atrás (real 2026: 2 de 21). *En parte hecho (sección 5): con el banco ya corregido, la pole pasa
-   del 21 % al 34 % y desde P4+ del 44 % al 32 %. La sprint estaba bien: el 83 % salía de un fallo del banco.*
+   del 21 % al 34 % y desde P4+ del 44 % al 32 %. La sprint estaba bien: el 83 % salía de un fallo del banco. Con lo de «Pendiente», la pole gana el 44 %.*
 7. **Un fallo de la IA**: con lluvia prevista que no llega, varios coches acaban **descalificados** por no usar dos
-   compuestos de seco.
+   compuestos de seco. *Hecho (PR #41).*
 8. Menores: coche de seguridad y virtual demasiado lentos, libres con la mitad de vueltas (la «sprint demasiado
    previsible» era un fallo del banco: ver sección 5). *Hecho (secciones 6 y 7).*
 
@@ -436,40 +436,91 @@ Antes y después de cualquier cambio conviene pasar `scripts/realismo.ts` (ya mi
 adelantamientos y márgenes) y este banco, que añade ritmo frente a la pole, evolución de clasificación, degradación,
 regularidad, doblados, uso de compuestos y libres.
 
+## Lo pendiente: lo que se ha hecho (26 de noviembre de 2026, segunda tanda)
+
+Medido con el banco: la referencia es el código de antes (48 fines de semana en seco, semillas 1-2) y lo nuevo, 96
+(semillas 1-4). Salida de los analizadores en `scripts/auditoria/base-2026-11c/`.
+
+| Métrica (carrera en seco) | Antes | Ahora | Real 2026 |
+|---|---|---|---|
+| Duro en Shanghái / Suzuka / Spa / Las Vegas | 0 / 0 / 6 / 22 % | 73 / 64 / 38 / 63 % | medio y duro |
+| Usa el duro / el blando (todas) | 76 / 29 % | 91 / 14 % | — |
+| Paradas por coche | 1,18 | 1,16 | — |
+| Doblados por carrera (media / mediana) | 3,9 / 4 | 5,5 / 6 | 6,0 / 8 |
+| Pole − pole real (mediana en seco) | −0,42 s | +0,02 s | 0 |
+| Gana la pole | 35 % | 44 % | 71 % |
+| Gana desde P4 o más atrás | 24-27 % | 28 % | 10 % |
+| Adelantamientos por carrera (sin la primera vuelta) | 72 | 74 | (calibrado así) |
+
+**1. El duro en las pistas frías** (`src/sim/tyres.ts`). Tres cambios:
+- **Graining con un umbral común.** Los tres compuestos de seco se rasgan por debajo de la temperatura del medio del
+  circuito menos 12 °C, y lo que los distingue es su tendencia (`grainK`, más en los blandos). Antes cada uno tenía la
+  suya (su óptima − 12 °C) y en frío el que más se rasgaba era el duro: en Las Vegas, 0,48 frente a 0,06 del medio.
+  En la F1 real es al revés.
+- **Más graining en carrera** (`GRAIN_GEN` × 3). Con la goma ya puesta y sin apretar, el graining se quedaba en un 0,3 %
+  de agarre, y en frío el blando aguantaba como neumático de carrera (blando-medio en las cuatro pistas). Ahora, en
+  una pista fría, le cuesta al blando ~1 %.
+- **Menos pérdida por debajo de la ventana** (`COLD_LOSS`, de 0,075 a 0,05). El tren delantero va 20-30 °C por debajo de
+  la ventana del duro en casi todos los circuitos, no solo en los fríos. Por eso este coeficiente decide el uso del duro
+  en todo el calendario: con 0,03, el duro pasaba del 90 % en las pistas templadas y los adelantamientos bajaban a la
+  mitad. 0,05 es el compromiso.
+
+Los adelantamientos bajaban con esto, porque hay menos diferencias de goma. Se recalibró el umbral de cada circuito
+(`scripts/calibra.ts --objetivos=…`): con el código viejo y sus umbrales se midió en `carrera.ts` cuántos adelantamientos
+salían en cada circuito, y se buscó el umbral con el que el código nuevo da lo mismo. No se recalibró contra la media
+real × 2,4, el objetivo original del script. Ese banco (parrilla por ritmo) ya daba con el código viejo bastante menos
+que esos objetivos (Austin 65 frente a 106), y recalibrar contra ellos habría disparado los adelantamientos del fin de
+semana, que estaban bien.
+
+**2. Pocos doblados** (`ritmoCarrera` en `data/equipos-2026.json`). Primero, una corrección del diagnóstico: casi
+toda la diferencia que se había medido entre clasificación y carrera (Williams a 2,9 % del mejor el sábado y a 1,8 % el
+domingo) era de la medida. El que cae en Q1
+hace su vuelta con la pista más verde (la evolución de la clasificación, `QUALI_EVO`), y eso le suma ~0,8 % en la
+clasificación. Comparando en la misma parte, el ritmo de carrera de cada equipo era el del sábado
+(`scripts/auditoria/equipos.mjs`). Lo que faltaba era que la zona media perdiera más en carrera: en 2026, en las
+carreras sin neutralizaciones, Racing Bulls, Alpine, Haas o Audi acaban a ~1,8 % del ganador (dobladas), cuando el
+sábado van a ~1 % (`rendimiento/race.py`). Los cuatro de cabeza, en cambio, van en carrera tan cerca de Mercedes como
+el sábado. Ahora los siete equipos que no son de cabeza pierden en carrera (y en la sprint) un 0,8 % de agarre más que
+el sábado.
+- **Lo que se probó antes:** multiplicar todas las diferencias entre equipos en carrera (× 1,4-2). Doblaba bien, pero
+  separaba también a los de cabeza (Red Bull, McLaren y Ferrari a ~0,45 % de Mercedes) y Mercedes ganaba desde atrás
+  cuando la pole era de otro.
+- Una estimación de lo que pierde cada coche por vuelta (agarre y potencia con las sensibilidades del circuito) no
+  separaba a Audi de McLaren, así que va como dato por equipo.
+
+**3. La pole.** `poleObjetivo` es ahora siempre la pole real. En Suzuka, Sepang y Singapur se había movido a mano «para
+que la pole simulada rondara la real», y Las Vegas tenía una estimación: 1:34.8, cuando la vuelta más rápida de la
+clasificación de 2026 fue de 1:33.893. La corrección de cada circuito va en `poleAjuste` (s, se suma al objetivo de la
+vuelta ideal en `buildTrack`). `scripts/auditoria/calibra-pole.mjs` la ajusta jugando libres y clasificación en seco
+con 6 semillas por circuito (`pole.ts`). Se hicieron dos pasadas: tras la primera, el error mediano bajó de −0,34 s a
++0,02 s, con un solo circuito por encima de 0,3 s (Shanghái, −0,45 s; la segunda pasada lo corrigió a medias).
+
+**4. El azar en cabeza: sigue pendiente.** La pole gana el 44 % (antes, el 35 %; en 2026, el 71 %), pero desde P4 o más
+atrás se sigue ganando el 28 % (en 2026, el 10 %).
+- **Cuando no gana la pole**, el ganador se le pone delante en la salida el 16 % de las veces, en boxes el 30 %, en
+  pista el 44 % y por abandono de la pole el 10 %. A la pole la pasan en pista estando en cabeza en el 36 % de las
+  carreras.
+- **El equipo ya cuadra con 2026:** Mercedes hace la mitad de las poles y gana el 47 % (real 62 % y 57 %). Lo que no
+  cuadra es que, con coches parecidos, la posición en pista vale poco: el líder se deja pasar y el ciclo de paradas
+  cambia el orden.
+- **Lo que se probó:** separar a los de cabeza en carrera (ver el punto 2). Con menos adelantamientos la pole ganaba
+  más (52 %), pero era por eso: con los umbrales recalibrados volvía al ~40 %.
+- **Lo siguiente sería mirar lo que defiende el líder** (el modo adelantamiento del que le sigue a menos de 1 s, el aire
+  sucio a esa distancia) y el ciclo de paradas entre los de cabeza, con `repite.ts` y `cabeza.js`.
+
+**De paso, un fallo.** Tras un pinchazo en un toque, el coche pedía un juego de medios. Si no le quedaba ninguno, no
+pedía nada: seguía con el pinchazo hasta el final y le descalificaban por la regla de los dos compuestos (Spa, semilla
+4). Ahora monta el que haya, mejor de otro compuesto que el que llevaba.
+
 ## Pendiente (26 de noviembre de 2026)
 
-Medido con el banco corregido. Ninguno de estos cambios está hecho.
-
-- **El duro en las pistas frías.** Con la referencia nueva, el duro se usa el 0 % en Las Vegas, el 6 % en Shanghái, el
-  8 % en Suzuka y el 39 % en Spa; en la realidad, ahí se corre con medio y duro.
-  - **Causa:** el agarre del duro por debajo de su ventana de temperatura (`fT` en `tyres.ts`). En frío, el duro nuevo va
-    1,0-1,3 s por detrás del medio; en Silverstone, 0,5 s.
-  - **Lo que se probó:** suavizar esa pérdida, con el coeficiente de 0,075 a 0,035 o a 0,02.
-
-    | Coeficiente de frío | Duro en Shanghái / Spa / Suzuka / Las Vegas | Adelantamientos por carrera | Paradas |
-    |---|---|---|---|
-    | 0,075 (actual) | 0 / 5 / 0 / 8 % | 72 | 1,16 |
-    | 0,035 | 22 / 41 / 0 / 3 % | 62 | 1,11 |
-    | 0,02 | 49 / 67 / 8 / 0 % | 53 | 1,10 |
-
-  - **Por qué no se aplicó:** el duro vuelve a Shanghái y a Spa, pero en Suzuka y Las Vegas degrada tanto o más que el
-    medio, y eso no depende de la temperatura. Además, con todos en medio-duro hay menos diferencias de goma y se adelanta
-    un 15-25 % menos, cuando los adelantamientos están calibrados con las diferencias de ahora. Hay que hacerlo junto con
-    el desgaste del duro en frío y volver a calibrar los umbrales de adelantamiento.
-- **Pocos doblados** (3-4 por carrera; en 2026, 6). Los coches lentos se quedan en carrera más cerca de lo que van en
-  clasificación:
-
-  | Distancia al mejor | Williams | Cadillac | Aston Martin | Cabeza |
-  |---|---|---|---|---|
-  | En clasificación | 2,9 % | 3,2 % | 3,5 % | igual en las dos |
-  | En carrera | 1,8 % | 2,4 % | 2,9 % | |
-
-  No sale del modo de ritmo: los lentos van algo menos en Atacar que los de cabeza. Hay que buscarlo en la física de
-  carrera (energía, rebufo, el modo adelantamiento entre ellos).
-- **La pole sale más rápida que la real.** Con el banco corregido, la pole sale 0,3 s más rápida que la real con la que
-  se calibró el circuito, y 0,5 s tras los cambios de esta tanda (0,12 s más, de llegar a Q3 con dos juegos nuevos). La
-  calibración de cada circuito (`poleObjetivo`) se hizo con el banco viejo; habría que repetirla.
-- **El azar en cabeza** (resto del punto 6, sección 5): la pole gana el 39 % (2026: 71 %).
+- **El azar en cabeza** (punto 4 de arriba).
+- **El duro, ahora casi siempre** (91 % de los coches; el blando, 14 %). El objetivo de la auditoría era un 60-75 %. En
+  Spa sigue siendo poco (38 %). La raíz está en el modelo de temperatura: mide la energía de cada curva relativa a la
+  vuelta y no ve lo que exige cada circuito (Suzuka, Spa o Silverstone frente a Las Vegas o Mónaco). Por eso el tren
+  delantero va frío en casi todas partes y un solo coeficiente decide el duro en todo el calendario.
+- **Comprobar las temperaturas de asfalto de Shanghái y Suzuka** (13-23 °C en la carrera simulada) contra las reales de
+  2026. Si la pista real va más caliente, parte de lo del duro en frío se arregla en el clima del circuito.
 
 ## Fuentes
 
