@@ -904,6 +904,11 @@ export function wrongTyresForWater(sess: Session, car: Car): boolean {
 }
 
 // ------------------------------------------------------------- clasificación
+/** Coche que pasa de sobra a la última parte: de los diez de más ritmo de la parrilla. */
+function strongCar(sess: Session, car: Car): boolean {
+  return sess.cars.filter((o) => o.pace > car.pace).length < 10;
+}
+
 /** La IA decide cuándo sale a pista en cada parte de la clasificación. */
 export function qualiTick(sess: Session, car: Car) {
   const part = sess.parts[sess.part];
@@ -980,7 +985,7 @@ export function qualiTick(sess: Session, car: Car) {
   // riesgo de caer: 2 fuera del corte (o sin tiempo en la última salida), 1 justo (sin el margen para quedarse en el
   // garaje). Sin tiempo en la primera salida, un coche que pasa de sobra no se da por en peligro: la regla de reserva
   // de qualiSet decide si va con uno usado
-  const risk = margin < 0 || (!isFinite(myBest) && (lastRun || car.pace <= 1.004)) ? 2 : margin < need ? 1 : 0;
+  const risk = margin < 0 || (!isFinite(myBest) && (lastRun || !strongCar(sess, car))) ? 2 : margin < need ? 1 : 0;
   let set = qualiSet(sess, car, c, lastRun, risk);
   if (!set && c === "W") { c = "I"; set = qualiSet(sess, car, c, lastRun, 2); }
   if (!set) return;
@@ -1074,7 +1079,7 @@ function qualiSet(sess: Session, car: Car, c: Compound, lastRun: boolean, risk: 
   // gastado: ese tiempo es el que queda si luego se anula la vuelta buena
   const light = used.filter((x) => setWear(x) < 0.12);
   if (fresh.length - 1 >= reserve || !light.length) return fresh[0];
-  return car.pace > 1.004 && !atRisk ? light[0] : fresh[0];
+  return strongCar(sess, car) && !atRisk ? light[0] : fresh[0];
 }
 
 /** Neumáticos de la IA durante una bandera roja en carrera (cambio gratis). */

@@ -1298,7 +1298,7 @@
   {
    "id": "ferrari",
    "nombre": "Ferrari",
-   "potencia": 0.8,
+   "potencia": -0.06,
    "fiabilidad": 1.05,
    "precio": 16,
    "inc": 1
@@ -1306,7 +1306,7 @@
   {
    "id": "redbullford",
    "nombre": "Red Bull Ford",
-   "potencia": 0.5,
+   "potencia": 0.47,
    "fiabilidad": 1.1,
    "precio": 15,
    "inc": 1.5
@@ -1314,7 +1314,7 @@
   {
    "id": "audi",
    "nombre": "Audi",
-   "potencia": 0.0,
+   "potencia": 0.01,
    "fiabilidad": 1.2,
    "precio": 12,
    "inc": 2
@@ -1322,7 +1322,7 @@
   {
    "id": "honda",
    "nombre": "Honda",
-   "potencia": -1.2,
+   "potencia": -1.85,
    "fiabilidad": 1.4,
    "precio": 10,
    "inc": 2

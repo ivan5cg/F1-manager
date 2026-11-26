@@ -65,6 +65,18 @@ const SPRINT_HALF = [4, 3.5, 3, 2.5, 2, 1.5, 1, 0.5];
 const CAR_DRY = 0.0035;
 const ENGINE_FAIL = [0.6, 1, 2.2];
 /**
+ * Diferencias entre equipos (agarre y potencia de equipos-2026.json), multiplicadas respecto al mejor: el mejor no
+ * cambia (la pole está calibrada con él) y el resto se aleja. Con 1 la parrilla de Q1 cabía en 1,2 s; en 2026 son ~3,3 s
+ * (2,0-4,8), con Cadillac y Aston Martin a 2,5-3,5 s del poleman.
+ */
+const TEAM_SPREAD = 2.6;
+/**
+ * Ruido de cada vuelta (fracción), aparte del de cada minisector: el de los minisectores se promedia a lo largo de la
+ * vuelta y la dejaba en centésimas (σ 0,05 s); en la F1 real, en aire limpio y con el mismo ritmo, 0,2-0,3 s.
+ * Se multiplica por lo irregular que es el piloto (1,25 − regularidad/100).
+ */
+const LAP_NOISE = 0.0065;
+/**
  * Modo de clasificación del motor y la batería. Solo en las vueltas lanzadas de clasificación se despliega toda la
  * energía; en el resto (carrera, tandas largas, vueltas de salida) se gestiona y la vuelta sale más lenta. La pista
  * está calibrada con la pole, así que esto no acelera la clasificación: frena todo lo demás. Va en tanto por uno del
@@ -282,6 +294,8 @@ const SQ_BREAKS = [7, 5];
 export interface TeamDef {
   id: string; nombre: string; motor: string; color: string;
   agarre: number; potencia: number; resistencia: number; desgaste: number;
+  /** Lo que gana (+) o pierde (−) el coche sobre su agarre en curva lenta, media y rápida (mismas unidades). */
+  curvas?: [number, number, number];
   boxes: number; fiabilidad: number; estrategia: number; meteo: number;
   pilotos: DriverDef[];
   /** Consumo de combustible frente al de referencia (1); lo baja el desarrollo del motor (development.ts). */
@@ -401,6 +415,8 @@ export interface Car {
   bestEvo?: { part: number; evo: number; wear: number };
   lapValid: boolean;
   noise: number;
+  /** Lo que va de más o de menos en esta vuelta (ver LAP_NOISE). */
+  lapNoise?: number;
   followGap: number;
   aheadId: number;
   drs: boolean; // modo adelantamiento activo (MO)
@@ -411,6 +427,8 @@ export interface Car {
   plan: Plan;
   lastPitLap: number;
   pace: number;
+  /** Ritmo en curva lenta, media y rápida (pace es su media en este circuito, para las estimaciones). */
+  paceBand: [number, number, number];
   wearMult: number;
   slowPuncture: boolean;
   autoPush: boolean;
@@ -697,6 +715,10 @@ export class Session {
   private wasRaining = false;
   private tRef: number[];
   private trimW: number[];
+  /** El mejor agarre y la mejor potencia de la parrilla: la referencia de TEAM_SPREAD. */
+  private topTeam = { agarre: 0, potencia: 0 };
+  /** Lo que pesa en este circuito cada tipo de curva (lenta, media, rápida) en lo que depende del agarre. */
+  private bandShare: [number, number, number] = [1 / 3, 1 / 3, 1 / 3];
   private cornerW: number[];
   private estimating = false;
   /** Energía recuperada por vuelta (MJ) y cómo se reparten la recarga y el gasto entre los minisectores. */
@@ -791,6 +813,13 @@ export class Session {
     if (this.kind === "SQ") { this.parts = partsFor(SQ_PARTS, opt.entrants.length); this.breaks = SQ_BREAKS; }
     if (this.parts.length) this.durationS = this.parts[0].minutes * 60;
 
+    this.topTeam = { agarre: Math.max(...opt.entrants.map((e) => e.team.agarre)), potencia: Math.max(...opt.entrants.map((e) => e.team.potencia)) };
+    {
+      const w = [0, 0, 0];
+      this.track.ms.forEach((m, i) => { for (let b = 0; b < 3; b++) w[b] += m.band[b] * m.cornerSens * this.tRef[i]; });
+      const sum = w[0] + w[1] + w[2] || 1;
+      this.bandShare = [w[0] / sum, w[1] / sum, w[2] / sum];
+    }
     for (const e of opt.entrants) {
       const d = e.d, team = e.team;
       const car: Car = {
@@ -802,7 +831,7 @@ export class Session {
         wing: 0, floor: 0, delay: 0, msK: -1, lat: 0, latOff: 0, latWant: 0, cross: [], lapTimes: [], lapStart: 0, best: Infinity, bestByPart: [], lapValid: true,
         noise: 0, followGap: 99, aheadId: -1, drs: false, drsEligible: false,
         grant: -1, grantUntil: 0, finishT: 0, plan: { stints: [] }, lastPitLap: -1,
-        pace: 1 + (d.ritmo - 85) * 0.0007 + team.agarre / 180,
+        ...this.carPace(d.ritmo, team),
         wearMult: team.desgaste * (1.18 - d.neumaticos * 0.002),
         slowPuncture: false, autoPush: !e.player, autoErs: true, auto: true, gapWant: 2.5,
         queue: [], eliminated: false, sessionLaps: 0, stintW0: 0, stintL0: 0, learnedLap: -99, lastImpede: -1,
@@ -1563,7 +1592,7 @@ export class Session {
   msTime(c: Car, m: Minisector, water: number): { t: number; grip: number } {
     const tyres = c.tyres!;
     const wetSkill = water > 0.05 ? 1 + (c.d.lluvia - 80) * 0.0012 * Math.min(1, water / 0.6) : 1;
-    let grip = setGrip(tyres, water) * c.pace * (1 + CONF_PACE * (c.conf ?? 0)) * (c.moral === undefined ? 1 : 1 + MORAL_PACE * clamp((c.moral - 60) / 40, -1.5, 1)) * wetSkill * PUSH_GRIP[c.push] * (1 + 0.018 * this.rubber) * (1 - c.wing - c.floor);
+    let grip = setGrip(tyres, water) * (c.paceBand[0] * m.band[0] + c.paceBand[1] * m.band[1] + c.paceBand[2] * m.band[2]) * (1 + CONF_PACE * (c.conf ?? 0)) * (c.moral === undefined ? 1 : 1 + MORAL_PACE * clamp((c.moral - 60) / 40, -1.5, 1)) * wetSkill * PUSH_GRIP[c.push] * (1 + 0.018 * this.rubber) * (1 - c.wing - c.floor);
     const su = this.setupAt(c, m, water);
     if (su) grip *= 1 + SETUP_GRIP.a * su.ea * m.aero - SETUP_GRIP.r * su.er * (m.aero - this.setupK!.aeroMean);
     // fuera de la trazada se agarra menos (sin goma y con gravilla de neumático)
@@ -1576,7 +1605,7 @@ export class Session {
     grip *= 1 + 0.5 * m.aero * m.cornerSens * air;
     let t = msTimeAtGrip(m, grip);
     const scale = t / this.tRef[m.i];
-    let power = c.team.potencia * 0.6 + ENGINE_POWER[c.engine] + this.era.ers * (c.soc > 0.05 || c.ers === 0 ? ERS_POWER[c.ers] : -3.5);
+    let power = (this.topTeam.potencia + (c.team.potencia - this.topTeam.potencia) * TEAM_SPREAD) * 0.6 + ENGINE_POWER[c.engine] + this.era.ers * (c.soc > 0.05 || c.ers === 0 ? ERS_POWER[c.ers] : -3.5);
     if (c.e.pu) power -= puPowerLoss(puLife(c.e.pu.km0 + c.puKm));
     // un motor o una batería tocados no dan todo
     if (c.fault && (c.fault.what === "motor" || c.fault.what === "unidad de potencia" || c.fault.what === "MGU-K" || c.fault.what === "batería")) power -= 1.2 * c.fault.lvl;
@@ -1591,6 +1620,18 @@ export class Session {
     t *= 1 + this.deployTrim(c) * this.trimW[m.i] + this.qualiEvo() * this.cornerW[m.i];
     t *= 1 + c.noise;
     return { t, grip };
+  }
+
+  /**
+   * Ritmo del coche: el del piloto más el del coche en cada tipo de curva (agarre + curvas, con TEAM_SPREAD respecto al
+   * mejor agarre de la parrilla); pace es la media con lo que pesa cada tipo de curva en este circuito.
+   */
+  private carPace(ritmo: number, team: TeamDef): { pace: number; paceBand: [number, number, number] } {
+    const drv = (ritmo - 85) * 0.0007;
+    const cv = team.curvas ?? [0, 0, 0];
+    const paceBand = cv.map((x) => 1 + drv + (this.topTeam.agarre + (team.agarre + x - this.topTeam.agarre) * TEAM_SPREAD) / 180) as [number, number, number];
+    const w = this.bandShare;
+    return { pace: paceBand[0] * w[0] + paceBand[1] * w[1] + paceBand[2] * w[2], paceBand };
   }
 
   /** Lo que le falta a la pista (y a los pilotos) en este momento de la clasificación (ver QUALI_EVO). */
@@ -1826,7 +1867,8 @@ export class Session {
     const sigma = 0.0035 * (1.25 - c.d.regularidad / 100) * (1 + this.water[ms] * 0.6);
     // cada coche aparta agua de la trazada: así se abre la línea seca
     if (this.water[ms] > 0) this.water[ms] *= 1 - CAR_DRY * Math.min(1, c.v / 60);
-    c.noise = this.rng.gauss(0, sigma);
+    if (ms === 0) c.lapNoise = this.rng.gauss(0, LAP_NOISE * (1.25 - c.d.regularidad / 100) * (1 + this.water[ms] * 0.6));
+    c.noise = this.rng.gauss(0, sigma) + (c.lapNoise ?? 0);
     this.sectorTiming(c, k, ms);
 
     if (ms === 0) {

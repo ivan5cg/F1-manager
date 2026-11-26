@@ -75,16 +75,24 @@ impacto (detalle y líneas de código en el informe):
    apenas cuestan. Con 48 fines de semana: 1,31/1,40 paradas, duro 86/92 %, blando 17/20 %, salida con medio ~67 %,
    vuelta rápida / pole 1,044; en las pistas frías el duro sube (Spa 61 %, Suzuka 68 %, Shanghái 44 %). Pendiente:
    Las Vegas (16 °C de asfalto) sigue sin duro; el blando se usa algo poco; en la sprint ~40 % sale con duro.
-4. Parrilla demasiado apretada (Q1 1,2 s frente a 3,3 s; 1,3 doblados frente a 7,5).
-5. Regularidad de metrónomo (σ 0,05 s frente a 0,2-0,3 s).
-6. Victorias demasiado abiertas en carrera (pole 31 %, desde P4+ 35 %) y demasiado cerradas en la sprint (pole 83 %).
+4. ~~Parrilla demasiado apretada (Q1 1,2 s frente a 3,3 s; 1,3 doblados frente a 7,5).~~ **Hecho:** las diferencias
+   de agarre y potencia entre equipos se multiplican por 2,6 respecto al mejor (`TEAM_SPREAD` en `session.ts`; el
+   mejor no cambia y la pole sigue calibrada). Q1 de primero a último 2,5-2,6 s, 4,4-4,6 doblados, Mercedes delante.
+   **Recalibrado con los 21 GP de 2026** ([rendimiento-2026.md](rendimiento-2026.md)): nivel de cada coche de los GP
+   13-21, carácter por tipo de curva (lenta, media, rápida: `curvas` en equipos-2026.json) y potencia por motor.
+   Q1 P1-P20 2,1-2,3 s (real 2,13), P10 − P1 1,1-1,2 s (real 1,39), compañeros 0,30 s (real 0,31).
+5. ~~Regularidad de metrónomo (σ 0,05 s frente a 0,2-0,3 s).~~ **Hecho:** ruido por vuelta además del de cada
+   minisector (`LAP_NOISE`): σ en aire limpio 0,19-0,20 s.
+6. Victorias demasiado abiertas en carrera y demasiado cerradas en la sprint (pole 83 %). Con los coches de 2026
+   recalibrados (los cuatro primeros a 0,2-0,4 %, como en la realidad) la pole gana el 33-50 % y desde P4+ el 29 %;
+   en 2026 fue 15 de 21 (71 %) y 2 de 21 (10 %). Es lo siguiente.
 7. ~~**Fallo:** descalificaciones por la regla de los dos compuestos cuando se prevé lluvia que no llega
    (`src/sim/strategy.ts:655-658` anula la parada de `strategy.ts:650`). Se reproduce con
    `npx tsx scripts/auditoria/gp.ts spa 32 chubD` (HAM, NOR, LAW y BEA descalificados; con `DEPURAR=1` sale por qué para
    cada uno).~~ **Hecho** (PR #41).
 8. Coche de seguridad y virtual demasiado lentos, y la mitad de vueltas en libres.
 
-Siguiente: los puntos 4-5 (parrilla y regularidad), midiendo con este banco y con `scripts/realismo.ts`. Con el punto 1 la
+Siguiente: el punto 8 (coche de seguridad y libres) y lo que queda del 6 (la sprint), midiendo con este banco y con `scripts/realismo.ts`. Con el punto 1 la
 vuelta media del ganador sube a ~1,10-1,12 de la pole (real 1,11), pero las carreras con coche de seguridad largo se
 alargan: el punto 8 (coche de seguridad demasiado lento) pesa ahora algo más. Tras los puntos 2 y 3 los libres siguen a
 1,1-1,3 / 0,8 / 0,4-0,65 s de la pole.
