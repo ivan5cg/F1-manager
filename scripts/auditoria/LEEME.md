@@ -17,6 +17,13 @@ node scripts/auditoria/lote.mjs lluviaS lluviaS 41-42 spa interlagos suzuka silv
 node scripts/auditoria/analiza.js auditoria-out/seco --por-circuito
 node scripts/auditoria/lluvia.js auditoria-out/lluviaD auditoria-out/chubD auditoria-out/lluviaS
 npx tsx scripts/auditoria/deg.ts silverstone bahrein monza         # curvas de neumático del modelo
+node scripts/auditoria/cabeza.js auditoria-out/seco                # cómo se decide la victoria (punto 6)
+# la sprint en los 24 circuitos (los que no la tienen, a 100 km y con su horario)
+node scripts/auditoria/lote.mjs sprint seco 1-2 --formato=sprint
+# solo salidas: muchas, con la parrilla de un lote (o una por ritmo si no se da PARRILLA)
+PARRILLA=auditoria-out/seco npx tsx scripts/auditoria/salida.ts RACE 1 8
+# la misma carrera con 6 semillas y la misma parrilla (lo que decide el azar de la carrera); una línea JSON
+npx tsx scripts/auditoria/repite.ts monaco 1 6
 # un solo fin de semana (JSON por la salida estándar)
 npx tsx scripts/auditoria/gp.ts silverstone 1 seco > fin.json
 ```
@@ -28,6 +35,13 @@ npx tsx scripts/auditoria/gp.ts silverstone 1 seco > fin.json
   tarda ~20 min. Con menos núcleos, usa menos circuitos o semillas.
 - **Salida:** `auditoria-out/<nombre>/<circuito>_<semilla>.json` (no se sube a git: ~200 KB por fin de semana). La
   simulación es determinista: las mismas semillas dan los mismos resultados mientras no cambie el código.
+- **Semillas:** cada circuito juega con su propia semilla de fin de semana (`semilla × 1000 + un número sacado del
+  nombre del circuito`), como el juego, que usa una por ronda. Hasta el 26 de noviembre de 2026, `gp.ts` usaba la misma
+  en los 24 circuitos, y con ella todas las sesiones de una semilla compartían los dados: en la salida, los mismos para
+  cada puesto de parrilla (la pole conservaba el liderato en 41 de 41 carreras de una semilla, o lo perdía en casi
+  todas las de otra). Las medias de ritmo, neumáticos o neutralizaciones apenas cambian, pero lo que dependa de la
+  salida o del orden en cabeza (gana la pole, gana desde P4+, la sprint) medido antes de esa fecha está sesgado, y la
+  referencia `base-2026-11/` también.
 - **Referencia:** `base-2026-11/` tiene la salida de los analizadores con el código de noviembre de 2026 (antes de
   cualquier arreglo). Sirve para comparar el antes y el después de un cambio. El lote en seco de la referencia se jugó
   con una versión anterior de `gp.ts` que aún no apuntaba las banderas de cada vuelta: por eso ahí salen sin dato las
