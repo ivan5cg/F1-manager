@@ -127,7 +127,7 @@ function gridBase(s: SeasonState, round: number): { teams: TeamDef[]; changes: G
     if (!s.dev) return { teams: base, changes: [] };
     return { teams: applyGridDev(base, s.seed, r, calLen, s.playerTeam, s.dev), changes: [] };
   }
-  const g = buildGrid(base, MARKET, s.equipo, s.trueSeed ?? s.seed, devRounds(s, r), !!s.dev, s.grid ? { agarre: s.carry ?? 0, extra: s.misPilotos } : undefined);
+  const g = buildGrid(base, MARKET, s.equipo, s.trueSeed ?? s.seed, s.dev ? r : devRounds(s, r), !!s.dev, s.grid ? { agarre: s.carry ?? 0, extra: s.misPilotos } : undefined, s.dev ? calLen : undefined);
   if (s.dev) g.teams = g.teams.map((t) => (t.id === PLAYER_TEAM_ID ? applyDev(t, s.dev, r) : t));
   return g;
 }

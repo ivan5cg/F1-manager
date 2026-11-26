@@ -1,5 +1,6 @@
 import type { SessionSnapshot } from "../sim/snapshot";
-import { TEAMS, BASE_TEAMS, CIRCUITS, ROUNDS, DRIVERS, GRID_CHANGES, getTrack, calendarOf, devContext, gridOf, CALENDARS, circuitOf, devRounds, person, whoAt, useSeason } from "./data";
+import { TEAMS, BASE_TEAMS, MARKET, CIRCUITS, ROUNDS, DRIVERS, GRID_CHANGES, getTrack, calendarOf, devContext, gridOf, CALENDARS, circuitOf, devRounds, person, whoAt, useSeason } from "./data";
+import { rivalTechMult } from "../sim/market";
 import { objectivesFor, objectiveStatus } from "../sim/objectives";
 import { DEV_AREAS, DEV_SIZES, MOTOR_CAP, DevArea, DevSize, devLeft, devExpect, orderPart, newDev, isWorks, devGains, rivalDevAt } from "../sim/development";
 import { myTeamPanel, puSummary, puPanel, wirePu, PLAYER_TEAM_ID } from "./teamBuilder";
@@ -393,8 +394,11 @@ function devPanel(s: SeasonState, team: TeamDef, cal: string[], done: boolean): 
     }).join("")}</div></div>`).join("")}</div>`;
   const parts = d.parts.slice().sort((a, b) => b.id - a.id);
   let rivalHtml = "";
-  if (!s.equipo && cal.length > 1) {
-    const rMap = rivalDevAt(s.grid ?? BASE_TEAMS, s.seed, Math.min(s.round, cal.length - 1), cal.length);
+  if (cal.length > 1) {
+    const base = s.grid ?? BASE_TEAMS;
+    const seed = s.equipo ? (s.trueSeed ?? s.seed) : s.seed;
+    const techM = s.equipo ? rivalTechMult(base, MARKET, s.equipo, seed) : undefined;
+    const rMap = rivalDevAt(base, seed, Math.min(s.round, cal.length - 1), cal.length, techM);
     const rivals = [...rMap.values()].filter((x) => x.teamId !== s.playerTeam);
     const arrivals = rivals.flatMap((x) => x.arrivals);
     const byGain = rivals.slice().sort((a, b) => (b.aero * AERO_S + b.motor * POWER_S) - (a.aero * AERO_S + a.motor * POWER_S));
@@ -411,7 +415,7 @@ function devPanel(s: SeasonState, team: TeamDef, cal: string[], done: boolean): 
     </div>`;
   }
   return `<div class="panel"><div class="hd"><span class="t">Desarrollo del coche</span><span class="small">Quedan <b>${String(left).replace(".", ",")} M</b> de ${d.budget} M</span></div><div class="bd">
-    <div class="small" style="margin-bottom:6px">Pide piezas con el presupuesto de la temporada: las pequeñas y medianas tardan 2 rondas en llegar y las grandes, 3. Una de cada cuatro rinde menos de lo que esperaban tus ingenieros. ${s.equipo ? "Los rivales evolucionan según su director técnico." : "Los rivales traen paquetes discretos a lo largo del año según su cuota ATR de túnel de viento (70–120 %): unos aciertan grandes saltos y otros tropiezan."}</div>
+    <div class="small" style="margin-bottom:6px">Pide piezas con el presupuesto de la temporada: las pequeñas y medianas tardan 2 rondas en llegar y las grandes, 3. Una de cada cuatro rinde menos de lo que esperaban tus ingenieros. ${s.equipo ? "Los rivales traen paquetes discretos según su director técnico y su cuota ATR de túnel de viento (70–120 %)." : "Los rivales traen paquetes discretos a lo largo del año según su cuota ATR de túnel de viento (70–120 %): unos aciertan grandes saltos y otros tropiezan."}</div>
     ${devPlanoHtml(d, s.round, (r) => (r < cal.length ? CIRCUITS[cal[r]].gp.replace("Gran Premio de ", "GP de ").replace(/ \(.*\)$/, "") : "después de la última carrera"))}
     ${now.aero || now.motor || now.fiab ? `<div class="small" style="margin-bottom:6px">Ya en el coche: ${[now.aero ? `aerodinámica ${devGainText("aero", now.aero)}` : "", now.motor ? `motor ${devGainText("motor", now.motor)}` : "", now.fiab ? `fiabilidad ${devGainText("fiab", now.fiab)}` : ""].filter(Boolean).join(" · ")}.</div>` : ""}
     ${order}

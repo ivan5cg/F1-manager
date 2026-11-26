@@ -208,7 +208,7 @@ const BREATHE_GAP = 1.0, BREATHE_MIN = 0.25, LAT_BREATHE = 0.25, BREATHE_AHEAD =
  * coste de salirse de la trazada, el duro usable en pistas frías y el modo adelantamiento con coste de batería, el
  * volumen de adelantamientos siga calibrado a 2026 (~55-65 en seco).
  */
-const PASS_LAT = 0.26;
+const PASS_LAT = 0.16;
 /**
  * Adelantar como maniobra (fase 3). El que ataca se pone a un lado (MV_SIDE, fracción de la media anchura): por el
  * interior de la curva o, si el de delante le cierra el interior, por fuera. El de delante se aparta un poco hacia el
@@ -267,7 +267,7 @@ type IncidentKind = "crash" | "failure" | "debris";
 const ERS_POWER = [-3.5, 0, 2.0, 4.5];
 const ERS_NET = [1.1, 0, -0.9, -2.4];
 export const SOC_MAX = 4;
-const MO_POWER = 6; // % extra del modo adelantamiento (2026, escalado por velocidad) o del DRS (2011-2025)
+const MO_POWER = 5.2; // % extra del modo adelantamiento (2026, escalado por velocidad) o del DRS (2011-2025)
 /**
  * Aerodinámica activa 2026 (Modo X / Modo Z): en seco todos abren alerones (Modo X) en las rectas rápidas, que ya es
  * la base calibrada con la pole de 2026. Cuando el Modo X se cierra a Modo Z (pista mojada, amarilla/SC o alerón

@@ -7,6 +7,7 @@
 // si un motor rinde menos de lo publicado, rinde menos para todos sus clientes.
 import { Rng, clamp } from "./rng";
 import type { TeamDef, DriverDef } from "./session";
+import { rivalDevAt } from "./development";
 
 export type Role = "titular" | "reserva" | "libre";
 const ATTRS = ["ritmo", "regularidad", "neumaticos", "lluvia", "ataque", "defensa", "agresividad", "salida"] as const;
@@ -130,18 +131,35 @@ export function devMean(m: Market): number {
 // ------------------------------------------------------------------ parrilla
 export interface GridChange { team: string; out: string; in: string; what: "piloto" | "jefe" | "tecnico" }
 
+/** Factor de desarrollo del director técnico de cada rival frente a la media (1 = medio; baja si se lo fichas). */
+export function rivalTechMult(base: TeamDef[], m: Market, spec: CustomTeam, seed: number): Map<string, number> {
+  const dm = devMean(m);
+  const out = new Map<string, number>();
+  for (const t of base) {
+    const tech = m.tecnicos.find((x) => x.equipo === t.id);
+    const techGone = !!tech && tech.nombre === spec.tecnico;
+    const dev = techGone || !tech ? INTERIM_DEV : trueTech(tech, seed).desarrollo;
+    out.set(t.id, dev / Math.max(0.01, dm));
+  }
+  return out;
+}
+
 /**
  * Parrilla de una temporada del modo «crear equipo» tras `round` carreras: los 11 equipos con sus
  * sustitutos y sus valores reales, y el tuyo al final. `changes` cuenta quién ha tenido que cubrir a quién.
- * ownDev: el coche del jugador evoluciona por piezas (development.ts) y aquí no gana nada solo.
+ * ownDev: el coche del jugador evoluciona por piezas (development.ts) y los rivales usan curvas ATR + paquetes
+ * discretos ponderados por su director técnico (si se pasa `totalRounds`); si no, desarrollo lineal heredado.
  */
-export function buildGrid(base: TeamDef[], m: Market, spec: CustomTeam, seed: number, round: number, ownDev = false, carry?: { agarre: number; extra?: DriverDef[] }): { teams: TeamDef[]; changes: GridChange[] } {
+export function buildGrid(base: TeamDef[], m: Market, spec: CustomTeam, seed: number, round: number, ownDev = false, carry?: { agarre: number; extra?: DriverDef[] }, totalRounds?: number): { teams: TeamDef[]; changes: GridChange[] } {
   const extra = carry?.extra;
   const signed = new Set(spec.pilotos);
   const used = new Set(spec.pilotos);
   for (const t of base) for (const p of t.pilotos) if (!signed.has(p.abrev)) used.add(p.abrev);
   const free = m.pilotos.filter((p) => p.rol === "libre").sort((a, b) => (b.ritmo ?? 0) - (a.ritmo ?? 0));
   const dm = devMean(m);
+  const useAtr = ownDev && totalRounds !== undefined && totalRounds > 1;
+  const devR = useAtr ? (totalRounds! > 9 ? (round * 8) / (totalRounds! - 1) : round) : round;
+  const atrDev = useAtr ? rivalDevAt(base, seed, round, totalRounds!, rivalTechMult(base, m, spec, seed)) : null;
   const changes: GridChange[] = [];
   const engines = new Map(m.motores.map((e) => [e.id, { pub: e, real: trueEngine(e, seed) }]));
   const teams: TeamDef[] = base.map((t) => {
@@ -162,13 +180,15 @@ export function buildGrid(base: TeamDef[], m: Market, spec: CustomTeam, seed: nu
     if (techGone) changes.push({ team: t.nombre, out: tech!.nombre, in: "un interino", what: "tecnico" });
     const dev = techGone || !tech ? INTERIM_DEV : trueTech(tech, seed).desarrollo;
     const eng = engines.get(engineIdOf(t))!;
+    const g = atrDev?.get(t.id);
     return {
       ...t,
       pilotos,
       // el coche ya estaba hecho: perder al director técnico frena el desarrollo, no el coche de salida
-      agarre: t.agarre + (dev - dm) * round,
-      potencia: t.potencia + (eng.real.potencia - eng.pub.potencia),
-      fiabilidad: t.fiabilidad * (eng.real.fiabilidad / eng.pub.fiabilidad),
+      agarre: t.agarre + (g ? g.aero - dm * devR : (dev - dm) * devR),
+      potencia: t.potencia + (eng.real.potencia - eng.pub.potencia) + (g?.motor ?? 0),
+      consumo: (t.consumo ?? 1) * (1 - (g?.fuel ?? 0)),
+      fiabilidad: t.fiabilidad * (eng.real.fiabilidad / eng.pub.fiabilidad) * (1 - (g?.fiab ?? 0)),
       estrategia: t.estrategia + (bossGone ? INTERIM_BOSS.estrategia : 0),
       meteo: t.meteo + (bossGone ? INTERIM_BOSS.meteo : 0),
       boxes: t.boxes + (bossGone ? INTERIM_BOSS.boxes : 0),
@@ -184,7 +204,7 @@ export function buildGrid(base: TeamDef[], m: Market, spec: CustomTeam, seed: nu
     id: PLAYER_TEAM_ID, nombre: spec.nombre, motor: e.nombre, color: spec.color,
     // con desarrollo por piezas (development.ts) lo que gana el coche lo ponen las piezas que lleguen; si no
     // (temporadas de antes), mejora solo según su director técnico y lo que quedó del techo de gasto
-    agarre: td.diseno + NEW_TEAM.agarre + (carry?.agarre ?? 0) + ((ownDev ? 0 : td.desarrollo * devBudgetMult(m, spec)) - dm) * round,
+    agarre: td.diseno + NEW_TEAM.agarre + (carry?.agarre ?? 0) + ((ownDev ? 0 : td.desarrollo * devBudgetMult(m, spec)) - dm) * devR,
     potencia: e.potencia,
     resistencia: td.resistencia,
     desgaste: td.desgaste,

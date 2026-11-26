@@ -38,6 +38,8 @@ node scripts/auditoria/carrera-equipos.mjs auditoria-out/seco
 # pole simulada en seco (con los libres antes) y calibración de `poleAjuste` en cada circuito
 npx tsx scripts/auditoria/pole.ts monaco 1-6
 node scripts/auditoria/calibra-pole.mjs 1-6 --escribe
+# desarrollo asimétrico ATR de rivales (equipo real y «crear equipo»), paquetes y delta real en pista
+npx tsx scripts/auditoria/desarrollo.ts 1-40 23
 ```
 
 - **Climas:** `seco` (los tres días «Estable»; aun así llueve en ~10 % de los fines de semana), `natural` (el que toque

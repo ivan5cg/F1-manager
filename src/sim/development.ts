@@ -138,7 +138,7 @@ const rivalCarLevel = (t: TeamDef) => t.agarre + 0.4 * t.potencia - 0.3 * t.resi
  * La media de la parrilla sigue rondando DEV_RIVAL · 8 (~0,48 de agarre en una temporada completa) para mantener
  * equilibrado el presupuesto de 40 M del jugador.
  */
-export function rivalDevAt(base: TeamDef[], seed: number, round: number, totalRounds: number): Map<string, RivalDevAt> {
+export function rivalDevAt(base: TeamDef[], seed: number, round: number, totalRounds: number, techMult?: Map<string, number>): Map<string, RivalDevAt> {
   const out = new Map<string, RivalDevAt>();
   const n = base.length;
   const maxR = Math.max(0, totalRounds - 1);
@@ -177,8 +177,9 @@ export function rivalDevAt(base: TeamDef[], seed: number, round: number, totalRo
     const atr = atrPercent(rank, n);
     const rng = new Rng(((seed * 2654435761) ^ hashId("dev:" + t.id)) >>> 0);
     const orgK = (t.estrategia - 80) * 0.002; // ligera ventaja organizativa (±3 %)
+    const techK = clamp(techMult?.get(t.id) ?? 1, 0.35, 1.85); // en «crear equipo», peso del director técnico real
     const teamK = clamp(rng.gauss(1.0, 0.15) + orgK, 0.68, 1.35);
-    const totalAeroExp = DEV_RIVAL * 8 * seasonScale * atrMult(atr) * teamK;
+    const totalAeroExp = DEV_RIVAL * 8 * seasonScale * atrMult(atr) * teamK * techK;
 
     // 20 % refinamiento continuo (puesta a punto, pequeños apéndices) + 80 % en paquetes discretos
     let aero = rNow > 0 ? totalAeroExp * 0.2 * prog : 0;
