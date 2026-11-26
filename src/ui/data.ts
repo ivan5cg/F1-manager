@@ -28,8 +28,8 @@ import market from "../../data/mercado-2026.json";
 import { buildTrack, Track } from "../sim/track";
 import type { TeamDef, DriverDef } from "../sim/session";
 import { buildGrid, GridChange, Market, PLAYER_TEAM_ID, costOf, trueTech } from "../sim/market";
-import { applyDev, applyGridDev } from "../sim/development";
-import { type SeasonState, type SeatSwap, personId } from "../sim/season";
+import { applyDev, applyGridDev, AtrPlan, atrAt, atrCarOrder, atrMidRound, atrOrderByPoints } from "../sim/development";
+import { type SeasonState, type SeatSwap, personId, teamStandings } from "../sim/season";
 
 /** Los 11 equipos reales (modo clásico y base del modo «crear equipo»). */
 export const BASE_TEAMS = teamsJson.equipos as unknown as TeamDef[];
@@ -125,12 +125,34 @@ function gridBase(s: SeasonState, round: number): { teams: TeamDef[]; changes: G
   if (!s.equipo) {
     // equipo real: con desarrollo por piezas, el tuyo evoluciona con lo que pidas y los rivales con curvas ATR + paquetes
     if (!s.dev) return { teams: base, changes: [] };
-    return { teams: applyGridDev(base, s.seed, r, calLen, s.playerTeam, s.dev), changes: [] };
+    return { teams: applyGridDev(base, s.seed, r, calLen, s.playerTeam, s.dev, atrPlan(s)), changes: [] };
   }
-  const g = buildGrid(base, MARKET, s.equipo, s.trueSeed ?? s.seed, s.dev ? r : devRounds(s, r), !!s.dev, s.grid ? { agarre: s.carry ?? 0, extra: s.misPilotos } : undefined, s.dev ? calLen : undefined);
+  const g = buildGrid(base, MARKET, s.equipo, s.trueSeed ?? s.seed, s.dev ? r : devRounds(s, r), !!s.dev, s.grid ? { agarre: s.carry ?? 0, extra: s.misPilotos } : undefined, s.dev ? calLen : undefined, s.dev ? atrPlan(s) : undefined);
   if (s.dev) g.teams = g.teams.map((t) => (t.id === PLAYER_TEAM_ID ? applyDev(t, s.dev, r) : t));
   return g;
 }
+
+/** Id de tu equipo en la parrilla (en «crear equipo», el del equipo propio). */
+export const myTeamId = (s: SeasonState) => (s.equipo ? PLAYER_TEAM_ID : s.playerTeam);
+
+/**
+ * Reparto ATR de la temporada (development.ts): empieza con la clasificación de constructores del año anterior (en
+ * la primera, por nivel del coche, y en «crear equipo» tu equipo nuevo el último) y se revisa con la clasificación
+ * tras ~el 45 % del calendario, en cuanto se han corrido esas carreras.
+ */
+export function atrPlan(s: SeasonState): AtrPlan {
+  const base = s.grid ?? BASE_TEAMS;
+  const start = s.atrOrder?.length ? s.atrOrder : atrCarOrder(base, s.equipo ? [PLAYER_TEAM_ID] : []);
+  const mid = atrMidRound(calendarOf(s).length);
+  if (mid === null || s.rounds.length < mid) return { start };
+  // los asientos van en el orden de la parrilla (en «crear equipo», el tuyo al final)
+  const seats = (s.equipo ? [...base, { ...base[0], id: PLAYER_TEAM_ID, pilotos: s.equipo.pilotos.map(() => base[0].pilotos[0]) }] : base) as TeamDef[];
+  const pts = new Map(teamStandings({ ...s, rounds: s.rounds.slice(0, mid) }, seats).map((x) => [x.team.id, x.points]));
+  return { start, mid: { round: mid, order: atrOrderByPoints(pts, start) } };
+}
+
+/** Tu cuota ATR (%) en una ronda. */
+export const myAtr = (s: SeasonState, round: number) => atrAt(atrPlan(s), myTeamId(s), round);
 
 /** Desarrollo: lo que queda del techo de gasto («crear equipo»; null con un equipo real) y el ritmo de tu director
  *  técnico frente al medio (lo publicado, para lo que se espera; lo real, para lo que rinde). */

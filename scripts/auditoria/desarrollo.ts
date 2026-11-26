@@ -4,10 +4,11 @@
 //    dispersión intratemporada, paquetes discretos (salto / ok / fallo), mejoras de UP por motorista (oficial vs cliente)
 //    y maduración de fiabilidad.
 //  - Modo «crear equipo» (buildGrid + ATR + director técnico real, incluido el impacto de fichar a un director rival).
+//  - Revisión ATR de mitad de año (con la clasificación), cuota ATR del jugador y calendarios cortos.
 //  - Impacto real en pista (delta de vuelta en Silverstone entre Ronda 1 y Ronda 23).
 //   npx tsx scripts/auditoria/desarrollo.ts [semillas: 1-40] [rondas: 23]
 import { readFileSync } from "fs";
-import { rivalDevAt, applyGridDev, DEV_RIVAL, isWorks } from "../../src/sim/development";
+import { rivalDevAt, applyGridDev, DEV_RIVAL, isWorks, atrCarOrder, atrMidRound, atrAt, atrMult, devExpect, AtrPlan } from "../../src/sim/development";
 import { buildGrid, Market, CustomTeam, PLAYER_TEAM_ID } from "../../src/sim/market";
 import { buildTrack } from "../../src/sim/track";
 import { Weekend, newWeekend } from "../../src/sim/weekend";
@@ -104,6 +105,42 @@ for (const x of rows) {
   const d = mean(catDelta.get(x.t.id)!);
   const note = x.t.id === "ferrari" ? "  ← con técnico interino (fichado)" : "";
   console.log(`  ${x.t.nombre.padEnd(15)} ATR ${String(x.atr).padStart(3)}% | Δagarre neto vs media: ${d >= 0 ? "+" : ""}${d.toFixed(3)} (${(-d * 0.38 >= 0 ? "+" : "")}${(-d * 0.38).toFixed(2)} s)${note}`);
+}
+
+console.log(`\n=== REVISIÓN ATR DE MITAD DE AÑO (${seeds.length} temporadas) ===`);
+{
+  const start = atrCarOrder(teams);
+  const mid = atrMidRound(totalRounds);
+  // caso extremo: la clasificación a mitad de año, al revés que el orden de partida
+  const plan: AtrPlan = mid === null ? { start } : { start, mid: { round: mid, order: [...start].reverse() } };
+  console.log(`Revisión tras ${mid ?? "—"} carreras (orden al revés)`);
+  for (const id of [start[0], start[1], start[start.length - 2], start[start.length - 1]]) {
+    const fixed = mean(seeds.map((x) => rivalDevAt(teams, x * 1337, lastRound, totalRounds).get(id)!.aero));
+    const rev = mean(seeds.map((x) => rivalDevAt(teams, x * 1337, lastRound, totalRounds, undefined, plan).get(id)!.aero));
+    const t = teams.find((x) => x.id === id)!;
+    console.log(`  ${t.nombre.padEnd(15)} ATR ${atrAt(plan, id, 0)}% → ${atrAt(plan, id, lastRound)}% | aero sin revisión +${fixed.toFixed(3)} · con revisión +${rev.toFixed(3)}`);
+  }
+  const same = seeds.every((x) => { const a = rivalDevAt(teams, x * 1337, lastRound, totalRounds), b = rivalDevAt(teams, x * 1337, lastRound, totalRounds, undefined, { start }); return teams.every((t) => Math.abs(a.get(t.id)!.aero - b.get(t.id)!.aero) < 1e-12); });
+  console.log(`Sin revisión = reparto por defecto: ${same ? "OK" : "FALLO"}`);
+
+  console.log("\n=== CUOTA ATR DEL JUGADOR (40 M todo en aerodinámica, piezas medianas) ===");
+  for (const id of [start[0], start[Math.floor(start.length / 2)], start[start.length - 1]]) {
+    const atrP = atrAt({ start }, id, 0);
+    console.log(`  ${teams.find((x) => x.id === id)!.nombre.padEnd(15)} ATR ${atrP}% → ×${atrMult(atrP).toFixed(2)} | 40 M en aero: +${(5 * devExpect("aero", 2, 1, atrMult(atrP))).toFixed(3)} (media rival +${gridMeanAero.toFixed(3)})`);
+  }
+  const custom = atrCarOrder(teams, [PLAYER_TEAM_ID]);
+  console.log(`  Crear equipo (nuevo, ${custom.length} equipos): ATR ${atrAt({ start: custom }, PLAYER_TEAM_ID, 0)}% → ×${atrMult(atrAt({ start: custom }, PLAYER_TEAM_ID, 0)).toFixed(2)}`);
+
+  console.log("\n=== CALENDARIOS CORTOS ===");
+  for (const n of [2, 3, 5, 7, 9]) {
+    let pk = 0, want = 0;
+    const maxR = n - 1, nPkg = maxR >= 12 ? 4 : maxR >= 6 ? 3 : maxR >= 2 ? 2 : 1;
+    for (let r = 0; r < n; r++) for (const g of rivalDevAt(teams, 1337, r, n).values()) pk += g.arrivals.filter((x) => x.area === "aero").length;
+    want = nPkg * teams.length;
+    const end = rivalDevAt(teams, 1337, maxR, n);
+    const pu = mean(teams.filter(isWorks).map((t) => end.get(t.id)!.motor));
+    console.log(`  ${n} carreras: paquetes aero que llegan ${pk}/${want} ${pk === want ? "OK" : "FALLO"} · UP oficial +${pu.toFixed(3)} · aero medio +${mean(teams.map((t) => end.get(t.id)!.aero)).toFixed(3)}`);
+  }
 }
 
 console.log("\n=== IMPACTO EN PISTA (Silverstone: Ronda 1 vs Ronda 23, semilla 2026) ===");

@@ -7,7 +7,7 @@
 // si un motor rinde menos de lo publicado, rinde menos para todos sus clientes.
 import { Rng, clamp } from "./rng";
 import type { TeamDef, DriverDef } from "./session";
-import { rivalDevAt } from "./development";
+import { rivalDevAt, AtrPlan, atrCarOrder } from "./development";
 
 export type Role = "titular" | "reserva" | "libre";
 const ATTRS = ["ritmo", "regularidad", "neumaticos", "lluvia", "ataque", "defensa", "agresividad", "salida"] as const;
@@ -149,8 +149,9 @@ export function rivalTechMult(base: TeamDef[], m: Market, spec: CustomTeam, seed
  * sustitutos y sus valores reales, y el tuyo al final. `changes` cuenta quién ha tenido que cubrir a quién.
  * ownDev: el coche del jugador evoluciona por piezas (development.ts) y los rivales usan curvas ATR + paquetes
  * discretos ponderados por su director técnico (si se pasa `totalRounds`); si no, desarrollo lineal heredado.
+ * atr: reparto ATR de la temporada (ver development.ts; sin él, por nivel del coche, con tu equipo nuevo el último).
  */
-export function buildGrid(base: TeamDef[], m: Market, spec: CustomTeam, seed: number, round: number, ownDev = false, carry?: { agarre: number; extra?: DriverDef[] }, totalRounds?: number): { teams: TeamDef[]; changes: GridChange[] } {
+export function buildGrid(base: TeamDef[], m: Market, spec: CustomTeam, seed: number, round: number, ownDev = false, carry?: { agarre: number; extra?: DriverDef[] }, totalRounds?: number, atr?: AtrPlan): { teams: TeamDef[]; changes: GridChange[] } {
   const extra = carry?.extra;
   const signed = new Set(spec.pilotos);
   const used = new Set(spec.pilotos);
@@ -159,7 +160,7 @@ export function buildGrid(base: TeamDef[], m: Market, spec: CustomTeam, seed: nu
   const dm = devMean(m);
   const useAtr = ownDev && totalRounds !== undefined && totalRounds > 1;
   const devR = useAtr ? (totalRounds! > 9 ? (round * 8) / (totalRounds! - 1) : round) : round;
-  const atrDev = useAtr ? rivalDevAt(base, seed, round, totalRounds!, rivalTechMult(base, m, spec, seed)) : null;
+  const atrDev = useAtr ? rivalDevAt(base, seed, round, totalRounds!, rivalTechMult(base, m, spec, seed), atr ?? { start: atrCarOrder(base, [PLAYER_TEAM_ID]) }) : null;
   const changes: GridChange[] = [];
   const engines = new Map(m.motores.map((e) => [e.id, { pub: e, real: trueEngine(e, seed) }]));
   const teams: TeamDef[] = base.map((t) => {
