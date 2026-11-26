@@ -1123,8 +1123,10 @@ function qualiSet(sess: Session, car: Car, c: Compound, lastRun: boolean, risk: 
   const reserve = later.length + (later.some((p) => p.advance === null) ? 1 : 0);
   if (final) return lastRun || fresh.length >= 2 || !used.length ? fresh[0] : used[0];
   // última salida de Q1/Q2: nuevo si está fuera o si aún quedan los de reserva (dos para la última parte); si solo va
-  // justo, también, pero guardando al menos uno nuevo para la última parte
-  if (lastRun) return risk >= 2 || fresh.length > (risk === 1 ? Math.min(reserve, 1) : reserve) || !used.length ? fresh[0] : used[0];
+  // justo, también en Q1, pero en Q2 sin tocar los dos de la última parte. (Antes el que iba justo en Q2 gastaba uno de
+  // los dos y la mayoría llegaba a Q3 con un solo juego nuevo: 3 de cada 10 hacían la Q3 peor que su Q2; 2026: 1.)
+  const justOk = later.length > 1 ? Math.min(reserve, 1) : reserve;
+  if (lastRun) return risk >= 2 || fresh.length > (risk === 1 ? justOk : reserve) || !used.length ? fresh[0] : used[0];
   // primera salida: nuevo si sobran; si no, usado (salvo que el coche no dé para pasar con uno usado). El usado, poco
   // gastado: ese tiempo es el que queda si luego se anula la vuelta buena
   const light = used.filter((x) => setWear(x) < 0.12);
