@@ -92,9 +92,9 @@ Comprobación: distancia a Mercedes en clasificación, misma parte de la sesión
   vueltas y la estrategia mete ruido, así que las distancias en carrera salen a la mitad que en clasificación
   (`race.py`). Hace falta el tiempo vuelta a vuelta. La única señal coherente: Red Bull y McLaren rinden algo mejor en
   carrera que en clasificación (−0,04 % y 0,11 % frente a 0,21 % y 0,22 %).
-- **Pilotos.** En la segunda mitad del año hubo cambios (por ejemplo, Lawson en Red Bull y Tsunoda en Racing Bulls desde
-  Monza), pero `equipos-2026.json` mantiene la alineación inicial. El ajuste descuenta al piloto que marcó cada vuelta,
-  así que los coches no se ven afectados, pero las alineaciones del juego siguen siendo las del principio de año.
+- **Pilotos.** En algunas carreras de la segunda mitad hubo sustituciones puntuales (por la lesión de Hadjar, Lawson
+  pasó a Red Bull y Tsunoda corrió con Racing Bulls). El ajuste descuenta al piloto que marcó cada vuelta, así que no
+  afecta a los coches; las alineaciones del juego no cambian.
 
 ## Repetirlo
 
