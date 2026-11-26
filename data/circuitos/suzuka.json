@@ -11,7 +11,7 @@
  "poleObjetivo": 89.18,
  "poleFuente": "Antonelli 1:28.778, clasificación del 28 de marzo de 2026 (FIA); el objetivo de calibración se ajusta para que la pole simulada ronde la real",
  "aero": {"cl": 1.05, "cd": 1.0},
- "abrasividad": 1.15,
+ "abrasividad": 1.15, "compuestos": ["C1", "C2", "C3"], "compuestosFuente": "Pirelli 2026: duro, medio, blando",
  "boxes": {"lado":"derecha","entrada": 400, "salida": 250, "perdida": 22.0, "limite": 80},
  "horario": {"fp1": "V 11:30", "fp2": "V 15:00", "fp3": "S 11:30", "q": "S 15:00", "carrera": "D 14:00"},
  "adelantamientos": {"objetivo": 40.5, "umbral": 2.0, "fuente": "media de adelantamientos por carrera (f1-race-review.com)"},

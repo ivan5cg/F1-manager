@@ -12,7 +12,7 @@
  "poleObjetivo": 90.9,
  "poleFuente": "Verstappen 1:31.373, clasificación del 10 de octubre de 2026; el objetivo de calibración se ajusta para que la pole simulada ronde la real",
  "aero": {"cl": 1.18, "cd": 1.1},
- "abrasividad": 0.9,
+ "abrasividad": 0.9, "compuestos": ["C3", "C4", "C5"], "compuestosFuente": "Pirelli 2026: duro, medio, blando",
  "boxes": {"lado":"izquierda","entrada": 380, "salida": 220, "perdida": 28.0, "limite": 60},
  "horario": {"fp1": "V 16:30", "sq": "V 20:30", "sprint": "S 17:00", "q": "S 21:00", "carrera": "D 20:00"},
  "adelantamientos": {"objetivo": 34.8, "umbral": 2.78, "fuente": "media de adelantamientos por carrera (f1-race-review.com)"},

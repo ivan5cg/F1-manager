@@ -172,6 +172,8 @@ export function planStrategy(sess: Session, car: Car, k: TeamKnowledge, fromLap 
  * igual y la mitad de la parrilla salía con duro.
  */
 const START_COST: Partial<Record<Compound, number>> = { H: 1.2 };
+/** En la sprint pesa más: es corta y sin paradas, lo que se pierde en la salida ya no se recupera. */
+const SPRINT_START_K = 2.5;
 
 /** Todas las estrategias posibles en seco (0, 1 o 2 paradas) con los juegos que quedan, de mejor a peor. */
 function enumeratePlans(sess: Session, car: Car, k: TeamKnowledge, fromLap = 0, curC: Compound | null = null, curAge = 0, margin = Infinity, keepUsed = false): Plan[] {
@@ -211,7 +213,7 @@ function enumeratePlans(sess: Session, car: Car, k: TeamKnowledge, fromLap = 0, 
     const c0 = st.c, a0 = st.age;
     const id0 = st.own ? avail[c0][0]?.id : undefined;
     // salida: con el duro se tracciona peor y, frío, se pierden puestos en la primera vuelta que luego cuesta recuperar
-    const startCost = st.own && fromLap === 0 && (isRace || sess.kind === "SPRINT") ? START_COST[c0] ?? 0 : 0;
+    const startCost = st.own && fromLap === 0 && (isRace || sess.kind === "SPRINT") ? (START_COST[c0] ?? 0) * (isRace ? 1 : SPRINT_START_K) : 0;
     const idx = (c: Compound, n: number) => n + (st.own && c === c0 ? 1 : 0); // índice del juego libre
     if (ruleOk([c0])) { const t = startCost + stintCost(sess, car, k, c0, a0, remain); if (keep(t)) options.push({ stints: [{ c: c0, endLap: total, setId: id0 }], total: t }); }
     for (const c2 of DRY) {

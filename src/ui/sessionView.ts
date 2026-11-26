@@ -1830,7 +1830,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     const btn = (g: (typeof groups)[number]) => {
       const sel = g.sets.find((s) => s.id === selected);
       const s = sel ?? g.sets[0];
-      return `<button data-set="${s.id}" class="${sel ? "on" : ""}">${tyreHtml(g.c, true)}<span>${COMPOUNDS[g.c].name}</span><span class="dim">${setLabel(s)}</span>${g.sets.length > 1 ? `<span class="cnt">×${g.sets.length}</span>` : ""}<i class="lifebar"><i style="width:${lifeLeft(s)}%;background:${wearColor(s)}"></i></i></button>`;
+      return `<button data-set="${s.id}" class="${sel ? "on" : ""}">${tyreHtml(g.c, true)}<span>${COMPOUNDS[g.c].name}${COMPOUNDS[g.c].pirelli ? ` <small class="dim">${COMPOUNDS[g.c].pirelli}</small>` : ""}</span><span class="dim">${setLabel(s)}</span>${g.sets.length > 1 ? `<span class="cnt">×${g.sets.length}</span>` : ""}<i class="lifebar"><i style="width:${lifeLeft(s)}%;background:${wearColor(s)}"></i></i></button>`;
     };
     const fold = !wetNow();
     const main = groups.filter((g) => !fold || DRY.includes(g.c) || g.sets.some((s) => s.id === selected));

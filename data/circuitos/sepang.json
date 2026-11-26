@@ -14,7 +14,7 @@
   "cl": 1.05,
   "cd": 1.0
  },
- "abrasividad": 1.15,
+ "abrasividad": 1.15, "compuestos": ["C2", "C3", "C4"], "compuestosFuente": "Pirelli 2026: duro, medio, blando",
  "boxes": {"lado":"derecha","entrada": 420,
   "salida": 280,
   "perdida": 21.0,
