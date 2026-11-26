@@ -9,7 +9,12 @@ import { pitLoss } from "../../src/sim/strategy";
 const [id, seedS, clima = "seco", fmtArg] = process.argv.slice(2);
 const seed = Number(seedS);
 const def = JSON.parse(readFileSync(`data/circuitos/${id}.json`, "utf8"));
-if (fmtArg) def.formato = fmtArg;
+if (fmtArg && fmtArg !== def.formato) {
+  // formato forzado: el horario del otro formato, o uno hecho con las mismas horas si el circuito no lo trae
+  const h = def.horario;
+  const otro = def.horarioOtro ?? (fmtArg === "sprint" ? { fp1: h.fp1, sq: h.fp2, sprint: h.fp3, q: h.q, carrera: h.carrera } : { fp1: h.fp1, fp2: h.sq, fp3: h.sprint, q: h.q, carrera: h.carrera });
+  def.horarioOtro = h; def.horario = otro; def.formato = fmtArg;
+}
 const teams = JSON.parse(readFileSync("data/equipos-2026.json", "utf8")).equipos as TeamDef[];
 const track = buildTrack(def);
 const st = newWeekend(def.ronda, def, teams, seed);
