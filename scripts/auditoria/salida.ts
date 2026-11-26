@@ -29,7 +29,7 @@ for (const id of ids) {
     : [];
   for (let s = 1; s <= n * Math.max(1, grids.length); s++) {
     const g = grids.length ? grids[(s - 1) % grids.length] : null;
-    const st = newWeekend(def.ronda, def, teams, g ? g.seed : 1000 + s);
+    const st = newWeekend(def.ronda, def, teams, (g ? g.seed : 1000 + s) * 1000 + def.ronda * 97 + 1); // como gp.ts (y el juego)
     for (const d of st.days) d.scenario = "seco";
     const wk = new Weekend(st, track, teams, "-");
     // parrilla: por ritmo del coche y del piloto, con algo de azar (como una clasificación)
@@ -37,7 +37,7 @@ for (const id of ids) {
     const score = (e: (typeof ents)[number]) => -(e.team.agarre * 2.6 + (e.team.potencia ?? 0) + (e.d.ritmo - 85) * 0.13 + ((s * 7919 + e.id * 104729) % 1000) / 1000 * 0.6);
     const order = g ? g.order.map((ab) => ents.find((e) => e.d.abrev === ab)!.id) : [...ents].sort((a, b) => score(a) - score(b)).map((e) => e.id);
     (st.results as any)[kind === "SPRINT" ? "SQ" : "Q"] = order.map((x) => ({ id: x }));
-    const sess = wk.build(kind, g ? s : 0);
+    const sess = wk.build(kind, g ? (process.env.DESPL0 ? 0 : s) : 0);
     while (!sess.finished && sess.leaderLap < upTo && sess.wall < 3600) sess.step();
     const o = sess.lapOrder[upTo];
     if (!o) continue;

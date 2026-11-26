@@ -19,7 +19,9 @@ const teams = JSON.parse(readFileSync("data/equipos-2026.json", "utf8")).equipos
 const track = buildTrack(def);
 // sprint forzada en un circuito sin sprint: la distancia del reglamento (100 km)
 if (def.formato === "sprint" && !def.vueltasSprint) def.vueltasSprint = Math.ceil(100000 / track.length);
-const st = newWeekend(def.ronda, def, teams, seed);
+// semilla del fin de semana como en el juego (hubs.ts): una por ronda. Con la misma en los 24 circuitos, todas las
+// sesiones de una semilla compartían los dados del principio (en la salida, los mismos para cada puesto de parrilla)
+const st = newWeekend(def.ronda, def, teams, seed * 1000 + def.ronda * 97 + 1);
 const sc = st.days;
 if (clima === "seco") for (const d of sc) d.scenario = "seco";
 else if (clima === "lluviaD") { sc[0].scenario = "seco"; sc[1].scenario = "seco"; sc[2].scenario = "frente"; }
