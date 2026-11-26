@@ -101,6 +101,12 @@ const PRACTICE_PUSH_TRIM: Partial<Record<SessionKind, number>> = { FP1: 0.01, FP
 const QUALI_EVO: Partial<Record<SessionKind, number>> = { Q: 0.015, SQ: 0.01 };
 const QUALI_EVO_END = 180;
 /**
+ * Goma que deja cada vuelta en libres (en clasificación y carrera, 0,0009). Los libres tienen ahora ~60 vueltas por
+ * piloto en vez de ~36, y con la goma de antes la pista llegaba a la clasificación con el tope (la pole salía 0,45 s más
+ * rápida que la real con la que está calibrada). Así llega con la misma goma que antes.
+ */
+const RUBBER_FP_LAP = 0.00054;
+/**
  * Neutralizaciones: lo que dura una vuelta con el virtual, con el coche de seguridad y la del que va a por el grupo
  * con él, en veces la vuelta de referencia. Cada circuito tiene un tope de velocidad que da eso: por encima se va a la
  * velocidad del tope y por debajo, como en verde. Así se pierde en recta y casi nada en las curvas lentas, como con el
@@ -2174,7 +2180,7 @@ export class Session {
     c.tyres!.laps++;
     c.sessionLaps++;
     this.tyreLap(c);
-    this.rubber = Math.min(1, this.rubber + 0.0009);
+    this.rubber = Math.min(1, this.rubber + (this.kind.startsWith("FP") ? RUBBER_FP_LAP : 0.0009));
     const wasPush = run.phase === "push" || run.phase === "long";
     // vuelta estropeada (anulada, o con una salida de pista o un bloqueo): si da tiempo, la IA lo vuelve a intentar
     const ruined = run.phase === "push" && c.lapStart > 0 && (!c.lapValid || (!!c.fx && c.fx.t > c.lapStart));
