@@ -14,7 +14,7 @@
   "cl": 1.0,
   "cd": 1.0
  },
- "abrasividad": 1.25,
+ "abrasividad": 1.25, "compuestos": ["C1", "C2", "C3"], "compuestosFuente": "Pirelli 2025 (en 2026 el GP de Baréin se corrió en Sepang): duro, medio, blando",
  "boxes": {"lado":"derecha","entrada": 380,
   "salida": 300,
   "perdida": 23.0,

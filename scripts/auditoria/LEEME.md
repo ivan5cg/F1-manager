@@ -66,9 +66,15 @@ impacto (detalle y líneas de código en el informe):
    duro.~~ **Hecho:** escala de compuestos 1,000 / 0,987 / 0,978, más pendiente (sobre todo medio y duro), precipicio
    de como mucho un 12 % y coste de salir con el duro en el planificador. Con 48 fines de semana: ~0,4-0,6 s por
    escalón, degradación en carrera 0,08 / 0,065 / 0,04 s/v, duro 73-87 % (antes 25-55 %), blando 29-37 % (antes
-   62-79 %), salida con medio ~63 %, 1,3 paradas. Pendiente: en pistas frías (Las Vegas, Shanghái, Spa) el duro casi
-   no se usa (le falta temperatura); en la sprint ~30 % sale con duro (tras la SQ quedan medios usados); 1,3 paradas
-   de media es algo bajo.
+   62-79 %), salida con medio ~63 %, 1,3 paradas.
+   **Gama C1-C5:** cada circuito lleva los tres compuestos que eligió Pirelli en 2026 (`compuestos` en su JSON; Baréin,
+   la de 2025). La gama (`RANGE` en `tyres.ts`) da el agarre (~1,2 % por escalón) y la ventana de temperatura de cada
+   compuesto; lo que dura cada papel sigue siendo el del blando, medio y duro genéricos escalado por la abrasividad
+   (con el desgaste propio de cada compuesto la dureza de la pista contaba dos veces y en tandas largas el duro barría
+   al medio). Además: media ventana por debajo de la óptima no cuesta agarre y las dos primeras vueltas de un juego
+   apenas cuestan. Con 48 fines de semana: 1,31/1,40 paradas, duro 86/92 %, blando 17/20 %, salida con medio ~67 %,
+   vuelta rápida / pole 1,044; en las pistas frías el duro sube (Spa 61 %, Suzuka 68 %, Shanghái 44 %). Pendiente:
+   Las Vegas (16 °C de asfalto) sigue sin duro; el blando se usa algo poco; en la sprint ~40 % sale con duro.
 4. Parrilla demasiado apretada (Q1 1,2 s frente a 3,3 s; 1,3 doblados frente a 7,5).
 5. Regularidad de metrónomo (σ 0,05 s frente a 0,2-0,3 s).
 6. Victorias demasiado abiertas en carrera (pole 31 %, desde P4+ 35 %) y demasiado cerradas en la sprint (pole 83 %).

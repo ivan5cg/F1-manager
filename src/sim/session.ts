@@ -7,7 +7,7 @@ import { Rng, clamp } from "./rng";
 import { caracterOf, type Caracter } from "./caracter";
 import { Track, Minisector, msTimeAtGrip, MIN_MASS, REF_CAR } from "./track";
 import { type Setup, type SessionSetup, WET_SHIFT, SETUP_Q, SETUP_GRIP } from "./setup";
-import { Compound, COMPOUNDS, DRY, HiddenTyre, TyreSet, setGrip, waterGrip, updateSet, axleGrip, warmBlankets, setWear, bestWaterGrip, WET, treadT, blisterT, grainT, driverRough } from "./tyres";
+import { Compound, COMPOUNDS, DRY, HiddenTyre, TyreSet, applyNomination, setGrip, waterGrip, updateSet, axleGrip, warmBlankets, setWear, bestWaterGrip, WET, treadT, blisterT, grainT, driverRough } from "./tyres";
 import { WeatherState, stepWeather, rainAt, evaporation, waterStep, windNow } from "./weather";
 import { PU_WEAR, puLife, puPowerLoss, puHazard, FAIL_LAPS } from "./powerunit";
 import { Plan, planStrategy, aiDecide, aiModes, aiErs, TeamKnowledge, practiceProgram, qualiTick, pickSet, learnFromRun, aiRedFlagTyres, practiceWeather, wrongTyresForWater, teamForecast, ruleSatisfied, NOSE_TIME, qualiCanImprove } from "./strategy";
@@ -721,6 +721,7 @@ export class Session {
     this.era = opt.era ?? ERA_2026;
     this.kind = opt.kind;
     this.track = opt.track;
+    applyNomination(this.track.def.compuestos);
     this.N = this.track.ms.length;
     this.rng = new Rng(opt.seed);
     this.moodS = ((opt.seed ^ 0x5bd1e995) >>> 0) || 1;

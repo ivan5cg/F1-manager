@@ -32,6 +32,8 @@ export interface CompoundSpec {
   cooling: number; // cuánto le enfría el agua
   grainK: number; // tendencia de la goma a rasgarse en frío (los compuestos blandos, más)
   blisterK: number; // tendencia a las ampollas (banda gruesa y de compuesto duro: retiene más el calor)
+  /** Compuesto de la gama de Pirelli que hace este papel en el circuito (C1 … C5); sin él, el genérico. */
+  pirelli?: Pirelli;
 }
 
 // Agarre según el agua en la trazada (mm). Calibrado con las referencias de Pirelli: el
@@ -52,6 +54,55 @@ export const COMPOUNDS: Record<Compound, CompoundSpec> = {
   W: { name: "Lluvia", short: "W", color: "#3A7BE8", base: 1.0, opt: 80, window: 18, slope: 0.03, wear: 0.026, cliff: 0.78,
     water: [[0, 0.79], [0.3, 0.755], [0.6, 0.725], [1, 0.695], [1.5, 0.667], [2, 0.638], [2.5, 0.605], [3, 0.575]], cooling: 0.35, grainK: 0.7, blisterK: 1.2 },
 };
+
+/**
+ * Gama de Pirelli (2026: cinco slicks, del C1, el más duro, al C5; el C6 de 2025 desapareció). Cada circuito lleva
+ * tres, que hacen de duro, medio y blando (`compuestos` en su JSON). De cada compuesto sale:
+ * - el agarre: ~1,2 % por escalón (~0,45 s), algo menos entre C4 y C5 (Pirelli quitó el C6 porque no daba diferencia);
+ *   se cuenta frente al blando del circuito, que es con el que está calibrada la pole;
+ * - la ventana de temperatura: ~8 °C más baja por escalón. Se corre hacia la del papel genérico: del todo con una
+ *   elección dura (Pirelli la lleva donde la pista mete mucha energía, que el modelo de temperatura no ve porque la
+ *   mide relativa a la vuelta) y solo en parte con una blanda (pistas de poca energía: un C3 de duro calienta mejor
+ *   que un duro genérico en una pista fría);
+ * - la tendencia al graining (más en los blandos) y a las ampollas (más en los duros).
+ * Lo que dura cada papel (desgaste, pendiente y precipicio) es el del blando, el medio y el duro genéricos, escalado
+ * por la abrasividad del circuito: Pirelli elige los tres para que funcionen en esa pista, y la abrasividad ya dice lo
+ * dura que es (con el desgaste de cada compuesto se contaba dos veces y en las tandas largas el duro barría al medio).
+ */
+export type Pirelli = "C1" | "C2" | "C3" | "C4" | "C5";
+type RangeSpec = Pick<CompoundSpec, "base" | "opt" | "window" | "grainK" | "blisterK">;
+export const RANGE: Record<Pirelli, RangeSpec> = {
+  C1: { base: 0.964, opt: 119, window: 15, grainK: 0.65, blisterK: 1.35 },
+  C2: { base: 0.976, opt: 111, window: 14, grainK: 0.75, blisterK: 1.25 },
+  C3: { base: 0.988, opt: 103, window: 13, grainK: 1.0, blisterK: 1.0 },
+  C4: { base: 1.0, opt: 95, window: 12, grainK: 1.35, blisterK: 0.8 },
+  C5: { base: 1.009, opt: 88, window: 11.5, grainK: 1.6, blisterK: 0.7 },
+};
+/** Cuánto se corre la ventana de temperatura hacia la del papel genérico (0: nada; 1: del todo), con una elección
+ * más dura que la genérica (C2-C4) y con una más blanda. */
+const RANGE_HEAT = { hard: 1, soft: 0.5 };
+const GENERIC: Record<Compound, CompoundSpec> = JSON.parse(JSON.stringify(COMPOUNDS));
+let nominated = "";
+
+/**
+ * Pone en duro, medio y blando los tres compuestos del circuito (de duro a blando, p. ej. ["C1","C2","C3"]). Sin
+ * ellos, los genéricos. Se llama al montar el fin de semana y cada sesión (solo hay un circuito a la vez).
+ */
+export function applyNomination(cs?: readonly string[] | null) {
+  const key = cs?.join(",") ?? "";
+  if (key === nominated) return;
+  nominated = key;
+  for (const c of DRY) Object.assign(COMPOUNDS[c], GENERIC[c], { pirelli: undefined });
+  if (cs && cs.length === 3 && cs.every((x) => x in RANGE)) {
+    const [h, m, sf] = cs.map((x) => RANGE[x as Pirelli]);
+    const shift = (m.opt > GENERIC.M.opt ? RANGE_HEAT.hard : RANGE_HEAT.soft) * (GENERIC.M.opt - m.opt);
+    ([["H", h, cs[0]], ["M", m, cs[1]], ["S", sf, cs[2]]] as const).forEach(([role, r, id]) => {
+      Object.assign(COMPOUNDS[role], { ...r, base: r.base / sf.base, opt: r.opt + shift, pirelli: id as Pirelli });
+    });
+  }
+  WET.si = crossover("M", "I");
+  WET.iw = crossover("I", "W");
+}
 
 export interface Axle {
   tSurf: number;
@@ -107,10 +158,12 @@ export function warmBlankets(t: TyreSet) {
 export function axleGrip(c: Compound, a: Axle): number {
   const sp = COMPOUNDS[c];
   const d = a.tBulk - sp.opt;
-  // por encima de la óptima, la mitad de la ventana no cuesta agarre: si no, en un asfalto exigente
-  // apretar con blandos los calentaba tanto que iban más lentos que a ritmo normal
+  // media ventana a cada lado de la óptima no cuesta agarre: por encima, si no, en un asfalto exigente apretar con
+  // blandos los calentaba tanto que iban más lentos que a ritmo normal; por debajo, un duro en una pista fría perdía
+  // tanto que nadie lo usaba (en Las Vegas, Shanghái o Suzuka el duro es el de carrera)
   const dh = Math.max(0, d - sp.window * 0.5);
-  const fT = d < 0 ? 1 - 0.075 * Math.min(2.2, Math.pow(-d / 30, 2)) : 1 - 0.05 * Math.min(2.5, Math.pow(dh / 30, 2));
+  const dc = Math.min(0, d + sp.window * 0.5);
+  const fT = d < 0 ? 1 - 0.075 * Math.min(2.2, Math.pow(-dc / 30, 2)) : 1 - 0.05 * Math.min(2.5, Math.pow(dh / 30, 2));
   const ds = a.tSurf - (sp.opt + 25);
   const fS = ds > 0 ? 1 - Math.min(0.03, ds * 0.0012) : 1;
   return sp.base * fT * fS * wearGrip(c, a.wear) * (1 - 0.03 * a.grain) * (1 - 0.045 * a.blister);
@@ -140,12 +193,15 @@ export function waterWear(c: Compound, water: number): number {
 /** Agarre que queda por el desgaste (1 = nuevo), con el precipicio: el mismo término que en axleGrip. */
 export function wearGrip(c: Compound, wear: number): number {
   const sp = COMPOUNDS[c];
-  let f = 1 - sp.slope * wear;
+  // las primeras vueltas apenas cuestan (la goma de la superficie se rueda): un juego poco usado vale casi como nuevo
+  let f = 1 - sp.slope * Math.max(0, wear - SCRUB);
   // pasado el precipicio la goma se va deprisa, pero sin desplomarse de golpe: hasta un 12 % más con la lona a la vista
   if (wear > sp.cliff) f -= CLIFF_LOSS * Math.pow((Math.min(1, wear) - sp.cliff) / (1 - sp.cliff), 2);
   return Math.max(0.6, f);
 }
 const CLIFF_LOSS = 0.12;
+/** Desgaste que no cuesta agarre: ~2 vueltas de un medio. */
+const SCRUB = 0.04;
 
 /** Mejor agarre posible con esa agua (el del compuesto adecuado), para medir si se va con el neumático equivocado. */
 export function bestWaterGrip(water: number): number {

@@ -3,7 +3,7 @@
 // clasificación hereda el agua y las nubes de la mañana).
 import { Rng, clamp } from "./rng";
 import { Track } from "./track";
-import { HiddenTyre, TyreSet, allocation, setWear, DRY } from "./tyres";
+import { HiddenTyre, TyreSet, allocation, setWear, DRY, applyNomination } from "./tyres";
 import { Climate, Scenario, WeatherState, createDayWeather, stepWeather, rainAt, pickScenario, evaporation, waterStep } from "./weather";
 import { Session, SessionKind, Entrant, TeamDef, ResultRow, isRaceKind, LongRun } from "./session";
 import { TeamKnowledge, buildKnowledge } from "./strategy";
@@ -67,6 +67,7 @@ const daysOf = (def: any): string => def.dias ?? "VSD";
 export const horarioFor = (def: any, sprint: boolean) => (sprint === (def.formato === "sprint") ? def.horario : def.horarioOtro ?? def.horario);
 
 export function newWeekend(round: number, def: any, teams: TeamDef[], seed: number): WeekendState {
+  applyNomination(def.compuestos);
   const rng = new Rng(seed);
   const sprint = def.formato === "sprint";
   const hr = rng.fork();
@@ -93,6 +94,7 @@ export function newWeekend(round: number, def: any, teams: TeamDef[], seed: numb
 export class Weekend {
   /** opts.setups = false: todos con el coche de referencia, sin reglajes (para comparar en los scripts). */
   constructor(public st: WeekendState, public track: Track, public teams: TeamDef[], public playerTeam: string, public opts: { setups?: boolean } = {}) {
+    applyNomination(track.def.compuestos);
     // fines de semana de antes de los reglajes (o recién creados): se crean aquí, con su propio azar
     if (opts.setups !== false && !st.setup) st.setup = newSetupState(track, teams, st.seed);
   }
