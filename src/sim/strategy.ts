@@ -758,8 +758,16 @@ export function aiModes(sess: Session, car: Car, left: number) {
   let push = Math.min(want, cap);
   // con las gomas justas y nadie cerca no se regala nada; pero defendiendo posición se aguanta el ritmo normal
   if (cap < 2 && (gapB < 0.8 || gapA < 0.8) && toEnd <= 10) push = Math.max(push, Math.min(2, cap + 1));
-  if (fuelLaps < left + 0.3) push = Math.min(push, 1);
-  if (fuelLaps < left - 0.5) push = 0;
+  // defenderse: con uno de su vuelta pegado detrás no se le regala el puesto por cuidar las gomas, se va a su ritmo
+  // (hasta Atacar). Lo que se gaste de más se paga luego: en cuanto se despegue, el cálculo de lo que aguantan las
+  // gomas vuelve a bajar el ritmo. Sin esto, el líder que iba cuidando las gomas al principio de la tanda se dejaba
+  // pasar por el segundo (que iba en Atacar por ir detrás) y la pole ganaba la mitad que en la realidad.
+  const chaser = gapB < 1.0 && sess.flag === "green" && !cooling ? sess.cars.find((o) => o.aheadId === car.id && sameLap(o) && o.team !== car.team) : undefined;
+  const defend = !!chaser && DRY.includes(car.tyres.c) && wear < sp.cliff - 0.05;
+  if (defend) push = Math.max(push, Math.min(3, chaser!.push));
+  // combustible justo: a ahorrar; defendiéndose se aguanta el ritmo normal con algo de deuda, ya se ahorrará luego
+  const fuelCap = fuelLaps < left - 0.5 ? 0 : fuelLaps < left + 0.3 ? 1 : 4;
+  push = Math.min(push, defend && fuelLaps > left - 0.5 ? Math.max(fuelCap, 2) : fuelCap);
   // una avería que avisa: a cuidarla para llegar (motor en Ahorro y levantando)
   if (car.fault) push = Math.min(push, car.fault.lvl > 0.7 ? 0 : 1);
   if (!car.player || car.autoPush || sess.autoPlayers) car.push = push;
