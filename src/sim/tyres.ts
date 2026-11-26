@@ -14,6 +14,9 @@
 // que no deja escapar ese calor. Son permanentes y aceleran el desgaste.
 import { clamp, interp } from "./rng";
 
+/** Pérdida de agarre por debajo de la ventana de temperatura (ver axleGrip). */
+const COLD_LOSS = 0.05;
+
 export type Compound = "S" | "M" | "H" | "I" | "W";
 export const DRY: Compound[] = ["S", "M", "H"];
 export const ALL: Compound[] = ["S", "M", "H", "I", "W"];
@@ -163,7 +166,9 @@ export function axleGrip(c: Compound, a: Axle): number {
   // tanto que nadie lo usaba (en Las Vegas, Shanghái o Suzuka el duro es el de carrera)
   const dh = Math.max(0, d - sp.window * 0.5);
   const dc = Math.min(0, d + sp.window * 0.5);
-  const fT = d < 0 ? 1 - 0.075 * Math.min(2.2, Math.pow(-dc / 30, 2)) : 1 - 0.05 * Math.min(2.5, Math.pow(dh / 30, 2));
+  // por debajo, hasta un 11 % con la carcasa 60 °C fría; con 0,075 en vez de 0,05 el duro casi no se usaba en
+  // Shanghái, Suzuka, Spa ni Las Vegas (el tren delantero va en casi todas las pistas 20-30 °C por debajo de su ventana)
+  const fT = d < 0 ? 1 - COLD_LOSS * Math.min(2.2, Math.pow(-dc / 30, 2)) : 1 - 0.05 * Math.min(2.5, Math.pow(dh / 30, 2));
   const ds = a.tSurf - (sp.opt + 25);
   const fS = ds > 0 ? 1 - Math.min(0.03, ds * 0.0012) : 1;
   return sp.base * fT * fS * wearGrip(c, a.wear) * (1 - 0.03 * a.grain) * (1 - 0.045 * a.blister);
@@ -258,12 +263,20 @@ export const driverRough = (skill: number) => clamp(1 + (85 - skill) / 50, 0.7, 
 export const treadT = (a: Axle) => a.tBulk + 0.5 * (a.tSurf - a.tBulk);
 /** Temperatura de banda a partir de la cual empiezan a formarse ampollas. */
 export const blisterT = (c: Compound) => COMPOUNDS[c].opt + COMPOUNDS[c].window + 22;
-/** Por debajo de esta temperatura de banda la goma está rígida y, si desliza, se rasga (graining). */
-export const grainT = (c: Compound) => COMPOUNDS[c].opt - 12;
+/**
+ * Por debajo de esta temperatura de banda la goma está rígida y, si desliza, se rasga (graining). Los tres de seco
+ * comparten la del medio del circuito: lo que distingue a cada uno es su tendencia (`grainK`, más en los blandos).
+ * Antes cada compuesto tenía la suya (su óptima − 12 °C), y en frío el duro, con la ventana más alta, era el que más se
+ * rasgaba: en Las Vegas, 0,48 frente a 0,06 del medio. En la F1 real es al revés: el que se rasga es el blando.
+ */
+export const grainT = (c: Compound) => (c === "I" || c === "W" ? COMPOUNDS[c].opt : COMPOUNDS.M.opt) - 12;
+
 
 // constantes del daño (por segundo): calibradas para que con el neumático claramente frío y en
 // pista verde el graining se vea en 2-4 vueltas, y que las ampollas pidan varias vueltas de abuso
-const GRAIN_GEN = 0.0026;
+// (× 3 desde noviembre de 2026: en carrera, con la goma ya puesta y sin apretar, el graining se quedaba en un 0,3 % de
+// agarre y en frío el blando aguantaba como neumático de carrera; ahora en una pista fría le cuesta al blando ~1 %)
+const GRAIN_GEN = 0.0078;
 const GRAIN_CLEAN = 1 / 190; // con la banda caliente y carga media, se limpia en ~3 min
 const GRAIN_TEAR = 0.05; // banda que se pierde por cada unidad de graining que se forma
 const BLISTER_GEN = 0.0009;
@@ -313,7 +326,7 @@ export function updateSet(t: TyreSet, env: TyreEnv, dt: number, lapRef: number, 
     }
     // limpieza: hace falta banda caliente (goma blanda que se deja arrastrar) y carga; el asfalto
     // abrasivo la limpia antes. Es proporcional a lo que hay (los rollitos se van arrancando)
-    const warm = clamp((tTread - (sp.opt - 18)) / 15, 0, 1.5);
+    const warm = clamp((tTread - (grainT(t.c) - 6)) / 15, 0, 1.5);
     const clean = a.grain * GRAIN_CLEAN * warm * env.abrasiveness * Math.min(1.6, Math.max(0.2, eLoc));
     a.grain = clamp(a.grain + (gen - clean) * dt, 0, 1);
 

@@ -1,5 +1,5 @@
 {
- "_nota": "Parrilla real 2026 (lista de inscritos FIA). agarre/potencia/resistencia en % respecto a la referencia; desgaste <1 cuida neumáticos; boxes: segundos parado; fiabilidad: multiplicador de averías; estrategia/meteo 0-100. agarre y potencia salen de las clasificaciones de 2026 (Wikipedia): el nivel de cada coche, de los GP 13-21 (Monza-Las Vegas); el carácter (curvas: lo que gana o pierde en curva lenta, media y rápida sobre su agarre) y la potencia de cada motor, de las 20 clasificaciones secas del año, ajustados con el modelo de pista del juego (scripts/auditoria/rendimiento-2026.md). nacimiento: año de nacimiento; debut: año de su primera carrera de F1.",
+ "_nota": "Parrilla real 2026 (lista de inscritos FIA). agarre/potencia/resistencia en % respecto a la referencia; desgaste <1 cuida neumáticos; boxes: segundos parado; fiabilidad: multiplicador de averías; estrategia/meteo 0-100. agarre y potencia salen de las clasificaciones de 2026 (Wikipedia): el nivel de cada coche, de los GP 13-21 (Monza-Las Vegas); el carácter (curvas: lo que gana o pierde en curva lenta, media y rápida sobre su agarre) y la potencia de cada motor, de las 20 clasificaciones secas del año, ajustados con el modelo de pista del juego (scripts/auditoria/rendimiento-2026.md). ritmoCarrera: % de agarre que el coche pierde en carrera además de lo del sábado (los siete que no son de cabeza: en 2026 la zona media acababa doblada). nacimiento: año de nacimiento; debut: año de su primera carrera de F1.",
  "equipos": [
   {
    "id": "mercedes",
@@ -207,6 +207,7 @@
   },
   {
    "id": "racingbulls",
+   "ritmoCarrera": -0.8,
    "nombre": "Racing Bulls",
    "motor": "Red Bull Ford",
    "color": "#6C98FF",
@@ -258,6 +259,7 @@
   },
   {
    "id": "alpine",
+   "ritmoCarrera": -0.8,
    "nombre": "Alpine",
    "motor": "Mercedes",
    "color": "#2293D1",
@@ -309,6 +311,7 @@
   },
   {
    "id": "haas",
+   "ritmoCarrera": -0.8,
    "nombre": "Haas",
    "motor": "Ferrari",
    "color": "#9AA0A6",
@@ -360,6 +363,7 @@
   },
   {
    "id": "audi",
+   "ritmoCarrera": -0.8,
    "nombre": "Audi",
    "motor": "Audi",
    "color": "#C8102E",
@@ -411,6 +415,7 @@
   },
   {
    "id": "williams",
+   "ritmoCarrera": -0.8,
    "nombre": "Williams",
    "motor": "Mercedes",
    "color": "#64C4FF",
@@ -462,6 +467,7 @@
   },
   {
    "id": "astonmartin",
+   "ritmoCarrera": -0.8,
    "nombre": "Aston Martin",
    "motor": "Honda",
    "color": "#229971",
@@ -513,6 +519,7 @@
   },
   {
    "id": "cadillac",
+   "ritmoCarrera": -0.8,
    "nombre": "Cadillac",
    "motor": "Ferrari",
    "color": "#E6E6E6",

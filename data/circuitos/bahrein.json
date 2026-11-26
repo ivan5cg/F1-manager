@@ -8,7 +8,7 @@
  "fecha": "2026-04-12",
  "formato": "normal",
  "vueltas": 57,
- "poleObjetivo": 92.35,
+ "poleObjetivo": 92.35,"poleAjuste":-0.005,
  "poleFuente": "Estimada en ~1:33.0: la pole de 2025 (Piastri 1:29.841) más lo que han perdido los coches de 2026 en el resto de circuitos (+3-4 %). En 2026 no se corrió en Sakhir: el GP de Baréin se trasladó a Sepang",
  "aero": {
   "cl": 1.0,

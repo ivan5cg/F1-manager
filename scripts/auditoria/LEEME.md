@@ -26,6 +26,18 @@ PARRILLA=auditoria-out/seco npx tsx scripts/auditoria/salida.ts RACE 1 8
 npx tsx scripts/auditoria/repite.ts monaco 1 6
 # un solo fin de semana (JSON por la salida estándar)
 npx tsx scripts/auditoria/gp.ts silverstone 1 seco > fin.json
+# solo carreras (parrilla por ritmo, sin libres ni clasificación, ~6 s cada una): uso del duro y del blando, paradas,
+# adelantamientos, doblados y, con --equipos, el ritmo de carrera de cada equipo; para probar cambios deprisa
+npx tsx scripts/auditoria/rapida.ts 1-4 shanghai suzuka spa lasvegas --equipos
+# temperatura de carcasa, graining y agarre de cada compuesto a lo largo de una tanda
+npx tsx scripts/auditoria/sonda.ts lasvegas silverstone
+# distancia de cada equipo al mejor en clasificación y en carrera (aire limpio), y como en rendimiento/race.py
+# (tiempo total del mejor coche, doblados a una vuelta por vuelta): lo que se compara con 2026
+node scripts/auditoria/equipos.mjs auditoria-out/seco
+node scripts/auditoria/carrera-equipos.mjs auditoria-out/seco
+# pole simulada en seco (con los libres antes) y calibración de `poleAjuste` en cada circuito
+npx tsx scripts/auditoria/pole.ts monaco 1-6
+node scripts/auditoria/calibra-pole.mjs 1-6 --escribe
 ```
 
 - **Climas:** `seco` (los tres días «Estable»; aun así llueve en ~10 % de los fines de semana), `natural` (el que toque
@@ -42,7 +54,7 @@ npx tsx scripts/auditoria/gp.ts silverstone 1 seco > fin.json
   todas las de otra). Las medias de ritmo, neumáticos o neutralizaciones apenas cambian, pero lo que dependa de la
   salida o del orden en cabeza (gana la pole, gana desde P4+, la sprint) medido antes de esa fecha está sesgado, y la
   referencia `base-2026-11/` también.
-- **Referencia actual:** `base-2026-11b/` (26 de noviembre de 2026, con el punto 6 hecho y una semilla por circuito):
+- **Referencia actual:** `base-2026-11c/` (ver el punto 9 de «Estado»). La anterior, `base-2026-11b/` (26 de noviembre de 2026, con el punto 6 hecho y una semilla por circuito):
   `seco.txt` (`lote.mjs ref-seco seco 1-4`, con `--por-circuito`), `lluvia-agregado.txt` y `lluvia-sesiones.txt` (los
   tres lotes de lluvia de arriba, juntos), `sprint.txt` (`--formato=sprint`, semillas 1-2), `cabeza.txt` y
   `curvas-neumaticos.txt` (`deg.ts`).
@@ -129,13 +141,21 @@ impacto (detalle y líneas de código en el informe):
    - **Lluvia en «Estable»:** las células que nacen durante el día son flojas y pocas (`SECO_BIRTH`). Llueve a la hora
      de la clasificación el 5 % de los días (antes, el 17 %).
 
-Pendiente, con lo que se ha medido, en la sección «Pendiente» del informe:
-- el duro en las pistas frías;
-- los pocos doblados (los lentos se quedan cerca en carrera);
-- la pole, 0,3-0,5 s más rápida que la real con el banco corregido;
-- el azar en cabeza (punto 6).
+9. **Lo pendiente de la primera tanda** (26 de noviembre de 2026; detalle en el informe, «Lo pendiente: lo que se ha
+   hecho»). Con 96 fines de semana:
+   - ~~El duro en las pistas frías.~~ **Hecho:** graining con un umbral común a los tres de seco (`grainT`), el triple
+     de fuerte (`GRAIN_GEN`) y menos pérdida por debajo de la ventana (`COLD_LOSS`, 0,05). Duro en Shanghái / Suzuka /
+     Spa / Las Vegas: 73 / 64 / 38 / 63 % (antes 0 / 0 / 6 / 22 %).
+   - ~~Pocos doblados.~~ **Hecho:** `ritmoCarrera` en equipos-2026.json (−0,8 % de agarre en carrera para los siete que
+     no son de cabeza): 5,5 doblados por carrera, mediana 6 (antes 3,9 y 4; en 2026, 6 y 8).
+   - ~~La pole, 0,3-0,5 s más rápida que la real.~~ **Hecho:** `poleObjetivo` es siempre la pole real y cada circuito
+     lleva su `poleAjuste`, calibrado con `calibra-pole.mjs`: +0,02 s de mediana (antes −0,42 s).
+   - Umbrales de adelantamiento recalibrados (`calibra.ts --objetivos`, para dar con el código nuevo lo mismo que con el
+     viejo): 74 por carrera (antes 72).
+   - El azar en cabeza: **en parte**. La pole gana el 44 % (antes 35 %; real 71 %) y desde P4+ se gana el 28 % (real 10 %).
+- **Referencia nueva:** `base-2026-11c/` (lote `fin2`: `lote.mjs fin2 seco 1-4`): `seco.txt` (con `--por-circuito`),
+  `cabeza.txt`, `equipos.txt` (`equipos.mjs` y `carrera-equipos.mjs`), `curvas-neumaticos.txt` y `pole.txt` (la segunda
+  pasada de `calibra-pole.mjs`, que mide tras la primera). Las de lluvia y sprint siguen siendo las de `base-2026-11b/`.
 
-Siguiente (antes del punto 8): lo que queda del 6 (el azar de la carrera en cabeza), midiendo con este banco y con `scripts/realismo.ts`. Con el punto 1 la
-vuelta media del ganador sube a ~1,10-1,12 de la pole (real 1,11), pero las carreras con coche de seguridad largo se
-alargan: el punto 8 (coche de seguridad demasiado lento) pesa ahora algo más. Tras los puntos 2 y 3 los libres siguen a
-1,1-1,3 / 0,8 / 0,4-0,65 s de la pole.
+Pendiente (en el informe, «Pendiente»): el azar en cabeza; el duro, que ahora lo usa casi todo el mundo (91 %; el blando,
+14 %); y comprobar si el asfalto de Shanghái y Suzuka está demasiado frío en el clima de esos circuitos.

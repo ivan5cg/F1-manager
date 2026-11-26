@@ -1,0 +1,25 @@
+austin       real   94.035 · poles 94.752 93.434 93.61 93.675 94.02 94.318 · error -0.188 · ajuste -0.234 → -0.102
+bahrein      real    92.35 · poles 92.723 92.429 92.351 92.278 92.82 92.349 · error +0.040 · ajuste 0.023 → -0.005
+baku         real  102.526 · poles 102.781 102.457 102.083 102.916 102.277 102.856 · error +0.093 · ajuste -0.324 → -0.389
+barcelona    real   74.679 · poles 74.758 74.668 75.242 75.17 74.514 74.963 · error +0.181 · ajuste 0.69 → 0.563
+hungaroring  real   77.207 · poles 77.003 78.354 77.223 77.508 77.071 · error +0.016 · ajuste 0.086 → 0.075
+interlagos   real     72.1 · poles 72.324 71.877 71.734 72.192 71.53 72.47 · error -0.065 · ajuste 0.261 → 0.307
+lasvegas     real   93.893 · poles 93.259 93.807 94.144 93.879 93.883 94.061 · error -0.012 · ajuste -0.001 → 0.007
+lusail       real    81.53 · poles 81.449 81.78 81.543 81.513 81.175 81.396 · error -0.049 · ajuste 1.014 → 1.048
+madrid       real   91.824 · poles 92.439 90.902 91.873 92.596 92.13 91.235 · error +0.178 · ajuste 0.057 → -0.068
+melbourne    real   78.518 · poles 78.448 78.954 78.421 78.569 78.517 78.566 · error +0.023 · ajuste 0.343 → 0.327
+mexico       real   76.514 · poles 77.221 76.592 76.362 76.236 77.362 76.597 · error +0.080 · ajuste -0.085 → -0.141
+miami        real   87.798 · poles 86.996 87.581 88.77 88.654 87.485 88.22 · error +0.102 · ajuste -0.387 → -0.458
+monaco       real   72.051 · poles 72.105 71.923 71.867 71.793 72.544 72.071 · error -0.054 · ajuste 0.39 → 0.428
+montreal     real   72.578 · poles 72.626 72.893 72.647 72.518 73.156 72.729 · error +0.110 · ajuste 0.559 → 0.482
+monza        real    81.79 · poles 81.816 82.248 81.555 81.759 81.812 82.108 · error +0.024 · ajuste 0.439 → 0.422
+sepang       real    95.13 · poles 96.603 94.24 95.305 94.278 95.436 95.215 · error +0.130 · ajuste -0.02 → -0.111
+shanghai     real   92.064 · poles 91.612 92.221 91.536 91.613 91.153 92.497 · error -0.452 · ajuste 0.29 → 0.606
+silverstone  real     88.1 · poles 88.135 87.985 88.214 88.169 88.334 · error +0.069 · ajuste 1.117 → 1.069
+singapur     real   91.373 · poles 90.935 91.243 92.076 91.917 92.279 91.086 · error +0.207 · ajuste -0.03 → -0.175
+spa          real   104.36 · poles 103.934 104.103 104.184 104.18 105.061 · error -0.180 · ajuste 0.794 → 0.92
+spielberg    real   66.113 · poles 66.073 66.287 65.963 65.981 66.239 · error -0.040 · ajuste -0.154 → -0.126
+suzuka       real   88.778 · poles 88.734 88.793 87.974 88.674 89.245 89.14 · error -0.015 · ajuste 0.801 → 0.812
+yasmarina    real    84.43 · poles 84.186 84.686 84.082 84.688 84.347 84.557 · error +0.022 · ajuste 0.398 → 0.383
+zandvoort    real   71.163 · poles 71.383 70.922 71.116 71.33 71.1 71.167 · error -0.021 · ajuste 0.655 → 0.67
+error mediano 0.023 s · |error| > 0,3 s en 1 de 24 · escrito en data/circuitos
