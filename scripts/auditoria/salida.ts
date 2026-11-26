@@ -12,6 +12,8 @@ const [kindArg = "SPRINT", lapsArg = "1", nArg = "20", ...ids0] = process.argv.s
 const kind = kindArg as "RACE" | "SPRINT";
 const upTo = Number(lapsArg), n = Number(nArg);
 const ids = ids0.length ? ids0 : readdirSync("data/circuitos").filter((f) => f.endsWith(".json")).map((f) => f.replace(".json", ""));
+// la misma semilla de fin de semana que gp.ts
+const weekendSeed = (seed: number, circuit: string) => { let h = 7; for (const ch of circuit) h = (h * 31 + ch.charCodeAt(0)) % 997; return seed * 1000 + h; };
 const teams = JSON.parse(readFileSync("data/equipos-2026.json", "utf8")).equipos as TeamDef[];
 let lead = 0, total = 0, p2lead = 0, poleLost = 0;
 const pos: number[] = [];
@@ -29,7 +31,7 @@ for (const id of ids) {
     : [];
   for (let s = 1; s <= n * Math.max(1, grids.length); s++) {
     const g = grids.length ? grids[(s - 1) % grids.length] : null;
-    const st = newWeekend(def.ronda, def, teams, (g ? g.seed : 1000 + s) * 1000 + def.ronda * 97 + 1); // como gp.ts (y el juego)
+    const st = newWeekend(def.ronda, def, teams, weekendSeed(g ? g.seed : 1000 + s, id));
     for (const d of st.days) d.scenario = "seco";
     const wk = new Weekend(st, track, teams, "-");
     // parrilla: por ritmo del coche y del piloto, con algo de azar (como una clasificación)
