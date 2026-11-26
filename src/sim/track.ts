@@ -33,6 +33,9 @@ export interface Minisector {
   aero: number; // parte del agarre en curva que viene de la carga aerodinámica (0..1): lo que se pierde en aire sucio
   hx: number; hy: number; // dirección de marcha media, pesada por la velocidad² (donde más pesa el aire): para el viento
   vAvg: number; // velocidad media (km/h)
+  vMin: number; // velocidad mínima (km/h): la de la curva del minisector
+  /** Reparto de lo que depende del agarre entre curva lenta, media y rápida (suma 1), según vMin. */
+  band: [number, number, number];
   overtake: number; // 0 = no se adelanta; >0 dificultad inversa (zona de frenada)
   drs: boolean;
   drsDetect: boolean;
@@ -280,6 +283,16 @@ export function lapSim(curv: Float64Array, ds: number, car: CarParams, gripScale
   return { v: vb, ax, ay, time, dt };
 }
 
+/**
+ * Tipo de curva por su velocidad mínima: lenta por debajo de ~110-140 km/h, rápida por encima de ~190-230 km/h y media
+ * entre medias (con transiciones suaves para que un minisector no salte de un tipo a otro).
+ */
+export function cornerBand(vMinKmh: number): [number, number, number] {
+  const slow = Math.min(1, Math.max(0, (140 - vMinKmh) / 30));
+  const fast = Math.min(1, Math.max(0, (vMinKmh - 190) / 40));
+  return [slow, Math.max(0, 1 - slow - fast), fast];
+}
+
 export function buildTrack(def: any): Track {
   const raw: number[][] = def.puntos.map((p: number[]) => [p[0] * (def.escala ?? 1), p[1] * (def.escala ?? 1)]);
   // trazados densos (datos reales): sin spline; los ligeros (a mano) se suavizan con Catmull-Rom
@@ -372,6 +385,8 @@ export function buildTrack(def: any): Track {
       aero: aeroT[k] > 0 ? aeroW[k] / aeroT[k] : aeroFrac(vMin[k]),
       hx: hW[k] ? hxW[k] / hW[k] : 0, hy: hW[k] ? hyW[k] / hW[k] : 0,
       vAvg: ((bounds[k + 1] - bounds[k]) * ds) / Math.max(0.01, t0[k]) * 3.6,
+      vMin: vMin[k] * 3.6,
+      band: cornerBand(vMin[k] * 3.6),
       overtake: 0,
       drs: false,
       drsDetect: false,

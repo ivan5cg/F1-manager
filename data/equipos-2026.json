@@ -1,5 +1,5 @@
 {
- "_nota": "Parrilla real 2026 (lista de inscritos FIA). agarre/potencia/resistencia en % respecto a la referencia; desgaste <1 cuida neumáticos; boxes: segundos parado; fiabilidad: multiplicador de averías; estrategia/meteo 0-100. Los valores de rendimiento son una estimación a partir del mundial de constructores 2026. nacimiento: año de nacimiento; debut: año de su primera carrera de F1.",
+ "_nota": "Parrilla real 2026 (lista de inscritos FIA). agarre/potencia/resistencia en % respecto a la referencia; desgaste <1 cuida neumáticos; boxes: segundos parado; fiabilidad: multiplicador de averías; estrategia/meteo 0-100. agarre y potencia salen de las clasificaciones de 2026 (Wikipedia): el nivel de cada coche, de los GP 13-21 (Monza-Las Vegas); el carácter (curvas: lo que gana o pierde en curva lenta, media y rápida sobre su agarre) y la potencia de cada motor, de las 20 clasificaciones secas del año, ajustados con el modelo de pista del juego (scripts/auditoria/rendimiento-2026.md). nacimiento: año de nacimiento; debut: año de su primera carrera de F1.",
  "equipos": [
   {
    "id": "mercedes",
@@ -45,6 +45,11 @@
      "nacimiento": 2006,
      "debut": 2025
     }
+   ],
+   "curvas": [
+    0.0,
+    0.0,
+    0.0
    ]
   },
   {
@@ -52,8 +57,8 @@
    "nombre": "Ferrari",
    "motor": "Ferrari",
    "color": "#E8002D",
-   "agarre": 1.4,
-   "potencia": 0.8,
+   "agarre": 1.72,
+   "potencia": -0.06,
    "resistencia": 0.0,
    "desgaste": 0.99,
    "boxes": 2.3,
@@ -91,6 +96,11 @@
      "nacimiento": 1985,
      "debut": 2007
     }
+   ],
+   "curvas": [
+    -0.06,
+    0.16,
+    -0.19
    ]
   },
   {
@@ -98,8 +108,8 @@
    "nombre": "Red Bull Racing",
    "motor": "Red Bull Ford",
    "color": "#3671C6",
-   "agarre": 1.0,
-   "potencia": 0.5,
+   "agarre": 1.48,
+   "potencia": 0.47,
    "resistencia": -0.4,
    "desgaste": 1.0,
    "boxes": 2.2,
@@ -137,6 +147,11 @@
      "nacimiento": 2004,
      "debut": 2025
     }
+   ],
+   "curvas": [
+    0.1,
+    -0.07,
+    -0.11
    ]
   },
   {
@@ -144,7 +159,7 @@
    "nombre": "McLaren",
    "motor": "Mercedes",
    "color": "#FF8000",
-   "agarre": 0.8,
+   "agarre": 1.21,
    "potencia": 1.2,
    "resistencia": 0.0,
    "desgaste": 0.96,
@@ -183,6 +198,11 @@
      "nacimiento": 2001,
      "debut": 2023
     }
+   ],
+   "curvas": [
+    -0.12,
+    0.17,
+    -0.05
    ]
   },
   {
@@ -190,8 +210,8 @@
    "nombre": "Racing Bulls",
    "motor": "Red Bull Ford",
    "color": "#6C98FF",
-   "agarre": -0.1,
-   "potencia": 0.5,
+   "agarre": 1.2,
+   "potencia": 0.47,
    "resistencia": 0.0,
    "desgaste": 1.0,
    "boxes": 2.4,
@@ -229,6 +249,11 @@
      "nacimiento": 2007,
      "debut": 2026
     }
+   ],
+   "curvas": [
+    -0.0,
+    -0.0,
+    0.01
    ]
   },
   {
@@ -236,7 +261,7 @@
    "nombre": "Alpine",
    "motor": "Mercedes",
    "color": "#2293D1",
-   "agarre": -0.2,
+   "agarre": 0.86,
    "potencia": 1.2,
    "resistencia": 0.3,
    "desgaste": 1.0,
@@ -275,6 +300,11 @@
      "nacimiento": 2003,
      "debut": 2024
     }
+   ],
+   "curvas": [
+    -0.26,
+    0.38,
+    -0.1
    ]
   },
   {
@@ -282,8 +312,8 @@
    "nombre": "Haas",
    "motor": "Ferrari",
    "color": "#9AA0A6",
-   "agarre": -0.5,
-   "potencia": 0.8,
+   "agarre": 1.02,
+   "potencia": -0.06,
    "resistencia": 0.0,
    "desgaste": 1.03,
    "boxes": 2.5,
@@ -321,6 +351,11 @@
      "nacimiento": 2005,
      "debut": 2024
     }
+   ],
+   "curvas": [
+    0.1,
+    -0.06,
+    -0.14
    ]
   },
   {
@@ -328,8 +363,8 @@
    "nombre": "Audi",
    "motor": "Audi",
    "color": "#C8102E",
-   "agarre": -0.4,
-   "potencia": 0.0,
+   "agarre": 1.33,
+   "potencia": 0.01,
    "resistencia": 0.2,
    "desgaste": 1.0,
    "boxes": 2.45,
@@ -367,6 +402,11 @@
      "nacimiento": 2004,
      "debut": 2025
     }
+   ],
+   "curvas": [
+    0.09,
+    -0.22,
+    0.23
    ]
   },
   {
@@ -413,6 +453,11 @@
      "nacimiento": 1996,
      "debut": 2019
     }
+   ],
+   "curvas": [
+    0.54,
+    -0.66,
+    -0.04
    ]
   },
   {
@@ -420,8 +465,8 @@
    "nombre": "Aston Martin",
    "motor": "Honda",
    "color": "#229971",
-   "agarre": -0.8,
-   "potencia": -1.2,
+   "agarre": -0.85,
+   "potencia": -1.85,
    "resistencia": 0.3,
    "desgaste": 1.0,
    "boxes": 2.4,
@@ -459,6 +504,11 @@
      "nacimiento": 1998,
      "debut": 2017
     }
+   ],
+   "curvas": [
+    0.51,
+    -0.51,
+    -0.3
    ]
   },
   {
@@ -466,8 +516,8 @@
    "nombre": "Cadillac",
    "motor": "Ferrari",
    "color": "#E6E6E6",
-   "agarre": -1.6,
-   "potencia": 0.8,
+   "agarre": -0.81,
+   "potencia": -0.06,
    "resistencia": 0.4,
    "desgaste": 1.05,
    "boxes": 2.6,
@@ -505,6 +555,11 @@
      "nacimiento": 1989,
      "debut": 2013
     }
+   ],
+   "curvas": [
+    -0.05,
+    0.07,
+    -0.01
    ]
   }
  ]

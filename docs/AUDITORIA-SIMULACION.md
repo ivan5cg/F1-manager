@@ -11,12 +11,55 @@ fines de semana completos sin interfaz y comparando lo que sale con la F1 real. 
   sábado para clasificación mojada (4 × 2). Spa, Silverstone, Interlagos, Suzuka, Montreal, Singapur, Mónaco y Melbourne.
 - En total **136 fines de semana, ~650 sesiones**, registrando vuelta a vuelta cada coche: tiempo, compuesto y edad,
   combustible, modo de ritmo, banderas vistas en la vuelta, distancia al de delante, paradas, sucesos de carrera.
-- Referencia real: **8 grandes premios de 2026** (Australia, Japón, Austria, Gran Bretaña, Hungría, Países Bajos, Monza,
-  Madrid) sacados de Wikipedia, más valores de 2022-2025 de memoria donde 2026 no da dato (marcados «aprox.»).
+- Referencia real: **los 21 grandes premios de 2026 ya disputados** (Australia a Las Vegas; faltan Catar y Abu Dabi),
+  con las tablas de clasificación y de carrera de Wikipedia (actualizado el 26 de noviembre; la primera versión usaba 8).
+  Lo que esas tablas no dan (coches de seguridad, virtuales, rojas) sigue saliendo de los 8 primeros que se leyeron, y
+  donde 2026 no da dato hay valores de 2022-2025 de memoria (marcados «aprox.»). Resumen en la sección siguiente.
 
 El banco de pruebas está en [`scripts/auditoria/`](../scripts/auditoria/LEEME.md): `gp.ts` juega un fin de semana y
 vuelca JSON, `lote.mjs` juega lotes en paralelo, `analiza.js` agrega, `lluvia.js` resume las sesiones mojadas y `deg.ts`
 saca las curvas de neumático del modelo. Las cifras de este informe están en `scripts/auditoria/base-2026-11/`.
+
+## Referencia real: los 21 GP de 2026
+
+Medianas de las 20 clasificaciones secas (São Paulo fue mojada) y de las 21 carreras, entre paréntesis el p10-p90:
+
+| Métrica | 21 GP de 2026 | Con los 8 primeros |
+|---|---|---|
+| Vuelta rápida de carrera / pole | **1,041** (1,021-1,062) | 1,045 |
+| Q1, primero a último | 3,24 s (2,49-4,83) | 3,3 s |
+| Q1, P1 − P20 | 2,13 s (1,90-2,99) | — |
+| P2 − P1 | 0,17 s (0,01-0,30) | ~0,1 (aprox.) |
+| P10 − P1 | **1,39 s** (0,93-2,19) | ~0,6-0,9 (aprox.) |
+| Mejora Q1 → Q3, poleman / mediana del top 10 | 1,27 s (0,83-1,67) / 1,04 s | 1,28 s / — |
+| Top 10 con Q3 peor que su Q2 | 1 de 10 (0-3) | ~1 (aprox.) |
+| Compañeros, diferencia en clasificación | **0,31 s** (0,18-0,43) | ~0,2 (aprox.) |
+| Gana el de la pole | **15 de 21 (71 %)** | 5 de 8 |
+| Gana desde P4 o más atrás | **2 de 21 (10 %)** (Monza desde P19, México desde P5) | ~15 % (aprox.) |
+| Doblados por carrera | **6,0** (0-12) | 7,5 |
+| Abandonos por carrera | **4,0** (2-7) | 3,4 |
+| Margen del ganador | med 4,4 / media 6,7 s | med 3,9 / media 7,0 |
+| Spearman parrilla-final | 0,75 | ~0,7 (aprox.) |
+
+Distancia del mejor tiempo de cada equipo a la pole en clasificación (%, mediana de las secas), por tercios del año:
+
+| Equipo | GP 1-7 | GP 8-14 | GP 15-21 |
+|---|---|---|---|
+| Mercedes | 0,00 | 0,01 | 0,01 |
+| Ferrari | 0,39 | 0,27 | 0,24 |
+| Red Bull | 0,46 | 0,55 | **0,21** |
+| McLaren | 0,44 | **0,22** | 0,45 |
+| Racing Bulls | 1,85 | 1,33 | 1,00 |
+| Alpine | 1,54 | 1,89 | 1,02 |
+| Audi | 1,80 | 1,52 | 1,61 |
+| Haas | 2,28 | 2,32 | 2,16 |
+| Williams | 2,42 | 2,84 | 2,44 |
+| Aston Martin | 4,36 | 4,11 | 3,12 |
+| Cadillac | 3,86 | 4,28 | 3,69 |
+
+Mercedes hace la pole en casi todas las clasificaciones secas, pero su ventaja sobre Ferrari, Red Bull y McLaren baja a
+0,2-0,45 % a lo largo del año (Red Bull gana 4 de las últimas 6 carreras); Racing Bulls, Alpine y Aston Martin mejoran
+mucho. Con estas carreras se recalibraron los coches (`scripts/auditoria/rendimiento-2026.md`).
 
 ## Resumen
 
@@ -28,25 +71,25 @@ la cantidad de adelantamientos de 2026.
 Lo que más aleja la simulación de la F1 real, por orden de gravedad:
 
 1. **La carrera va casi al ritmo de la clasificación.** La vuelta rápida de carrera sale a +0,5 % de la pole; en 2026
-   es +4,5 %. Y los libres igualan o baten la pole.
-2. **La clasificación no evoluciona.** El poleman mejora 0,17 s de Q1 a Q3; en 2026, 1,28 s. En casi la mitad de los
+   es +4,1 %. Y los libres igualan o baten la pole.
+2. **La clasificación no evoluciona.** El poleman mejora 0,17 s de Q1 a Q3; en 2026, 1,27 s. En casi la mitad de los
    casos el tiempo de Q3 es peor que el de Q2.
 3. **Neumáticos: demasiada diferencia entre compuestos y casi nada de degradación progresiva.** ~1 s por escalón
    (real 0,3-0,6 s) y el duro apenas cae hasta un precipicio brusco. De ahí salen el abuso del blando y el poco duro.
-4. **La parrilla está demasiado apretada.** 1,2 s de primero a último en Q1 (real 2026: 3,3 s); 1,3 doblados por carrera
-   (real 2026: 7,5).
+4. **La parrilla está demasiado apretada.** 1,2 s de primero a último en Q1 (real 2026: 3,2 s); 1,3 doblados por carrera
+   (real 2026: 6,0).
 5. **Los coches son metrónomos.** σ vuelta a vuelta en aire limpio de 0,05 s (real 0,2-0,3 s).
-6. **Resultados demasiado abiertos en cabeza.** La pole gana el 31 % (real 2026: 5 de 8) y el 35 % de las victorias
-   salen de P4 o más atrás (real ~15 %).
+6. **Resultados demasiado abiertos en cabeza.** La pole gana el 31 % (real 2026: 15 de 21) y el 35 % de las victorias
+   salen de P4 o más atrás (real 2026: 2 de 21).
 7. **Un fallo de la IA**: con lluvia prevista que no llega, varios coches acaban **descalificados** por no usar dos
    compuestos de seco.
 8. Menores: coche de seguridad y virtual demasiado lentos, libres con la mitad de vueltas, sprint demasiado previsible.
 
 ## 1. Carrera frente a clasificación
 
-| Métrica | Simulador (seco, 96) | Real 2026 (8 GP) | Veredicto |
+| Métrica | Simulador (seco, 96) | Real 2026 (21 GP) | Veredicto |
 |---|---|---|---|
-| Vuelta rápida de carrera / pole | **1,005** (p10 0,996, p90 1,014) | **1,045** (1,021-1,064) | ✘ muy lejos |
+| Vuelta rápida de carrera / pole | **1,005** (p10 0,996, p90 1,014) | **1,041** (1,021-1,062) | ✘ muy lejos |
 | Carreras con vuelta rápida más rápida que la pole | 13 % (10 de 80 con clasificación y carrera secas) | 0 | ✘ |
 | Vuelta verde típica del top 10 / pole | 1,031 | ~1,07-1,08 (aprox.) | ✘ |
 | Vuelta media del ganador (con boxes y SC) / pole | 1,093 | 1,11 (6 GP sin roja) | ≈ (compensa el SC lento) |
@@ -72,14 +115,14 @@ Russell hace 1:15.166 en L3 y la pole es 1:15.239.
 
 | Métrica | Simulador (seco, 88) | Real | Veredicto |
 |---|---|---|---|
-| Mejora Q1 → Q3 | 0,17 s (top 10) | **1,28 s** el poleman (2026: 0,83-1,65) | ✘ |
-| Pilotos del top 10 con Q3 peor que su Q2 | **4,6 de 10** | ~1 de 10 (aprox.) | ✘ |
-| Q1, primero a último | **1,23 s** | **3,3 s** (2026: 2,0-4,8) | ✘ |
-| P2 − P1 (mediana) | 0,037 s | ~0,1 s (aprox.) | ✘ leve |
-| P10 − P1 | 0,93 s | ~0,6-0,9 s (aprox.) | ≈ |
+| Mejora Q1 → Q3 | 0,17 s (top 10) | **1,27 s** el poleman, 1,04 s el top 10 (2026: 0,83-1,67) | ✘ |
+| Pilotos del top 10 con Q3 peor que su Q2 | **4,6 de 10** | 1 de 10 (2026) | ✘ |
+| Q1, primero a último | **1,23 s** | **3,24 s** (2026: 2,5-4,8) | ✘ |
+| P2 − P1 (mediana) | 0,037 s | 0,17 s (2026) | ✘ |
+| P10 − P1 | 0,93 s | 1,39 s (2026) | ✘ algo corto |
 | Corte de Q1 (P16-P17) | 0,023 s | ~0,03-0,05 (aprox.) | ✔ |
 | Uno de los 8 de cabeza cae en Q1 | 19 % de sesiones | frecuente con el 2.º de Red Bull (aprox.) | ✔ |
-| Compañeros, diferencia mediana | 0,12 s | ~0,2 s (aprox.) | ≈ |
+| Compañeros, diferencia mediana | 0,12 s | 0,31 s (2026) | ✘ |
 | Bandera roja | 8 % (seco) | ~15-25 % (2026: Melbourne, varias en libres) | ≈ algo baja |
 | Pole frente a la real calibrada (seco) | +0,10 s (σ 0,58) | — | ✔ |
 | Neumáticos | blando en las tres partes | igual | ✔ |
@@ -135,9 +178,9 @@ Curvas del propio modelo (lo que pierde cada compuesto frente a un blando nuevo,
 | Métrica | Simulador | Real | Veredicto |
 |---|---|---|---|
 | σ vuelta a vuelta, aire limpio, mismo modo (residuo de la tendencia) | **0,054 s** | ~0,2-0,3 s (aprox.) | ✘ |
-| Doblados por carrera | **1,3** | **7,5** (2026: 3-12) | ✘ |
+| Doblados por carrera | **1,3** | **6,0** (2026: 0-12) | ✘ |
 | Primero a décimo | 44,6 s | ~45-75 s (aprox.) | ≈ algo corto |
-| Margen del ganador | med 3,9 / media 6,3 s | med 3,9 / media 7,0 (2026) | ✔ |
+| Margen del ganador | med 3,9 / media 6,3 s | med 4,4 / media 6,7 (2026) | ✔ |
 
 El ruido es una gaussiana por minisector con σ = 0,35 % × (1,25 − regularidad) (`session.ts:1760`). Al sumarse unos 40
 minisectores independientes, se promedia y en la vuelta queda en centésimas: con el mismo modo de ritmo, Russell hace
@@ -150,9 +193,9 @@ Los pocos doblados salen de la parrilla apretada (punto 2) sumada a lo poco que 
 
 | Métrica | Simulador (seco, 96) | Real | Veredicto |
 |---|---|---|---|
-| Gana el de la pole | **31 %** | 5 de 8 en 2026; ~45-50 % en 2022-25 (aprox.) | ✘ |
-| Gana alguien desde P4 o más atrás | **35 %** | ~15 % (aprox.; 2026: Monza desde P19) | ✘ |
-| Spearman parrilla-final | 0,69 | ~0,7 (aprox.) | ✔ |
+| Gana el de la pole | **31 %** | 15 de 21 en 2026 (71 %); ~45-50 % en 2022-25 (aprox.) | ✘ |
+| Gana alguien desde P4 o más atrás | **35 %** | 2 de 21 en 2026 (10 %: Monza desde P19, México desde P5) | ✘ |
+| Spearman parrilla-final | 0,69 | 0,75 (2026) | ✔ |
 | Cambios de puesto en la primera vuelta (suma de \|Δ\|) | 51 | ~40-60 (aprox.) | ✔ |
 | Adelantamientos | ×2,4 la media 2022-25 de cada circuito (calibrado así) | 2026: ×2-4 sobre 2025 (Australia 45→120, China 72→146, Japón 28→106) | ✔ |
 
@@ -173,7 +216,7 @@ El volumen de adelantamientos está bien. Lo que habría que revisar es que la v
 | Vueltas detrás del coche de seguridad | 5,2 | ~4-5 (aprox.) | ✔ |
 | Vuelta entera con coche de seguridad / vuelta verde | **1,87** | ~1,4 (aprox.) | ✘ |
 | Vuelta entera con virtual / vuelta verde | **1,53** | ~1,3-1,35 (aprox.) | ✘ |
-| Abandonos por carrera | 3,16 | 3,4 (2026) | ✔ |
+| Abandonos por carrera | 3,16 | 4,0 (2026: 2-7) | ≈ algo bajo |
 | Reparto de abandonos | 73 % averías, 27 % accidentes | 2026: mayoría mecánicos (frenos, hidráulica, ERS) | ✔ para 2026 |
 | Toques por carrera | 0,64 | — | probablemente bajo |
 | Sanciones por carrera | 1,06 (límites 37, toques 28, salida insegura 16, pit-lane 10…) | ~1,5-2,5 (aprox.) | ≈ algo bajo |
@@ -268,7 +311,9 @@ regularidad, doblados, uso de compuestos y libres.
 
 ## Fuentes
 
-- Wikipedia, grandes premios de 2026: [Australia](https://en.wikipedia.org/wiki/2026_Australian_Grand_Prix),
+- Wikipedia, [temporada 2026](https://en.wikipedia.org/wiki/2026_Formula_One_World_Championship) y los 21 grandes premios
+  disputados (por ronda): [1](https://en.wikipedia.org/wiki/2026_Australian_Grand_Prix), [2](https://en.wikipedia.org/wiki/2026_Chinese_Grand_Prix), [3](https://en.wikipedia.org/wiki/2026_Japanese_Grand_Prix), [4](https://en.wikipedia.org/wiki/2026_Miami_Grand_Prix), [5](https://en.wikipedia.org/wiki/2026_Canadian_Grand_Prix), [6](https://en.wikipedia.org/wiki/2026_Monaco_Grand_Prix), [7](https://en.wikipedia.org/wiki/2026_Barcelona-Catalunya_Grand_Prix), [8](https://en.wikipedia.org/wiki/2026_Austrian_Grand_Prix), [9](https://en.wikipedia.org/wiki/2026_British_Grand_Prix), [10](https://en.wikipedia.org/wiki/2026_Belgian_Grand_Prix), [11](https://en.wikipedia.org/wiki/2026_Hungarian_Grand_Prix), [12](https://en.wikipedia.org/wiki/2026_Dutch_Grand_Prix), [13](https://en.wikipedia.org/wiki/2026_Italian_Grand_Prix), [14](https://en.wikipedia.org/wiki/2026_Spanish_Grand_Prix), [15](https://en.wikipedia.org/wiki/2026_Azerbaijan_Grand_Prix), [16](https://en.wikipedia.org/wiki/2026_Bahrain_Grand_Prix_in_Malaysia), [17](https://en.wikipedia.org/wiki/2026_Singapore_Grand_Prix), [18](https://en.wikipedia.org/wiki/2026_United_States_Grand_Prix), [19](https://en.wikipedia.org/wiki/2026_Mexico_City_Grand_Prix), [20](https://en.wikipedia.org/wiki/2026_S%C3%A3o_Paulo_Grand_Prix), [21](https://en.wikipedia.org/wiki/2026_Las_Vegas_Grand_Prix). De estas páginas salen las tablas de clasificación y
+  carrera de la referencia de 21 GP; los primeros 8 que se leyeron fueron: [Australia](https://en.wikipedia.org/wiki/2026_Australian_Grand_Prix),
   [Japón](https://en.wikipedia.org/wiki/2026_Japanese_Grand_Prix), [Austria](https://en.wikipedia.org/wiki/2026_Austrian_Grand_Prix),
   [Gran Bretaña](https://en.wikipedia.org/wiki/2026_British_Grand_Prix), [Hungría](https://en.wikipedia.org/wiki/2026_Hungarian_Grand_Prix),
   [Países Bajos](https://en.wikipedia.org/wiki/2026_Dutch_Grand_Prix), [Italia](https://en.wikipedia.org/wiki/2026_Italian_Grand_Prix),
