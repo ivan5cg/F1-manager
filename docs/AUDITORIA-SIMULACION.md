@@ -230,6 +230,8 @@ cabeza estaba sesgado. Con el banco corregido, la situación de partida era peor
 
 Sin cambios fuera de esto: vuelta rápida / pole 1,044, vuelta verde / pole 1,071, paradas 1,31 → 1,36, uso del duro
 73 %, adelantamientos 77 → 74 por carrera, coche de seguridad, abandonos, pole frente a la real, mejora de Q1 a Q3.
+`scripts/realismo.ts` (24 circuitos × 3 carreras, también con una semilla por circuito) sigue todo dentro de margen; ahí
+la pole pasa del 33 % al 38 % y desde P4+ del 28 % al 24 %.
 
 **Por qué perdía la pole** (`scripts/auditoria/cabeza.js`, que mide cómo se decide la victoria):
 
