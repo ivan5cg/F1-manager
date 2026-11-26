@@ -100,6 +100,16 @@ const PRACTICE_PUSH_TRIM: Partial<Record<SessionKind, number>> = { FP1: 0.01, FP
  */
 const QUALI_EVO: Partial<Record<SessionKind, number>> = { Q: 0.015, SQ: 0.01 };
 const QUALI_EVO_END = 180;
+/**
+ * Neutralizaciones: lo que dura una vuelta con el virtual, con el coche de seguridad y la del que va a por el grupo
+ * con él, en veces la vuelta de referencia. Cada circuito tiene un tope de velocidad que da eso: por encima se va a la
+ * velocidad del tope y por debajo, como en verde. Así se pierde en recta y casi nada en las curvas lentas, como con el
+ * delta del virtual y detrás del coche de seguridad. Antes se iba al 60 % (virtual) o al 50-62 % (coche de
+ * seguridad) de la velocidad en todo el circuito, y la vuelta duraba 1,6 y 1,9 veces la verde (real ~1,3 y ~1,4).
+ */
+// (lo que se pide es algo menos que lo que sale: con el acordeón del grupo y las frenadas, la vuelta medida en el banco
+// queda ~0,07 por encima; así sale ~1,33 con el virtual y ~1,42 con el coche de seguridad)
+const NEUTRAL_LAP = { vsc: 1.26, sc: 1.35, chase: 1.2 };
 /** De los errores en curva, cuántos acaban contra las barreras (en seco). */
 const CRASH_P = 0.11;
 /**
@@ -722,6 +732,8 @@ export class Session {
   private lastRainMsg = -999;
   private wasRaining = false;
   private tRef: number[];
+  /** Topes de velocidad (m/s, en la escala de vref) del virtual y del coche de seguridad en este circuito (ver NEUTRAL_LAP). */
+  neutralCap!: { vsc: number; sc: number; chase: number };
   private trimW: number[];
   /** El mejor agarre y la mejor potencia de la parrilla: la referencia de TEAM_SPREAD. */
   private topTeam = { agarre: 0, potencia: 0 };
@@ -766,6 +778,16 @@ export class Session {
     this.sprintWeekend = opt.sprintWeekend;
     this.lapRefRace = this.track.refLap;
     this.tRef = this.track.ms.map((m) => msTimeAtGrip(m, 1));
+    {
+      // el tope con el que la vuelta dura NEUTRAL_LAP veces la de referencia (por bisección sobre vref)
+      const v = this.track.vref, base = v.reduce((a, x) => a + 1 / x, 0);
+      const capFor = (k: number) => {
+        let lo = 5, hi = 150;
+        for (let i = 0; i < 40; i++) { const c = (lo + hi) / 2; if (v.reduce((a, x) => a + 1 / Math.min(x, c), 0) > k * base) lo = c; else hi = c; }
+        return (lo + hi) / 2;
+      };
+      this.neutralCap = { vsc: capFor(NEUTRAL_LAP.vsc), sc: capFor(NEUTRAL_LAP.sc), chase: capFor(NEUTRAL_LAP.chase) };
+    }
     {
       // reparto del recorte de energía por minisector: sobre todo a fondo, algo en curva; suma lo mismo en la vuelta
       const w = this.track.ms.map((m) => 0.3 + 0.7 * m.throttle);
@@ -1732,15 +1754,17 @@ export class Session {
       if (this.flag === "green" && this.t - this.launchT < la.react) v = 0;
       else v = Math.min(v, Math.sqrt(2 * 11 * la.k * this.launchGrip(c) * Math.max(0.3, c.s - c.gridS + 0.3)));
     }
-    if (this.flag === "vsc") v = Math.min(v, this.track.vref[pi] * 0.6);
+    // neutralizaciones: por encima del tope del circuito, a su velocidad (en la escala del ritmo de cada uno)
+    const neutral = (cap: number) => (this.track.vref[pi] > cap ? v * cap / this.track.vref[pi] : v);
+    if (this.flag === "vsc") v = neutral(this.neutralCap.vsc);
     if (this.flag === "sc" || this.flag === "sc_in") {
       if (c.unlap) v = Math.min(v, this.track.vref[pi] * 0.8); // desdoblándose: a buen ritmo hasta la cola del grupo
       else if (this.scGo?.t != null && this.t >= (c.scGoT ?? Infinity)) { /* relanzada: ya acelera */ }
       else {
-        const cap = this.track.vref[pi] * (c.followGap > 1.0 || c.aheadId < 0 ? 0.62 : 0.5);
-        v = Math.min(v, Math.min(cap, 62));
-        if (c.id === this.leaderId) {
-          v = Math.min(v, this.track.vref[pi] * 0.5, 50);
+        // el líder, al ritmo del coche de seguridad; detrás, el que va lejos del de delante va a por el grupo
+        const lead = c.id === this.leaderId;
+        v = neutral(lead || (c.followGap <= 1.0 && c.aheadId >= 0) ? this.neutralCap.sc : this.neutralCap.chase);
+        if (lead) {
           // última vuelta del coche de seguridad: el líder agrupa a todos y acelera donde quiere antes de la meta
           if (this.flag === "sc_in" && this.scGo && this.scGo.t === null) {
             if (pos >= this.L - this.scGo.at) { this.restartGo(); v = this.track.vref[pi] * (this.tRef[m.i] / t) * ph.speed; }
