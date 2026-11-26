@@ -7,6 +7,8 @@ for (const dir of process.argv.slice(2)) for (const f of fs.readdirSync(dir).fil
 const mean = (a) => { a = a.filter(Number.isFinite); return a.length ? a.reduce((x, y) => x + y, 0) / a.length : NaN; };
 const med = (a) => { a = a.filter(Number.isFinite).sort((x, y) => x - y); return a.length ? a[Math.floor(a.length / 2)] : NaN; };
 const pct = (a) => (100 * a.filter(Boolean).length) / Math.max(1, a.length);
+// vueltas sin orden apuntado (null, p. ej. con bandera roja): la de antes
+const orders = (R) => { const L = []; for (const o of R.lapOrder) L.push(o ?? L[L.length - 1]); return L; };
 const f = (x, d = 0) => (Number.isFinite(x) ? x.toFixed(d) : "–");
 
 function one(w, k, qk) {
@@ -14,7 +16,7 @@ function one(w, k, qk) {
   if (!R || !Q || R.maxWater > 0.2 || Q.maxWater > 0.2) return null;
   const fin = R.res.filter((r) => r.status === "fin");
   if (!fin.length || !R.lapOrder?.length) return null;
-  const grid = R.grid, L = R.lapOrder;
+  const grid = R.grid, L = orders(R);
   const q = Q.res.map((r) => r.byPart[r.byPart.length - 1]);
   const x = { win: fin[0].grid, p12: q[1] - q[0], lead1: L[1] ? grid.indexOf(L[1][0]) + 1 : NaN, poleLap1: L[1] ? L[1].indexOf(grid[0]) + 1 : NaN };
   // cambios de líder vuelta a vuelta: ¿en boxes (el que lideraba paró en esa vuelta), con SC, o en pista?
@@ -63,7 +65,7 @@ for (const [k, qk, name] of [["RACE", "Q", "CARRERA"], ["SPRINT", "SQ", "SPRINT"
     n++;
     const pr = R.res.find((r) => r.ab === pole);
     if (pr.status !== "fin") { H["abandono de la pole"]++; continue; }
-    const L = R.lapOrder, recs = Object.fromEntries(R.res.map((r) => [r.ab, r.lapsRec]));
+    const L = orders(R), recs = Object.fromEntries(R.res.map((r) => [r.ab, r.lapsRec]));
     let last = 0;
     for (let i = 1; i < L.length; i++) { const a = L[i].indexOf(win.ab), b = L[i].indexOf(pole); const pa = L[i - 1].indexOf(win.ab), pb = L[i - 1].indexOf(pole); if (a >= 0 && b >= 0 && a < b && !(pa >= 0 && pb >= 0 && pa < pb)) last = i; }
     if (last === 0) { H.salida++; continue; }
