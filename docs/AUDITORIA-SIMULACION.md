@@ -80,10 +80,12 @@ Lo que más aleja la simulación de la F1 real, por orden de gravedad:
    (real 2026: 6,0).
 5. **Los coches son metrónomos.** σ vuelta a vuelta en aire limpio de 0,05 s (real 0,2-0,3 s).
 6. **Resultados demasiado abiertos en cabeza.** La pole gana el 31 % (real 2026: 15 de 21) y el 35 % de las victorias
-   salen de P4 o más atrás (real 2026: 2 de 21).
+   salen de P4 o más atrás (real 2026: 2 de 21). *En parte hecho (sección 5): con el banco ya corregido, la pole pasa
+   del 21 % al 34 % y desde P4+ del 44 % al 32 %. La sprint estaba bien: el 83 % salía de un fallo del banco.*
 7. **Un fallo de la IA**: con lluvia prevista que no llega, varios coches acaban **descalificados** por no usar dos
    compuestos de seco.
-8. Menores: coche de seguridad y virtual demasiado lentos, libres con la mitad de vueltas, sprint demasiado previsible.
+8. Menores: coche de seguridad y virtual demasiado lentos, libres con la mitad de vueltas (la «sprint demasiado
+   previsible» era un fallo del banco: ver sección 5).
 
 ## 1. Carrera frente a clasificación
 
@@ -206,6 +208,78 @@ VER 3,6, LEC 4,5), en 2026 se adelanta mucho y la estrategia cambia mucho de uno
 El volumen de adelantamientos está bien. Lo que habría que revisar es que la ventaja de ritmo en cabeza sea la de
 2026 (Mercedes claramente por delante al principio del año).
 
+### Punto 6: lo que se ha hecho (26 de noviembre de 2026)
+
+**Primero, un fallo del banco.** `gp.ts` (y `scripts/banco.ts`, que usan `realismo.ts` y los demás scripts) jugaba los
+24 circuitos con la misma semilla de fin de semana. Los circuitos no traen la ronda, así que todas las sesiones de una
+misma semilla compartían los dados del principio. En la salida eran los mismos para cada puesto de parrilla en los 24
+circuitos: con una semilla la pole conservaba el liderato en la vuelta 1 en 41 de 41 carreras, y con otra lo perdía en
+casi todas. El juego no tiene el problema, porque usa una semilla por ronda. Ahora cada circuito tiene la suya. Las
+medias de ritmo, neumáticos o neutralizaciones apenas se movían, pero todo lo que depende de la salida y del orden en
+cabeza estaba sesgado. Con el banco corregido, la situación de partida era peor de lo que decía la tabla de arriba:
+
+| Métrica (carrera en seco; 72 fines de semana, semillas 1-3) | Antes | Después | Real 2026 |
+|---|---|---|---|
+| Gana el de la pole | **21 %** | **34 %** | 71 % |
+| Gana alguien desde P4 o más atrás | **44 %** | **32 %** | 10 % |
+| La pole lidera tras la vuelta 1 | 81 % | 84 % | ~70-80 % (aprox.) |
+| El compañero que sale delante acaba delante | 56 % | **66 %** (71 % en los equipos de cabeza) | 70 % (106 de 152) |
+| La pole acaba delante de su compañero | 61 % | 76 % | 94 % (17 de 18) |
+| Compañeros en clasificación, diferencia mediana | 0,29 s | 0,29 s | 0,31 s |
+| Spearman parrilla-final | 0,76 | 0,79 | 0,75 |
+
+Sin cambios fuera de esto: vuelta rápida / pole 1,044, vuelta verde / pole 1,071, paradas 1,31 → 1,36, uso del duro
+73 %, adelantamientos 77 → 74 por carrera, coche de seguridad, abandonos, pole frente a la real, mejora de Q1 a Q3.
+
+**Por qué perdía la pole** (`scripts/auditoria/cabeza.js`, que mide cómo se decide la victoria):
+
+- **Con el duro desde delante.** Una de cada cuatro poles salía con duro y ganaba el 11 % (con medio, el 24 %): perdía
+  puestos en la arrancada y su primera tanda larga le dejaba el undercut a los de detrás. El planificador le cobraba al
+  duro 1,2 s en la salida, saliera de donde saliera.
+- **El undercut.** Parar antes que el de delante (en pareja a menos de 4 s) ganaba 0,7 s parando una vuelta antes,
+  2,2 s con dos y 3,2 s con tres, y salía bien el 60-75 % de las veces. El líder solo reaccionaba cuando el otro ya había
+  parado, y entonces solo si aún le daba para salir delante; si no, alargaba la tanda. Casi todos los que le ganaban la
+  posición a la pole en la ventana de paradas habían parado antes que ella.
+- **El de delante en un modo de ritmo más bajo.** Era el caso más frecuente en los adelantamientos al líder (un 32 %):
+  el de detrás pasaba a Atacar a 1,3 s y el de delante solo se defendía a 1,0 s.
+- **La clasificación decía poco del domingo.** La pole era el coche con mejor ritmo de carrera solo en el 17 % de las
+  carreras. Entre compañeros, la clasificación era azar de esa vuelta y la carrera, azar aparte. En 2026, la
+  diferencia de 0,3 s entre compañeros del sábado sigue el domingo.
+
+**Cambios:**
+
+1. **Salir con el duro desde las primeras filas cuesta más en el planificador** (`START_FRONT` en `strategy.ts`): 4 s
+   más desde la pole, y menos cuanto más atrás, hasta nada desde la undécima. Ninguna pole sale ya con duro (antes, el
+   26 %).
+2. **Prioridad del de delante** (`strategy.ts`, «cubrir»): con un rival de su vuelta a tiro de undercut detrás
+   (2 × lo que ganan las gomas nuevas por vuelta + 0,5 s, entre 1 y 4 s), con gomas de la misma edad y la ventana de su
+   parada a 1-3 vueltas, para antes que él (con más probabilidad cuanto mejor es el muro). El undercut de una vuelta
+   deja de valer nada (sale bien el 48 %). Los de dos o tres vueltas siguen valiendo 2-3,7 s: el que va delante no
+   siempre los ve venir, porque solo mira a 1-3 vueltas de su parada.
+3. **Defensa simétrica** (`aiModes`): el de delante pasa a Atacar con uno a menos de 1,3 s detrás, la misma distancia
+   con la que ataca el de detrás, sin saltarse el límite de las gomas ni el del combustible.
+4. **Forma del fin de semana** (`FORM` en `weekend.ts`): cada piloto tiene un ritmo propio en cada fin de semana
+   (σ 0,15 % de agarre, ~0,13 s por vuelta), el mismo en libres, clasificación y carrera. Sale de la semilla y del
+   piloto, sin tocar el azar de las sesiones. Para que los compañeros sigan a ~0,3 s en clasificación, el ruido de cada
+   vuelta en clasificación baja al 85 % (`QUALI_NOISE` en `session.ts`).
+
+**Lo que se probó y no ayudó:**
+
+- Defenderse al ritmo del de detrás aunque las gomas no lo aguanten: la pole gana menos, porque el líder gasta las gomas,
+  hace más paradas y luego le hacen el undercut.
+- Juntar los modos de ritmo (Conservar a −0,9 % en vez de −1,7 %, Atacar a +0,4 % en vez de +0,6 %): sin efecto medible.
+- Una forma más fuerte (σ 0,2 % con el ruido de clasificación al 45 %): poco más, con los compañeros a 0,22 s y la pole
+  0,3 s más rápida que la real.
+
+**Lo que queda.** `scripts/auditoria/repite.ts` juega la misma carrera con 6 semillas y la misma parrilla. Con el
+código de los cambios 1 y 2, la pole gana el 28 % y en 7 de 24 fines de semana no gana ninguna de las seis. En
+Mónaco, Russell desde la pole gana 2 de 6: dos veces le pasa su compañero en la vuelta 1, y una vez gana Hamilton
+alargando la tanda con un virtual. El azar de la carrera entre coches parecidos (salida, ciclo de paradas,
+neutralizaciones) pesa más que la diferencia entre ellos. Lo siguiente sería medir, con `repite.ts`, cuánto pesa cada
+uno, empezando por la salida en los circuitos donde casi no se adelanta y por lo que gana cada estrategia en el ciclo de
+paradas. Y comprobar si los cuatro primeros equipos deben ir más separados en carrera que en clasificación: la
+recalibración con 2026 solo usó tiempos de clasificación.
+
 ## 6. Neutralizaciones, abandonos y sanciones
 
 | Métrica | Simulador (seco, 96) | Real | Veredicto |
@@ -247,13 +321,18 @@ rodaje que la realidad y, en L3, todos hacen lo mismo.
 |---|---|---|---|
 | Paradas | 0,01 | ~0 | ✔ |
 | Neumáticos | medio 76 %, blando 22 %, duro 2 % | mayoría medio, algún blando | ✔ |
-| Gana el de la pole | **83 %** | ~50-60 % | ✘ |
+| Gana el de la pole | **83 %** (con el fallo de semillas del banco; corregido, 61 %, y con los cambios del punto 6, 70 %) | ~50-60 % | ✔ (≈ tras el punto 6) |
 | Adelantamientos (sin la primera vuelta) | 10,6 por sprint (0,5 por vuelta, frente a 1,4 en carrera) | más, en 2026 | ✘ probable |
 | Vuelta rápida / pole sprint | 1,009 | ~1,02-1,03 | ✘ (punto 1) |
 | Coche de seguridad / bandera roja | 38 % / 13 % | ~30 % / ~5 % | ≈ |
 
 En la sprint todos van con el mismo neumático y sin paradas, así que no hay diferencias de goma que valgan un
 adelantamiento: el de la pole se escapa.
+
+Con el banco corregido (sección 5) y los 24 circuitos en formato sprint (los que no la tienen, a 100 km), 46 sprints
+en seco: la pole gana el 61 % (tras el punto 6, el 70 %), lidera la vuelta 1 el 80 %, y cuando pierde es en la salida
+(la mitad de las veces) o en pista. Hay 14-15 adelantamientos por sprint después de la vuelta 1, y el duro se usa
+el 14-19 %.
 
 ## 9. Lluvia (40 fines de semana, 25 carreras mojadas)
 

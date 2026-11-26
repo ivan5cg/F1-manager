@@ -97,16 +97,26 @@ impacto (detalle y líneas de código en el informe):
    Q1 P1-P20 2,1-2,3 s (real 2,13), P10 − P1 1,1-1,2 s (real 1,39), compañeros 0,30 s (real 0,31).
 5. ~~Regularidad de metrónomo (σ 0,05 s frente a 0,2-0,3 s).~~ **Hecho:** ruido por vuelta además del de cada
    minisector (`LAP_NOISE`): σ en aire limpio 0,19-0,20 s.
-6. Victorias demasiado abiertas en carrera y demasiado cerradas en la sprint (pole 83 %). Con los coches de 2026
-   recalibrados (los cuatro primeros a 0,2-0,4 %, como en la realidad) la pole gana el 33-50 % y desde P4+ el 29 %;
-   en 2026 fue 15 de 21 (71 %) y 2 de 21 (10 %). Es lo siguiente.
+6. Victorias demasiado abiertas en carrera y demasiado cerradas en la sprint (pole 83 %). **En parte hecho** (detalle
+   en el informe, sección 5, «Punto 6»):
+   - El 83 % de la sprint y el 33-50 % de la carrera venían de un fallo del banco: la misma semilla en los 24
+     circuitos (ver «Semillas»). Con el banco corregido, la pole ganaba el 61 % de las sprints (bien) y solo el 21 % de
+     las carreras, con un 44 % de victorias desde P4+.
+   - Cambios: salir con el duro desde delante cuesta más (`START_FRONT`), prioridad del de delante para cubrir el
+     undercut («cubrir» en `aiDecide`), defensa simétrica a 1,3 s (`aiModes`) y forma del fin de semana de cada piloto
+     (`FORM` en `weekend.ts`, con `QUALI_NOISE` en `session.ts`).
+   - Con 72 fines de semana: la pole gana el 34 % (real 71 %), desde P4+ el 32 % (real 10 %), y el compañero que sale
+     delante acaba delante el 66 % (real 70 %). En la sprint, la pole gana el 70 %.
+   - Pendiente: con la misma parrilla, la carrera cambia mucho de una semilla a otra (`repite.ts`: la pole gana el
+     28 %). Falta medir cuánto pone cada fuente (salida, ciclo de paradas, neutralizaciones) y si los de cabeza deben
+     separarse más en carrera que en clasificación.
 7. ~~**Fallo:** descalificaciones por la regla de los dos compuestos cuando se prevé lluvia que no llega
    (`src/sim/strategy.ts:655-658` anula la parada de `strategy.ts:650`). Se reproduce con
    `npx tsx scripts/auditoria/gp.ts spa 32 chubD` (HAM, NOR, LAW y BEA descalificados; con `DEPURAR=1` sale por qué para
    cada uno).~~ **Hecho** (PR #41).
 8. Coche de seguridad y virtual demasiado lentos, y la mitad de vueltas en libres.
 
-Siguiente: el punto 8 (coche de seguridad y libres) y lo que queda del 6 (la sprint), midiendo con este banco y con `scripts/realismo.ts`. Con el punto 1 la
+Siguiente: el punto 8 (coche de seguridad y libres) y lo que queda del 6 (el azar de la carrera en cabeza), midiendo con este banco y con `scripts/realismo.ts`. Con el punto 1 la
 vuelta media del ganador sube a ~1,10-1,12 de la pole (real 1,11), pero las carreras con coche de seguridad largo se
 alargan: el punto 8 (coche de seguridad demasiado lento) pesa ahora algo más. Tras los puntos 2 y 3 los libres siguen a
 1,1-1,3 / 0,8 / 0,4-0,65 s de la pole.
