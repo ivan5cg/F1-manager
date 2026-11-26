@@ -85,7 +85,7 @@ Lo que más aleja la simulación de la F1 real, por orden de gravedad:
 7. **Un fallo de la IA**: con lluvia prevista que no llega, varios coches acaban **descalificados** por no usar dos
    compuestos de seco.
 8. Menores: coche de seguridad y virtual demasiado lentos, libres con la mitad de vueltas (la «sprint demasiado
-   previsible» era un fallo del banco: ver sección 5).
+   previsible» era un fallo del banco: ver sección 5). *Hecho (secciones 6 y 7).*
 
 ## 1. Carrera frente a clasificación
 
@@ -303,6 +303,30 @@ cosas frenan también en las curvas lentas, donde en la realidad casi no se pier
 bien (aprox. la mitad de una parada en verde), porque las dos cosas se compensan. Lo que sale mal es la duración: una
 vuelta con coche de seguridad dura casi el doble que una verde.
 
+**Hecho (26 de noviembre de 2026).**
+- **Tope por circuito.** Ya no se limita a un porcentaje de la velocidad en todo el circuito: cada uno tiene un tope de
+  velocidad, sacado de su perfil de velocidades (`NEUTRAL_LAP` en `session.ts`).
+  - Con el tope, la vuelta dura ~1,3 veces la de referencia con el virtual y ~1,4 detrás del coche de seguridad. El que
+    va lejos del grupo, ~1,2, para alcanzarlo.
+  - Por encima del tope se va a su velocidad y por debajo, como en verde. Así se pierde en recta y casi nada en las
+    curvas lentas.
+  - Topes: 126-190 km/h detrás del coche de seguridad (Mónaco y Monza) y 141-210 km/h con el virtual.
+- **Coste de parar.** La IA lo calcula con esos mismos topes (`pitLossUnder` en `strategy.ts`), en vez del 45 % (coche
+  de seguridad) y el 60 % (virtual) fijos. Sale el 70-87 % de una parada en verde con el coche de seguridad y el 77-91 %
+  con el virtual. Las referencias que hay dan ~70 % y 60-80 %.
+- Además, al líder se le aplicaba el límite dos veces.
+
+| Métrica (72 fines de semana en seco) | Antes | Después | Real (aprox.) |
+|---|---|---|---|
+| Vuelta con coche de seguridad / verde | 1,89 | **1,43** | ~1,4 |
+| Vuelta con virtual / verde | 1,58 | **1,33** | ~1,3 |
+| Paradas por piloto | 1,35 | 1,16 | — |
+| Gana la pole / desde P4+ | 34 % / 30 % | 39 % / 22 % | 71 % / 10 % (2026) |
+| Adelantamientos por carrera | 73 | 70 | ×2-4 sobre 2025 |
+
+Parar con neutralización sale menos barato que antes, así que se para menos aprovechándolas: hay menos 2 paradas y
+algo menos de lotería en el resultado. `realismo.ts` sigue todo dentro de margen.
+
 ## 7. Libres
 
 | Métrica | Simulador | Real (aprox.) | Veredicto |
@@ -316,6 +340,21 @@ vuelta con coche de seguridad dura casi el doble que una verde.
 El programa de la IA (`strategy.ts:814`) es fijo y corto: L1 = 1 vuelta de instalación, una tanda de 7-11 vueltas y
 dos vueltas lanzadas; L2 = dos lanzadas y una tanda de 9-13; L3 = dos salidas de 1-2 lanzadas. Se queda en la mitad de
 rodaje que la realidad y, en L3, todos hacen lo mismo.
+
+**Hecho (26 de noviembre de 2026).** Programas más largos y con salidas que dependen del azar (`practiceProgram`):
+- **L1:** salidas de reglajes con medio y una segunda tanda larga con otro compuesto.
+- **L2:** reglajes, dos simulaciones de clasificación y dos tandas largas.
+- **L3:** reglajes, dos o tres salidas con blando y, la mitad de las veces, una tanda con medio.
+
+Vueltas por piloto: **24 / 23 / 14** (antes 15 / 15 / 6). En L3, entre 7 y 20 según el piloto.
+
+Tres efectos secundarios, ya corregidos:
+- **Goma en pista:** con tantas vueltas, la pista llegaba a la clasificación con el tope de goma. La de cada vuelta de
+  libres baja en proporción (`RUBBER_FP_LAP`).
+- **Blandos para Q3:** a casi todos les quedaba un solo juego nuevo para Q3, porque el que iba justo en Q2 gastaba uno de
+  los dos que se guardan. Ya no lo gasta (`qualiSet`). Q3 peor que su Q2: de 3,2 a **1,3 de 10** (real ~1).
+- **Libres frente a la pole:** el mejor de L1 / L2 / L3 queda a 1,6 / 0,9 / 0,7 s, y L3 bate la pole el 2 % de las veces
+  (antes, el 13 %).
 
 ## 8. Sprint (24)
 
@@ -350,10 +389,17 @@ Funciona bien:
 Para revisar:
 - **Ganadores sorpresa muy frecuentes:** Hülkenberg desde P17, Gasly desde P19, Albon desde P15 en Mónaco, Leclerc
   desde P21 y Antonelli desde P15. Son 6 de ~25 carreras mojadas, el 24 %. Pasa en la realidad, pero bastante menos.
+  *Con el banco corregido (sección 5) es 1 de 24: Lindblad desde P9. Ya está bien.*
 - **Las averías no bajan con el agua:** las carreras mojadas tienen las mismas averías que las secas, pero los
-  accidentes casi no suben (29 en 40 carreras, frente a 58 en 96 en seco).
+  accidentes casi no suben (29 en 40 carreras, frente a 58 en 96 en seco). *Con el banco corregido, los accidentes
+  suben: 1,2 por carrera con agua, frente a 0,66 en seco. Las averías se quedan en 2,5 frente a 2,2.*
 - **Escenario «Estable» con lluvia:** en el 10 % de los fines de semana «Estable» llueve en alguna sesión. Bakú,
-  Shanghái, México y Suzuka tuvieron la clasificación mojada con el escenario seco.
+  Shanghái, México y Suzuka tuvieron la clasificación mojada con el escenario seco. *Hecho:*
+  - Las células que nacen durante un día estable salen flojas y pocas, como las de primera hora (`SECO_BIRTH` en
+    `weather.ts`). Antes nacían ~0,014 por minuto con toda su fuerza.
+  - Los días «Estable» con un chaparrón sobre el circuito a la hora de la clasificación bajan del 17 % al ~5 % (1 % en
+    el desierto, 10 % en Singapur). Lo mide `scripts/auditoria/tiempo.ts`.
+  - Antes, la clasificación salía mojada en uno de cada ocho fines de semana secos.
 
 ### Fallo: descalificaciones por la regla de los dos compuestos
 
@@ -389,6 +435,41 @@ ese caso se monte el intermedio si hay agua o el otro compuesto de seco si no.
 Antes y después de cualquier cambio conviene pasar `scripts/realismo.ts` (ya mide neutralizaciones, abandonos,
 adelantamientos y márgenes) y este banco, que añade ritmo frente a la pole, evolución de clasificación, degradación,
 regularidad, doblados, uso de compuestos y libres.
+
+## Pendiente (26 de noviembre de 2026)
+
+Medido con el banco corregido. Ninguno de estos cambios está hecho.
+
+- **El duro en las pistas frías.** Con la referencia nueva, el duro se usa el 0 % en Las Vegas, el 6 % en Shanghái, el
+  8 % en Suzuka y el 39 % en Spa; en la realidad, ahí se corre con medio y duro.
+  - **Causa:** el agarre del duro por debajo de su ventana de temperatura (`fT` en `tyres.ts`). En frío, el duro nuevo va
+    1,0-1,3 s por detrás del medio; en Silverstone, 0,5 s.
+  - **Lo que se probó:** suavizar esa pérdida, con el coeficiente de 0,075 a 0,035 o a 0,02.
+
+    | Coeficiente de frío | Duro en Shanghái / Spa / Suzuka / Las Vegas | Adelantamientos por carrera | Paradas |
+    |---|---|---|---|
+    | 0,075 (actual) | 0 / 5 / 0 / 8 % | 72 | 1,16 |
+    | 0,035 | 22 / 41 / 0 / 3 % | 62 | 1,11 |
+    | 0,02 | 49 / 67 / 8 / 0 % | 53 | 1,10 |
+
+  - **Por qué no se aplicó:** el duro vuelve a Shanghái y a Spa, pero en Suzuka y Las Vegas degrada tanto o más que el
+    medio, y eso no depende de la temperatura. Además, con todos en medio-duro hay menos diferencias de goma y se adelanta
+    un 15-25 % menos, cuando los adelantamientos están calibrados con las diferencias de ahora. Hay que hacerlo junto con
+    el desgaste del duro en frío y volver a calibrar los umbrales de adelantamiento.
+- **Pocos doblados** (3-4 por carrera; en 2026, 6). Los coches lentos se quedan en carrera más cerca de lo que van en
+  clasificación:
+
+  | Distancia al mejor | Williams | Cadillac | Aston Martin | Cabeza |
+  |---|---|---|---|---|
+  | En clasificación | 2,9 % | 3,2 % | 3,5 % | igual en las dos |
+  | En carrera | 1,8 % | 2,4 % | 2,9 % | |
+
+  No sale del modo de ritmo: los lentos van algo menos en Atacar que los de cabeza. Hay que buscarlo en la física de
+  carrera (energía, rebufo, el modo adelantamiento entre ellos).
+- **La pole sale más rápida que la real.** Con el banco corregido, la pole sale 0,3 s más rápida que la real con la que
+  se calibró el circuito, y 0,5 s tras los cambios de esta tanda (0,12 s más, de llegar a Q3 con dos juegos nuevos). La
+  calibración de cada circuito (`poleObjetivo`) se hizo con el banco viejo; habría que repetirla.
+- **El azar en cabeza** (resto del punto 6, sección 5): la pole gana el 39 % (2026: 71 %).
 
 ## Fuentes
 
