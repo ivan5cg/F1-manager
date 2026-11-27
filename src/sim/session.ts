@@ -328,11 +328,13 @@ export interface TeamDef {
   /** Lo que gana (+) o pierde (−) el coche sobre su agarre en curva lenta, media y rápida (mismas unidades). */
   curvas?: [number, number, number];
   /**
-   * Lo que el coche pierde en carrera (y en la sprint) además de lo del sábado, en % de agarre (negativo: pierde). En
-   * 2026 los cuatro de cabeza van en carrera tan cerca de Mercedes como en clasificación (rendimiento/race.py), pero la
-   * zona media acaba doblada en las carreras sin neutralizaciones, a ~1,8 % del ganador cuando el sábado va a ~1 %: se
-   * doblaban 6 coches por carrera (8 de mediana) y en el juego, con solo lo del sábado, 3-4.
+   * Eficiencia energética y de refrigeración en carrera / tandas largas (1 = referencia; < 1 despliega mejor la
+   * energía ERS y necesita menos recorte en zonas a fondo; > 1 sufre más clipping/refrigeración respecto a Q).
    */
+  energia?: number;
+  /** Sensibilidad aerodinámica en aire sucio (< 1 sigue mejor en estela y sobrecalienta menos las delanteras; 1 = ref). */
+  aireSucio?: number;
+  /** @deprecated Solo compatibilidad con partidas guardadas antiguas (se traduce a `energia` si falta). */
   ritmoCarrera?: number;
   boxes: number; fiabilidad: number; estrategia: number; meteo: number;
   pilotos: DriverDef[];
@@ -1723,7 +1725,7 @@ export class Session {
     const off = c.offLine ?? 0;
     if (off > 0) grip *= 1 - OFFLINE_GRIP * m.cornerSens * off * off * (0.6 + 0.4 * this.rubber);
     // en paralelo (adelantando) ya no va en la estela; apartado a un lado, solo en parte
-    if (c.aheadId >= 0 && c.grant !== c.aheadId) grip *= 1 - DIRTY_AIR * m.aero * m.cornerSens * dirtyAir(c.followGap) * wake(c.aheadDl ?? 0, WAKE_DIRTY) * (su ? 1 + 0.06 * su.ea : 1);
+    if (c.aheadId >= 0 && c.grant !== c.aheadId) grip *= 1 - DIRTY_AIR * (c.team.aireSucio ?? 1) * m.aero * m.cornerSens * dirtyAir(c.followGap) * wake(c.aheadDl ?? 0, WAKE_DIRTY) * (su ? 1 + 0.06 * su.ea : 1);
     // viento: de cara frena en recta pero da carga en curva; de cola, al revés
     const air = this.windAir[m.i];
     grip *= 1 + 0.5 * m.aero * m.cornerSens * air;
@@ -1756,14 +1758,12 @@ export class Session {
 
   /**
    * Ritmo del coche: el del piloto más el del coche en cada tipo de curva (agarre + curvas, con TEAM_SPREAD respecto al
-   * mejor agarre de la parrilla y, en carrera, `ritmoCarrera`); pace es la media con lo que pesa cada tipo de curva en este circuito.
+   * mejor agarre de la parrilla); pace es la media con lo que pesa cada tipo de curva en este circuito.
    */
   private carPace(ritmo: number, team: TeamDef, form = 0): { pace: number; paceBand: [number, number, number] } {
     const drv = (ritmo - 85) * 0.0007 + form;
     const cv = team.curvas ?? [0, 0, 0];
-    // en carrera, lo que el equipo pierde además de lo del sábado (`ritmoCarrera` en equipos-2026.json)
-    const extra = isRaceKind(this.kind) ? -(team.ritmoCarrera ?? 0) / 100 : 0;
-    const paceBand = cv.map((x) => 1 + drv - extra + (this.topTeam.agarre + (team.agarre + x - this.topTeam.agarre) * TEAM_SPREAD) / 180) as [number, number, number];
+    const paceBand = cv.map((x) => 1 + drv + (this.topTeam.agarre + (team.agarre + x - this.topTeam.agarre) * TEAM_SPREAD) / 180) as [number, number, number];
     const w = this.bandShare;
     return { pace: paceBand[0] * w[0] + paceBand[1] * w[1] + paceBand[2] * w[2], paceBand };
   }
@@ -1789,11 +1789,17 @@ export class Session {
     return Math.max(0, from - this.qualiEvo(this.durationS));
   }
 
-  /** Lo que se pierde por no ir en modo de clasificación (ver DEPLOY_TRIM). */
+  /** Eficiencia energética en tanda larga/carrera (compatibilidad si una partida antigua solo guardaba ritmoCarrera). */
+  private teamEnergy(t: TeamDef): number {
+    return t.energia ?? (t.ritmoCarrera !== undefined ? clamp(1 - t.ritmoCarrera * 0.14, 0.88, 1.25) : 1);
+  }
+
+  /** Lo que se pierde por no ir en modo de clasificación (gestión energética ERS y refrigeración en carrera/tandas largas). */
   private deployTrim(c: Car): number {
     // en libres y clasificación, la vuelta estimada («Posible») es la de una vuelta lanzada
     if (c.run?.phase === "push" || (this.estimating && !isRaceKind(this.kind))) return isQualiKind(this.kind) ? 0 : PRACTICE_PUSH_TRIM[this.kind] ?? DEPLOY_TRIM[this.kind];
-    return DEPLOY_TRIM[this.kind];
+    const raceTrim = isRaceKind(this.kind) || c.run?.kind === "long";
+    return DEPLOY_TRIM[this.kind] * (raceTrim ? this.teamEnergy(c.team) : 1);
   }
 
   /**
@@ -1903,7 +1909,7 @@ export class Session {
     const slow = this.flag !== "green" ? 0.35 : ph.energy;
     // en aire sucio el morro pierde carga: el tren delantero desliza (subviraje), se recalienta y se rasga
     const wk = c.aheadId >= 0 ? wake(c.aheadDl ?? 0, WAKE_DIRTY) : 0;
-    const dirty = c.aheadId >= 0 ? dirtyAir(c.followGap) * wk * m.aero * m.cornerSens * slow : 0;
+    const dirty = c.aheadId >= 0 ? dirtyAir(c.followGap) * wk * (c.team.aireSucio ?? 1) * m.aero * m.cornerSens * slow : 0;
     const tyres = c.tyres!;
     updateSet(tyres, {
       trackT: this.weather.trackT, airT: this.weather.airT, water,
@@ -1920,8 +1926,8 @@ export class Session {
     const underFlag = this.flag !== "green" || ph.speed < 1;
     c.fuel -= (this.fuelLap(c) * ENGINE_FUEL[c.engine] * PUSH_FUEL[c.push] * (underFlag ? 0.5 : 1) * move) / L;
     if (!underFlag) {
-      // eficiencia de cosecha eléctrica en 2026: ligeramente ligada a la unidad de potencia
-      const ersEff = this.era.ers >= 0.8 ? clamp(1 + (c.team.potencia - 0.3) * 0.035, 0.91, 1.05) : 1;
+      // eficiencia de cosecha eléctrica en 2026: depende de la unidad de potencia y de la gestión energética (`energia`)
+      const ersEff = this.era.ers >= 0.8 ? clamp(1 + (c.team.potencia - 0.3) * 0.035 - (this.teamEnergy(c.team) - 1) * 0.18, 0.88, 1.06) : 1;
       const dE = this.ersLap * ersEff * this.ersIn[m.i] - (this.ersLap - ERS_NET[c.ers]) * this.ersOut[m.i]; // MJ en este minisector
       // en 2026 el modo adelantamiento tira de la batería (~0,35 MJ por vuelta de uso en rectas X)
       const moDrain = this.era.ayuda === "mo" && c.drs && m.xZone && c.soc > 0.05 ? 0.35 / this.moTime : 0;

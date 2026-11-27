@@ -356,20 +356,30 @@ export function offSeason(inp: OffSeasonInput): OffSeasonOutput {
     const fiabCut = Math.max(0, f.fiabilidad - 0.88) * clamp(rng.gauss(0.28, 0.08), 0.10, 0.48);
     const fiabilidad = Math.round(Math.max(0.88, f.fiabilidad - fiabCut) * 100) / 100;
 
-    // Ritmo de carrera: mejora con el desarrollo de chasis/aero invernal si tiene déficit
-    const rc0 = f.ritmoCarrera ?? 0;
-    const rcGain = rc0 < 0.3 ? Math.min(0.3 - rc0, winterAero * clamp(rng.gauss(0.55, 0.15), 0.2, 0.9)) : 0;
-    const ritmoCarrera = Math.round((rc0 + rcGain) * 100) / 100;
+    // Gestión energética ERS en tanda larga (mejora con el trabajo de unidad de potencia + refrigeración)
+    const en0 = f.energia ?? 1;
+    const enCut = en0 > 0.94 ? Math.min(en0 - 0.94, Math.max(0.005, puGain * 0.14 + winterAero * 0.04) * clamp(rng.gauss(1.0, 0.2), 0.5, 1.5)) : 0;
+    const energia = Math.round(Math.max(0.94, en0 - enCut) * 1000) / 1000;
 
+    // Estabilidad aerodinámica en aire sucio y desgaste de neumáticos (mejoran con desarrollo de chasis)
+    const da0 = f.aireSucio ?? 1;
+    const daCut = da0 > 0.93 ? Math.min(da0 - 0.93, winterAero * 0.08 * clamp(rng.gauss(1.0, 0.2), 0.5, 1.5)) : 0;
+    const aireSucio = Math.round(Math.max(0.93, da0 - daCut) * 1000) / 1000;
+    const dgCut = f.desgaste > 0.95 ? Math.min(f.desgaste - 0.95, winterAero * 0.03 * clamp(rng.gauss(1.0, 0.2), 0.5, 1.5)) : 0;
+    const desgaste = Math.round(Math.max(0.95, f.desgaste - dgCut) * 1000) / 1000;
+
+    const { ritmoCarrera: _oldRc, ...rest } = f;
     return {
-      ...f,
+      ...rest,
       pilotos: seats as DriverDef[],
       agarre: Math.round(agarre * 100) / 100,
       potencia: Math.round(potencia * 100) / 100,
       resistencia,
       fiabilidad,
+      desgaste,
+      energia,
+      aireSucio,
       curvas,
-      ritmoCarrera,
     };
   });
   // salarios solo de los que tienen equipo
@@ -389,7 +399,7 @@ export function developPlayerWinter(
   seed: number,
   year: number,
   devK = 1,
-): { team: TeamDef; summary: { aero: number; motor: number; fiabCut: number; rcGain: number } } {
+): { team: TeamDef; summary: { aero: number; motor: number; fiabCut: number; energiaCut: number; aireSucioCut: number } } {
   const rng = new Rng(((seed * 53) ^ (year * 1997) ^ 0x71e3) >>> 0);
   const topLevel = Math.max(...allFinals.map(carLevel));
   const topPot = Math.max(...allFinals.map((t) => t.potencia));
@@ -418,7 +428,7 @@ export function developPlayerWinter(
   ];
   const resistencia = Math.round(clamp(myFin.resistencia - winterAero * sp[3] * DRAG_PER_GRIP, -0.55, 0.55) * 100) / 100;
 
-  // 2. Unidad de potencia invernal (con concesiones ADUO si el motor va rezagado)
+  // 2. Unidad de potencia invernal (con concesiones ADUO si el motor va rezagado) + gestión energética ERS en carrera
   const works = isWorks(myFin);
   const aduoK = aduoMult(myFin.potencia, topPot, works);
   const motorRoll = clamp(rng.gauss(1.0, 0.12), 0.75, 1.28);
@@ -426,19 +436,26 @@ export function developPlayerWinter(
   const motorGain = motorBase * aduoK * (0.50 + 1.45 * fMotor) * devK * motorRoll;
   const potencia = Math.round((myFin.potencia + motorGain) * 100) / 100;
 
+  const en0 = myFin.energia ?? 1;
+  const energiaCut = en0 > 0.94 ? Math.min(en0 - 0.94, (motorGain * 0.16 + winterAero * 0.04) * (0.7 + 0.7 * fMotor)) : 0;
+  const energia = Math.round(Math.max(0.94, en0 - energiaCut) * 1000) / 1000;
+
   // 3. Fiabilidad invernal (sin resetear; cuanto más frágil, más margen al invertir enfoque)
   const fiabRoll = clamp(rng.gauss(1.0, 0.10), 0.80, 1.22);
   const fiabCut = Math.max(0, myFin.fiabilidad - 0.88) * clamp(0.14 + 0.65 * fFiab, 0.12, 0.60) * fiabRoll;
   const fiabilidad = Math.round(Math.max(0.88, myFin.fiabilidad - fiabCut) * 100) / 100;
 
-  // 4. Ritmo de carrera invernal (mejora con el trabajo de chasis y aero en tandas largas)
-  const rc0 = myFin.ritmoCarrera ?? 0;
-  const rcGain = rc0 < 0.35 ? Math.min(0.35 - rc0, winterAero * (0.35 + 0.75 * fChassis)) : 0;
-  const ritmoCarrera = Math.round((rc0 + rcGain) * 100) / 100;
+  // 4. Estabilidad en aire sucio y desgaste de neumáticos (mejoran con el trabajo de chasis en tandas largas)
+  const da0 = myFin.aireSucio ?? 1;
+  const aireSucioCut = da0 > 0.93 ? Math.min(da0 - 0.93, winterAero * (0.06 + 0.12 * fChassis)) : 0;
+  const aireSucio = Math.round(Math.max(0.93, da0 - aireSucioCut) * 1000) / 1000;
+  const dgCut = myFin.desgaste > 0.95 ? Math.min(myFin.desgaste - 0.95, winterAero * (0.02 + 0.05 * fChassis)) : 0;
+  const desgaste = Math.round(Math.max(0.95, myFin.desgaste - dgCut) * 1000) / 1000;
 
+  const { ritmoCarrera: _oldRc, ...rest } = myFin;
   return {
-    team: { ...myFin, agarre, potencia, resistencia, fiabilidad, curvas, ritmoCarrera },
-    summary: { aero: winterAero, motor: motorGain, fiabCut, rcGain },
+    team: { ...rest, agarre, potencia, resistencia, fiabilidad, desgaste, energia, aireSucio, curvas },
+    summary: { aero: winterAero, motor: motorGain, fiabCut, energiaCut, aireSucioCut },
   };
 }
 

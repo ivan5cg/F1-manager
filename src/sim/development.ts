@@ -103,11 +103,12 @@ export function splitAt(a: AeroPlan, period: number): number[] {
 export function newAeroPlan(budget: number): AeroPlan {
   return { reserva: Math.round(budget * AERO_RESERVE), reparto: {}, pkgs: [] };
 }
-/** Nivel medio del coche (agarre, carácter medio en curvas, potencia, resistencia y ritmo de carrera). */
+/** Nivel medio del coche (agarre, curvas, potencia, resistencia, eficiencia energética ERS y desgaste de goma). */
 export function carLevel(t: TeamDef): number {
   const cv = t.curvas ?? [0, 0, 0];
   const grip = t.agarre + (cv[0] + cv[1] + cv[2]) / 3;
-  return grip + 0.4 * t.potencia - 0.3 * t.resistencia + 0.35 * (t.ritmoCarrera ?? 0);
+  const en = t.energia ?? 1;
+  return grip + 0.4 * t.potencia - 0.3 * t.resistencia - 2.0 * (en - 1) - 0.8 * (t.desgaste - 1);
 }
 
 /**
@@ -288,12 +289,22 @@ export function applyDev(t: TeamDef, d: DevState | undefined, round: number, top
   if (!g.aero && !g.motor && !g.fiab && !a.total) return t;
   const cv = t.curvas ?? [0, 0, 0];
   const aeroAll = g.aero + a.total;
-  // las mejoras aerodinámicas y de chasis también afinan el ritmo de carrera si el coche arrastra déficit en tandas largas
-  const rc0 = t.ritmoCarrera ?? 0;
-  const rcGain = aeroAll > 0 && rc0 < 0.25 ? Math.min(0.25 - rc0, aeroAll * 0.35) : 0;
+  // las mejoras de motor/eficiencia bajan el recorte eléctrico en carrera (`energia`); las aerodinámicas afinan
+  // la estabilidad en estela (`aireSucio`) y el trato a los neumáticos (`desgaste`)
+  const en0 = t.energia ?? 1;
+  const enCut = g.motor > 0 && en0 > 0.95 ? Math.min(en0 - 0.95, g.motor * 0.08) : 0;
+  const da0 = t.aireSucio ?? 1;
+  const daCut = aeroAll > 0 && da0 > 0.93 ? Math.min(da0 - 0.93, aeroAll * 0.06) : 0;
+  const dgCut = aeroAll > 0 && t.desgaste > 0.95 ? Math.min(t.desgaste - 0.95, aeroAll * 0.03) : 0;
   return {
-    ...t, agarre: t.agarre + g.aero, potencia: t.potencia + g.motor, consumo: (t.consumo ?? 1) * (1 - g.fuel), fiabilidad: t.fiabilidad * (1 - g.fiab),
-    ...(rcGain ? { ritmoCarrera: Math.round((rc0 + rcGain) * 1000) / 1000 } : {}),
+    ...t,
+    agarre: t.agarre + g.aero,
+    potencia: t.potencia + g.motor,
+    consumo: (t.consumo ?? 1) * (1 - g.fuel),
+    fiabilidad: t.fiabilidad * (1 - g.fiab),
+    desgaste: Math.round((t.desgaste - dgCut) * 1000) / 1000,
+    ...(enCut ? { energia: Math.round((en0 - enCut) * 1000) / 1000 } : {}),
+    ...(daCut ? { aireSucio: Math.round((da0 - daCut) * 1000) / 1000 } : {}),
     ...(a.total ? { curvas: [cv[0] + a.curvas[0], cv[1] + a.curvas[1], cv[2] + a.curvas[2]] as [number, number, number], resistencia: t.resistencia + a.drag } : {}),
   };
 }
@@ -500,15 +511,20 @@ export function applyGridDev(base: TeamDef[], seed: number, round: number, total
     if (t.id === playerTeamId) return applyDev(t, playerDev, round, topPotencia);
     const g = rivals.get(t.id);
     if (!g || (!g.aero && !g.motor && !g.fiab)) return t;
-    const rc0 = t.ritmoCarrera ?? 0;
-    const rcGain = g.aero > 0 && rc0 < 0.25 ? Math.min(0.25 - rc0, g.aero * 0.35) : 0;
+    const en0 = t.energia ?? 1;
+    const enCut = g.motor > 0 && en0 > 0.95 ? Math.min(en0 - 0.95, g.motor * 0.08) : 0;
+    const da0 = t.aireSucio ?? 1;
+    const daCut = g.aero > 0 && da0 > 0.93 ? Math.min(da0 - 0.93, g.aero * 0.06) : 0;
+    const dgCut = g.aero > 0 && t.desgaste > 0.95 ? Math.min(t.desgaste - 0.95, g.aero * 0.03) : 0;
     return {
       ...t,
       agarre: t.agarre + g.aero,
       potencia: t.potencia + g.motor,
       consumo: (t.consumo ?? 1) * (1 - g.fuel),
       fiabilidad: t.fiabilidad * (1 - g.fiab),
-      ...(rcGain ? { ritmoCarrera: Math.round((rc0 + rcGain) * 1000) / 1000 } : {}),
+      desgaste: Math.round((t.desgaste - dgCut) * 1000) / 1000,
+      ...(enCut ? { energia: Math.round((en0 - enCut) * 1000) / 1000 } : {}),
+      ...(daCut ? { aireSucio: Math.round((da0 - daCut) * 1000) / 1000 } : {}),
     };
   });
 }

@@ -88,9 +88,11 @@ test("rendimiento: el orden de los coches de 2026 (Mercedes delante, Aston Marti
   const simOrder = [...TEAMS].sort((a, b) => simCarLevel(b) - simCarLevel(a)).map((t) => t.id);
   assert.equal(simOrder[0], "mercedes");
   assert.equal(simOrder[simOrder.length - 1], "astonmartin");
-  // ritmoCarrera de 2026 medido por equipo (no -0.8 plano)
-  const rcs = new Set(TEAMS.map((t) => t.ritmoCarrera ?? 0));
-  assert.ok(rcs.size >= 7, `ritmoCarrera debe variar por equipo: ${[...rcs]}`);
+  // atributos físicos explícitos de carrera 2026 (energia y aireSucio medidos por equipo, sin ritmoCarrera)
+  assert.ok(TEAMS.every((t) => t.ritmoCarrera === undefined), "sin ritmoCarrera genérico en equipos-2026");
+  const ens = new Set(TEAMS.map((t) => t.energia ?? 1));
+  const das = new Set(TEAMS.map((t) => t.aireSucio ?? 1));
+  assert.ok(ens.size >= 7 && das.size >= 5, `energia/aireSucio deben variar por equipo: en=${ens.size}, da=${das.size}`);
 });
 
 test("concesiones ADUO FIA 2026, objetivos de fondo y posterior bayesiano del túnel", () => {
@@ -133,7 +135,8 @@ test("desarrollo de invierno conserva mejoras y normalización uniforme mantiene
   const res = developPlayerWinter(am, TEAMS, 120, DEFAULT_WINTER, 101, 2027, 1);
   assert.ok(res.team.potencia > am.potencia, "motor mejora en invierno");
   assert.ok(res.team.fiabilidad < am.fiabilidad, "fiabilidad mejora y no se resetea");
-  assert.ok((res.team.ritmoCarrera ?? 0) > (am.ritmoCarrera ?? 0), "ritmo de carrera mejora con el desarrollo");
+  assert.ok((res.team.energia ?? 1) < (am.energia ?? 1), "eficiencia energética ERS mejora con el desarrollo");
+  assert.ok((res.team.aireSucio ?? 1) < (am.aireSucio ?? 1), "estabilidad en aire sucio mejora con el desarrollo");
   // Normalización uniforme conserva las diferencias entre equipos
   const boosted = TEAMS.map((t) => ({ ...t, agarre: t.agarre + 0.6, potencia: t.potencia + 0.5 }));
   const gapBefore = boosted[0].agarre - boosted[boosted.length - 1].agarre;

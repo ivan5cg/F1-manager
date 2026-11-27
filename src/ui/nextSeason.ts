@@ -168,7 +168,7 @@ export function buildNextSeason(s: SeasonState, choices: { keep: boolean; sign?:
 
   const sec = (x: number) => `${x >= 0 ? "−" : "+"}${Math.abs(x * 0.98).toFixed(2).replace(".", ",")} s`;
   const winterNews: string[] = [
-    `🏭 Desarrollo de invierno ${y} (ATR ${myAtrW} %): túnel ${sec(wRes.summary.aero)}/vuelta, motor −${(wRes.summary.motor * 0.22).toFixed(2).replace(".", ",")} s/vuelta${wRes.summary.fiabCut > 0.01 ? `, fiabilidad −${Math.round(wRes.summary.fiabCut * 100)} %` : ""}${wRes.summary.rcGain > 0.01 ? `, ritmo de carrera +${wRes.summary.rcGain.toFixed(2).replace(".", ",")} %` : ""}.`,
+    `🏭 Desarrollo de invierno ${y} (ATR ${myAtrW} %): túnel ${sec(wRes.summary.aero)}/vuelta, motor −${(wRes.summary.motor * 0.22).toFixed(2).replace(".", ",")} s/vuelta${wRes.summary.energiaCut > 0.004 ? `, eficiencia ERS +${Math.round(wRes.summary.energiaCut * 100)} %` : ""}${wRes.summary.fiabCut > 0.01 ? `, fiabilidad −${Math.round(wRes.summary.fiabCut * 100)} %` : ""}${wRes.summary.aireSucioCut > 0.004 ? `, estela −${Math.round(wRes.summary.aireSucioCut * 100)} %` : ""}.`,
   ];
 
   const rec = seasonRecord(s);
@@ -305,8 +305,8 @@ export function offSeasonScreen(s: SeasonState, onDone: (next: SeasonState) => v
   const myAtrW = atrAt(atrPlan(s), myId, lastAeroPeriodRound(races));
   const pctW = (x: number) => `${Math.round(x * 100)} %`;
   const FACT_AREAS = [
-    { name: "Chasis y ritmo de carrera", what: "carga aerodinámica de base y ritmo en tandas largas" },
-    { name: "Unidad de potencia", what: `potencia y eficiencia${aduoK > 1.01 ? ` (concesiones ADUO ×${aduoK.toFixed(2).replace(".", ",")})` : ""}` },
+    { name: "Chasis, estela y neumáticos", what: `agarre base, estabilidad en aire sucio (×${(myFin.aireSucio ?? 1).toFixed(2).replace(".", ",")}) y desgaste (×${myFin.desgaste.toFixed(2).replace(".", ",")})` },
+    { name: "Unidad de potencia y ERS", what: `potencia y despliegue energético en carrera (×${(myFin.energia ?? 1).toFixed(2).replace(".", ",")})${aduoK > 1.01 ? ` · ADUO ×${aduoK.toFixed(2).replace(".", ",")}` : ""}` },
     { name: "Fiabilidad", what: `reducir averías (actual ×${myFin.fiabilidad.toFixed(2).replace(".", ",")})` },
   ];
   const winterPanel = () => {
