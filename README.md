@@ -679,6 +679,23 @@ volumen general, de motores, de ambiente y de radio, y las voces de la radio y d
   importantes se leen en voz alta con la voz en español del dispositivo (si no tiene, sin voz), como mucho uno cada
   8 s; con «Voz de Lobato», sus comentarios, con otra voz.
 
+## Tests
+
+```bash
+npm test             # tipos (tsc) y todos los tests: ~1,5 min con 4 núcleos
+npm run test:rapido  # solo los rápidos (~1 s)
+```
+
+- `tests/unidad.test.ts`: que la simulación es determinista, el túnel de viento (paquetes malos, reparto, reserva,
+  medida), el programa de libres con paquete y el orden de los coches de 2026.
+- `tests/banco-*.test.ts` (en paralelo): dos carreras en seco por circuito en Mónaco, Monza, Hungaroring,
+  Silverstone, Spa, Suzuka, Las Vegas y Baréin (parrilla por ritmo, como `scripts/auditoria/rapida.ts`). Los
+  adelantamientos de cada uno, ±35 % de su calibración; nadie descalificado; entre 0,9 y 2 paradas por coche; como
+  mucho 12 doblados; al menos 12 coches en meta. Con el umbral viejo de Mónaco (2,2) el test falla: 5 adelantamientos
+  por carrera.
+- Si un cambio mueve los adelantamientos a propósito, se recalibra el circuito y se actualiza su referencia en el
+  fichero del banco (`pass`, de `rapida.ts 1-2 <circuito>`).
+
 ## Simular sin interfaz
 
 ```bash

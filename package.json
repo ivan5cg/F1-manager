@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "npm run check",
+    "test": "npm run check && node --import tsx --test tests/*.test.ts",
+    "test:rapido": "node --import tsx --test tests/unidad.test.ts",
     "dev": "vite --host",
     "build": "vite build",
     "finde": "tsx scripts/finde.ts",

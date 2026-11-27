@@ -29,6 +29,8 @@ npx tsx scripts/auditoria/gp.ts silverstone 1 seco > fin.json
 # solo carreras (parrilla por ritmo, sin libres ni clasificación, ~6 s cada una): uso del duro y del blando, paradas,
 # adelantamientos, doblados y, con --equipos, el ritmo de carrera de cada equipo; para probar cambios deprisa
 npx tsx scripts/auditoria/rapida.ts 1-4 shanghai suzuka spa lasvegas --equipos
+# neumáticos en carrera: vueltas con cada compuesto, tanda media y estrategias más comunes (para comparar con 2026)
+npx tsx scripts/auditoria/gomas.ts 1-2 singapur silverstone suzuka
 # temperatura de carcasa, graining y agarre de cada compuesto a lo largo de una tanda
 npx tsx scripts/auditoria/sonda.ts lasvegas silverstone
 # distancia de cada equipo al mejor en clasificación y en carrera (aire limpio), y como en rendimiento/race.py
@@ -162,6 +164,7 @@ impacto (detalle y líneas de código en el informe):
   pasada de `calibra-pole.mjs`, que mide tras la primera). Las de lluvia y sprint siguen siendo las de `base-2026-11b/`.
 
 Pendiente (en el informe, «Pendiente»; medido otra vez con `base-2026-11d/`): el azar en cabeza (la pole gana el 39 %);
-el duro, que lo usa casi todo el mundo (94 %; el blando, 20 %); y la temperatura del asfalto de Suzuka, que las
+el reparto de vueltas y tandas por compuesto (el duro casi siempre es realista; lo que se aparta es la degradación del
+blando y del duro y lo corto de las tandas de medio: ver el informe); y la temperatura del asfalto de Suzuka, que las
 fuentes de 2026 no aclaran. (Silverstone no tenía error de pole: era una Q3 mojada en la media; Mónaco y Hungaroring,
 recalibrados.)
