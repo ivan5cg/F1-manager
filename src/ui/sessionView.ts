@@ -297,7 +297,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       const e = [...sess.events].reverse().find((x) => x.kind === "control" || x.kind === "weather");
       const cl = prefs.lobato !== false ? lob.list[lob.list.length - 1] : undefined;
       const ce = prefs.experta !== false ? exp.list[exp.list.length - 1] : undefined;
-      // el comentario más nuevo de los dos (Lobato o la experta)
+      // el comentario más nuevo de los dos (Lobato o el experto técnico)
       const com = cl && ce ? (ce.t > cl.t ? ce : cl) : cl ?? ce;
       // el comentario tapa el aviso solo si es más nuevo y el aviso ya lleva unos segundos a la vista
       if (com && (!e || (com.t >= e.t && now - lastCtlReal > 5000))) lh = com === ce ? rmHtml(`🔧 ${EXP_TAB}`, com.text, "exp") : rmHtml(`🎙️ ${LOB_TAB}`, com.text, "lob");
@@ -2443,7 +2443,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       <h2>Sonido</h2>
       <label class="optrow"><input type="checkbox" id="psnd" ${prefs.sonido.sonido ? "checked" : ""}><span><b>Sonido</b><br><span class="small dim">Motores, público, lluvia, viento, paradas, semáforos y choques. Empieza al tocar la velocidad, el 3D o la salida.</span></span></label>
       <label class="optrow"><input type="checkbox" id="pvoz" ${prefs.sonido.voz ? "checked" : ""}><span><b>Voz en la radio</b><br><span class="small dim">Los mensajes importantes de tus pilotos y del ingeniero, en voz alta (uno cada 8 s como mucho), con la voz en español del dispositivo.${audio.hasVoice() ? "" : " <span class=\"yellow\">Este dispositivo no tiene voz en español: sin voz.</span>"}</span></span></label>
-      <label class="optrow"><input type="checkbox" id="pexp" ${prefs.experta !== false ? "checked" : ""}><span><b>Comentarios de la experta técnica</b><br><span class="small dim">${EXPERTA}, ingeniera de pista retirada (personaje inventado), explica la estrategia: undercuts, paradas con coche de seguridad, gomas y lluvia. Habla menos que Lobato y con su propia voz.</span></span></label>
+      <label class="optrow"><input type="checkbox" id="pexp" ${prefs.experta !== false ? "checked" : ""}><span><b>Comentarios del experto técnico</b><br><span class="small dim">${EXPERTA}, ingeniero y comentarista técnico, explica la estrategia: undercuts, paradas con coche de seguridad, gomas y lluvia. Habla menos que Lobato y con su propia voz.</span></span></label>
       <label class="optrow"><input type="checkbox" id="pvozl" ${prefs.sonido.vozLobato ? "checked" : ""}><span><b>Voz de Lobato</b><br><span class="small dim">Sus comentarios en voz alta, con otra voz.</span></span></label>
       ${([["volumen", "Volumen general"], ["motores", "Motores"], ["ambiente", "Ambiente"], ["radio", "Radio"]] as const).map(([k, n]) => `<label class="optrow volrow"><span class="grow">${n}</span><input type="range" min="0" max="100" step="5" data-vol="${k}" value="${Math.round(prefs.sonido[k] * 100)}" aria-label="${n}"></label>`).join("")}
       <h2>Vibración</h2>

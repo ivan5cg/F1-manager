@@ -106,9 +106,13 @@ export function ageDriver(d: DriverDef, year: number, rng: Rng): DriverDef {
   };
 }
 
+/** Nadie corre con más años (también tus pilotos: hay que buscarles sustituto). */
+export const MAX_AGE = 50;
+
 /** Probabilidad de que un piloto lo deje este año. */
 export function retireChance(d: DriverDef, year: number): number {
   const age = ageOf(d, year);
+  if (age > MAX_AGE) return 1;
   let p = age < 34 ? 0 : age < 36 ? 0.06 : age < 38 ? 0.15 : age < 40 ? 0.3 : age < 42 ? 0.45 : age < 44 ? 0.6 : age < 46 ? 0.8 : 0.95;
   if (age > 30 && rating(d) < 80) p += 0.15;
   // los que siguen arriba aguantan más (Alonso, Hamilton), pero pasados los 44 ya pesa la edad
@@ -234,6 +238,17 @@ export function offSeason(inp: OffSeasonInput): OffSeasonOutput {
   // 1b. tus fichajes van primero: de los libres, o de otro equipo pagando la cláusula si tiene contrato
   const mine: DriverDef[] = [];
   for (const m of mineAged) {
+    // con más de MAX_AGE años no sigue (la pantalla de fin de temporada ya obliga a cambiarlo; esto es por si acaso)
+    if (m.keep && ageOf(m.d, y) > MAX_AGE) {
+      const pick = pool.slice().sort((a, b) => rating(b) - rating(a))[0];
+      if (pick) {
+        news.push(`🏁 ${m.d.nombre} se retira a los ${ageOf(m.d, y)} años; en su lugar llega ${pick.nombre}.`);
+        pool = pool.filter((d) => d !== pick);
+        sign(pick);
+        mine.push(pick);
+        continue;
+      }
+    }
     if (m.keep) {
       if ((contracts[m.d.abrev] ?? y) < y) sign(m.d);
       mine.push(m.d);

@@ -23,7 +23,7 @@ import { newDev, newAeroPlan, devLeft, orderPart, atrMult, carLevel, type DevAre
 import { moraleAfterRace, rivalsAfterRace, expectedPos, carRank, wantsRenew, moralOf } from "../src/sim/morale";
 import { hitosAfterRace } from "../src/sim/hitos";
 import { quotaFor } from "../src/sim/powerunit";
-import { rating, ageOf, initialContracts } from "../src/sim/career";
+import { rating, ageOf, initialContracts, MAX_AGE } from "../src/sim/career";
 import { costOf, PLAYER_TEAM_ID, priceOf, type CustomTeam } from "../src/sim/market";
 import { Rng } from "../src/sim/rng";
 
@@ -366,7 +366,7 @@ function winterChoices(s: SeasonState): { keep: boolean; sign?: string }[] {
   const ranked = [...pool].sort((a, b) => (b.ritmo !== undefined && a.ritmo !== undefined ? rating(b) - rating(a) : 0));
   const out = mine.map(() => ({ keep: true, sign: undefined as string | undefined }));
   mine.forEach((d, i) => {
-    if ((contracts[d.abrev] ?? y) <= y && !wantsRenew(s, d.nombre)) {
+    if (ageOf(d, y + 1) > MAX_AGE || ((contracts[d.abrev] ?? y) <= y && !wantsRenew(s, d.nombre))) {
       out[i].keep = false;
       out[i].sign = ranked.find((p) => !out.some((x) => !x.keep && x.sign === p.abrev))?.abrev;
     }
@@ -491,7 +491,7 @@ function checkSeasonStart(s: SeasonState, Y: number, custom: boolean, fail: (w: 
         if (!Number.isFinite(v) || v < 40 || v > 100) fail(w, `${d.nombre} (${t.nombre}): ${f} = ${v}`);
       }
       const age = ageOf(d, Y);
-      if (age < 16 || age > 50) fail(w, `${d.nombre} tiene ${age} años`);
+      if (age < 16 || age > MAX_AGE) fail(w, `${d.nombre} tiene ${age} años (como mucho ${MAX_AGE})`);
     }
   }
   if (s.pool) {

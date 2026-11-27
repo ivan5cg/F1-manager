@@ -44,7 +44,7 @@ Ya hecho de lo que viene ahora (noviembre de 2026):
   De paso: en carrera, una vuelta cortada por una bandera roja o una salida parada (de unos segundos) contaba como
   la mejor (`raceLine`, ahora con un mínimo del 85 % de `lapRefRace`); salía en la vuelta rápida del resumen.
 - **10.3 Segundo comentarista, 10.4 Público y sonido según el circuito y 12.2 Planos técnicos** (sin tocar la
-  simulación): `src/ui/experta.ts` (Begoña Arrieta, `Prefs.experta`, voz «experta» en `audio.ts`), el público de casa
+  simulación): `src/ui/experta.ts` (Toni Cuquerella, antes Begoña Arrieta; `Prefs.experta`, voz «experta» en `audio.ts`), el público de casa
   (`isLocal` y el himno en `sessionView.ts`, `audio.anthem`, `FAN_U`/`loadFanFlag` en `map3d.ts`) y
   `src/ui/planos.ts` (`devPlanoHtml`, `setupPlanoHtml`).
 - **13 Gestión** (cambia la simulación en lo que toca a sanciones): despido de verdad (`firedNow`, `firingOffers`,

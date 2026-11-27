@@ -111,8 +111,9 @@ En la realidad, en 2026 el GP de Baréin no se corrió en Sakhir: se trasladó a
   cobrar); romper el contrato de uno tuyo también se paga. Las cláusulas salen del presupuesto de desarrollo.
   - **Pilotos:** cumplen años. Mejoran hasta los ~27, se mantienen hasta los ~34 y desde ahí pierden poco a poco
     (unos 2-3 puntos de ritmo de los 34 a los 40, como Alonso o Hamilton, que siguen arriba pasados los 40). Desde los
-    34 alguno se retira; los que siguen siendo buenos aguantan más, hasta los ~44, cuando ya pesa la edad. Los
-    contratos de la primera temporada son una estimación del juego.
+    34 alguno se retira; los que siguen siendo buenos aguantan más, hasta los ~44, cuando ya pesa la edad. **Nadie
+    corre con más de 50 años**, tampoco tus pilotos: en la pantalla de fin de temporada, el que se pasaría se retira y
+    hay que elegirle sustituto. Los contratos de la primera temporada son una estimación del juego.
   - **Mercado:** cada equipo renueva a quien le sirve según lo bueno que es su coche, y los mejores coches eligen
     primero; a veces uno se lleva al que acababa contrato en un equipo peor. Los asientos libres se llenan con los
     mejores que queden: libres, reservas y los de la **F2**. Está la parrilla real de F2 de 2026 (Câmara, Tsolov,
@@ -424,8 +425,8 @@ temporada (el gran premio suelto y los escenarios, como siempre).
   sabría Lobato y la gala.
 
 **La retransmisión y el público** (`src/ui/experta.ts`, `audio.ts`, `map3d.ts`):
-- **Begoña Arrieta**, ingeniera de pista retirada (personaje inventado), comenta junto a Lobato en la caja de la
-  izquierda y en Radio (pestaña verde), con su propia voz. Donde él se emociona, ella explica: el undercut de verdad
+- **Toni Cuquerella**, ingeniero y comentarista técnico, comenta junto a Lobato en la caja de la izquierda y en Radio
+  (pestaña verde), con su propia voz. Donde Lobato se emociona, él explica: el undercut de verdad
   (para con alguien a tiro delante que aún no ha parado) o la respuesta a la parada del de detrás, lo que cuesta
   parar con coche de seguridad o virtual en ese circuito, el compuesto que monta cada uno de los de delante y si le
   llega hasta el final, las estrategias cruzadas en cabeza, las gomas gastadas, el aire sucio y el cruce entre lluvia

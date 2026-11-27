@@ -289,8 +289,10 @@ Salen de las 14 partidas de `scripts/partidas/base-2026-11` (56 temporadas, 504 
 - **Lesión encadenada:** al probar el invierno salió otro caso del fallo del asiento de los lesionados, ya arreglado.
   Se lesiona el piloto, luego su sustituto, y el sustituto vuelve antes de acabar el año; entonces el primero no
   recuperaba su asiento. Ahora se sigue quién es el dueño de cada asiento (`seatOwners` en `src/ui/nextSeason.ts`).
-- **Pendiente: tus pilotos siguen sin retirarse nunca.** Con la edad nueva, en partidas de 8 temporadas Alonso llega a
-  correr con 51-52 años si es piloto tuyo; en la IA se retira a los 46 como mucho.
+- **Tope de 50 años.** Nadie corre con más de 50, tampoco tus pilotos. Antes, con la edad nueva y en partidas de 8
+  temporadas, Alonso llegaba a correr con 51-52 años si era piloto tuyo, porque tus pilotos no se retiran nunca por
+  azar. Ahora, en la pantalla de fin de temporada, el que pasaría de 50 se retira y hay que elegirle sustituto. Por
+  debajo de esa edad, tus pilotos siguen sin retirarse.
 
 ## Cómo repetirlo
 

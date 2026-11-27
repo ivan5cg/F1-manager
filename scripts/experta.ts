@@ -1,4 +1,4 @@
-// La experta técnica sin interfaz (10.3): corre una carrera y vuelca lo que comenta Begoña Arrieta, con la vuelta.
+// El experto técnico sin interfaz (10.3): corre una carrera y vuelca lo que comenta Toni Cuquerella, con la vuelta.
 // npx tsx scripts/experta.ts [circuito] [semilla]
 import { readFileSync } from "fs";
 import { buildTrack } from "../src/sim/track";

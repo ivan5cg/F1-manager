@@ -285,3 +285,19 @@ test("invierno: los coches cambian mucho más de orden que antes, pero la parril
   assert.ok(mv > 0.8, `un coche se mueve ${mv.toFixed(2)} puestos en invierno`);
   for (const r of allCareers()) assert.ok(r.seasons[r.seasons.length - 1].spread0 > 1, `${r.opts.team} #${r.opts.seed}: hueco ${r.seasons[r.seasons.length - 1].spread0} en el último año`);
 });
+
+test("tope de 50 años: nadie corre con más, tampoco tus pilotos", () => {
+  const alo = BASE_TEAMS.flatMap((t) => t.pilotos).find((d) => d.abrev === "ALO")!;
+  const born = alo.nacimiento!;
+  assert.equal(retireChance(alo, born + 51), 1);
+  assert.ok(retireChance(alo, born + 50) < 1, "con 50 todavía puede seguir");
+  // Alonso, tuyo en Aston Martin, con 50 años al acabar el año: no sigue aunque se elija mantenerlo
+  const s: SeasonState = { v: 1, playerTeam: "astonmartin", seed: 4, round: 9, weekend: null, rounds: [], calendar: [...CALENDARS.corta.ids], year: born + 50 };
+  useSeason(s);
+  s.contracts = Object.fromEntries(TEAMS.flatMap((t) => t.pilotos.map((d) => [d.abrev, born + 52])));
+  const next = buildNextSeason(s, [{ keep: true }, { keep: true }]);
+  const am = next.grid!.find((t) => t.id === "astonmartin")!;
+  assert.ok(!am.pilotos.some((d) => d.abrev === "ALO"), am.pilotos.map((d) => d.abrev).join(","));
+  assert.ok(next.news!.some((n) => /Alonso se retira a los 51/.test(n)), next.news!.join(" | "));
+  for (const t of next.grid!) for (const d of t.pilotos) assert.ok(born + 51 - (d.nacimiento ?? 0) <= 50 || d.abrev !== "ALO");
+});
