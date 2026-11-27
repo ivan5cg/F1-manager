@@ -111,7 +111,10 @@ test("crea tu equipo: 12 equipos, tu equipo sigue con su jefe, técnico y motor,
       assert.ok(Number.isFinite(s.custom!.spentCap) && s.custom!.spentCap > 0);
       if (s.year > 2026) assert.ok(Number.isFinite(s.custom!.carry), "desde la segunda temporada el coche arrastra algo del anterior");
     }
-    assert.deepEqual(r.seasons[0].myDrivers.map((d) => d.abrev).sort(), [...spec.pilotos].sort(), "tus pilotos son los fichados");
+    // tus pilotos son los fichados (al acabar el año, salvo que uno siga lesionado: entonces corre su sustituto)
+    const s0 = r.seasons[0];
+    const hurt = s0.races[0].mine.some((m) => s0.swaps.some((x) => x.includes(`lesión de ${m.nombre}`) && !s0.swaps.some((y) => y.includes(`vuelve ${m.nombre}`))));
+    if (!hurt) assert.deepEqual(s0.myDrivers.map((d) => d.abrev).sort(), [...spec.pilotos].sort(), "tus pilotos son los fichados");
   }
 });
 
@@ -189,5 +192,6 @@ test("randomSpec: equipos propios distintos y dentro del techo", () => {
   const specs = SEEDS.map((sd) => randomSpec(sd));
   for (const sp of specs) assert.ok(costOf(MARKET, sp) <= MARKET.techo);
   assert.ok(new Set(specs.map((x) => x.pilotos.join())).size > 1);
+  assert.equal(new Set(specs.map((x) => x.motor)).size, MARKET.motores.length, "los cinco motores");
   void BASE_TEAMS;
 });

@@ -145,7 +145,8 @@ export function randomSpec(seed: number): CustomTeam {
       nombre: `Propio ${seed}`, color: "#ff8800", pilotos: [ps[0].abrev, ps[1].abrev],
       jefe: MARKET.jefes[rng.int(0, MARKET.jefes.length - 1)].nombre,
       tecnico: MARKET.tecnicos[rng.int(0, MARKET.tecnicos.length - 1)].nombre,
-      motor: MARKET.motores[rng.int(0, MARKET.motores.length - 1)].id,
+      // el motor, por turno según la semilla (con el azar salían casi siempre el mismo con semillas seguidas)
+      motor: MARKET.motores[(seed - 1 + Math.floor(k / 500)) % MARKET.motores.length].id,
     };
     const c = costOf(MARKET, spec);
     // como haría un jugador: gastar al menos la mitad del techo, sin pasarse
@@ -175,6 +176,7 @@ export function runCareer(o: CareerOptions): CareerResult {
   delete (opts as { log?: unknown }).log;
   const seasons: SeasonLog[] = [];
   let endedFired: number | undefined;
+  let injured: ReturnType<typeof pendingInjuries> = [];
   const fail = (where: string, what: string) => problems.push(`${where}: ${what}`);
 
   for (let k = 0; k < o.seasons; k++) {
@@ -189,6 +191,14 @@ export function runCareer(o: CareerOptions): CareerResult {
     if (ensureAeroPkgs(s)) useSeason(s);
     const calIds = calendarOf(s);
     checkSeasonStart(s, Y, custom, fail);
+    // quien se lesionó al final del año anterior (y no se ha retirado ni acababa contrato) sigue en su equipo
+    for (const x of injured) {
+      if ((s.news ?? []).some((n) => n.includes(x.nombre) && /se retira|no renueva|deja|Fichas a/.test(n))) continue;
+      if ((s.contracts?.[x.abrev] ?? 0) < Y) continue;
+      const now = DRIVERS.find((d) => d.d.abrev === x.abrev);
+      if (now?.team.id !== x.teamId) fail(`${Y} inicio`, `${x.nombre} se lesionó en la R${x.round + 1} de ${Y - 1} y ha perdido su asiento en ${x.team} (ahora ${now ? now.team.nombre : "sin equipo"}; lo ocupa ${x.sub})`);
+    }
+    injured = [];
     const lv0 = levels(TEAMS);
     const myId = myTeamId(s);
     const rank = (lv: Record<string, number>) => Object.entries(lv).sort((a, b) => b[1] - a[1]).findIndex(([id]) => id === myId) + 1;
@@ -335,9 +345,20 @@ export function runCareer(o: CareerOptions): CareerResult {
       continue;
     }
     seasons.push(sl as SeasonLog);
+    injured = pendingInjuries(s);
     s = buildNextSeason(s, winterChoices(s));
   }
   return { opts, seasons, problems, endedFired, secs: (Date.now() - t00) / 1000 };
+}
+
+/** Lesionados que no han vuelto al acabar la temporada: en qué equipo estaban y quién les sustituye. */
+function pendingInjuries(s: SeasonState) {
+  const sw = s.swaps ?? [];
+  const n = calendarOf(s).length;
+  const teams = gridOf(s, n).teams;
+  const teamOfSeat = (seat: number) => { let id = 0; for (const t of teams) for (const _ of t.pilotos) if (id++ === seat) return t; return undefined; };
+  return sw.filter((x, i) => /^lesión/.test(x.why) && !sw.slice(i + 1).some((y) => y.seat === x.seat && y.in.abrev === x.out.abrev))
+    .map((x) => { const t = teamOfSeat(x.seat)!; return { abrev: x.out.abrev, nombre: x.out.nombre, teamId: t.id, team: t.nombre, round: x.round, sub: x.in.nombre }; });
 }
 
 /** Lo que propone la pantalla de fin de temporada: seguir con tus pilotos; si uno no quiere renovar, el mejor libre. */
