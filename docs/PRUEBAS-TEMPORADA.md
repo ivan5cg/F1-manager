@@ -157,6 +157,87 @@ de partida `b4681aa`, el de la física de carrera; no tiene que ver con el modo 
   doblado que acaba. Se ordena por vueltas, como en el reglamento; la comprobación era demasiado estricta y se ha
   ajustado.
 
+## Patrones en los resultados
+
+Salen de las 14 partidas de `scripts/partidas/base-2026-11` (56 temporadas, 504 carreras) con
+`python3 scripts/partidas/analiza.py`, que vale para cualquier carpeta de partidas. Límites:
+
+- solo hay 9 circuitos;
+- el jugador automático no toma decisiones de estrategia;
+- los datos son de antes de los arreglos y de los cambios de más abajo.
+
+**1. El coche decide casi todo.**
+
+- El orden de coches y el de constructores casi coinciden: correlación de Spearman media de 0,92 (el peor año,
+  0,70).
+- El campeón de constructores tenía el mejor coche al empezar 33 de 56 veces y el 2.º, 9. Nunca uno peor que el
+  6.º.
+- El mejor coche gana el 41 % de las carreras, el 2.º el 22 %, el 3.º el 18 % y el 4.º el 13 %. Del 7.º hacia
+  atrás no gana casi nadie.
+
+**2. El piloto pesa mucho arriba.**
+
+- En 2026 todas las partidas empiezan con la misma parrilla y Mercedes tiene el mejor coche en todas. Aun así, el
+  campeón es Verstappen, con Red Bull, en 8 de 14.
+- Antonelli pasa de ganar el 20 % de las carreras en 2026 al 33 % en 2028, supera a Verstappen y es el rey de las
+  poles (134 de 504). Hadjar aparece entre los ganadores en 2028-29.
+- El que más carreras gana es campeón en 40 de 56 temporadas.
+- Valoración de tus pilotos por edad, cambio en un año:
+
+  | Edad | 21-23 | 24-26 | 27-29 | 30-32 | 36-38 | 39 o más |
+  |---|---|---|---|---|---|---|
+  | Cambio | +1,3 | +0,6 | +0,3 | −0,9 | −1,1 | −1,2 a −1,9 |
+
+**3. El invierno apenas cambia nada.**
+
+- El nivel de un coche al acabar un año y al empezar el siguiente coinciden casi del todo (correlación de 0,96).
+- Un coche se mueve de media 0,44 puestos en invierno.
+- El cambio frente a la media tiene una desviación de solo 0,15 (el hueco entre el mejor y el peor es de 3-4).
+- Hay un ligero tirón hacia la media: los 3 primeros pierden 0,1 y los de abajo ganan 0,1.
+- Con equipo real, Mercedes pasa de ser el mejor coche en 2026 a un puesto medio de 2,2 en 2029. Ferrari y Audi
+  suben, pero Williams, Aston Martin y Cadillac siguen abajo los 4 años.
+
+**4. Los objetivos de la directiva no estaban equilibrados.**
+
+| Coche al empezar | 1.º–2.º | 3.º–4.º | 5.º–7.º | 8.º–9.º | 10.º o peor |
+|---|---|---|---|---|---|
+| Objetivos cumplidos | **20 %** (2 de 10) | 89 % | 91 % | 86 % | 74 % |
+
+**5. Por circuito y condiciones.**
+
+| Circuito | Gana el de la pole | Bandera roja | Abandonos | Adelantamientos | Ganadores distintos (de 56) |
+|---|---|---|---|---|---|
+| Mónaco | 59 % | 50 % | 3,8 | 27 | 12 |
+| Singapur | 34 % | 36 % | 3,6 | 49 | 12 |
+| Spa | 38 % | 20 % | 1,6 | 136 | 8 |
+| Suzuka | 27 % | 20 % | 2,2 | 100 | 14 |
+| Baréin | 43 % | 9 % | 2,2 | 88 | 7 |
+
+- **Mojado:** con alguna sesión mojada en el fin de semana, la bandera roja se duplica (32 % frente a 16 %) y hay
+  más coches de seguridad (66 % frente a 53 %).
+- **Sprint:** en los fines de semana con sprint, el de la pole gana mucho menos (31 % frente a 45 %). Con solo unos
+  libres los equipos saben menos de los neumáticos.
+
+**6. En «crea tu equipo», el desarrollo rinde más que las estrellas.**
+
+- Quien gastó 80-88 M en pilotos se quedó con 31-35 M de desarrollo y su coche no salió de abajo: 19-126 puntos en
+  4 años.
+- Con unos 50-60 M y un buen director técnico, el coche sube cada año:
+  - la #1, con Allison, pasa del 8.º al 1.º;
+  - la #8 suma 726 puntos, con Antonelli a 10 M.
+- A más presupuesto, más puestos gana el coche durante el año: +0,8 con 55 M o más, −0,2 con menos de 35 M.
+
+**7. Otros.**
+
+- **Moral:** la diferencia de moral entre tus dos pilotos sigue a la de puntos (correlación de 0,78). Refleja los
+  resultados más que causarlos.
+- **De la salida a la meta:** tus pilotos que salen en el top 5 pierden de media 2,8 puestos y los que salen del
+  21.º hacia atrás ganan 5,5.
+- **Averías de tus pilotos por motor:** Ferrari 5 % de las salidas, Mercedes 4 %, Honda y Audi 11 % (una partida
+  cada uno).
+- **El jugador automático no tiene ventaja:** en 2026, cada equipo queda prácticamente igual llevándolo él que
+  llevándolo la IA.
+
 ## Cómo repetirlo
 
 ```bash
@@ -164,6 +245,7 @@ npm test                                   # incluye tests/temporada.test.ts y t
 npm run partidas -- ferrari 2 4 --salida=partidas/ferrari-2.json
 npm run partidas -- propio 8 4 --salida=partidas/propio-8.json
 npm run partidas:informe -- partidas informe.md
+python3 scripts/partidas/analiza.py partidas   # los patrones de arriba
 ```
 
 ## Anexo: datos de las 14 partidas con la simulación entera
