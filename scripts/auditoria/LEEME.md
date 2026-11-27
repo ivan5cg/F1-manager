@@ -31,6 +31,8 @@ npx tsx scripts/auditoria/gp.ts silverstone 1 seco > fin.json
 npx tsx scripts/auditoria/rapida.ts 1-4 shanghai suzuka spa lasvegas --equipos
 # neumáticos en carrera: vueltas con cada compuesto, tanda media y estrategias más comunes (para comparar con 2026)
 npx tsx scripts/auditoria/gomas.ts 1-2 singapur silverstone suzuka
+# por qué pierde la pole: según el equipo que la tiene, si es el más rápido en carrera y cómo la pierde
+node scripts/auditoria/pole.js auditoria-out/seco
 # temperatura de carcasa, graining y agarre de cada compuesto a lo largo de una tanda
 npx tsx scripts/auditoria/sonda.ts lasvegas silverstone
 # distancia de cada equipo al mejor en clasificación y en carrera (aire limpio), y como en rendimiento/race.py

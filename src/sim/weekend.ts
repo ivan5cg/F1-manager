@@ -75,7 +75,7 @@ const daysOf = (def: any): string => def.dias ?? "VSD";
  * delante de su compañero en 17 de 18 carreras, y en el juego, sin esto, en dos de cada tres (la clasificación era
  * azar de esa vuelta y la carrera azar aparte). Sale de la semilla y del piloto, sin tocar el azar de las sesiones.
  */
-const FORM = 0.0022;
+const FORM = 0.0015;
 export function weekendForm(seed: number, who: string): number {
   const u = [0, 1].map((k) => {
     const txt = `${seed}:${who}:${k}`;

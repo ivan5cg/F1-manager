@@ -677,8 +677,7 @@ export function aiDecide(sess: Session, car: Car, adviceOnly = false): string | 
       const a = sess.carById(car.aheadId);
       const g = sess.gapBetween(a, car);
       const fg = freshGain();
-      // (al compañero no se le hace el undercut: el equipo da prioridad al que va delante)
-      if (rival(a) && a.team !== car.team && a.stops === car.stops && !a.pitRequest && g < 1.6 && (car.stuck?.n ?? 0) >= 1 && fg > 0.5 && g < fg * 2.2 + 0.3 && traffic(lossGreen) < 1.6 && stack < 0.5 && sess.rng.chance(0.25 + 0.6 * sharp)) { box = true; why = "undercut"; say = `no pasamos a ${a.d.abrev} en pista: podemos ganarle el puesto en boxes`; }
+      if (rival(a) && a.stops === car.stops && !a.pitRequest && g < 1.6 && (car.stuck?.n ?? 0) >= 1 && fg > 0.5 && g < fg * 2.2 + 0.3 && traffic(lossGreen) < 1.6 && stack < 0.5 && sess.rng.chance(0.25 + 0.6 * sharp)) { box = true; why = "undercut"; say = `no pasamos a ${a.d.abrev} en pista: podemos ganarle el puesto en boxes`; }
     }
     // prioridad del de delante: con un rival de su vuelta a tiro de undercut detrás, con gomas de la misma edad (le
     // toca parar como a él) y la ventana abierta, el muro no espera a que pare el otro: para primero. Esperar a
