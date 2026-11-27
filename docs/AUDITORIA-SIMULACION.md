@@ -550,9 +550,25 @@ unos 13 °C corta. No se cambia el clima con datos tan dispares.
 
 - **El azar en cabeza** (punto 4 de la segunda tanda y la tabla de arriba): la pole gana el 39 %, desde P4+ el 24 %. Ahora
   lo que más la tumba es el ciclo de paradas entre los de cabeza (`repite.ts`, `cabeza.js`).
-- **El duro, casi siempre** (94 % de los coches; el blando, 20 %). La raíz sigue siendo la misma: el modelo de
-  temperatura mide la energía de cada curva relativa a la vuelta y no ve lo que exige cada circuito, así que el tren
-  delantero va frío en casi todas partes y un solo coeficiente (`COLD_LOSS`) decide el duro en todo el calendario.
+- **El duro, casi siempre** (94 % de los coches): **no es un fallo** (27 de noviembre de 2026). El objetivo de 60-75 %
+  era una suposición de esta auditoría. En 2026 medio-duro a una parada es la estrategia por defecto (previas de
+  Pirelli de Silverstone, Hungría y Singapur), así que casi todos acaban usando el duro. Lo que sí se aparta:
+  - **Reparto de vueltas** (`scripts/auditoria/gomas.ts`): en el banco de carreras, 10 / 46 / 44 % con blando / medio /
+    duro en ocho circuitos; en Singapur, 0 / 36 / 64 % (real 2026: ~16 / 42 / 42 %). En el lote de fines de semana
+    completos, 6 / 33 / 62 %.
+  - **Tandas:** blando / medio / duro de 12-14 / 21-23 / 31-37 vueltas (Singapur 2026: 18 / 30 / 36).
+  - **Degradación:** blando 0,16, medio 0,07 y duro 0,04 s/vuelta en carrera; un análisis de 156 tandas de 2026 da
+    0,063 / 0,065 / 0,071, al revés que en el juego (una sola fuente: f1chronicle).
+  - **Lo que se probó y no se dejó:** cambiar la pendiente de degradación (`slope`) del blando, el medio y el duro, en
+    cuatro combinaciones (8 circuitos × 2 semillas cada una). Las tandas de medio apenas pasan de 23 a 25 vueltas (las
+    decide el planificador, que ya optimiza bien: la vuelta de cambio de medio-duro es (Δ + d_duro·L) / (d_medio +
+    d_duro)), y con cualquier cambio el duro desaparece de Suzuka (de 13 % de vueltas a 0-2 %), que era lo que arregló
+    #49; bajando mucho la del blando, el blando a dos paradas pasa a dominar en Silverstone, Suzuka, Spa y Montreal.
+  - **Lo que haría falta** para acercarse sin romper las pistas frías: datos de 2026 de toda la temporada (vueltas por
+    compuesto y tandas por carrera) y tocar a la vez el modelo de temperatura (el tren delantero va frío en casi
+    todas partes porque la energía de cada curva se mide relativa a la vuelta) y la pendiente del duro.
+  - **La parada final a blandos** que se ve en algunas carreras (Hungaroring: medio-duro-blando con el blando en las
+    2-3 últimas vueltas) no es un fallo: es una bandera roja al final, con cambio de neumáticos gratis.
 - ~~**Silverstone:** +2,6 s de error de pole.~~ **No era un fallo:** una de sus cuatro clasificaciones tuvo lluvia en
   la Q3 (pole de 99,1 s, con hasta 0,79 mm de agua) aun con el día «Estable», y la columna por circuito de
   `analiza.js` hacía la media de todas. En seco, −0,15 s. Ahora esa columna solo cuenta las clasificaciones secas.
