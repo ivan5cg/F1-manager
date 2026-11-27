@@ -1,5 +1,5 @@
 // Partida sin interfaz: un jugador automático que lleva una partida de varias temporadas igual que la interfaz
-// (src/ui/main.ts y src/ui/hubs.ts): presupuesto de desarrollo, objetivos, túnel de viento, test de pretemporada,
+// (src/ui/main.ts y src/ui/hubs.ts): presupuesto de desarrollo, túnel de viento, test de pretemporada,
 // fines de semana enteros (libres, clasificación, sprint y carrera, simulados hasta el final como el botón
 // «Simular»), unidades de potencia, sanciones, moral, directiva, cambios a mitad de temporada, mercado e invierno.
 //
@@ -11,18 +11,16 @@
 // Va comprobando lo que no debería pasar nunca (pilotos repetidos, puntos que no cuadran, valores sin sentido...) y lo
 // apunta en `problems`; el resto se guarda en `seasons` para el informe (scripts/partidas.ts).
 import { TEAMS, DRIVERS, CIRCUITS, MARKET, BASE_TEAMS, CALENDARS, getTrack, useSeason, gridOf, devContext, devBonuses, ensureAeroPkgs, myAtr, circuitOf, calendarOf, myTeamId } from "../src/ui/data";
-import { buildNextSeason, applyMidSeason, yearOf, seasonRecord, firedNow, firingOffers } from "../src/ui/nextSeason";
+import { buildNextSeason, applyMidSeason, yearOf, seasonRecord } from "../src/ui/nextSeason";
 import { settlePkg } from "../src/ui/tunel";
 import { syncMood } from "../src/ui/vestuario";
 import { buildSummary } from "../src/ui/summary";
-import { boardMessage } from "../src/ui/prensa";
 import { seatAt, gpOf } from "../src/ui/ritual";
 import { Weekend, newWeekend, newPreseasonWeekend, preparePu } from "../src/sim/weekend";
 import { isRaceKind, type ResultRow, type SessionKind, type TeamDef, type DriverDef } from "../src/sim/session";
 import { driverStandings, teamStandings, pointsFor, RACE_POINTS, SPRINT_POINTS, type SeasonState } from "../src/sim/season";
 import { newDev, newAeroPlan, devLeft, orderPart, atrMult, carLevel, type DevArea, type DevSize } from "../src/sim/development";
-import { objectivesFor, objectiveStatus } from "../src/sim/objectives";
-import { moraleAfterRace, rivalsAfterRace, expectedPos, wantsRenew, moralOf } from "../src/sim/morale";
+import { moraleAfterRace, rivalsAfterRace, expectedPos, carRank, wantsRenew, moralOf } from "../src/sim/morale";
 import { hitosAfterRace } from "../src/sim/hitos";
 import { quotaFor } from "../src/sim/powerunit";
 import { rating, ageOf, initialContracts } from "../src/sim/career";
@@ -88,8 +86,9 @@ export interface SeasonLog {
   devLeftEnd: number;
   parts: { area: string; size: number; ordered: number; ready: number; expect: number; real: number }[];
   aeroPkgs: { period: number; ready: number; expect: number; real: number; medido?: number; montar?: boolean }[];
-  objectives: { text: string; done: boolean }[];
-  aviso: number;
+  /** Objetivos de la directiva y temporadas seguidas sin cumplirlos (solo en las partidas de antes de quitarla). */
+  objectives?: { text: string; done: boolean }[];
+  aviso?: number;
   carRank0: number;
   carRankEnd: number;
   levels0: Record<string, number>;
@@ -118,15 +117,18 @@ export interface SeasonLog {
   ratings: { mean: number; min: number; max: number };
   poolSize: number;
   custom?: { spentCap: number; leftCap: number; carry?: number; jefe: string; tecnico: string; motor: string };
+  /** Despido de la directiva y la oferta aceptada (partidas de antes de quitarla). */
   fired?: boolean;
   offer?: string;
+  /** Lo que se esperaba de tu coche en cada carrera para la moral (según su puesto en la parrilla al empezar). */
+  expectedPos?: number;
 }
 
 export interface CareerResult {
   opts: Omit<CareerOptions, "log">;
   seasons: SeasonLog[];
   problems: string[];
-  /** Temporada en la que acabó la partida por despido (la directiva o los inversores). */
+  /** Temporada en la que acabó la partida por despido (partidas de antes de quitar la directiva). */
   endedFired?: number;
   secs: number;
 }
@@ -175,7 +177,6 @@ export function runCareer(o: CareerOptions): CareerResult {
   const opts = { ...o, spec: s.equipo };
   delete (opts as { log?: unknown }).log;
   const seasons: SeasonLog[] = [];
-  let endedFired: number | undefined;
   let injured: ReturnType<typeof pendingInjuries> = [];
   const fail = (where: string, what: string) => problems.push(`${where}: ${what}`);
 
@@ -187,7 +188,7 @@ export function runCareer(o: CareerOptions): CareerResult {
     s.dev.aero = newAeroPlan(s.dev.budget);
     useSeason(s);
     // ---- pantalla de temporada (hubs.ts: seasonScreen)
-    if (!s.objetivos) s.objetivos = objectivesFor(gridOf(s, 0).teams, s.playerTeam, calendarOf(s).length);
+    const expect = expectedPos(carRank(gridOf(s, 0).teams, s.playerTeam));
     if (ensureAeroPkgs(s)) useSeason(s);
     const calIds = calendarOf(s);
     checkSeasonStart(s, Y, custom, fail);
@@ -206,7 +207,7 @@ export function runCareer(o: CareerOptions): CareerResult {
       year: Y, playerTeam: s.playerTeam, teamName: TEAMS.find((t) => t.id === s.playerTeam)?.nombre ?? "?", calendar: calIds,
       sprints: calIds.filter((id) => circuitOf(s, id).formato === "sprint"),
       budget: s.dev.budget, devBonus: s.devBonus ?? 0, devLeftStart: devLeft(s.dev), levels0: lv0, carRank0: rank(lv0), spread0: spread(lv0),
-      races: [], aviso: s.aviso ?? 0, news: s.news ?? [],
+      races: [], news: s.news ?? [], expectedPos: expect,
     };
     if (custom) {
       const ctx = devContext(s);
@@ -269,12 +270,8 @@ export function runCareer(o: CareerOptions): CareerResult {
         const myCars = DRIVERS.filter((d) => d.team.id === s.playerTeam).map((d) => ({ id: d.id, nombre: d.d.nombre }));
         const hs = hitosAfterRace(s, seatAt(s), gpOf);
         if (hs.length) s.hitos = [...(s.hitos ?? []), ...hs].slice(-200);
-        moraleAfterRace(s, race, myCars, [], expectedPos(s.objetivos));
+        moraleAfterRace(s, race, myCars, [], expect);
         rivalsAfterRace(s, []);
-        const myIds = DRIVERS.filter((d) => d.team.id === s.playerTeam).map((d) => d.id);
-        const msg = boardMessage(s, TEAMS, myIds, calendarOf(s).length);
-        if (msg) { s.rounds[s.rounds.length - 1].board = msg; extra.board = msg; }
-        s.boardMood = 0;
         useSeason(s);
       }
       checkRound(s, r, race, sprint, where, fail);
@@ -317,12 +314,6 @@ export function runCareer(o: CareerOptions): CareerResult {
       const i = ds.findIndex((x) => x.id === d.id);
       return { nombre: d.d.nombre, abrev: d.d.abrev, pos: i + 1, puntos: ds[i]?.points ?? 0, edad: ageOf(d.d, Y), rating: r1(rating(d.d)), moral: r1(moralOf(s, d.d.nombre)) };
     });
-    // objetivos: la pantalla y el registro deben coincidir
-    const mineIds = DRIVERS.filter((d) => d.team.id === s.playerTeam).map((d) => d.id);
-    for (const ob of s.objetivos ?? []) {
-      const st = objectiveStatus(ob, s, TEAMS, mineIds, calIds.length);
-      if (st.state !== "done" && st.state !== "failed") fail(`${Y} fin`, `objetivo «${st.text}» sigue ${st.state} al acabar`);
-    }
     const puLog: SeasonLog["pu"] = {};
     if (custom && s.pu) for (const d of DRIVERS.filter((x) => x.team.id === PLAYER_TEAM_ID)) {
       const p = s.pu[d.id];
@@ -332,7 +323,7 @@ export function runCareer(o: CareerOptions): CareerResult {
       devLeftEnd: devLeft(s.dev), levelsEnd: lvE, carRankEnd: rank(lvE), spreadEnd: spread(lvE),
       parts: s.dev.parts.map((p) => ({ area: p.area, size: p.size, ordered: p.ordered, ready: p.ready, expect: r3(p.expect), real: r3(p.real) })),
       aeroPkgs: (s.dev.aero?.pkgs ?? []).map((p) => ({ period: p.period, ready: p.ready, expect: r3(p.expect), real: r3(p.real), medido: p.medido === undefined ? undefined : r3(p.medido), montar: p.montar })),
-      objectives: rec.objetivos, champion: rec.champion, constructors: ts.map((x) => ({ equipo: x.team.nombre, puntos: x.points })),
+      champion: rec.champion, constructors: ts.map((x) => ({ equipo: x.team.nombre, puntos: x.points })),
       myPos: tp + 1, myPoints: ts[tp].points, myDrivers, wins, winnersDistinct: Object.keys(wins).length, teamsWinning: teamsWin.size,
       poleToWin: sl.races!.filter((x) => x.pole && x.pole === x.winner).length,
       dnfRate: r3(sl.races!.reduce((a, x) => a + x.dnfs, 0) / Math.max(1, totalCars)),
@@ -341,25 +332,15 @@ export function runCareer(o: CareerOptions): CareerResult {
       grid: TEAMS.map((t) => ({ equipo: t.nombre, pilotos: t.pilotos.map((d) => `${d.abrev}${ageOf(d, Y)}`) })),
       ages: stats(DRIVERS.map((d) => ageOf(d.d, Y))), ratings: stats(DRIVERS.map((d) => rating(d.d))), poolSize: s.pool?.length ?? 0,
     } as Partial<SeasonLog>);
-    log(`== ${Y}: campeón ${rec.champion.nombre} (${rec.champion.equipo}) · tu equipo ${tp + 1}.º con ${ts[tp].points} · objetivos ${rec.objetivos.filter((x) => x.done).length}/${rec.objetivos.length}`);
+    log(`== ${Y}: campeón ${rec.champion.nombre} (${rec.champion.equipo}) · tu equipo ${tp + 1}.º con ${ts[tp].points}`);
 
     // ---- invierno (nextSeason.ts: offSeasonScreen con lo que propone la pantalla)
     if (k === o.seasons - 1) { seasons.push(sl as SeasonLog); break; }
-    if (firedNow(s)) {
-      sl.fired = true;
-      const offers = s.equipo ? [] : firingOffers(s);
-      if (!offers.length) { s.despedido = Y; endedFired = Y; seasons.push(sl as SeasonLog); log(`${Y}: despedido; se acaba la partida`); break; }
-      sl.offer = offers[0].id;
-      seasons.push(sl as SeasonLog);
-      log(`${Y}: despedido; acepta la oferta de ${offers[0].nombre}`);
-      s = buildNextSeason(s, DRIVERS.filter((d) => d.team.id === s.playerTeam).map(() => ({ keep: true })), { newTeam: offers[0].id });
-      continue;
-    }
     seasons.push(sl as SeasonLog);
     injured = pendingInjuries(s);
     s = buildNextSeason(s, winterChoices(s));
   }
-  return { opts, seasons, problems, endedFired, secs: (Date.now() - t00) / 1000 };
+  return { opts, seasons, problems, secs: (Date.now() - t00) / 1000 };
 }
 
 /** Lesionados que no han vuelto al acabar la temporada: en qué equipo estaban y quién les sustituye. */
@@ -458,12 +439,8 @@ function realWeekend(s: SeasonState, r: number, calIds: string[], where: string,
       if (hs.length) s.hitos = [...(s.hitos ?? []), ...hs].slice(-200);
       const myCars = sess.cars.filter((c) => c.player).map((c) => ({ id: c.id, nombre: c.d.nombre }));
       if (myCars.length !== 2) fail(where, `${myCars.length} coches tuyos en carrera`);
-      moraleAfterRace(s, rows0, myCars, sess.orders, expectedPos(s.objetivos));
+      moraleAfterRace(s, rows0, myCars, sess.orders, expectedPos(carRank(gridOf(s, 0).teams, s.playerTeam)));
       rivalsAfterRace(s, Object.entries(sess.duels).map(([k, v]) => { const [a, b] = k.split("-").map(Number); return { a: sess.carById(a).d.nombre, b: sess.carById(b).d.nombre, ...v }; }));
-      const myIds = DRIVERS.filter((d) => d.team.id === s.playerTeam).map((d) => d.id);
-      const msg = boardMessage(s, TEAMS, myIds, calendarOf(s).length);
-      if (msg) { s.rounds[s.rounds.length - 1].board = msg; extra.board = msg; }
-      s.boardMood = 0;
       useSeason(s);
       break;
     }
@@ -529,7 +506,6 @@ function checkSeasonStart(s: SeasonState, Y: number, custom: boolean, fail: (w: 
     for (const d of DRIVERS) { const c = s.contracts[d.d.abrev]; if (c !== undefined && c < Y) fail(w, `${d.d.nombre} corre con contrato hasta ${c}`); }
   }
   if (!s.dev || !(s.dev.budget >= 15)) fail(w, `presupuesto de desarrollo ${s.dev?.budget}`);
-  if ((s.objetivos ?? []).length < 1) fail(w, "sin objetivos de la directiva");
   if (custom) {
     const ctx = devContext(s);
     if (ctx.left === null || !Number.isFinite(ctx.left)) fail(w, `techo de gasto sin sentido (${ctx.left})`);

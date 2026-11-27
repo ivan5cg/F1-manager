@@ -8,7 +8,6 @@ import {
   newDev, devLeft, AERO_BAD, DRAG_PER_GRIP, aduoMult, motorCapFor, catchUpMult, carLevel as simCarLevel,
 } from "../src/sim/development";
 import { developPlayerWinter, DEFAULT_WINTER, normalizeGridScale } from "../src/sim/career";
-import { objectivesFor } from "../src/sim/objectives";
 import { randomSprintsFor } from "../src/ui/nextSeason";
 import { CIRCUITS, CALENDARS } from "../src/ui/data";
 import { carLevel } from "../src/ui/rendimiento";
@@ -95,17 +94,13 @@ test("rendimiento: el orden de los coches de 2026 (Mercedes delante, Aston Marti
   assert.ok(ens.size >= 7 && das.size >= 5, `energia/aireSucio deben variar por equipo: en=${ens.size}, da=${das.size}`);
 });
 
-test("concesiones ADUO FIA 2026, objetivos de fondo y posterior bayesiano del túnel", () => {
+test("concesiones ADUO FIA 2026 y posterior bayesiano del túnel", () => {
   const merc = TEAMS.find((t) => t.id === "mercedes")!;
   const am = TEAMS.find((t) => t.id === "astonmartin")!;
   assert.equal(aduoMult(merc.potencia, merc.potencia, true), 1);
   assert.ok(aduoMult(am.potencia, merc.potencia, true) > 1.35, "Honda recibe concesiones ADUO");
   assert.ok(motorCapFor(am, merc.potencia) > 1.0, "Tope de motor ampliado por ADUO");
   assert.ok(catchUpMult(simCarLevel(am), simCarLevel(merc)) > catchUpMult(simCarLevel(merc), simCarLevel(merc)));
-  // Objetivos P11 en calendario de 23 carreras: 2 carreras puntuando (no 5)
-  const objAM = objectivesFor(TEAMS, "astonmartin", 23);
-  const scoreObj = objAM.find((o) => o.kind === "puntuar")!;
-  assert.equal(scoreObj.target, 2);
   // Posterior bayesiano: ruido leve negativo (-0.002 con sigma 0.075) no descarta paquete esperado de +0.11
   const pNoisy = { period: 0, ready: 4, split: [0.25, 0.25, 0.25, 0.25], atr: 115, expect: 0.11, real: 0.095, medido: -0.002, sigma: 0.075 };
   assert.ok(aeroPosterior(pNoisy).mean > 0, "no descarta falso negativo leve");

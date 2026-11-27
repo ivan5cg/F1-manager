@@ -1,12 +1,13 @@
 // Varias temporadas seguidas: lo que pasa entre una y la siguiente.
 //
-//  · Los pilotos cumplen años: mejoran hasta los ~28, se mantienen y empeoran desde los ~33; algunos se retiran.
+//  · Los pilotos cumplen años: mejoran hasta los ~27, se mantienen hasta los ~34 y luego bajan poco a poco (Alonso o
+//    Hamilton siguen arriba pasados los 40); algunos se retiran, menos los que siguen siendo buenos.
 //  · Contratos: cada piloto tiene contrato hasta un año. Al acabar, su equipo lo renueva si le sirve (según lo bueno que
 //    es el coche, quiere un piloto mejor o peor) o lo deja libre. Los asientos libres se llenan de mejor a peor equipo
 //    con los mejores pilotos que queden (libres, reservas y novatos que suben, algunos inventados).
-//  · Coches: el del año siguiente sale de cómo acabó cada uno (con su desarrollo) con una regresión a la media: el que
-//    acabó muy por delante conserva parte de la ventaja, no toda.
-//  · Objetivos de la directiva: cumplirlos sube el presupuesto de desarrollo del año siguiente y fallarlos lo baja.
+//  · Coches: el del año siguiente sale de cómo acabó cada uno (con su desarrollo) más el coche nuevo del invierno, que
+//    es donde más cambian (winterConcept): casi siempre un paso grande, a veces un gran acierto y alguna vez nada o
+//    algo peor.
 // Todo sale de la semilla de la temporada: la misma partida da el mismo mercado.
 import { Rng, clamp } from "./rng";
 import type { TeamDef, DriverDef } from "./session";
@@ -16,8 +17,28 @@ import { carLevel, catchUpMult, aduoMult, atrMult, isWorks, DRAG_PER_GRIP } from
 export const FIRST_YEAR = 2026;
 /** @deprecated Mantenido solo por compatibilidad: la evolución entre años ahora ocurre 100 % vía desarrollo de invierno. */
 export const CAR_CARRY = 0.65;
-/** Presupuesto de desarrollo de más (o de menos) por cada objetivo cumplido (o fallado), en M. */
-export const OBJ_BONUS = 6, OBJ_MALUS = 5;
+/**
+ * El coche nuevo del invierno, como múltiplo del paso medio (WINTER_STEP): es cuando más cambian los coches (conceptos
+ * nuevos). Casi siempre un paso grande (a veces un gran acierto); 1 de cada 10, apenas nada; 1 de cada 12, algo peor
+ * que el del año pasado. Mejorar es 11 veces más probable que empeorar y la mayor mejora (×1,75) es 7 veces la peor
+ * caída (×−0,25).
+ */
+export function winterConcept(rng: Rng): number {
+  const u = rng.next();
+  if (u < WINTER_WORSE) return -rng.range(0, 0.25);
+  if (u < WINTER_WORSE + 0.1) return rng.range(0, 0.35);
+  return clamp(rng.gauss(1.2, 0.4), 0.35, 1.75);
+}
+/** Lo que gana de media un coche en invierno (agarre, ~0,8 s/vuelta): más que en toda una temporada de evoluciones
+ *  (0,48). Antes eran 0,30 y siempre parecido, así que el invierno apenas movía el orden. */
+export const WINTER_STEP = 0.8;
+/** Probabilidad de que el coche nuevo sea algo peor que el del año pasado. */
+export const WINTER_WORSE = 0.08;
+/** La cuota ATR y los rendimientos decrecientes pesan algo menos en el paso del invierno que en las evoluciones del año
+ *  (×0,7 de su efecto): con un paso tan grande, a pleno efecto la parrilla se igualaría en pocos inviernos, y con muy
+ *  poco el azar del coche nuevo la iría separando año tras año. Así el hueco del mejor al peor se queda en 2-4 a lo
+ *  largo de 8 temporadas (tests/temporada.test.ts). */
+export const winterTilt = (atrK: number, cuK: number) => 1 + (atrK * cuK - 1) * 0.7;
 
 /** Plan de desarrollo en fábrica durante el invierno (entre la última carrera del año X y la primera del año Y). */
 export interface WinterPlan {
@@ -40,7 +61,8 @@ export interface SeasonRecord {
   constructores: { equipo: string; puntos: number };
   /** Tu equipo: puesto en constructores y tus pilotos (puesto en el mundial). */
   mine: { equipo: string; pos: number; puntos: number; pilotos: { nombre: string; pos: number; puntos: number }[] };
-  objetivos: { text: string; done: boolean }[];
+  /** Objetivos de la directiva (solo las temporadas jugadas antes de quitarla, en noviembre de 2026). */
+  objetivos?: { text: string; done: boolean }[];
   carreras: number;
   /** Tus podios de la temporada (sala de trofeos), quién ganó en cada circuito (previa) y la gala (ver hitos.ts). */
   trofeos?: { year: number; round: number; circuitId: string; gp: string; nombre: string; pos: number }[];
@@ -57,11 +79,12 @@ export function ageStep(age: number): number {
   if (age <= 21) return 2.2;
   if (age <= 24) return 1.3;
   if (age <= 27) return 0.6;
-  if (age <= 30) return 0.1;
-  if (age <= 32) return -0.3;
-  if (age <= 34) return -0.7;
-  if (age <= 36) return -1.2;
-  return -1.8;
+  if (age <= 31) return 0.2;
+  if (age <= 34) return 0;
+  if (age <= 36) return -0.3;
+  if (age <= 38) return -0.6;
+  if (age <= 40) return -0.9;
+  return -1.2;
 }
 
 /** Un año más: los jóvenes ganan ritmo y oficio; los mayores pierden ritmo pero no la cabeza. */
@@ -86,10 +109,11 @@ export function ageDriver(d: DriverDef, year: number, rng: Rng): DriverDef {
 /** Probabilidad de que un piloto lo deje este año. */
 export function retireChance(d: DriverDef, year: number): number {
   const age = ageOf(d, year);
-  let p = age < 33 ? 0 : age < 35 ? 0.08 : age < 37 ? 0.2 : age < 39 ? 0.4 : age < 41 ? 0.6 : 0.85;
+  let p = age < 34 ? 0 : age < 36 ? 0.06 : age < 38 ? 0.15 : age < 40 ? 0.3 : age < 42 ? 0.45 : age < 44 ? 0.6 : age < 46 ? 0.8 : 0.95;
   if (age > 30 && rating(d) < 80) p += 0.15;
-  // los que siguen arriba aguantan más
-  if (age < 37 && rating(d) > 88) p *= 0.4;
+  // los que siguen arriba aguantan más (Alonso, Hamilton), pero pasados los 44 ya pesa la edad
+  if (age < 44 && rating(d) > 88) p *= 0.4;
+  else if (age < 44 && rating(d) > 85) p *= 0.7;
   return Math.min(0.95, p);
 }
 
@@ -324,8 +348,10 @@ export function offSeason(inp: OffSeasonInput): OffSeasonOutput {
     const atr = inp.atrByTeam?.[t.id] ?? 95;
     const atrK = atrMult(atr);
     const cuK = catchUpMult(carLevel(f), topLevel);
-    const aeroRoll = clamp(rng.gauss(1.0, 0.28), 0.35, 1.65);
-    const winterAero = 0.30 * atrK * cuK * aeroRoll;
+    const concept = winterConcept(rng);
+    const winterAero = WINTER_STEP * winterTilt(atrK, cuK) * concept;
+    if (concept >= 1.6) news.push(`📈 ${t.nombre} acierta de lleno con el coche nuevo.`);
+    else if (concept < 0) news.push(`📉 El coche nuevo de ${t.nombre} no funciona: va algo peor que el del año pasado.`);
 
     // La IA concentra sus horas de túnel invernal parcialmente en sus debilidades de curva/recta
     const w0 = clamp(0.25 - cv0[0] * 0.25, 0.10, 0.45);
@@ -400,7 +426,7 @@ export function developPlayerWinter(
   seed: number,
   year: number,
   devK = 1,
-): { team: TeamDef; summary: { aero: number; motor: number; fiabCut: number; energiaCut: number; aireSucioCut: number } } {
+): { team: TeamDef; summary: { aero: number; motor: number; fiabCut: number; energiaCut: number; aireSucioCut: number; concept: number } } {
   const rng = new Rng(((seed * 53) ^ (year * 1997) ^ 0x71e3) >>> 0);
   const topLevel = Math.max(...allFinals.map(carLevel));
   const topPot = Math.max(...allFinals.map((t) => t.potencia));
@@ -411,9 +437,9 @@ export function developPlayerWinter(
   const sp = plan.aeroSplit.map((x) => x / spSum);
 
   // 1. Aero invernal (túnel de viento + enfoque de chasis en fábrica)
-  const aeroRoll = clamp(rng.gauss(1.0, 0.12), 0.72, 1.30);
+  const concept = winterConcept(rng);
   const chassisMult = 0.80 + 0.45 * fChassis;
-  const winterAero = 0.30 * atrK * cuK * devK * chassisMult * aeroRoll;
+  const winterAero = WINTER_STEP * winterTilt(atrK, cuK) * devK * chassisMult * concept;
   const cv0: [number, number, number] = myFin.curvas ? [myFin.curvas[0], myFin.curvas[1], myFin.curvas[2]] : [0, 0, 0];
   const cvNew: [number, number, number] = [
     cv0[0] + 3 * winterAero * sp[0],
@@ -456,7 +482,7 @@ export function developPlayerWinter(
   const { ritmoCarrera: _oldRc, ...rest } = myFin;
   return {
     team: { ...rest, agarre, potencia, resistencia, fiabilidad, desgaste, energia, aireSucio, curvas },
-    summary: { aero: winterAero, motor: motorGain, fiabCut, energiaCut, aireSucioCut },
+    summary: { aero: winterAero, motor: motorGain, fiabCut, energiaCut, aireSucioCut, concept },
   };
 }
 
@@ -480,10 +506,6 @@ export function normalizeGridScale(teams: TeamDef[], refMeanAgarre: number, refM
   }));
 }
 
-/** Presupuesto de desarrollo del año siguiente según los objetivos: más por cada uno cumplido, menos por cada fallado. */
-export function objectivesBonus(done: number, total: number): number {
-  return done * OBJ_BONUS - (total - done) * OBJ_MALUS;
-}
 
 // ------------------------------------------------------------------ a mitad de temporada
 /** Un asiento en la carrera que acaba de terminar. */

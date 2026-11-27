@@ -5,9 +5,12 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { runCareer, randomSpec, type CareerResult } from "./partida";
 import { MARKET, BASE_TEAMS, CALENDARS, useSeason, TEAMS, DRIVERS, gridOf } from "../src/ui/data";
-import { buildNextSeason, firedNow, randomSprintsFor, yearOf } from "../src/ui/nextSeason";
+import { buildNextSeason, randomSprintsFor, yearOf } from "../src/ui/nextSeason";
 import { costOf, publicDriver } from "../src/sim/market";
-import { objectivesBonus, OBJ_BONUS, OBJ_MALUS } from "../src/sim/career";
+import { ageStep, retireChance, rating, winterConcept, WINTER_STEP, WINTER_WORSE } from "../src/sim/career";
+import { expectedPos, carRank } from "../src/sim/morale";
+import { Rng } from "../src/sim/rng";
+import type { DriverDef } from "../src/sim/session";
 import type { SeasonState } from "../src/sim/season";
 
 const REAL_TEAMS = ["mclaren", "mercedes", "ferrari", "williams", "haas", "cadillac", "audi", "alpine"];
@@ -31,13 +34,12 @@ test("partidas de 4 temporadas sin nada que no debería pasar (pilotos repetidos
   for (const r of allCareers()) assert.deepEqual(r.problems, [], `${r.opts.team} semilla ${r.opts.seed}`);
 });
 
-test("cada partida llega a las 4 temporadas (o acaba por despido) y los años van seguidos", () => {
+test("cada partida llega a las 4 temporadas y los años van seguidos (ya no hay despido)", () => {
   for (const r of allCareers()) {
     const ys = r.seasons.map((s) => s.year);
     assert.equal(ys[0], 2026);
     ys.forEach((y, i) => assert.equal(y, 2026 + i));
-    if (r.endedFired === undefined) assert.equal(r.seasons.length, SEASONS, `${r.opts.team} #${r.opts.seed}`);
-    else assert.equal(r.seasons[r.seasons.length - 1].year, r.endedFired);
+    assert.equal(r.seasons.length, SEASONS, `${r.opts.team} #${r.opts.seed}`);
     for (const s of r.seasons) assert.equal(s.races.length, CALENDARS.corta.ids.length);
   }
 });
@@ -51,52 +53,27 @@ test("la misma semilla da la misma partida", () => {
   assert.deepEqual(c.seasons.map((s) => [s.champion, s.myPoints, s.grid, s.custom]), d.seasons.map((s) => [s.champion, s.myPoints, s.grid, s.custom]));
 });
 
-test("el presupuesto de desarrollo sigue a los objetivos del año anterior (y nunca baja de 15 M)", () => {
-  for (const r of allCareers()) for (let i = 1; i < r.seasons.length; i++) {
-    const prev = r.seasons[i - 1], cur = r.seasons[i];
-    if (prev.fired) continue;
-    const done = prev.objectives.filter((o) => o.done).length;
-    const bonus = objectivesBonus(done, prev.objectives.length);
-    // devBonus = premio o castigo de la directiva menos las cláusulas pagadas en invierno
-    assert.ok(cur.devBonus <= bonus + 1e-9, `${r.opts.team} #${r.opts.seed} ${cur.year}: devBonus ${cur.devBonus} > ${bonus}`);
-    assert.ok(cur.budget >= 15);
-  }
-  assert.equal(objectivesBonus(2, 2), 2 * OBJ_BONUS);
-  assert.equal(objectivesBonus(0, 2), -2 * OBJ_MALUS);
-  assert.equal(objectivesBonus(1, 2), OBJ_BONUS - OBJ_MALUS);
-});
-
-test("aviso de la directiva: sube con cada temporada sin objetivos y vuelve a 0 al cumplir alguno", () => {
-  for (const r of allCareers()) for (let i = 1; i < r.seasons.length; i++) {
-    const prev = r.seasons[i - 1], cur = r.seasons[i];
-    if (prev.fired) { assert.equal(cur.aviso, 0, "nuevo equipo tras el despido: sin aviso"); continue; }
-    const none = prev.objectives.length > 0 && prev.objectives.every((o) => !o.done);
-    assert.equal(cur.aviso, none ? prev.aviso + 1 : 0, `${r.opts.team} #${r.opts.seed} ${cur.year}`);
-  }
-});
-
-test("despido: solo tras tres temporadas seguidas sin objetivos; con equipo real hay oferta, con equipo propio se acaba", () => {
+test("sin directiva: ni objetivos ni aviso ni despido, y el presupuesto no depende de los resultados", () => {
   for (const r of allCareers()) for (const s of r.seasons) {
-    if (!s.fired) continue;
-    assert.ok(s.aviso >= 2 && s.objectives.every((o) => !o.done), `${r.opts.team} #${r.opts.seed} ${s.year}`);
-    if (r.opts.team === "propio") assert.equal(r.endedFired, s.year);
-    else assert.ok(s.offer && s.offer !== s.playerTeam);
+    assert.equal(s.objectives, undefined);
+    assert.ok(!s.fired);
+    // con equipo real, 40 M cada año (menos lo que se pague en cláusulas); en «crea tu equipo», según el techo
+    assert.ok(s.devBonus <= 0, `${r.opts.team} #${r.opts.seed} ${s.year}: devBonus ${s.devBonus}`);
+    if (r.opts.team !== "propio") assert.equal(s.budget, Math.max(15, 40 + s.devBonus));
   }
-  // un caso forzado: tres temporadas sin cumplir nada
-  const s: SeasonState = { v: 1, playerTeam: "cadillac", seed: 5, round: 9, weekend: null, rounds: [], calendar: [...CALENDARS.corta.ids], aviso: 2, objetivos: [{ kind: "victorias", target: 9 }] };
-  useSeason(s);
-  assert.equal(firedNow(s), true);
-  assert.equal(firedNow({ ...s, aviso: 1 }), false);
 });
 
-test("con equipo real juegas con tu equipo todas las temporadas (salvo que te despidan y cambies)", () => {
-  for (const r of allCareers().filter((x) => x.opts.team !== "propio")) {
-    let team = r.opts.team;
-    for (const s of r.seasons) {
-      assert.equal(s.playerTeam, team, `${r.opts.team} #${r.opts.seed} ${s.year}`);
-      if (s.fired && s.offer) team = s.offer;
-    }
-  }
+test("con equipo real juegas con tu equipo todas las temporadas", () => {
+  for (const r of allCareers().filter((x) => x.opts.team !== "propio")) for (const s of r.seasons) assert.equal(s.playerTeam, r.opts.team, `${r.opts.team} #${r.opts.seed} ${s.year}`);
+});
+
+test("la moral espera de cada carrera lo que da el coche: ganar con los dos mejores, podio con el 3.º-4.º, puntos el resto", () => {
+  assert.deepEqual([1, 2, 3, 4, 5, 6, 11].map(expectedPos), [1, 1, 3, 3, 8, 10, 10]);
+  const s: SeasonState = { v: 1, playerTeam: "mercedes", seed: 1, round: 0, weekend: null, rounds: [], calendar: [...CALENDARS.corta.ids] };
+  useSeason(s);
+  assert.equal(carRank(gridOf(s, 0).teams, "mercedes"), 1, "Mercedes, el mejor coche de 2026");
+  assert.equal(carRank(gridOf(s, 0).teams, "astonmartin"), 11);
+  for (const r of allCareers()) for (const x of r.seasons) assert.equal(x.expectedPos, expectedPos(x.carRank0));
 });
 
 test("crea tu equipo: 12 equipos, tu equipo sigue con su jefe, técnico y motor, y el techo de gasto cuadra", () => {
@@ -118,10 +95,10 @@ test("crea tu equipo: 12 equipos, tu equipo sigue con su jefe, técnico y motor,
   }
 });
 
-test("los pilotos envejecen: la parrilla sigue entre 17 y 48 años y entran novatos con los años", () => {
-  // (Alonso, de 1981, puede seguir con 46 o 47: a esa edad se retira el 85 % de las veces cada año)
+test("los pilotos envejecen: la parrilla sigue entre 17 y 49 años y entran novatos con los años", () => {
+  // (Alonso, de 1981, puede seguir pasados los 45 si sigue siendo bueno)
   for (const r of allCareers()) for (const s of r.seasons) {
-    assert.ok(s.ages.min >= 17 && s.ages.max <= 48, `${r.opts.team} #${r.opts.seed} ${s.year}: ${s.ages.min}-${s.ages.max}`);
+    assert.ok(s.ages.min >= 17 && s.ages.max <= 49, `${r.opts.team} #${r.opts.seed} ${s.year}: ${s.ages.min}-${s.ages.max}`);
     assert.ok(s.ages.mean > 22 && s.ages.mean < 34);
   }
   const news = allCareers().flatMap((r) => r.seasons.flatMap((s) => s.news));
@@ -140,14 +117,6 @@ test("la parrilla no se descompensa con los años: hueco entre el mejor y el peo
   for (const r of allCareers()) for (const s of r.seasons) {
     assert.ok(s.spread0 > 0.3 && s.spread0 < 6, `${r.opts.team} #${r.opts.seed} ${s.year}: hueco ${s.spread0}`);
     assert.ok(s.spreadEnd < 7, `${r.opts.team} #${r.opts.seed} ${s.year}: hueco final ${s.spreadEnd}`);
-  }
-});
-
-test("objetivos según el coche: el mejor coche pide victorias, uno de atrás, puntuar", () => {
-  for (const r of allCareers()) for (const s of r.seasons) {
-    assert.ok(s.objectives.length === 2, `${s.objectives.length} objetivos`);
-    if (s.carRank0 <= 2) assert.ok(s.objectives.some((o) => /Ganar/.test(o.text)), `${s.teamName} ${s.year}: ${s.objectives.map((o) => o.text)}`);
-    if (s.carRank0 >= 8) assert.ok(s.objectives.some((o) => /Puntuar/.test(o.text)));
   }
 });
 
@@ -243,9 +212,76 @@ test("crea tu equipo: tu piloto lesionado sigue siendo tuyo (su equipo de antes 
   assert.deepEqual([...buildNextSeason(old, [{ keep: true }, { keep: true }]).equipo!.pilotos].sort(), ["RUS", "VIL"]);
 });
 
+test("lesión encadenada: si el sustituto también se lesiona y vuelve, el asiento sigue siendo del primero", () => {
+  const { s, out } = endedWithInjury("williams", () => DRIVERS.find((d) => d.d.abrev === "BEA")!.id);
+  const k = s.swaps![0].seat, sub1 = s.swaps![0].in, sub2 = publicDriver(MARKET, BASE_TEAMS, "BRO");
+  // Bearman se lesiona en la R7 sin vuelta; su sustituto se lesiona en la R8 y vuelve en la R9
+  s.swaps = [{ ...s.swaps![0], round: 6 }, { round: 7, seat: k, in: sub2, out: sub1, why: `lesión de ${sub1.nombre}` }, { round: 8, seat: k, in: sub1, out: sub2, why: `vuelve ${sub1.nombre}` }];
+  useSeason(s);
+  const next = buildNextSeason(s, [{ keep: true }, { keep: true }]);
+  assert.ok(next.grid!.find((t) => t.id === "haas")!.pilotos.some((d) => d.abrev === out), `Haas: ${next.grid!.find((t) => t.id === "haas")!.pilotos.map((d) => d.abrev)}`);
+});
+
 test("los jóvenes de la F2 inventados no repiten el dorsal de nadie (ni de la parrilla ni de los libres)", () => {
   for (const sd of [1, 2, 3, 4, 5, 6, 7, 8]) {
     const r = runCareer({ team: sd % 2 ? "propio" : "haas", seed: 300 + sd, seasons: 4, mode: "rapida" });
     assert.deepEqual(r.problems.filter((p) => /dorsal/.test(p)), []);
   }
+});
+
+// ------------------------------------------------------------------ cambios de noviembre de 2026
+test("los pilotos no empeoran jóvenes: mejoran hasta los ~27, se mantienen hasta los 34 y bajan poco a poco", () => {
+  for (let a = 18; a <= 34; a++) assert.ok(ageStep(a) >= 0, `${a} años: ${ageStep(a)}`);
+  for (let a = 35; a <= 46; a++) assert.ok(ageStep(a) < 0 && ageStep(a) >= -1.2, `${a} años: ${ageStep(a)}`);
+  // de los 33 a los 40 (como Alonso o Hamilton) se pierden unos 2-3 puntos de ritmo, no 7
+  let lost = 0;
+  for (let a = 34; a <= 40; a++) lost -= ageStep(a);
+  assert.ok(lost > 1.5 && lost < 4, `pierde ${lost} de ritmo de los 33 a los 40`);
+  // en las partidas: tus pilotos de 30 a 34 no empeoran de media
+  const ch: number[] = [];
+  for (const r of allCareers()) for (let i = 1; i < r.seasons.length; i++) for (const d of r.seasons[i - 1].myDrivers) {
+    const e = r.seasons[i].myDrivers.find((x) => x.abrev === d.abrev);
+    if (e && d.edad >= 30 && d.edad <= 33) ch.push(e.rating - d.rating);
+  }
+  if (ch.length >= 5) assert.ok(ch.reduce((a, b) => a + b, 0) / ch.length > -0.4, `de 30 a 34 años cambian ${ch}`);
+});
+
+test("los que siguen arriba se retiran menos, también pasados los 40", () => {
+  const d = (ritmo: number, nacimiento: number) => ({ nombre: "X", abrev: "XXX", numero: 99, ritmo, regularidad: ritmo, neumaticos: ritmo, lluvia: ritmo, ataque: ritmo, defensa: ritmo, agresividad: 50, salida: 80, nacimiento } as DriverDef);
+  const top = d(92, 1984), mid = d(84, 1984), low = d(78, 1984);
+  assert.ok(rating(top) > 88 && rating(mid) < 85);
+  assert.ok(retireChance(top, 2026) < retireChance(mid, 2026) && retireChance(mid, 2026) < retireChance(low, 2026));
+  assert.ok(retireChance(top, 2026) <= 0.3, `42 años y muy bueno: ${retireChance(top, 2026)}`);
+  assert.equal(retireChance(top, 2017), 0, "33 años: nadie se retira por la edad");
+});
+
+test("invierno: el coche nuevo casi siempre mejora (a veces mucho) y como mucho empeora un poco (7 a 1)", () => {
+  const rng = new Rng(12345);
+  const k = Array.from({ length: 20000 }, () => winterConcept(rng));
+  const worse = k.filter((x) => x < 0).length / k.length, better = k.filter((x) => x > 0).length / k.length;
+  assert.ok(Math.abs(worse - WINTER_WORSE) < 0.01, `empeora el ${(worse * 100).toFixed(1)} %`);
+  assert.ok(better / worse >= 7, `mejora ${(better / worse).toFixed(1)} veces más a menudo que empeora`);
+  assert.ok(Math.max(...k) / -Math.min(...k) >= 7 - 1e-9, `la mayor mejora es ${(Math.max(...k) / -Math.min(...k)).toFixed(1)} veces la peor caída`);
+  const mean = k.reduce((a, b) => a + b, 0) / k.length;
+  assert.ok(mean > 0.9 && mean < 1.1, `paso medio ×${mean.toFixed(2)}`);
+  assert.ok(k.filter((x) => x >= 1.6).length / k.length > 0.08, "a veces un gran acierto");
+  // el invierno pesa más que toda una temporada de evoluciones de un rival (0,06 × 8 = 0,48)
+  assert.ok(WINTER_STEP > 0.48);
+});
+
+test("invierno: los coches cambian mucho más de orden que antes, pero la parrilla no se iguala de golpe", () => {
+  const rel: number[] = [], moved: number[] = [];
+  const order = (lv: Record<string, number>) => Object.keys(lv).sort((a, b) => lv[b] - lv[a]);
+  for (const r of allCareers()) for (let i = 1; i < r.seasons.length; i++) {
+    const a = r.seasons[i - 1].levelsEnd, b = r.seasons[i].levels0;
+    const ma = Object.values(a).reduce((x, y) => x + y, 0) / Object.keys(a).length, mb = Object.values(b).reduce((x, y) => x + y, 0) / Object.keys(b).length;
+    const oa = order(a), ob = order(b);
+    for (const t of Object.keys(a)) if (t in b) { rel.push((b[t] - mb) - (a[t] - ma)); moved.push(Math.abs(oa.indexOf(t) - ob.indexOf(t))); }
+  }
+  const sd = Math.sqrt(rel.reduce((x, y) => x + y * y, 0) / rel.length);
+  const mv = moved.reduce((x, y) => x + y, 0) / moved.length;
+  // antes (partidas de scripts/partidas/base-2026-11): desviación 0,15 y 0,44 puestos por coche
+  assert.ok(sd > 0.3, `cambio frente a la media en invierno: desviación ${sd.toFixed(2)}`);
+  assert.ok(mv > 0.8, `un coche se mueve ${mv.toFixed(2)} puestos en invierno`);
+  for (const r of allCareers()) assert.ok(r.seasons[r.seasons.length - 1].spread0 > 1, `${r.opts.team} #${r.opts.seed}: hueco ${r.seasons[r.seasons.length - 1].spread0} en el último año`);
 });

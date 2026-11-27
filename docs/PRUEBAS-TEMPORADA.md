@@ -111,7 +111,7 @@ de partida `b4681aa`, el de la física de carrera; no tiene que ver con el modo 
 
 ## Comportamientos que conviene revisar (no son fallos de programación)
 
-- **Tus pilotos no se retiran nunca.** Las retiradas solo se sortean entre los pilotos de la IA, aunque el
+- **Tus pilotos no se retiran nunca** (sigue igual; ver «Cambios a raíz del análisis»). Las retiradas solo se sortean entre los pilotos de la IA, aunque el
   comentario del código dice «los tuyos, si se retiran, también». Alonso sigue en un equipo propio con 48 años, y
   con 46-47 en la IA (allí cada año se retira el 85 % de las veces). El README («desde los 33 alguno se retira») no
   aclara si va también por los tuyos.
@@ -123,7 +123,7 @@ de partida `b4681aa`, el de la física de carrera; no tiene que ver con el modo 
   en tres inviernos; en 2029, a veces el mejor coche es el de Audi o el de Racing Bulls. En «crea tu equipo» se
   iguala bastante menos (de 4,1 a 3,2), en parte porque a quien le quitas el jefe o el técnico se queda con un
   interino.
-- **Crea tu equipo puede acabar arriba del todo.** Con buenos objetivos el presupuesto sube a 55-62 M (con equipo
+- **Crea tu equipo puede acabar arriba del todo.** Con buenos objetivos (ya no existen) el presupuesto subía a 55-62 M (con equipo
   real, 40-52 M):
   - la #1 (Allison como técnico) pasa del 8.º coche al 1.º y acaba 2.ª de constructores en 2029;
   - con la #8, Antonelli es campeón con el equipo propio en 2028 y 2029.
@@ -131,7 +131,7 @@ de partida `b4681aa`, el de la física de carrera; no tiene que ver con el modo 
   Al revés, un buen coche con pilotos flojos se queda a medias: la #3 tiene el 2.º mejor coche en 2029 y acaba 6.ª.
 - **Unidades de potencia: casi todos tus pilotos usan 3 con un cupo de 2.** Es decir, 10 puestos de sanción por
   piloto cada temporada. Lo decide `autoFit`; un jugador de verdad podría gestionarlo mejor.
-- **Directiva:**
+- **Directiva** (quitada; ver «Cambios a raíz del análisis»):
   - Ferrari gana el mundial de 2026 y luego, con el mejor coche o el segundo, no cumple ningún objetivo en 2027 ni
     en 2028 (piden quedar entre los 2 primeros y ganar 2 carreras). En 2029 se queda a una temporada del despido.
   - Cadillac, con el peor coche, cumple sus objetivos 3 de 4 años con la simulación entera, pero en modo rápido la
@@ -237,6 +237,60 @@ Salen de las 14 partidas de `scripts/partidas/base-2026-11` (56 temporadas, 504 
   cada uno).
 - **El jugador automático no tiene ventaja:** en 2026, cada equipo queda prácticamente igual llevándolo él que
   llevándolo la IA.
+
+## Cambios a raíz del análisis (noviembre de 2026)
+
+- **Banderas rojas:** se quedan como están.
+- **Directiva y objetivos: se quitan.** Eran demasiado arbitrarios (punto 4 de los patrones). Además de los objetivos
+  se van el mensaje tras cada carrera, el aviso, el despido y las ofertas. El presupuesto de desarrollo ya no depende
+  de los resultados: 40 M con equipo real menos las cláusulas que pagues; en «crea tu equipo», según el techo.
+
+  La moral de tus pilotos sigue comparando cada resultado con lo que se espera de tu coche, pero ahora eso sale del
+  puesto del coche en la parrilla y no de los objetivos: ganar con uno de los dos mejores, podio con el 3.º o el 4.º,
+  puntos con el resto. Las respuestas de la rueda de prensa que «gustaban a la directiva» ahora solo tocan la moral.
+- **Pilotos: ya no empeoran tan jóvenes.**
+
+  | Edad | Hasta 27 | 28-31 | 32-34 | 35-36 | 37-38 | 39-40 | 41 o más |
+  |---|---|---|---|---|---|---|---|
+  | Cambio de ritmo por año | igual que antes | +0,2 | 0 | −0,3 | −0,6 | −0,9 | −1,2 |
+  | Antes | | +0,1 a −0,3 | −0,3 a −0,7 | −1,2 | −1,8 | −1,8 | −1,8 |
+
+  De los 34 a los 40 se pierden unos 2-3 puntos de ritmo, no 7. La retirada:
+  - empieza a los 34, no a los 33;
+  - los que siguen arriba aguantan más a cualquier edad (Hamilton puede seguir hasta los 43-44);
+  - desde los 44 pesa la edad y a los 46 es casi segura.
+- **Invierno: es cuando más cambian los coches.** Cada equipo saca un coche nuevo (`winterConcept` en
+  `src/sim/career.ts`):
+  - el paso medio es de ~0,8 s/vuelta (antes 0,30, y casi igual para todos), más que todo un año de evoluciones
+    (0,48);
+  - casi siempre es un paso grande, y a veces un gran acierto (hasta ×1,75 del paso medio);
+  - 1 de cada 10 veces apenas mejora;
+  - 1 de cada 12 sale algo peor que el del año pasado (como mucho ×−0,25).
+
+  Mejorar es 11 veces más probable que empeorar, y la mayor mejora es 7 veces la peor caída; los dos cumplen el
+  mínimo de 7 a 1. La cuota ATR y los rendimientos decrecientes ayudan a los de atrás un 70 % de lo que ayudan en las
+  evoluciones del año. Con menos, el azar del coche nuevo iría separando la parrilla año tras año; con todo, se
+  igualaría en pocos inviernos. Las noticias del invierno cuentan los grandes aciertos, los coches fallidos y si el
+  tuyo ha salido bien.
+
+  En 120 partidas rápidas de 4 temporadas:
+
+  | | Antes | Ahora |
+  |---|---|---|
+  | Cambio de cada coche frente a la media en invierno (desviación) | 0,14 | 0,40 |
+  | Puestos que se mueve un coche en invierno | 0,37 | ~1,1-1,5 |
+
+  El hueco medio del mejor al peor coche, a 8 temporadas:
+
+  | | 2029 antes | 2029 ahora | 2033 antes | 2033 ahora |
+  |---|---|---|---|---|
+  | Equipo real | 2,0 | 2,6 | 1,0 (todos los coches casi iguales) | 1,9 |
+  | Crea tu equipo | 3,2 | 3,3 | 3,5 | 3,8 |
+- **Lesión encadenada:** al probar el invierno salió otro caso del fallo del asiento de los lesionados, ya arreglado.
+  Se lesiona el piloto, luego su sustituto, y el sustituto vuelve antes de acabar el año; entonces el primero no
+  recuperaba su asiento. Ahora se sigue quién es el dueño de cada asiento (`seatOwners` en `src/ui/nextSeason.ts`).
+- **Pendiente: tus pilotos siguen sin retirarse nunca.** Con la edad nueva, en partidas de 8 temporadas Alonso llega a
+  correr con 51-52 años si es piloto tuyo; en la IA se retira a los 46 como mucho.
 
 ## Cómo repetirlo
 

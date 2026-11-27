@@ -5,7 +5,6 @@ import { gridOf, useSeason, DRIVERS, TEAMS, CALENDARS, MARKET } from "../src/ui/
 import { buildNextSeason, yearOf, applyMidSeason } from "../src/ui/nextSeason";
 import type { SeasonState } from "../src/sim/season";
 import { driverStandings } from "../src/sim/season";
-import { objectivesFor } from "../src/sim/objectives";
 import { newDev } from "../src/sim/development";
 import { rating, ageOf } from "../src/sim/career";
 import { Rng } from "../src/sim/rng";
@@ -25,7 +24,6 @@ for (let k = 0; k < n; k++) {
   s.dev = newDev(s.equipo ? 20 : null);
   if (s.devBonus) s.dev.budget = Math.max(15, s.dev.budget + s.devBonus);
   useSeason(s);
-  s.objetivos = objectivesFor(gridOf(s, 0).teams, s.playerTeam, s.calendar!.length);
   // carreras: por ritmo del coche y del piloto, con azar
   for (let r = 0; r < s.calendar!.length; r++) {
     s.round = r;

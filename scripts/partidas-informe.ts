@@ -28,7 +28,7 @@ for (const mode of ["real", "propio"] as const) {
   p("| Partida | Año | Equipo | Coche (puesto ini→fin) | Constructores | Pts | Objetivos | Aviso | Presup. | Campeón | Ganadores distintos |");
   p("|---|---|---|---|---|---|---|---|---|---|---|");
   for (const r of rs) for (const s of r.seasons) {
-    p(`| ${r.opts.team} #${r.opts.seed} | ${s.year} | ${s.teamName} | ${s.carRank0}→${s.carRankEnd} | ${s.myPos}.º | ${s.myPoints} | ${s.objectives.filter((o) => o.done).length}/${s.objectives.length} | ${s.aviso} | ${s.budget} M (${s.devBonus >= 0 ? "+" : ""}${s.devBonus}) | ${s.champion.nombre} (${s.champion.equipo}, ${s.champion.puntos}) | ${s.winnersDistinct} pilotos / ${s.teamsWinning} equipos |${s.fired ? " **despedido**" + (s.offer ? ` → ${s.offer}` : "") : ""}`);
+    p(`| ${r.opts.team} #${r.opts.seed} | ${s.year} | ${s.teamName} | ${s.carRank0}→${s.carRankEnd} | ${s.myPos}.º | ${s.myPoints} | ${s.objectives ? `${s.objectives.filter((o) => o.done).length}/${s.objectives.length}` : "-"} | ${s.aviso ?? "-"} | ${s.budget} M (${s.devBonus >= 0 ? "+" : ""}${s.devBonus}) | ${s.champion.nombre} (${s.champion.equipo}, ${s.champion.puntos}) | ${s.winnersDistinct} pilotos / ${s.teamsWinning} equipos |${s.fired ? " **despedido**" + (s.offer ? ` → ${s.offer}` : "") : ""}`);
   }
   p();
   // carreras

@@ -2,7 +2,7 @@ import "./style.css";
 
 // tema visual (las fichas de color están en style.css)
 document.documentElement.dataset.tema = "grafito";
-import { TEAMS, CIRCUITS, ROUNDS, DRIVERS, getTrack, useSeason, devContext, CALENDARS, circuitOf, calendarOf } from "./data";
+import { TEAMS, CIRCUITS, ROUNDS, DRIVERS, getTrack, useSeason, devContext, CALENDARS, circuitOf, calendarOf, gridOf } from "./data";
 import { applyMidSeason, yearOf } from "./nextSeason";
 import { newDev, newAeroPlan } from "../sim/development";
 import { builderScreen, PLAYER_TEAM_ID } from "./teamBuilder";
@@ -19,8 +19,8 @@ import { Weekend, newPreseasonWeekend } from "../sim/weekend";
 import { Session, SessionKind, SESSION_NAMES, isRaceKind } from "../sim/session";
 import { raceSummaryHtml, drawRaceSummary, buildSummary, photosHtml } from "./summary";
 import { takeLastPhotos } from "./photos";
-import { headlines, portadaHtml, boardMessage, boardHtml } from "./prensa";
-import { moraleAfterRace, rivalsAfterRace, expectedPos } from "../sim/morale";
+import { headlines, portadaHtml } from "./prensa";
+import { moraleAfterRace, rivalsAfterRace, expectedPos, carRank } from "../sim/morale";
 import { vestuarioHtml } from "./vestuario";
 import { hitosAfterRace } from "../sim/hitos";
 import { hitosHtml, seatAt, gpOf } from "./ritual";
@@ -51,7 +51,7 @@ function finishSession(wk: Weekend, kind: SessionKind, sess: Session) {
   const sum = isRaceKind(kind) ? buildSummary(sess) : null;
   const rows0 = sess.results();
   if (sum) st.summaries = { ...st.summaries, [kind]: sum };
-  let extra = "", board = "", hitos = "";
+  let extra = "", hitos = "";
   if (kind === "TEST") {
     const myLaps = rows0.filter((r) => DRIVERS[r.id]?.team.id === s.playerTeam).reduce((a, r) => a + r.laps, 0);
     const fiabBonus = Math.min(0.05, Math.round((myLaps / 160) * 0.05 * 1000) / 1000);
@@ -90,14 +90,10 @@ function finishSession(wk: Weekend, kind: SessionKind, sess: Session) {
     hitos = hitosHtml(hs);
     // el vestuario: la moral de tus pilotos y las rivalidades, de carrera en carrera
     const myCars = sess.cars.filter((c) => c.player).map((c) => ({ id: c.id, nombre: c.d.nombre }));
-    const changes = moraleAfterRace(s, rows0, myCars, sess.orders, expectedPos(s.objetivos));
+    // lo que se espera según lo bueno que era tu coche frente a la parrilla al empezar el año
+    const changes = moraleAfterRace(s, rows0, myCars, sess.orders, expectedPos(carRank(gridOf(s, 0).teams, s.playerTeam)));
     const born = rivalsAfterRace(s, Object.entries(sess.duels).map(([k, v]) => { const [a, b] = k.split("-").map(Number); return { a: sess.carById(a).d.nombre, b: sess.carById(b).d.nombre, ...v }; }));
     extra = vestuarioHtml(changes, born, s) + extra;
-    // la directiva escribe según los objetivos (con los pilotos que han corrido esta carrera)
-    const myIds = DRIVERS.filter((d) => d.team.id === s.playerTeam).map((d) => d.id);
-    const msg = boardMessage(s, TEAMS, myIds, calendarOf(s).length);
-    if (msg) { s.rounds[s.rounds.length - 1].board = msg; board = boardHtml(msg, ts[tp].team.nombre); }
-    s.boardMood = 0; // la directiva ya ha dicho lo suyo de la rueda de prensa
     // la parrilla de la siguiente ronda (con lo que ha desarrollado cada equipo)
     useSeason(s);
   }
@@ -114,7 +110,7 @@ function finishSession(wk: Weekend, kind: SessionKind, sess: Session) {
   }
   if (sum) extra = raceSummaryHtml(sum) + extra;
   // la portada del periódico del lunes
-  if (sum && kind === "RACE") extra = portadaHtml(headlines(sum, sess.results(), gp, s.playerTeam), "Edición del lunes") + board + extra;
+  if (sum && kind === "RACE") extra = portadaHtml(headlines(sum, sess.results(), gp, s.playerTeam), "Edición del lunes") + extra;
   saveSeason(s);
   const rows = sess.results();
   // carrera o sprint: podio con confeti y la tarjeta para compartir
@@ -179,7 +175,7 @@ function startGp(p: GpPick) {
 /** Temporada nueva en una partida: lo que hubiera en ella se borra. */
 function newSeason(slot: number, s: SeasonState) {
   s.dev = newDev(devContext(s).left); // presupuesto de desarrollo de la temporada
-  // temporadas siguientes: los objetivos del año pasado suben o bajan el presupuesto
+  // temporadas siguientes: las cláusulas pagadas en invierno salen del presupuesto
   if (s.devBonus) s.dev.budget = Math.max(15, s.dev.budget + s.devBonus);
   // la aerodinámica va por horas de túnel de viento (ATR) y paquetes que se validan en libres
   s.dev.aero = newAeroPlan(s.dev.budget);
