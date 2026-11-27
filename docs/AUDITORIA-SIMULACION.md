@@ -548,8 +548,29 @@ unos 13 °C corta. No se cambia el clima con datos tan dispares.
 
 ## Pendiente (27 de noviembre de 2026)
 
-- **El azar en cabeza** (punto 4 de la segunda tanda y la tabla de arriba): la pole gana el 39 %, desde P4+ el 24 %. Ahora
-  lo que más la tumba es el ciclo de paradas entre los de cabeza (`repite.ts`, `cabeza.js`).
+- **El azar en cabeza:** la pole gana el 39 % (2026: 71 %), desde P4+ el 24 % (10 %). Lo que se ha visto el 27 de
+  noviembre (`scripts/auditoria/pole.js`, sobre el lote `base-2026-11d`):
+  - **La pole no suele ser el coche más rápido en carrera:** lo es en el 38 % de las carreras, y en una de cada cinco
+    es el quinto o peor en ritmo de carrera (mediana de vueltas en verde). El más rápido en carrera gana el 62 %.
+    Cuando la pole pierde, el ganador iba de mediana 0,28 s/vuelta más rápido (en 37 de 47).
+  - **Con la pole de Mercedes**, gana el 54 % y su compañero le gana en el 22 % de esas carreras (2026: la pole acabó
+    delante de su compañero en 17 de 18).
+  - **Lo que se probó, con el lote completo cada vez (90 carreras secas), y no se dejó:**
+
+    | Cambio | Gana la pole | La pole es la más rápida en carrera |
+    |---|---|---|
+    | Sin cambios | 39 % | 38-39 % |
+    | `ritmoCarrera` de Ferrari, Red Bull y McLaren para que vayan como el sábado | 32 % | – |
+    | + el líder cierra la puerta toda la carrera, y los compañeros de la IA no se atacan ni se hacen el undercut | 31 % | 31 % |
+    | Clasificación con menos azar por vuelta (`QUALI_NOISE` 0,85 → 0,45) y más forma del fin de semana (`FORM` 0,0015 → 0,0022) | 34 % | 34 % |
+
+    Con 90 carreras la cifra baila ±5 puntos por el ruido: ninguno la mueve. Defender toda la carrera cuesta tiempo y
+    goma en cada intento y a la pole la pasaban más (50 %). El ritmo de carrera por equipo de `equipos.mjs` es
+    demasiado ruidoso para calibrar con él: Ferrari salió a 0,22 % y a 0,53 % de Mercedes con el mismo ajuste.
+  - **Lo siguiente:** medir con `repite.ts` (misma parrilla, varias semillas) qué parte del ritmo de carrera de cada
+    coche es suya y qué parte es estrategia (compuesto y edad del neumático), porque la «pole quinta en ritmo» puede
+    ser una medida de estrategia más que de coche; y separar el ruido de la carrera en sus fuentes (salida, paradas,
+    neutralizaciones) antes de tocar nada más.
 - **El duro, casi siempre** (94 % de los coches): **no es un fallo** (27 de noviembre de 2026). El objetivo de 60-75 %
   era una suposición de esta auditoría. En 2026 medio-duro a una parada es la estrategia por defecto (previas de
   Pirelli de Silverstone, Hungría y Singapur), así que casi todos acaban usando el duro. Lo que sí se aparta:
