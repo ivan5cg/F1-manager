@@ -234,7 +234,7 @@ export interface Prefs {
   mapa3d?: boolean;
   /** Comentarios de Antonio Lobato en la sesión (por defecto, sí). */
   lobato?: boolean;
-  /** Comentarios de la experta técnica (Begoña Arrieta) en la sesión (por defecto, sí). */
+  /** Comentarios del experto técnico (Toni Cuquerella) en la sesión (por defecto, sí). */
   experta?: boolean;
   /** Rótulos de tele sobre el mapa 3D: sectores, récords, batallas, neumáticos y radio (por defecto, sí). */
   rotulos?: boolean;

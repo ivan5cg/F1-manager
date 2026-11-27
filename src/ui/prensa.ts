@@ -1,12 +1,9 @@
-// La prensa y la directiva tras cada gran premio (9.2 y 9.3).
-// - Titulares: una portada de un periódico inventado, sacada del resumen y del resultado de la carrera. Sale siempre la
-//   misma para la misma carrera (el azar sale de un hash del resultado), así que se puede volver a ver en el calendario.
-// - La directiva: un mensaje corto tras cada gran premio de la temporada, según lo que se esperaba del coche (los
-//   objetivos) y cómo van. Se guarda con la ronda.
+// La prensa tras cada gran premio (9.2): una portada de un periódico inventado, sacada del resumen y del resultado de
+// la carrera. Sale siempre la misma para la misma carrera (el azar sale de un hash del resultado), así que se puede
+// volver a ver en el calendario. (El mensaje de la directiva y sus objetivos se quitaron en noviembre de 2026.)
 // Solo interfaz: no toca la simulación.
 import type { RaceSummary, SeasonState } from "../sim/season";
 import { pointsFor, RACE_POINTS } from "../sim/season";
-import { objectiveStatus } from "../sim/objectives";
 import type { TeamDef, ResultRow } from "../sim/session";
 import { DRIVERS } from "./data";
 import { esc } from "./common";
@@ -114,54 +111,4 @@ export function portadaHtml(p: Portada, kicker = ""): string {
     <h2 class="paper-t">${esc(p.title)}</h2><div class="paper-s">${esc(p.sub)}</div>
     ${p.side.length ? `<ul class="paper-b">${p.side.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}
     <div class="paper-f">Periódico inventado del juego</div></div>`;
-}
-
-/**
- * Mensaje de la directiva tras un gran premio de la temporada (s ya lleva la ronda recién corrida). Según lo que se
- * esperaba del coche (sus objetivos), cómo ha ido la carrera y si algún objetivo se acaba de cumplir o de perder.
- */
-export function boardMessage(s: SeasonState, teams: TeamDef[], mine: number[], races: number): string | null {
-  const objs = s.objetivos ?? [];
-  const r = s.rounds[s.rounds.length - 1];
-  if (!r?.race || !objs.length) return null;
-  const pick = chooser(`${s.seed}|${s.year ?? 2026}|${r.round}|${r.race.map((x) => x.id).join(",")}`);
-  const prev: SeasonState = { ...s, rounds: s.rounds.slice(0, -1), round: s.round - 1 };
-  const before = objs.map((o) => objectiveStatus(o, prev, teams, mine, races));
-  const now = objs.map((o) => objectiveStatus(o, s, teams, mine, races));
-  // lo que se espera de este coche en una carrera, según su objetivo principal
-  const goal = objs.find((o) => o.kind !== "constructores")?.kind ?? "puntuar";
-  const expect = goal === "victorias" ? 1 : goal === "podios" ? 3 : objs[0].target <= 6 ? 8 : 10;
-  const rows = r.race;
-  const fin = rows.map((x, i) => ({ id: x.id, pos: i + 1, ok: x.status === "fin" })).filter((x) => mine.includes(x.id));
-  const bestPos = Math.min(...fin.filter((x) => x.ok).map((x) => x.pos), 99);
-  const pts = (() => { const p = pointsFor(rows, r.raceTable ?? RACE_POINTS); return mine.reduce((a, id) => a + (p.get(id) ?? 0), 0); })();
-  const outs = fin.filter((x) => !x.ok).length;
-  const lines: string[] = [];
-  // sin repetir la frase con la que empezó el mensaje de la carrera anterior
-  const last = s.rounds[s.rounds.length - 2]?.board ?? "";
-  const pick1 = <T extends string>(a: T[]): T => { const fresh = a.filter((x) => !last.startsWith(x)); return pick(fresh.length ? fresh : a); };
-  const winsBefore = prev.rounds.filter((x) => x.race?.[0] && mine.includes(x.race[0].id) && x.race[0].status === "fin").length;
-  if (bestPos === 1) lines.push(goal === "victorias" ? pick1(["Victoria. Es lo que esperábamos de este coche, y así hay que seguir.", winsBefore ? "Una victoria más. Bien hecho, pero el campeonato no se gana en una tarde." : "La primera victoria del año. Bien hecho, pero el campeonato no se gana en una tarde."]) : pick1(["¡Una victoria! Nadie en la fábrica se lo esperaba. Enhorabuena a todo el equipo.", "Ganar con este coche no estaba en ningún plan. Disfrutadlo: os lo habéis ganado."]));
-  else if (bestPos <= expect) lines.push(bestPos <= 3 && expect > 3 ? pick1(["Un podio con este coche vale oro. Buen trabajo en el muro.", "El podio está por encima de lo que pedíamos. Así, sí."]) : pick1(["Resultado dentro de lo que esperábamos. Hay que seguir sumando.", `${pts} ${pts === 1 ? "punto" : "puntos"} más. Correcto, sin más.`, "Lo que tocaba. Ni más ni menos.", "Buen trabajo. Seguid así y no os relajéis.", `Sumamos ${pts}. Es el camino.`]));
-  else if (outs === fin.length) lines.push(pick1(["Ningún coche en meta. Quiero un informe de lo que ha pasado antes de la próxima carrera.", "Ningún coche en meta. Esto no se puede repetir.", "Cero coches en la bandera a cuadros. Inaceptable."]));
-  else if (goal === "victorias") lines.push(pick1(["Con este coche esperaba ganar. Quiero saber qué ha fallado.", "Hoy no era para estar fuera de lo más alto. Revisad la estrategia.", "Tenemos el mejor coche y no hemos ganado. Explicádmelo.", "No pagamos este coche para ver ganar a otros."]));
-  else if (goal === "podios") lines.push(pick1(["Esperaba el podio con este coche.", "Teníamos coche para el podio y nos vamos con las manos casi vacías.", "Fuera del podio. Con este coche no es aceptable.", "El podio era lo mínimo. Hablemos."]));
-  else lines.push(pts ? pick1(["Pocos puntos para lo que tenemos. Hay que apretar.", "Algo es algo, pero sabe a poco.", "Puntuamos, pero el coche da para más.", "Un paso, pequeño. Necesitamos más."]) : pick1(["Sin puntos otra vez. Así no vamos a ninguna parte.", "Cero puntos. Necesito ver otra cosa en la próxima carrera.", "Otro fin de semana en blanco. Los patrocinadores también miran la tabla.", "Nada que sumar. Quiero un plan claro para la próxima carrera.", "Así no. Sin puntos no hay presupuesto que aguante."]));
-  // objetivos que se cumplen o se pierden en esta carrera
-  const list = (xs: string[]) => (xs.length > 1 ? `${xs.slice(0, -1).join("», «")}» ni a «${xs[xs.length - 1]}` : xs[0]);
-  const just = (k: string) => now.filter((st, i) => st.state === k && before[i].state !== k).map((st) => st.text.toLowerCase());
-  const done = just("done"), failed = just("failed"), off = just("off");
-  if (done.length) lines.push(`${done.length > 1 ? "Objetivos cumplidos" : "Objetivo cumplido"}: ${done.join(" y ")}. Lo tendremos en cuenta en el presupuesto.`);
-  if (failed.length) lines.push(`Ya no llegamos a «${list(failed)}». Esto pesará en el presupuesto del año que viene.`);
-  if (off.length) lines.push(`Cuidado: ahora mismo no llegamos a «${list(off)}».`);
-  if ((s.aviso ?? 0) >= 2 && bestPos > expect) lines.push("Es tu última oportunidad: si este año tampoco cumplimos nada, buscaremos a otro.");
-  else if ((s.aviso ?? 0) > 0 && bestPos > expect) lines.push("Os recuerdo que vuestro puesto está en juego.");
-  // lo que dijiste en la rueda de prensa
-  const said = (s.boardMood ?? 0) > 0 ? pick(["Bien dicho en la rueda de prensa.", "Me gustó lo que dijiste ante la prensa."]) : (s.boardMood ?? 0) < 0 ? pick(["Y lo de la rueda de prensa sobraba.", "Cuidado con lo que se dice ante la prensa."]) : "";
-  return [...lines.slice(0, 3), said].filter(Boolean).join(" ");
-}
-
-/** El mensaje de la directiva, en HTML. */
-export function boardHtml(msg: string, team: string): string {
-  return `<div class="panel board"><div class="hd"><span class="t">📩 Mensaje de la directiva</span></div><div class="bd"><div class="board-m">${esc(msg)}</div><div class="small dim" style="margin-top:4px">— La directiva de ${esc(team)}</div></div></div>`;
 }

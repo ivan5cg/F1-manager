@@ -1,7 +1,6 @@
 import type { SessionSnapshot } from "../sim/snapshot";
 import { TEAMS, BASE_TEAMS, MARKET, CIRCUITS, ROUNDS, DRIVERS, GRID_CHANGES, getTrack, calendarOf, devContext, devBonuses, atrPlan, myAtr, gridOf, ensureAeroPkgs, CALENDARS, circuitOf, devRounds, person, whoAt, useSeason } from "./data";
 import { rivalTechMult } from "../sim/market";
-import { objectivesFor, objectiveStatus } from "../sim/objectives";
 import { DEV_AREAS, DEV_SIZES, MOTOR_CAP, motorCapFor, DevArea, DevSize, devLeft, devExpect, orderPart, newDev, isWorks, devGains, rivalDevAt, atrMult, atrMidRound } from "../sim/development";
 import { myTeamPanel, puSummary, puPanel, wirePu, PLAYER_TEAM_ID } from "./teamBuilder";
 import { $, esc, fmtLap, fmtRace, tyreHtml, fmtDate, sheet, setLabel, groupSets, flagHtml, setBack } from "./common";
@@ -21,7 +20,7 @@ import { SCENARIO_NAMES } from "../sim/weather";
 import { gpWhere } from "./grandPrix";
 import { GP_SLOT, hasSession, saveSeason, loadSeason, slotList, getActiveSlot, deleteSlot, exportSlot, checkImport, importInto, SLOTS, storageUse, installed, isSafariLike, markExported, exportDue, loadPrefs, savePrefs } from "./store";
 import { raceSummaryHtml, drawRaceSummary, photosHtml } from "./summary";
-import { headlines, portadaHtml, boardHtml } from "./prensa";
+import { headlines, portadaHtml } from "./prensa";
 import { moodPanel, syncMood, prensaHtml, wirePrensa } from "./vestuario";
 import { previaHtml, galaHtml, galaOf, trophyRoomHtml, hitosHtml } from "./ritual";
 import { devPlanoHtml, setupPlanoHtml } from "./planos";
@@ -90,7 +89,6 @@ function chooseSlot(what: string, onPick: (slot: number) => void) {
 /** Por dónde va una temporada guardada. */
 function slotWhere(s: SeasonState): string {
   const cal = calendarOf(s);
-  if (s.despedido) return `Despedido al acabar ${s.despedido}`;
   if (s.round >= cal.length) return `Temporada ${yearOf(s)} terminada`;
   const c = CIRCUITS[cal[s.round]];
   return `${yearOf(s)} · Ronda ${s.round + 1}/${cal.length} · ${flagHtml(c.bandera)} ${esc(c.gp.replace("Gran Premio de ", "GP de "))}`;
@@ -259,8 +257,6 @@ export function teamPickerScreen(nav: Nav, slot: number) {
 export function seasonScreen(nav: Nav, s: SeasonState) {
   // temporadas empezadas antes del desarrollo por piezas: si aún no se ha corrido nada, se les pone ya
   if (!s.dev && s.round === 0 && !s.rounds.length) { s.dev = newDev(devContext(s).left); saveSeason(s); }
-  // objetivos de la directiva: según cómo era el coche frente a la parrilla al empezar
-  if (!s.objetivos) { s.objetivos = objectivesFor(gridOf(s, 0).teams, s.playerTeam, calendarOf(s).length); saveSeason(s); }
   // túnel de viento: el paquete del periodo que acaba de terminar
   if (ensureAeroPkgs(s)) { saveSeason(s); useSeason(s); }
   const ds = driverStandings(s, DRIVERS.length);
@@ -286,7 +282,6 @@ export function seasonScreen(nav: Nav, s: SeasonState) {
     ${newsPanel(s)}
     ${swapsPanel(s)}
     ${!done && s.dev && !(s.weekend && s.weekend.next > 0) ? `<div style="padding:0 10px 8px"><button id="swapbtn" style="width:100%">Cambiar un piloto (libres, F2 u otro equipo)</button></div>` : ""}
-    ${objectivesPanel(s, ROUNDS_S.length, done)}
     ${done ? galaHtml(galaOf(s), yearOf(s)) : moodPanel(s)}
     ${trophyRoomHtml(s)}
     ${devPanel(s, myTeam, ROUNDS_S, done)}
@@ -323,8 +318,7 @@ export function seasonScreen(nav: Nav, s: SeasonState) {
       ${ts.map((x, i) => `<div class="cbar${x.team.id === s.playerTeam ? " me" : ""}"><span class="pos">${i + 1}</span><span class="cn">${x.team.id === s.playerTeam && s.equipo ? teamCrest(s.equipo, 13) + " " : ""}${esc(x.team.nombre)}</span><span class="cb"><i style="--w:${ts[0].points ? Math.max(1.5, (100 * x.points) / ts[0].points) : 1.5}%;background:${x.team.color};animation-delay:${i * 45}ms"></i></span><b class="mono">${x.points}</b></div>`).join("")}
     </div></div>
     ${historyPanel(s)}
-    ${done ? (s.despedido ? `<div class="panel"><div class="bd"><b>🚪 La directiva te despidió al acabar ${s.despedido}.</b> La partida se queda aquí, con todo lo que ganaste.</div></div><div style="padding:0 10px"><button class="red big-cta" id="again" style="width:100%">Otra partida</button></div>`
-      : `<div style="padding:0 10px;display:grid;gap:8px"><button class="red big-cta" id="nextyear">Empezar la temporada ${yearOf(s) + 1}</button><button id="again">Otra partida</button></div>`) : ""}
+    ${done ? `<div style="padding:0 10px;display:grid;gap:8px"><button class="red big-cta" id="nextyear">Empezar la temporada ${yearOf(s) + 1}</button><button id="again">Otra partida</button></div>` : ""}
   </div>`;
   setBack(() => nav.home());
   $("#home").onclick = () => nav.home();
@@ -420,19 +414,6 @@ function wirePreseason(nav: Nav, s: SeasonState, redraw: () => void) {
       ${lr}
       <button data-close style="width:100%;margin-top:10px">Cerrar</button>`);
   };
-}
-
-// --------------------------------------------------------------- objetivos
-function objectivesPanel(s: SeasonState, races: number, done: boolean): string {
-  if (!s.objetivos?.length) return "";
-  const mine = DRIVERS.filter((d) => d.team.id === s.playerTeam).map((d) => d.id);
-  const st = s.objetivos.map((o) => objectiveStatus(o, s, TEAMS, mine, races));
-  const ICON = { done: "✅", failed: "❌", on: "🟢", off: "🟠" };
-  const ok = st.filter((x) => x.state === "done").length;
-  return `<div class="panel"><div class="hd"><span class="t">Objetivos de la directiva</span>${done ? `<span class="small">${ok} de ${st.length} cumplidos</span>` : ""}</div><div class="bd">
-    ${st.map((x) => `<div class="objrow"><span>${ICON[x.state]}</span><div class="grow"><b>${esc(x.text)}</b><br><span class="small dim">${esc(x.now)}${x.state === "done" ? " · cumplido" : x.state === "failed" ? " · ya no se puede" : x.state === "off" ? " · por ahora, no llegas" : ""}</span></div></div>`).join("")}
-    <div class="small dim" style="margin-top:4px">${done ? (ok === st.length ? "La directiva está contenta con la temporada." : ok ? "La directiva esperaba algo más." : "La directiva no está nada contenta.") : "Los pone la directiva al empezar, según lo bueno que es el coche frente al resto."}</div>
-  </div></div>`;
 }
 
 // --------------------------------------------------------------- desarrollo
@@ -579,7 +560,7 @@ function roundSheet(r: RoundResult, playerTeam: string, hitosOf?: SeasonState["h
     `<h2 style="margin-top:14px">${SESSION_NAMES[kind]}</h2>${resultsTable(kind, rows, playerTeam, table)}${sum ? `<div class="sumwrap" data-sumwrap="${kind}">${sum.photos?.length ? photosHtml(sum.photos) : ""}${raceSummaryHtml(sum)}</div>` : ""}`;
   const { el } = sheet(`<div class="row"><h1 class="grow" style="font-size:18px">${flagHtml(c.bandera)} ${esc(c.gp)}</h1><button data-close>Cerrar</button></div>
     ${hitosHtml((hitosOf ?? []).filter((h) => h.round === r.round && h.circuitId === r.circuitId))}
-    ${r.summary ? portadaHtml(headlines(r.summary, r.race, c.gp, playerTeam), "Edición del lunes") : ""}${r.board ? boardHtml(r.board, TEAMS.find((t) => t.id === playerTeam)?.nombre ?? "") : ""}
+    ${r.summary ? portadaHtml(headlines(r.summary, r.race, c.gp, playerTeam), "Edición del lunes") : ""}
     ${block("RACE", r.race, r.raceTable, r.summary)}${block("SPRINT", r.sprint, r.sprintTable, r.sprintSummary)}${block("Q", r.q)}
     ${!r.summary ? `<div class="small dim" style="margin-top:8px">De esta carrera no se guardaron las gráficas (se corrió con una versión anterior).</div>` : ""}
     <button data-close style="width:100%;margin-top:10px">Cerrar</button>`);

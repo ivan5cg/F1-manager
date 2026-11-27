@@ -1,0 +1,2741 @@
+{
+ "opts": {
+  "team": "haas",
+  "seed": 4,
+  "seasons": 4,
+  "mode": "real",
+  "preseason": true,
+  "develop": true,
+  "calendar": "corta"
+ },
+ "seasons": [
+  {
+   "year": 2026,
+   "playerTeam": "haas",
+   "teamName": "Haas",
+   "calendar": [
+    "suzuka",
+    "bahrein",
+    "monaco",
+    "silverstone",
+    "spa",
+    "monza",
+    "sepang",
+    "singapur",
+    "interlagos"
+   ],
+   "sprints": [
+    "singapur",
+    "interlagos"
+   ],
+   "budget": 40,
+   "devBonus": 0,
+   "devLeftStart": 24,
+   "levels0": {
+    "mercedes": 2.044,
+    "ferrari": 1.754,
+    "redbull": 1.829,
+    "mclaren": 1.762,
+    "racingbulls": 1.091,
+    "alpine": 0.997,
+    "haas": 0.747,
+    "audi": 1.043,
+    "williams": -0.667,
+    "astonmartin": -2.012,
+    "cadillac": -1.339
+   },
+   "carRank0": 8,
+   "spread0": 4.056,
+   "races": [
+    {
+     "round": 1,
+     "circuitId": "suzuka",
+     "sprint": false,
+     "winner": "Kimi Antonelli",
+     "winnerTeam": "Mercedes",
+     "pole": "Kimi Antonelli",
+     "mine": [
+      {
+       "nombre": "Oliver Bearman",
+       "grid": 9,
+       "pos": 12,
+       "status": "fin",
+       "points": 0
+      },
+      {
+       "nombre": "Esteban Ocon",
+       "grid": 16,
+       "pos": 19,
+       "status": "fin",
+       "points": 0
+      }
+     ],
+     "dnfs": 3,
+     "dnfReasons": {
+      "avería": 2,
+      "accidente": 1
+     },
+     "dsq": 0,
+     "finished": 19,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 38.002,
+     "passes": 79,
+     "safety": 0,
+     "vsc": 0,
+     "red": true,
+     "board": "Otro fin de semana en blanco. Los patrocinadores también miran la tabla."
+    },
+    {
+     "round": 2,
+     "circuitId": "bahrein",
+     "sprint": false,
+     "winner": "Kimi Antonelli",
+     "winnerTeam": "Mercedes",
+     "pole": "Kimi Antonelli",
+     "mine": [
+      {
+       "nombre": "Esteban Ocon",
+       "grid": 14,
+       "pos": 12,
+       "status": "fin",
+       "points": 0
+      },
+      {
+       "nombre": "Oliver Bearman",
+       "grid": 8,
+       "pos": 22,
+       "status": "out",
+       "reason": "accidente con LIN",
+       "points": 0
+      }
+     ],
+     "dnfs": 4,
+     "dnfReasons": {
+      "avería": 2,
+      "accidente": 1,
+      "accidente con LIN": 1
+     },
+     "dsq": 0,
+     "finished": 18,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 34.288,
+     "passes": 57,
+     "safety": 1,
+     "vsc": 0,
+     "red": true,
+     "board": "Nada que sumar. Quiero un plan claro para la próxima carrera."
+    },
+    {
+     "round": 3,
+     "circuitId": "monaco",
+     "sprint": false,
+     "winner": "Kimi Antonelli",
+     "winnerTeam": "Mercedes",
+     "pole": "Lando Norris",
+     "mine": [
+      {
+       "nombre": "Oliver Bearman",
+       "grid": 16,
+       "pos": 11,
+       "status": "fin",
+       "points": 0
+      },
+      {
+       "nombre": "Esteban Ocon",
+       "grid": 10,
+       "pos": 15,
+       "status": "fin",
+       "points": 0
+      }
+     ],
+     "dnfs": 3,
+     "dnfReasons": {
+      "avería": 1,
+      "accidente": 2
+     },
+     "dsq": 0,
+     "finished": 19,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [
+      "🚑 Lewis Hamilton (Ferrari) se ha lesionado en el accidente: se pierde la próxima carrera. Le sustituye Antonio Giovinazzi."
+     ],
+     "secs": 30.798,
+     "passes": 22,
+     "safety": 1,
+     "vsc": 0,
+     "red": true,
+     "board": "Otro fin de semana en blanco. Los patrocinadores también miran la tabla."
+    },
+    {
+     "round": 4,
+     "circuitId": "silverstone",
+     "sprint": false,
+     "winner": "Max Verstappen",
+     "winnerTeam": "Red Bull Racing",
+     "pole": "Max Verstappen",
+     "mine": [
+      {
+       "nombre": "Oliver Bearman",
+       "grid": 15,
+       "pos": 11,
+       "status": "fin",
+       "points": 0
+      },
+      {
+       "nombre": "Esteban Ocon",
+       "grid": 16,
+       "pos": 12,
+       "status": "fin",
+       "points": 0
+      }
+     ],
+     "dnfs": 4,
+     "dnfReasons": {
+      "avería": 1,
+      "accidente": 2,
+      "accidente con GIO": 1
+     },
+     "dsq": 0,
+     "finished": 18,
+     "shortened": false,
+     "wet": true,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 44.154,
+     "passes": 99,
+     "safety": 2,
+     "vsc": 1,
+     "red": false,
+     "board": "Cero puntos. Necesito ver otra cosa en la próxima carrera."
+    },
+    {
+     "round": 5,
+     "circuitId": "spa",
+     "sprint": false,
+     "winner": "Lewis Hamilton",
+     "winnerTeam": "Ferrari",
+     "pole": "Lewis Hamilton",
+     "mine": [
+      {
+       "nombre": "Oliver Bearman",
+       "grid": 7,
+       "pos": 8,
+       "status": "fin",
+       "points": 4
+      },
+      {
+       "nombre": "Esteban Ocon",
+       "grid": 12,
+       "pos": 11,
+       "status": "fin",
+       "points": 0
+      }
+     ],
+     "dnfs": 2,
+     "dnfReasons": {
+      "accidente": 1,
+      "daños tras el toque": 1
+     },
+     "dsq": 0,
+     "finished": 20,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [
+      "🚑 George Russell (Mercedes) se ha lesionado en el accidente: se pierde las 2 próximas carreras. Le sustituye Frederik Vesti."
+     ],
+     "secs": 34.727,
+     "passes": 103,
+     "safety": 0,
+     "vsc": 0,
+     "red": true,
+     "board": "Resultado dentro de lo que esperábamos. Hay que seguir sumando."
+    },
+    {
+     "round": 6,
+     "circuitId": "monza",
+     "sprint": false,
+     "winner": "Max Verstappen",
+     "winnerTeam": "Red Bull Racing",
+     "pole": "Oscar Piastri",
+     "mine": [
+      {
+       "nombre": "Esteban Ocon",
+       "grid": 14,
+       "pos": 9,
+       "status": "fin",
+       "points": 2
+      },
+      {
+       "nombre": "Oliver Bearman",
+       "grid": 11,
+       "pos": 21,
+       "status": "out",
+       "reason": "accidente",
+       "points": 0
+      }
+     ],
+     "dnfs": 3,
+     "dnfReasons": {
+      "avería": 2,
+      "accidente": 1
+     },
+     "dsq": 0,
+     "finished": 19,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 30.618,
+     "passes": 116,
+     "safety": 1,
+     "vsc": 0,
+     "red": false,
+     "board": "Lo que tocaba. Ni más ni menos. Objetivo cumplido: puntuar en 2 carreras. Lo tendremos en cuenta en el presupuesto."
+    },
+    {
+     "round": 7,
+     "circuitId": "sepang",
+     "sprint": false,
+     "winner": "Max Verstappen",
+     "winnerTeam": "Red Bull Racing",
+     "pole": "Max Verstappen",
+     "mine": [
+      {
+       "nombre": "Oliver Bearman",
+       "grid": 10,
+       "pos": 8,
+       "status": "fin",
+       "points": 4
+      },
+      {
+       "nombre": "Esteban Ocon",
+       "grid": 11,
+       "pos": 14,
+       "status": "fin",
+       "points": 0
+      }
+     ],
+     "dnfs": 2,
+     "dnfReasons": {
+      "daños tras el toque": 1,
+      "avería": 1
+     },
+     "dsq": 0,
+     "finished": 20,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 32.703,
+     "passes": 48,
+     "safety": 0,
+     "vsc": 0,
+     "red": false,
+     "board": "Resultado dentro de lo que esperábamos. Hay que seguir sumando."
+    },
+    {
+     "round": 8,
+     "circuitId": "singapur",
+     "sprint": true,
+     "winner": "Max Verstappen",
+     "winnerTeam": "Red Bull Racing",
+     "pole": "Kimi Antonelli",
+     "mine": [
+      {
+       "nombre": "Esteban Ocon",
+       "grid": 10,
+       "pos": 20,
+       "status": "out",
+       "reason": "daños tras el toque",
+       "points": 0
+      },
+      {
+       "nombre": "Oliver Bearman",
+       "grid": 16,
+       "pos": 21,
+       "status": "out",
+       "reason": "avería (batería), se retira en boxes",
+       "points": 0
+      }
+     ],
+     "dnfs": 4,
+     "dnfReasons": {
+      "avería": 3,
+      "daños tras el toque": 1
+     },
+     "dsq": 0,
+     "finished": 18,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 32.778,
+     "passes": 16,
+     "safety": 0,
+     "vsc": 1,
+     "red": false,
+     "board": "Ningún coche en meta. Quiero un informe de lo que ha pasado antes de la próxima carrera."
+    },
+    {
+     "round": 9,
+     "circuitId": "interlagos",
+     "sprint": true,
+     "winner": "Max Verstappen",
+     "winnerTeam": "Red Bull Racing",
+     "pole": "Max Verstappen",
+     "mine": [
+      {
+       "nombre": "Esteban Ocon",
+       "grid": 8,
+       "pos": 7,
+       "status": "fin",
+       "points": 6
+      },
+      {
+       "nombre": "Oliver Bearman",
+       "grid": 18,
+       "pos": 9,
+       "status": "fin",
+       "points": 2
+      }
+     ],
+     "dnfs": 5,
+     "dnfReasons": {
+      "avería": 5
+     },
+     "dsq": 0,
+     "finished": 17,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 27.63,
+     "passes": 67,
+     "safety": 0,
+     "vsc": 1,
+     "red": false,
+     "board": "Sumamos 8. Es el camino. Objetivo cumplido: acabar entre los 9 primeros de constructores. Lo tendremos en cuenta en el presupuesto."
+    }
+   ],
+   "aviso": 0,
+   "news": [],
+   "preseason": {
+    "laps": 161,
+    "fiabBonus": 0.05,
+    "secs": 24.305
+   },
+   "devLeftEnd": 0,
+   "levelsEnd": {
+    "mercedes": 2.417,
+    "ferrari": 2.183,
+    "redbull": 2.373,
+    "mclaren": 2.266,
+    "racingbulls": 1.626,
+    "alpine": 1.356,
+    "haas": 1.485,
+    "audi": 1.492,
+    "williams": -0.41,
+    "astonmartin": -1.414,
+    "cadillac": -0.538
+   },
+   "carRankEnd": 7,
+   "spreadEnd": 3.831,
+   "parts": [
+    {
+     "area": "motor",
+     "size": 2,
+     "ordered": 0,
+     "ready": 2,
+     "expect": 0.172,
+     "real": 0.153
+    },
+    {
+     "area": "fiab",
+     "size": 1,
+     "ordered": 1,
+     "ready": 3,
+     "expect": 0.032,
+     "real": 0.036
+    },
+    {
+     "area": "motor",
+     "size": 2,
+     "ordered": 2,
+     "ready": 4,
+     "expect": 0.172,
+     "real": 0.096
+    },
+    {
+     "area": "fiab",
+     "size": 1,
+     "ordered": 3,
+     "ready": 5,
+     "expect": 0.032,
+     "real": 0.026
+    }
+   ],
+   "aeroPkgs": [
+    {
+     "period": 0,
+     "ready": 3,
+     "expect": 0.266,
+     "real": 0.274,
+     "medido": 0.228,
+     "montar": true
+    },
+    {
+     "period": 1,
+     "ready": 6,
+     "expect": 0.266,
+     "real": 0.335,
+     "medido": 0.316,
+     "montar": true
+    }
+   ],
+   "objectives": [
+    {
+     "text": "Acabar entre los 9 primeros de constructores",
+     "done": true
+    },
+    {
+     "text": "Puntuar en 2 carreras",
+     "done": true
+    }
+   ],
+   "champion": {
+    "nombre": "Max Verstappen",
+    "equipo": "Red Bull Racing",
+    "puntos": 191
+   },
+   "constructors": [
+    {
+     "equipo": "Red Bull Racing",
+     "puntos": 285
+    },
+    {
+     "equipo": "Mercedes",
+     "puntos": 223
+    },
+    {
+     "equipo": "Ferrari",
+     "puntos": 216
+    },
+    {
+     "equipo": "McLaren",
+     "puntos": 132
+    },
+    {
+     "equipo": "Alpine",
+     "puntos": 42
+    },
+    {
+     "equipo": "Racing Bulls",
+     "puntos": 35
+    },
+    {
+     "equipo": "Audi",
+     "puntos": 30
+    },
+    {
+     "equipo": "Haas",
+     "puntos": 18
+    },
+    {
+     "equipo": "Williams",
+     "puntos": 0
+    },
+    {
+     "equipo": "Aston Martin",
+     "puntos": 0
+    },
+    {
+     "equipo": "Cadillac",
+     "puntos": 0
+    }
+   ],
+   "myPos": 8,
+   "myPoints": 18,
+   "myDrivers": [
+    {
+     "nombre": "Esteban Ocon",
+     "abrev": "OCO",
+     "pos": 17,
+     "puntos": 8,
+     "edad": 30,
+     "rating": 83.8,
+     "moral": 50.7
+    },
+    {
+     "nombre": "Oliver Bearman",
+     "abrev": "BEA",
+     "pos": 15,
+     "puntos": 10,
+     "edad": 21,
+     "rating": 86.4,
+     "moral": 60.2
+    }
+   ],
+   "wins": {
+    "Kimi Antonelli": 3,
+    "Max Verstappen": 5,
+    "Lewis Hamilton": 1
+   },
+   "winnersDistinct": 3,
+   "teamsWinning": 3,
+   "poleToWin": 6,
+   "dnfRate": 0.152,
+   "swaps": [
+    "R4 Lewis Hamilton → Antonio Giovinazzi (lesión de Lewis Hamilton)",
+    "R5 Antonio Giovinazzi → Lewis Hamilton (vuelve Lewis Hamilton)",
+    "R6 George Russell → Frederik Vesti (lesión de George Russell)",
+    "R8 Frederik Vesti → George Russell (vuelve George Russell)"
+   ],
+   "hitos": 1,
+   "rivals": 3,
+   "grid": [
+    {
+     "equipo": "Mercedes",
+     "pilotos": [
+      "RUS28",
+      "ANT20"
+     ]
+    },
+    {
+     "equipo": "Ferrari",
+     "pilotos": [
+      "LEC29",
+      "HAM41"
+     ]
+    },
+    {
+     "equipo": "Red Bull Racing",
+     "pilotos": [
+      "VER29",
+      "HAD22"
+     ]
+    },
+    {
+     "equipo": "McLaren",
+     "pilotos": [
+      "NOR27",
+      "PIA25"
+     ]
+    },
+    {
+     "equipo": "Racing Bulls",
+     "pilotos": [
+      "LAW24",
+      "LIN19"
+     ]
+    },
+    {
+     "equipo": "Alpine",
+     "pilotos": [
+      "GAS30",
+      "COL23"
+     ]
+    },
+    {
+     "equipo": "Haas",
+     "pilotos": [
+      "OCO30",
+      "BEA21"
+     ]
+    },
+    {
+     "equipo": "Audi",
+     "pilotos": [
+      "HUL39",
+      "BOR22"
+     ]
+    },
+    {
+     "equipo": "Williams",
+     "pilotos": [
+      "SAI32",
+      "ALB30"
+     ]
+    },
+    {
+     "equipo": "Aston Martin",
+     "pilotos": [
+      "ALO45",
+      "STR28"
+     ]
+    },
+    {
+     "equipo": "Cadillac",
+     "pilotos": [
+      "PER36",
+      "BOT37"
+     ]
+    }
+   ],
+   "ages": {
+    "mean": 29,
+    "min": 19,
+    "max": 45
+   },
+   "ratings": {
+    "mean": 87.3,
+    "min": 81.2,
+    "max": 95.3
+   },
+   "poolSize": 40
+  },
+  {
+   "year": 2027,
+   "playerTeam": "haas",
+   "teamName": "Haas",
+   "calendar": [
+    "suzuka",
+    "bahrein",
+    "monaco",
+    "silverstone",
+    "spa",
+    "monza",
+    "sepang",
+    "singapur",
+    "interlagos"
+   ],
+   "sprints": [
+    "suzuka",
+    "silverstone",
+    "spa",
+    "singapur"
+   ],
+   "budget": 52,
+   "devBonus": 12,
+   "devLeftStart": 31,
+   "levels0": {
+    "mercedes": 2.206,
+    "ferrari": 2.092,
+    "redbull": 2.127,
+    "mclaren": 2.132,
+    "racingbulls": 1.504,
+    "alpine": 1.164,
+    "haas": 1.354,
+    "audi": 1.513,
+    "williams": -0.489,
+    "astonmartin": -1.312,
+    "cadillac": -0.615
+   },
+   "carRank0": 7,
+   "spread0": 3.518,
+   "races": [
+    {
+     "round": 1,
+     "circuitId": "suzuka",
+     "sprint": true,
+     "winner": "Lando Norris",
+     "winnerTeam": "McLaren",
+     "pole": "Lando Norris",
+     "mine": [
+      {
+       "nombre": "Oliver Bearman",
+       "grid": 7,
+       "pos": 9,
+       "status": "fin",
+       "points": 2
+      },
+      {
+       "nombre": "Esteban Ocon",
+       "grid": 11,
+       "pos": 17,
+       "status": "fin",
+       "points": 0
+      }
+     ],
+     "dnfs": 1,
+     "dnfReasons": {
+      "avería": 1
+     },
+     "dsq": 0,
+     "finished": 21,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 28.686,
+     "passes": 75,
+     "safety": 0,
+     "vsc": 0,
+     "red": false,
+     "board": "Resultado dentro de lo que esperábamos. Hay que seguir sumando."
+    },
+    {
+     "round": 2,
+     "circuitId": "bahrein",
+     "sprint": false,
+     "winner": "George Russell",
+     "winnerTeam": "Mercedes",
+     "pole": "Kimi Antonelli",
+     "mine": [
+      {
+       "nombre": "Oliver Bearman",
+       "grid": 13,
+       "pos": 6,
+       "status": "fin",
+       "points": 8
+      },
+      {
+       "nombre": "Esteban Ocon",
+       "grid": 12,
+       "pos": 20,
+       "status": "out",
+       "reason": "avería (caja de cambios)",
+       "points": 0
+      }
+     ],
+     "dnfs": 4,
+     "dnfReasons": {
+      "accidente con NOR": 1,
+      "avería": 3
+     },
+     "dsq": 0,
+     "finished": 18,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 32.849,
+     "passes": 66,
+     "safety": 2,
+     "vsc": 1,
+     "red": false,
+     "board": "Lo que tocaba. Ni más ni menos."
+    },
+    {
+     "round": 3,
+     "circuitId": "monaco",
+     "sprint": false,
+     "winner": "Max Verstappen",
+     "winnerTeam": "Red Bull Racing",
+     "pole": "Max Verstappen",
+     "mine": [
+      {
+       "nombre": "Esteban Ocon",
+       "grid": 10,
+       "pos": 14,
+       "status": "fin",
+       "points": 0
+      },
+      {
+       "nombre": "Oliver Bearman",
+       "grid": 11,
+       "pos": 16,
+       "status": "fin",
+       "points": 0
+      }
+     ],
+     "dnfs": 0,
+     "dnfReasons": {},
+     "dsq": 0,
+     "finished": 22,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 30.514,
+     "passes": 5,
+     "safety": 0,
+     "vsc": 0,
+     "red": false,
+     "board": "Así no. Sin puntos no hay presupuesto que aguante."
+    },
+    {
+     "round": 4,
+     "circuitId": "silverstone",
+     "sprint": true,
+     "winner": "Max Verstappen",
+     "winnerTeam": "Red Bull Racing",
+     "pole": "Max Verstappen",
+     "mine": [
+      {
+       "nombre": "Oliver Bearman",
+       "grid": 10,
+       "pos": 9,
+       "status": "fin",
+       "points": 2
+      },
+      {
+       "nombre": "Esteban Ocon",
+       "grid": 16,
+       "pos": 14,
+       "status": "fin",
+       "points": 0
+      }
+     ],
+     "dnfs": 2,
+     "dnfReasons": {
+      "accidente con HAD": 1,
+      "avería": 1
+     },
+     "dsq": 0,
+     "finished": 20,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 25.89,
+     "passes": 68,
+     "safety": 0,
+     "vsc": 1,
+     "red": false,
+     "board": "Lo que tocaba. Ni más ni menos."
+    },
+    {
+     "round": 5,
+     "circuitId": "spa",
+     "sprint": true,
+     "winner": "Max Verstappen",
+     "winnerTeam": "Red Bull Racing",
+     "pole": "George Russell",
+     "mine": [
+      {
+       "nombre": "Esteban Ocon",
+       "grid": 14,
+       "pos": 11,
+       "status": "fin",
+       "points": 0
+      },
+      {
+       "nombre": "Oliver Bearman",
+       "grid": 8,
+       "pos": 12,
+       "status": "fin",
+       "points": 0
+      }
+     ],
+     "dnfs": 0,
+     "dnfReasons": {},
+     "dsq": 0,
+     "finished": 22,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 28.109,
+     "passes": 95,
+     "safety": 0,
+     "vsc": 0,
+     "red": false,
+     "board": "Nada que sumar. Quiero un plan claro para la próxima carrera."
+    },
+    {
+     "round": 6,
+     "circuitId": "monza",
+     "sprint": false,
+     "winner": "Kimi Antonelli",
+     "winnerTeam": "Mercedes",
+     "pole": "Kimi Antonelli",
+     "mine": [
+      {
+       "nombre": "Oliver Bearman",
+       "grid": 9,
+       "pos": 11,
+       "status": "fin",
+       "points": 0
+      },
+      {
+       "nombre": "Esteban Ocon",
+       "grid": 15,
+       "pos": 17,
+       "status": "fin",
+       "points": 0
+      }
+     ],
+     "dnfs": 1,
+     "dnfReasons": {
+      "accidente": 1
+     },
+     "dsq": 0,
+     "finished": 21,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 32.353,
+     "passes": 40,
+     "safety": 0,
+     "vsc": 1,
+     "red": false,
+     "board": "Sin puntos otra vez. Así no vamos a ninguna parte."
+    },
+    {
+     "round": 7,
+     "circuitId": "sepang",
+     "sprint": false,
+     "winner": "Kimi Antonelli",
+     "winnerTeam": "Mercedes",
+     "pole": "Isack Hadjar",
+     "mine": [
+      {
+       "nombre": "Esteban Ocon",
+       "grid": 16,
+       "pos": 14,
+       "status": "fin",
+       "points": 0
+      },
+      {
+       "nombre": "Oliver Bearman",
+       "grid": 14,
+       "pos": 15,
+       "status": "fin",
+       "points": 0
+      }
+     ],
+     "dnfs": 0,
+     "dnfReasons": {},
+     "dsq": 0,
+     "finished": 22,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 31.639,
+     "passes": 92,
+     "safety": 0,
+     "vsc": 0,
+     "red": false,
+     "board": "Así no. Sin puntos no hay presupuesto que aguante."
+    },
+    {
+     "round": 8,
+     "circuitId": "singapur",
+     "sprint": true,
+     "winner": "Max Verstappen",
+     "winnerTeam": "Red Bull Racing",
+     "pole": "George Russell",
+     "mine": [
+      {
+       "nombre": "Oliver Bearman",
+       "grid": 11,
+       "pos": 8,
+       "status": "fin",
+       "points": 4
+      },
+      {
+       "nombre": "Esteban Ocon",
+       "grid": 16,
+       "pos": 11,
+       "status": "fin",
+       "points": 0
+      }
+     ],
+     "dnfs": 2,
+     "dnfReasons": {
+      "avería": 2
+     },
+     "dsq": 0,
+     "finished": 20,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 37.226,
+     "passes": 18,
+     "safety": 1,
+     "vsc": 0,
+     "red": false,
+     "board": "Buen trabajo. Seguid así y no os relajéis."
+    },
+    {
+     "round": 9,
+     "circuitId": "interlagos",
+     "sprint": false,
+     "winner": "Nico Hülkenberg",
+     "winnerTeam": "Ferrari",
+     "pole": "George Russell",
+     "mine": [
+      {
+       "nombre": "Esteban Ocon",
+       "grid": 14,
+       "pos": 15,
+       "status": "fin",
+       "points": 0
+      },
+      {
+       "nombre": "Oliver Bearman",
+       "grid": 11,
+       "pos": 16,
+       "status": "fin",
+       "points": 0
+      }
+     ],
+     "dnfs": 1,
+     "dnfReasons": {
+      "accidente": 1
+     },
+     "dsq": 0,
+     "finished": 21,
+     "shortened": false,
+     "wet": true,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 35.428,
+     "passes": 44,
+     "safety": 1,
+     "vsc": 0,
+     "red": false,
+     "board": "Otro fin de semana en blanco. Los patrocinadores también miran la tabla. Objetivo cumplido: acabar entre los 8 primeros de constructores. Lo tendremos en cuenta en el presupuesto. Ya no llegamos a «puntuar en 5 carreras». Esto pesará en el presupuesto del año que viene."
+    }
+   ],
+   "aviso": 0,
+   "news": [
+    "🏭 Desarrollo de invierno 2027 (ATR 105 %): túnel −0,30 s/vuelta, motor −0,03 s/vuelta, eficiencia ERS +3 %, fiabilidad −2 %, estela −1 %.",
+    "📅 Sprints 2027 (4 al azar): Japón, Gran Bretaña, Bélgica, Singapur.",
+    "🏁 Lewis Hamilton se retira a los 42 años (Ferrari).",
+    "🏁 Fernando Alonso se retira a los 46 años (Aston Martin).",
+    "🏁 Sergio Pérez se retira a los 37 años (Cadillac).",
+    "🏁 Valtteri Bottas se retira a los 38 años (Cadillac).",
+    "🔁 Nico Hülkenberg deja Audi y se va a Ferrari.",
+    "✍️ Audi ficha a Nikola Tsolov.",
+    "✍️ Cadillac ficha a Rafael Câmara.",
+    "✍️ Cadillac ficha a Yuki Tsunoda.",
+    "✍️ Aston Martin ficha a Leonardo Fornaroli."
+   ],
+   "preseason": {
+    "laps": 95,
+    "fiabBonus": 0.03,
+    "secs": 17.447
+   },
+   "devLeftEnd": 3,
+   "levelsEnd": {
+    "mercedes": 2.655,
+    "ferrari": 2.299,
+    "redbull": 2.643,
+    "mclaren": 2.504,
+    "racingbulls": 2.052,
+    "alpine": 1.798,
+    "haas": 1.438,
+    "audi": 1.935,
+    "williams": 0.373,
+    "astonmartin": -0.79,
+    "cadillac": -0.19
+   },
+   "carRankEnd": 8,
+   "spreadEnd": 3.445,
+   "parts": [
+    {
+     "area": "motor",
+     "size": 2,
+     "ordered": 0,
+     "ready": 2,
+     "expect": 0.169,
+     "real": 0.168
+    },
+    {
+     "area": "fiab",
+     "size": 1,
+     "ordered": 1,
+     "ready": 3,
+     "expect": 0.032,
+     "real": 0.031
+    },
+    {
+     "area": "motor",
+     "size": 2,
+     "ordered": 2,
+     "ready": 4,
+     "expect": 0.169,
+     "real": 0.196
+    },
+    {
+     "area": "fiab",
+     "size": 1,
+     "ordered": 3,
+     "ready": 5,
+     "expect": 0.032,
+     "real": 0.037
+    },
+    {
+     "area": "motor",
+     "size": 1,
+     "ordered": 4,
+     "ready": 6,
+     "expect": 0.085,
+     "real": 0.092
+    }
+   ],
+   "aeroPkgs": [
+    {
+     "period": 0,
+     "ready": 3,
+     "expect": 0.247,
+     "real": -0.075,
+     "medido": 0.296,
+     "montar": true
+    },
+    {
+     "period": 1,
+     "ready": 6,
+     "expect": 0.247,
+     "real": -0.025,
+     "medido": 0.056,
+     "montar": true
+    }
+   ],
+   "objectives": [
+    {
+     "text": "Acabar entre los 8 primeros de constructores",
+     "done": true
+    },
+    {
+     "text": "Puntuar en 5 carreras",
+     "done": false
+    }
+   ],
+   "champion": {
+    "nombre": "Max Verstappen",
+    "equipo": "Red Bull Racing",
+    "puntos": 185
+   },
+   "constructors": [
+    {
+     "equipo": "Mercedes",
+     "puntos": 280
+    },
+    {
+     "equipo": "Red Bull Racing",
+     "puntos": 263
+    },
+    {
+     "equipo": "Ferrari",
+     "puntos": 202
+    },
+    {
+     "equipo": "McLaren",
+     "puntos": 176
+    },
+    {
+     "equipo": "Racing Bulls",
+     "puntos": 42
+    },
+    {
+     "equipo": "Alpine",
+     "puntos": 38
+    },
+    {
+     "equipo": "Audi",
+     "puntos": 36
+    },
+    {
+     "equipo": "Haas",
+     "puntos": 16
+    },
+    {
+     "equipo": "Williams",
+     "puntos": 0
+    },
+    {
+     "equipo": "Aston Martin",
+     "puntos": 0
+    },
+    {
+     "equipo": "Cadillac",
+     "puntos": 0
+    }
+   ],
+   "myPos": 8,
+   "myPoints": 16,
+   "myDrivers": [
+    {
+     "nombre": "Esteban Ocon",
+     "abrev": "OCO",
+     "pos": 16,
+     "puntos": 0,
+     "edad": 31,
+     "rating": 82.2,
+     "moral": 37.6
+    },
+    {
+     "nombre": "Oliver Bearman",
+     "abrev": "BEA",
+     "pos": 12,
+     "puntos": 16,
+     "edad": 22,
+     "rating": 88.3,
+     "moral": 59.3
+    }
+   ],
+   "wins": {
+    "Lando Norris": 1,
+    "George Russell": 1,
+    "Max Verstappen": 4,
+    "Kimi Antonelli": 2,
+    "Nico Hülkenberg": 1
+   },
+   "winnersDistinct": 5,
+   "teamsWinning": 4,
+   "poleToWin": 4,
+   "dnfRate": 0.056,
+   "swaps": [],
+   "hitos": 0,
+   "rivals": 2,
+   "grid": [
+    {
+     "equipo": "Mercedes",
+     "pilotos": [
+      "RUS29",
+      "ANT21"
+     ]
+    },
+    {
+     "equipo": "Ferrari",
+     "pilotos": [
+      "LEC30",
+      "HUL40"
+     ]
+    },
+    {
+     "equipo": "Red Bull Racing",
+     "pilotos": [
+      "VER30",
+      "HAD23"
+     ]
+    },
+    {
+     "equipo": "McLaren",
+     "pilotos": [
+      "NOR28",
+      "PIA26"
+     ]
+    },
+    {
+     "equipo": "Racing Bulls",
+     "pilotos": [
+      "LAW25",
+      "LIN20"
+     ]
+    },
+    {
+     "equipo": "Alpine",
+     "pilotos": [
+      "GAS31",
+      "COL24"
+     ]
+    },
+    {
+     "equipo": "Haas",
+     "pilotos": [
+      "OCO31",
+      "BEA22"
+     ]
+    },
+    {
+     "equipo": "Audi",
+     "pilotos": [
+      "TSO21",
+      "BOR23"
+     ]
+    },
+    {
+     "equipo": "Williams",
+     "pilotos": [
+      "SAI33",
+      "ALB31"
+     ]
+    },
+    {
+     "equipo": "Aston Martin",
+     "pilotos": [
+      "FOR23",
+      "STR29"
+     ]
+    },
+    {
+     "equipo": "Cadillac",
+     "pilotos": [
+      "CAM22",
+      "TSU27"
+     ]
+    }
+   ],
+   "ages": {
+    "mean": 26.8,
+    "min": 20,
+    "max": 40
+   },
+   "ratings": {
+    "mean": 86.8,
+    "min": 79.7,
+    "max": 94.9
+   },
+   "poolSize": 40
+  },
+  {
+   "year": 2028,
+   "playerTeam": "haas",
+   "teamName": "Haas",
+   "calendar": [
+    "suzuka",
+    "bahrein",
+    "monaco",
+    "silverstone",
+    "spa",
+    "monza",
+    "sepang",
+    "singapur",
+    "interlagos"
+   ],
+   "sprints": [
+    "silverstone",
+    "spa",
+    "sepang",
+    "interlagos"
+   ],
+   "budget": 41,
+   "devBonus": 1,
+   "devLeftStart": 25,
+   "levels0": {
+    "mercedes": 2.116,
+    "ferrari": 1.835,
+    "redbull": 2.158,
+    "mclaren": 2.127,
+    "racingbulls": 1.743,
+    "alpine": 1.411,
+    "haas": 1.096,
+    "audi": 1.646,
+    "williams": 0.238,
+    "astonmartin": -0.958,
+    "cadillac": -0.414
+   },
+   "carRank0": 8,
+   "spread0": 3.116,
+   "races": [
+    {
+     "round": 1,
+     "circuitId": "suzuka",
+     "sprint": false,
+     "winner": "Kimi Antonelli",
+     "winnerTeam": "Mercedes",
+     "pole": "Kimi Antonelli",
+     "mine": [
+      {
+       "nombre": "Oliver Bearman",
+       "grid": 10,
+       "pos": 9,
+       "status": "fin",
+       "points": 2
+      },
+      {
+       "nombre": "Esteban Ocon",
+       "grid": 16,
+       "pos": 20,
+       "status": "fin",
+       "points": 0
+      }
+     ],
+     "dnfs": 0,
+     "dnfReasons": {},
+     "dsq": 0,
+     "finished": 22,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 33.058,
+     "passes": 158,
+     "safety": 0,
+     "vsc": 0,
+     "red": false,
+     "board": "Resultado dentro de lo que esperábamos. Hay que seguir sumando."
+    },
+    {
+     "round": 2,
+     "circuitId": "bahrein",
+     "sprint": false,
+     "winner": "George Russell",
+     "winnerTeam": "Mercedes",
+     "pole": "Lando Norris",
+     "mine": [
+      {
+       "nombre": "Oliver Bearman",
+       "grid": 15,
+       "pos": 11,
+       "status": "fin",
+       "points": 0
+      },
+      {
+       "nombre": "Esteban Ocon",
+       "grid": 19,
+       "pos": 17,
+       "status": "fin",
+       "points": 0
+      }
+     ],
+     "dnfs": 1,
+     "dnfReasons": {
+      "accidente": 1
+     },
+     "dsq": 0,
+     "finished": 21,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 32.402,
+     "passes": 83,
+     "safety": 1,
+     "vsc": 0,
+     "red": false,
+     "board": "Cero puntos. Necesito ver otra cosa en la próxima carrera."
+    },
+    {
+     "round": 3,
+     "circuitId": "monaco",
+     "sprint": false,
+     "winner": "Kimi Antonelli",
+     "winnerTeam": "Mercedes",
+     "pole": "Kimi Antonelli",
+     "mine": [
+      {
+       "nombre": "Esteban Ocon",
+       "grid": 10,
+       "pos": 9,
+       "status": "fin",
+       "points": 2
+      },
+      {
+       "nombre": "Oliver Bearman",
+       "grid": 17,
+       "pos": 10,
+       "status": "fin",
+       "points": 1
+      }
+     ],
+     "dnfs": 2,
+     "dnfReasons": {
+      "avería": 1,
+      "accidente": 1
+     },
+     "dsq": 0,
+     "finished": 20,
+     "shortened": false,
+     "wet": true,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 36.52,
+     "passes": 33,
+     "safety": 2,
+     "vsc": 0,
+     "red": false,
+     "board": "Sumamos 3. Es el camino. Objetivo cumplido: puntuar en 2 carreras. Lo tendremos en cuenta en el presupuesto."
+    },
+    {
+     "round": 4,
+     "circuitId": "silverstone",
+     "sprint": true,
+     "winner": "Lando Norris",
+     "winnerTeam": "McLaren",
+     "pole": "Lando Norris",
+     "mine": [
+      {
+       "nombre": "Esteban Ocon",
+       "grid": 19,
+       "pos": 13,
+       "status": "fin",
+       "points": 0
+      },
+      {
+       "nombre": "Oliver Bearman",
+       "grid": 14,
+       "pos": 14,
+       "status": "fin",
+       "points": 0
+      }
+     ],
+     "dnfs": 0,
+     "dnfReasons": {},
+     "dsq": 0,
+     "finished": 22,
+     "shortened": false,
+     "wet": true,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 30.502,
+     "passes": 94,
+     "safety": 0,
+     "vsc": 0,
+     "red": false,
+     "board": "Así no. Sin puntos no hay presupuesto que aguante."
+    },
+    {
+     "round": 5,
+     "circuitId": "spa",
+     "sprint": true,
+     "winner": "Kimi Antonelli",
+     "winnerTeam": "Mercedes",
+     "pole": "Max Verstappen",
+     "mine": [
+      {
+       "nombre": "Oliver Bearman",
+       "grid": 20,
+       "pos": 6,
+       "status": "fin",
+       "points": 8
+      },
+      {
+       "nombre": "Esteban Ocon",
+       "grid": 13,
+       "pos": 12,
+       "status": "fin",
+       "points": 0
+      }
+     ],
+     "dnfs": 0,
+     "dnfReasons": {},
+     "dsq": 0,
+     "finished": 22,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 29.515,
+     "passes": 123,
+     "safety": 0,
+     "vsc": 0,
+     "red": false,
+     "board": "Sumamos 8. Es el camino."
+    },
+    {
+     "round": 6,
+     "circuitId": "monza",
+     "sprint": false,
+     "winner": "Oscar Piastri",
+     "winnerTeam": "McLaren",
+     "pole": "Oscar Piastri",
+     "mine": [
+      {
+       "nombre": "Oliver Bearman",
+       "grid": 17,
+       "pos": 9,
+       "status": "fin",
+       "points": 2
+      },
+      {
+       "nombre": "Esteban Ocon",
+       "grid": 18,
+       "pos": 18,
+       "status": "fin",
+       "points": 0
+      }
+     ],
+     "dnfs": 1,
+     "dnfReasons": {
+      "accidente": 1
+     },
+     "dsq": 0,
+     "finished": 21,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [
+      "🚑 Zhou Guanyu (Ferrari) se ha lesionado en el accidente: se pierde las 3 próximas carreras. Le sustituye Antonio Giovinazzi."
+     ],
+     "secs": 30.111,
+     "passes": 59,
+     "safety": 0,
+     "vsc": 0,
+     "red": true,
+     "board": "Lo que tocaba. Ni más ni menos."
+    },
+    {
+     "round": 7,
+     "circuitId": "sepang",
+     "sprint": true,
+     "winner": "Oscar Piastri",
+     "winnerTeam": "McLaren",
+     "pole": "Gabriel Bortoleto",
+     "mine": [
+      {
+       "nombre": "Oliver Bearman",
+       "grid": 2,
+       "pos": 9,
+       "status": "fin",
+       "points": 2
+      },
+      {
+       "nombre": "Esteban Ocon",
+       "grid": 16,
+       "pos": 15,
+       "status": "fin",
+       "points": 0
+      }
+     ],
+     "dnfs": 2,
+     "dnfReasons": {
+      "avería": 1,
+      "accidente": 1
+     },
+     "dsq": 0,
+     "finished": 20,
+     "shortened": false,
+     "wet": true,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 35.571,
+     "passes": 89,
+     "safety": 1,
+     "vsc": 0,
+     "red": false,
+     "board": "Sumamos 2. Es el camino."
+    },
+    {
+     "round": 8,
+     "circuitId": "singapur",
+     "sprint": false,
+     "winner": "Isack Hadjar",
+     "winnerTeam": "Red Bull Racing",
+     "pole": "Isack Hadjar",
+     "mine": [
+      {
+       "nombre": "Oliver Bearman",
+       "grid": 14,
+       "pos": 10,
+       "status": "fin",
+       "points": 1
+      },
+      {
+       "nombre": "Esteban Ocon",
+       "grid": 16,
+       "pos": 17,
+       "status": "fin",
+       "points": 0
+      }
+     ],
+     "dnfs": 2,
+     "dnfReasons": {
+      "avería": 1,
+      "accidente": 1
+     },
+     "dsq": 0,
+     "finished": 20,
+     "shortened": false,
+     "wet": true,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 36.128,
+     "passes": 33,
+     "safety": 1,
+     "vsc": 0,
+     "red": false,
+     "board": "1 punto más. Correcto, sin más."
+    },
+    {
+     "round": 9,
+     "circuitId": "interlagos",
+     "sprint": true,
+     "winner": "Kimi Antonelli",
+     "winnerTeam": "Mercedes",
+     "pole": "Kimi Antonelli",
+     "mine": [
+      {
+       "nombre": "Esteban Ocon",
+       "grid": 15,
+       "pos": 8,
+       "status": "fin",
+       "points": 4
+      },
+      {
+       "nombre": "Oliver Bearman",
+       "grid": 14,
+       "pos": 11,
+       "status": "fin",
+       "points": 0
+      }
+     ],
+     "dnfs": 1,
+     "dnfReasons": {
+      "accidente": 1
+     },
+     "dsq": 0,
+     "finished": 21,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 26.073,
+     "passes": 184,
+     "safety": 0,
+     "vsc": 1,
+     "red": false,
+     "board": "Lo que tocaba. Ni más ni menos. Objetivo cumplido: acabar entre los 9 primeros de constructores. Lo tendremos en cuenta en el presupuesto."
+    }
+   ],
+   "aviso": 0,
+   "news": [
+    "🏭 Desarrollo de invierno 2028 (ATR 100 %): túnel −0,33 s/vuelta, motor −0,02 s/vuelta, eficiencia ERS +3 %.",
+    "📅 Sprints 2028 (4 al azar): Gran Bretaña, Bélgica, Malasia, São Paulo.",
+    "🏁 Nico Hülkenberg se retira a los 41 años (Ferrari).",
+    "✍️ Ferrari ficha a Zhou Guanyu."
+   ],
+   "preseason": {
+    "laps": 129,
+    "fiabBonus": 0.04,
+    "secs": 16.639
+   },
+   "devLeftEnd": 1,
+   "levelsEnd": {
+    "mercedes": 2.41,
+    "ferrari": 2.1,
+    "redbull": 2.448,
+    "mclaren": 2.412,
+    "racingbulls": 1.944,
+    "alpine": 1.743,
+    "haas": 1.521,
+    "audi": 2.168,
+    "williams": 0.899,
+    "astonmartin": 0.03,
+    "cadillac": 0.092
+   },
+   "carRankEnd": 8,
+   "spreadEnd": 2.418,
+   "parts": [
+    {
+     "area": "motor",
+     "size": 2,
+     "ordered": 0,
+     "ready": 2,
+     "expect": 0.169,
+     "real": 0.165
+    },
+    {
+     "area": "fiab",
+     "size": 1,
+     "ordered": 1,
+     "ready": 3,
+     "expect": 0.032,
+     "real": 0.034
+    },
+    {
+     "area": "motor",
+     "size": 2,
+     "ordered": 2,
+     "ready": 4,
+     "expect": 0.169,
+     "real": 0.127
+    },
+    {
+     "area": "fiab",
+     "size": 1,
+     "ordered": 3,
+     "ready": 5,
+     "expect": 0.032,
+     "real": 0.042
+    }
+   ],
+   "aeroPkgs": [
+    {
+     "period": 0,
+     "ready": 3,
+     "expect": 0.256,
+     "real": 0.312,
+     "medido": 0.297,
+     "montar": true
+    },
+    {
+     "period": 1,
+     "ready": 6,
+     "expect": 0.256,
+     "real": -0.045,
+     "medido": 0.013,
+     "montar": true
+    }
+   ],
+   "objectives": [
+    {
+     "text": "Acabar entre los 9 primeros de constructores",
+     "done": true
+    },
+    {
+     "text": "Puntuar en 2 carreras",
+     "done": true
+    }
+   ],
+   "champion": {
+    "nombre": "Kimi Antonelli",
+    "equipo": "Mercedes",
+    "puntos": 179
+   },
+   "constructors": [
+    {
+     "equipo": "Mercedes",
+     "puntos": 300
+    },
+    {
+     "equipo": "McLaren",
+     "puntos": 286
+    },
+    {
+     "equipo": "Red Bull Racing",
+     "puntos": 217
+    },
+    {
+     "equipo": "Ferrari",
+     "puntos": 116
+    },
+    {
+     "equipo": "Racing Bulls",
+     "puntos": 44
+    },
+    {
+     "equipo": "Audi",
+     "puntos": 39
+    },
+    {
+     "equipo": "Haas",
+     "puntos": 22
+    },
+    {
+     "equipo": "Williams",
+     "puntos": 14
+    },
+    {
+     "equipo": "Cadillac",
+     "puntos": 12
+    },
+    {
+     "equipo": "Alpine",
+     "puntos": 3
+    },
+    {
+     "equipo": "Aston Martin",
+     "puntos": 0
+    }
+   ],
+   "myPos": 7,
+   "myPoints": 22,
+   "myDrivers": [
+    {
+     "nombre": "Esteban Ocon",
+     "abrev": "OCO",
+     "pos": 17,
+     "puntos": 6,
+     "edad": 32,
+     "rating": 81.6,
+     "moral": 42
+    },
+    {
+     "nombre": "Oliver Bearman",
+     "abrev": "BEA",
+     "pos": 12,
+     "puntos": 16,
+     "edad": 23,
+     "rating": 88.3,
+     "moral": 74.8
+    }
+   ],
+   "wins": {
+    "Kimi Antonelli": 4,
+    "George Russell": 1,
+    "Lando Norris": 1,
+    "Oscar Piastri": 2,
+    "Isack Hadjar": 1
+   },
+   "winnersDistinct": 5,
+   "teamsWinning": 3,
+   "poleToWin": 6,
+   "dnfRate": 0.045,
+   "swaps": [
+    "R7 Zhou Guanyu → Antonio Giovinazzi (lesión de Zhou Guanyu)"
+   ],
+   "hitos": 1,
+   "rivals": 4,
+   "grid": [
+    {
+     "equipo": "Mercedes",
+     "pilotos": [
+      "RUS30",
+      "ANT22"
+     ]
+    },
+    {
+     "equipo": "Ferrari",
+     "pilotos": [
+      "LEC31",
+      "GIO35"
+     ]
+    },
+    {
+     "equipo": "Red Bull Racing",
+     "pilotos": [
+      "VER31",
+      "HAD24"
+     ]
+    },
+    {
+     "equipo": "McLaren",
+     "pilotos": [
+      "NOR29",
+      "PIA27"
+     ]
+    },
+    {
+     "equipo": "Racing Bulls",
+     "pilotos": [
+      "LAW26",
+      "LIN21"
+     ]
+    },
+    {
+     "equipo": "Alpine",
+     "pilotos": [
+      "GAS32",
+      "COL25"
+     ]
+    },
+    {
+     "equipo": "Haas",
+     "pilotos": [
+      "OCO32",
+      "BEA23"
+     ]
+    },
+    {
+     "equipo": "Audi",
+     "pilotos": [
+      "TSO22",
+      "BOR24"
+     ]
+    },
+    {
+     "equipo": "Williams",
+     "pilotos": [
+      "SAI34",
+      "ALB32"
+     ]
+    },
+    {
+     "equipo": "Aston Martin",
+     "pilotos": [
+      "FOR24",
+      "STR30"
+     ]
+    },
+    {
+     "equipo": "Cadillac",
+     "pilotos": [
+      "CAM23",
+      "TSU28"
+     ]
+    }
+   ],
+   "ages": {
+    "mean": 27.5,
+    "min": 21,
+    "max": 35
+   },
+   "ratings": {
+    "mean": 87,
+    "min": 78,
+    "max": 95.9
+   },
+   "poolSize": 39
+  },
+  {
+   "year": 2029,
+   "playerTeam": "haas",
+   "teamName": "Haas",
+   "calendar": [
+    "suzuka",
+    "bahrein",
+    "monaco",
+    "silverstone",
+    "spa",
+    "monza",
+    "sepang",
+    "singapur",
+    "interlagos"
+   ],
+   "sprints": [
+    "bahrein",
+    "monza",
+    "singapur",
+    "interlagos"
+   ],
+   "budget": 52,
+   "devBonus": 12,
+   "devLeftStart": 31,
+   "levels0": {
+    "mercedes": 2.002,
+    "ferrari": 1.827,
+    "redbull": 2.066,
+    "mclaren": 1.862,
+    "racingbulls": 1.773,
+    "alpine": 1.372,
+    "haas": 1.095,
+    "audi": 1.788,
+    "williams": 0.749,
+    "astonmartin": -0.269,
+    "cadillac": -0.19
+   },
+   "carRank0": 8,
+   "spread0": 2.335,
+   "races": [
+    {
+     "round": 1,
+     "circuitId": "suzuka",
+     "sprint": false,
+     "winner": "Kimi Antonelli",
+     "winnerTeam": "Mercedes",
+     "pole": "Kimi Antonelli",
+     "mine": [
+      {
+       "nombre": "Esteban Ocon",
+       "grid": 13,
+       "pos": 16,
+       "status": "fin",
+       "points": 0
+      },
+      {
+       "nombre": "Oliver Bearman",
+       "grid": 14,
+       "pos": 21,
+       "status": "out",
+       "reason": "avería (batería)",
+       "points": 0
+      }
+     ],
+     "dnfs": 4,
+     "dnfReasons": {
+      "accidente": 2,
+      "avería": 2
+     },
+     "dsq": 0,
+     "finished": 18,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 30.496,
+     "passes": 139,
+     "safety": 2,
+     "vsc": 1,
+     "red": false,
+     "board": "Nada que sumar. Quiero un plan claro para la próxima carrera."
+    },
+    {
+     "round": 2,
+     "circuitId": "bahrein",
+     "sprint": true,
+     "winner": "George Russell",
+     "winnerTeam": "Mercedes",
+     "pole": "Gabriel Bortoleto",
+     "mine": [
+      {
+       "nombre": "Oliver Bearman",
+       "grid": 13,
+       "pos": 10,
+       "status": "fin",
+       "points": 1
+      },
+      {
+       "nombre": "Esteban Ocon",
+       "grid": 14,
+       "pos": 14,
+       "status": "fin",
+       "points": 0
+      }
+     ],
+     "dnfs": 2,
+     "dnfReasons": {
+      "avería": 1,
+      "accidente": 1
+     },
+     "dsq": 0,
+     "finished": 20,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 29.119,
+     "passes": 111,
+     "safety": 1,
+     "vsc": 0,
+     "red": false,
+     "board": "1 punto más. Correcto, sin más."
+    },
+    {
+     "round": 3,
+     "circuitId": "monaco",
+     "sprint": false,
+     "winner": "Max Verstappen",
+     "winnerTeam": "Red Bull Racing",
+     "pole": "Max Verstappen",
+     "mine": [
+      {
+       "nombre": "Oliver Bearman",
+       "grid": 9,
+       "pos": 6,
+       "status": "fin",
+       "points": 8
+      },
+      {
+       "nombre": "Esteban Ocon",
+       "grid": 17,
+       "pos": 15,
+       "status": "fin",
+       "points": 0
+      }
+     ],
+     "dnfs": 1,
+     "dnfReasons": {
+      "accidente": 1
+     },
+     "dsq": 0,
+     "finished": 21,
+     "shortened": false,
+     "wet": true,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 37.834,
+     "passes": 25,
+     "safety": 1,
+     "vsc": 0,
+     "red": false,
+     "board": "Sumamos 8. Es el camino. Objetivo cumplido: puntuar en 2 carreras. Lo tendremos en cuenta en el presupuesto."
+    },
+    {
+     "round": 4,
+     "circuitId": "silverstone",
+     "sprint": false,
+     "winner": "Kimi Antonelli",
+     "winnerTeam": "Mercedes",
+     "pole": "Kimi Antonelli",
+     "mine": [
+      {
+       "nombre": "Esteban Ocon",
+       "grid": 13,
+       "pos": 8,
+       "status": "fin",
+       "points": 4
+      },
+      {
+       "nombre": "Oliver Bearman",
+       "grid": 21,
+       "pos": 9,
+       "status": "fin",
+       "points": 2
+      }
+     ],
+     "dnfs": 3,
+     "dnfReasons": {
+      "accidente": 1,
+      "avería": 1,
+      "accidente con FOR": 1
+     },
+     "dsq": 0,
+     "finished": 19,
+     "shortened": false,
+     "wet": true,
+     "gridPens": 0,
+     "swaps": [
+      "🚑 Liam Lawson (Racing Bulls) se ha lesionado en el accidente: se pierde la próxima carrera. Le sustituye Ayumu Iwasa."
+     ],
+     "secs": 35.583,
+     "passes": 81,
+     "safety": 1,
+     "vsc": 1,
+     "red": false,
+     "board": "Resultado dentro de lo que esperábamos. Hay que seguir sumando."
+    },
+    {
+     "round": 5,
+     "circuitId": "spa",
+     "sprint": false,
+     "winner": "Kimi Antonelli",
+     "winnerTeam": "Mercedes",
+     "pole": "Oscar Piastri",
+     "mine": [
+      {
+       "nombre": "Esteban Ocon",
+       "grid": 14,
+       "pos": 12,
+       "status": "fin",
+       "points": 0
+      },
+      {
+       "nombre": "Oliver Bearman",
+       "grid": 10,
+       "pos": 21,
+       "status": "out",
+       "reason": "daños tras el toque",
+       "points": 0
+      }
+     ],
+     "dnfs": 2,
+     "dnfReasons": {
+      "daños tras el toque": 2
+     },
+     "dsq": 0,
+     "finished": 20,
+     "shortened": false,
+     "wet": true,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 33.707,
+     "passes": 80,
+     "safety": 0,
+     "vsc": 0,
+     "red": false,
+     "board": "Así no. Sin puntos no hay presupuesto que aguante."
+    },
+    {
+     "round": 6,
+     "circuitId": "monza",
+     "sprint": true,
+     "winner": "Kimi Antonelli",
+     "winnerTeam": "Mercedes",
+     "pole": "George Russell",
+     "mine": [
+      {
+       "nombre": "Oliver Bearman",
+       "grid": 12,
+       "pos": 7,
+       "status": "fin",
+       "points": 6
+      },
+      {
+       "nombre": "Esteban Ocon",
+       "grid": 19,
+       "pos": 17,
+       "status": "fin",
+       "points": 0
+      }
+     ],
+     "dnfs": 1,
+     "dnfReasons": {
+      "avería": 1
+     },
+     "dsq": 0,
+     "finished": 21,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 24.81,
+     "passes": 92,
+     "safety": 0,
+     "vsc": 0,
+     "red": false,
+     "board": "6 puntos más. Correcto, sin más."
+    },
+    {
+     "round": 7,
+     "circuitId": "sepang",
+     "sprint": false,
+     "winner": "Kimi Antonelli",
+     "winnerTeam": "Mercedes",
+     "pole": "Kimi Antonelli",
+     "mine": [
+      {
+       "nombre": "Esteban Ocon",
+       "grid": 8,
+       "pos": 14,
+       "status": "fin",
+       "points": 0
+      },
+      {
+       "nombre": "Oliver Bearman",
+       "grid": 9,
+       "pos": 22,
+       "status": "out",
+       "reason": "avería (fallo eléctrico), se retira en boxes",
+       "points": 0
+      }
+     ],
+     "dnfs": 1,
+     "dnfReasons": {
+      "avería": 1
+     },
+     "dsq": 0,
+     "finished": 21,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 34.881,
+     "passes": 55,
+     "safety": 0,
+     "vsc": 0,
+     "red": false,
+     "board": "Sin puntos otra vez. Así no vamos a ninguna parte."
+    },
+    {
+     "round": 8,
+     "circuitId": "singapur",
+     "sprint": true,
+     "winner": "Lando Norris",
+     "winnerTeam": "McLaren",
+     "pole": "Lando Norris",
+     "mine": [
+      {
+       "nombre": "Esteban Ocon",
+       "grid": 15,
+       "pos": 8,
+       "status": "fin",
+       "points": 4
+      },
+      {
+       "nombre": "Oliver Bearman",
+       "grid": 13,
+       "pos": 16,
+       "status": "fin",
+       "points": 0
+      }
+     ],
+     "dnfs": 5,
+     "dnfReasons": {
+      "accidente con BEA": 1,
+      "daños tras el toque": 2,
+      "accidente con SAI": 1,
+      "accidente": 1
+     },
+     "dsq": 0,
+     "finished": 17,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 37.392,
+     "passes": 47,
+     "safety": 3,
+     "vsc": 2,
+     "red": true,
+     "board": "Buen trabajo. Seguid así y no os relajéis."
+    },
+    {
+     "round": 9,
+     "circuitId": "interlagos",
+     "sprint": true,
+     "winner": "Lando Norris",
+     "winnerTeam": "McLaren",
+     "pole": "Arvid Lindblad",
+     "mine": [
+      {
+       "nombre": "Esteban Ocon",
+       "grid": 13,
+       "pos": 4,
+       "status": "fin",
+       "points": 12
+      },
+      {
+       "nombre": "Oliver Bearman",
+       "grid": 16,
+       "pos": 14,
+       "status": "fin",
+       "points": 0
+      }
+     ],
+     "dnfs": 5,
+     "dnfReasons": {
+      "avería": 4,
+      "accidente": 1
+     },
+     "dsq": 0,
+     "finished": 17,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 31.713,
+     "passes": 94,
+     "safety": 1,
+     "vsc": 2,
+     "red": false,
+     "board": "12 puntos más. Correcto, sin más. Objetivo cumplido: acabar entre los 9 primeros de constructores. Lo tendremos en cuenta en el presupuesto."
+    }
+   ],
+   "aviso": 0,
+   "news": [
+    "🏭 Desarrollo de invierno 2029 (ATR 110 %): túnel −0,30 s/vuelta, motor −0,03 s/vuelta, eficiencia ERS +3 %.",
+    "📅 Sprints 2029 (4 al azar): Baréin, Italia, Singapur, São Paulo.",
+    "🏁 Alexander Albon se retira a los 33 años (Williams).",
+    "✍️ Williams ficha a Théo Pourchaire."
+   ],
+   "preseason": {
+    "laps": 137,
+    "fiabBonus": 0.043,
+    "secs": 16.098
+   },
+   "devLeftEnd": 3,
+   "levelsEnd": {
+    "mercedes": 2.359,
+    "ferrari": 2.044,
+    "redbull": 2.454,
+    "mclaren": 2.319,
+    "racingbulls": 2.123,
+    "alpine": 1.956,
+    "haas": 1.795,
+    "audi": 2.283,
+    "williams": 1.275,
+    "astonmartin": 0.656,
+    "cadillac": 0.541
+   },
+   "carRankEnd": 8,
+   "spreadEnd": 1.913,
+   "parts": [
+    {
+     "area": "motor",
+     "size": 2,
+     "ordered": 0,
+     "ready": 2,
+     "expect": 0.165,
+     "real": 0.184
+    },
+    {
+     "area": "fiab",
+     "size": 1,
+     "ordered": 1,
+     "ready": 3,
+     "expect": 0.032,
+     "real": 0.036
+    },
+    {
+     "area": "motor",
+     "size": 2,
+     "ordered": 2,
+     "ready": 4,
+     "expect": 0.165,
+     "real": 0.124
+    },
+    {
+     "area": "fiab",
+     "size": 1,
+     "ordered": 3,
+     "ready": 5,
+     "expect": 0.032,
+     "real": 0.027
+    },
+    {
+     "area": "motor",
+     "size": 1,
+     "ordered": 4,
+     "ready": 6,
+     "expect": 0.083,
+     "real": 0.097
+    }
+   ],
+   "aeroPkgs": [
+    {
+     "period": 0,
+     "ready": 3,
+     "expect": 0.244,
+     "real": 0.33,
+     "medido": 0.346,
+     "montar": true
+    },
+    {
+     "period": 1,
+     "ready": 6,
+     "expect": 0.244,
+     "real": 0.267,
+     "medido": 0.289,
+     "montar": true
+    }
+   ],
+   "objectives": [
+    {
+     "text": "Acabar entre los 9 primeros de constructores",
+     "done": true
+    },
+    {
+     "text": "Puntuar en 2 carreras",
+     "done": true
+    }
+   ],
+   "champion": {
+    "nombre": "Kimi Antonelli",
+    "equipo": "Mercedes",
+    "puntos": 166
+   },
+   "constructors": [
+    {
+     "equipo": "Mercedes",
+     "puntos": 265
+    },
+    {
+     "equipo": "Red Bull Racing",
+     "puntos": 224
+    },
+    {
+     "equipo": "McLaren",
+     "puntos": 219
+    },
+    {
+     "equipo": "Racing Bulls",
+     "puntos": 112
+    },
+    {
+     "equipo": "Audi",
+     "puntos": 89
+    },
+    {
+     "equipo": "Ferrari",
+     "puntos": 81
+    },
+    {
+     "equipo": "Haas",
+     "puntos": 37
+    },
+    {
+     "equipo": "Alpine",
+     "puntos": 26
+    },
+    {
+     "equipo": "Williams",
+     "puntos": 0
+    },
+    {
+     "equipo": "Aston Martin",
+     "puntos": 0
+    },
+    {
+     "equipo": "Cadillac",
+     "puntos": 0
+    }
+   ],
+   "myPos": 7,
+   "myPoints": 37,
+   "myDrivers": [
+    {
+     "nombre": "Esteban Ocon",
+     "abrev": "OCO",
+     "pos": 12,
+     "puntos": 20,
+     "edad": 33,
+     "rating": 81.6,
+     "moral": 59.4
+    },
+    {
+     "nombre": "Oliver Bearman",
+     "abrev": "BEA",
+     "pos": 13,
+     "puntos": 17,
+     "edad": 24,
+     "rating": 89.9,
+     "moral": 56.6
+    }
+   ],
+   "wins": {
+    "Kimi Antonelli": 5,
+    "George Russell": 1,
+    "Max Verstappen": 1,
+    "Lando Norris": 2
+   },
+   "winnersDistinct": 4,
+   "teamsWinning": 3,
+   "poleToWin": 5,
+   "dnfRate": 0.121,
+   "swaps": [
+    "R5 Liam Lawson → Ayumu Iwasa (lesión de Liam Lawson)",
+    "R6 Ayumu Iwasa → Liam Lawson (vuelve Liam Lawson)"
+   ],
+   "hitos": 0,
+   "rivals": 8,
+   "grid": [
+    {
+     "equipo": "Mercedes",
+     "pilotos": [
+      "RUS31",
+      "ANT23"
+     ]
+    },
+    {
+     "equipo": "Ferrari",
+     "pilotos": [
+      "LEC32",
+      "GIO36"
+     ]
+    },
+    {
+     "equipo": "Red Bull Racing",
+     "pilotos": [
+      "VER32",
+      "HAD25"
+     ]
+    },
+    {
+     "equipo": "McLaren",
+     "pilotos": [
+      "NOR30",
+      "PIA28"
+     ]
+    },
+    {
+     "equipo": "Racing Bulls",
+     "pilotos": [
+      "LAW27",
+      "LIN22"
+     ]
+    },
+    {
+     "equipo": "Alpine",
+     "pilotos": [
+      "GAS33",
+      "COL26"
+     ]
+    },
+    {
+     "equipo": "Haas",
+     "pilotos": [
+      "OCO33",
+      "BEA24"
+     ]
+    },
+    {
+     "equipo": "Audi",
+     "pilotos": [
+      "TSO23",
+      "BOR25"
+     ]
+    },
+    {
+     "equipo": "Williams",
+     "pilotos": [
+      "SAI35",
+      "POU26"
+     ]
+    },
+    {
+     "equipo": "Aston Martin",
+     "pilotos": [
+      "FOR25",
+      "STR31"
+     ]
+    },
+    {
+     "equipo": "Cadillac",
+     "pilotos": [
+      "CAM24",
+      "TSU29"
+     ]
+    }
+   ],
+   "ages": {
+    "mean": 28.2,
+    "min": 22,
+    "max": 36
+   },
+   "ratings": {
+    "mean": 87.4,
+    "min": 78,
+    "max": 96.3
+   },
+   "poolSize": 39
+  }
+ ],
+ "problems": [],
+ "secs": 1248.377
+}

@@ -68,8 +68,8 @@ export function questions(s: SeasonState, st: WeekendState): Question[] {
   const rival = (s.rivals ?? []).find((r) => r.k >= 0.3 && (r.a === A || r.b === A || r.a === B || r.b === B));
   if (dry) out.push({ id: "racha", text: "Dos carreras seguidas sin puntos. ¿Peligra tu puesto?", answers: [
     { text: "Confío en este equipo y en mis pilotos.", e: { moral: { [A]: 3, [B]: 3 } } },
-    { text: "Con este coche no se puede hacer más.", e: { moral: { [A]: 5, [B]: 5 }, board: -2 } },
-    { text: "Asumo la responsabilidad. Lo arreglaremos.", e: { moral: { [A]: 1, [B]: 1 }, board: 1 } },
+    { text: "Con este coche no se puede hacer más.", e: { moral: { [A]: 2, [B]: 2 } } },
+    { text: "Asumo la responsabilidad. Lo arreglaremos.", e: { moral: { [A]: 4, [B]: 1 } } },
   ] });
   if (s.rounds.length >= 2 && (Math.abs(ma - mb) > 12 || pts(mine.find((d) => d.d.nombre === A)!.id) - pts(mine.find((d) => d.d.nombre === B)!.id) >= 20)) out.push({ id: "favorito", text: `¿Hay favoritismo hacia ${sur(A)} en el equipo?`, answers: [
     { text: "Los dos tienen las mismas opciones.", e: { moral: { [A]: -1, [B]: 4 } } },
@@ -80,18 +80,18 @@ export function questions(s: SeasonState, st: WeekendState): Question[] {
     const me = rival.a === A || rival.a === B ? rival.a : rival.b, other = me === rival.a ? rival.b : rival.a;
     out.push({ id: "rival", text: `${sur(me)} y ${sur(other)} no se pueden ni ver. ¿Pedirás calma?`, answers: [
       { text: "Que sigan así: es bueno para el espectáculo.", e: { moral: { [me]: 3 }, rival: { a: me, b: other, k: 0.2 } } },
-      { text: "Hablaré con él para que no arriesgue.", e: { moral: { [me]: -3 }, rival: { a: me, b: other, k: -0.25 }, board: 1 } },
+      { text: "Hablaré con él para que no arriesgue.", e: { moral: { [me]: -3 }, rival: { a: me, b: other, k: -0.25 } } },
     ] });
   }
   if (out.length < 2 && s.rounds.length >= 3 && mb < 50) out.push({ id: "segundo", text: `${sur(B)} no termina de arrancar. ¿Os preocupa?`, answers: [
     { text: "Tiene todo nuestro apoyo.", e: { moral: { [B]: 5 } } },
-    { text: "Tiene que dar un paso adelante.", e: { moral: { [B]: -6, [A]: 2 }, board: 1 } },
+    { text: "Tiene que dar un paso adelante.", e: { moral: { [B]: -3, [A]: 3 } } },
   ] });
   if (!out.length) {
     const g = st.results.Q?.findIndex((r) => mine.some((d) => d.id === r.id));
     out.push({ id: "previa", text: g !== undefined && g >= 0 ? `Mañana salís desde la ${g + 1}.ª posición. ¿Qué esperáis?` : "¿Qué esperáis de la carrera?", answers: [
       { text: "Ganar. Siempre salimos a ganar.", e: { moral: { [A]: 2, [B]: 2 } } },
-      { text: "Sumar todo lo que se pueda.", e: { board: 1 } },
+      { text: "Sumar todo lo que se pueda.", e: { moral: { [B]: 2 } } },
       { text: "Ya veremos: la carrera es larga.", e: {} },
     ] });
   }
@@ -101,7 +101,6 @@ export function questions(s: SeasonState, st: WeekendState): Question[] {
 const effectText = (e: PressEffect) => {
   const parts = Object.entries(e.moral ?? {}).filter(([, d]) => d).map(([n, d]) => `${sur(n)} ${d > 0 ? "+" : "−"}${Math.abs(d)}`);
   if (e.rival) parts.push(e.rival.k > 0 ? "más rivalidad" : "menos rivalidad");
-  if (e.board) parts.push(e.board > 0 ? "a la directiva le gusta" : "a la directiva no le gusta");
   return parts.join(" · ") || "sin efecto";
 };
 
@@ -115,7 +114,7 @@ export function prensaHtml(s: SeasonState, st: WeekendState): string {
     ${qs.map((q) => `<div style="margin-bottom:8px"><div style="font-style:italic">«${esc(q.text)}»</div>${done[q.id] !== undefined
       ? `<div style="margin-top:3px">Tú: <b>«${esc(q.answers[done[q.id]].text)}»</b> <span class="dim">(${esc(effectText(q.answers[done[q.id]].e))})</span></div>`
       : `<div class="col" style="gap:4px;margin-top:4px">${q.answers.map((a, i) => `<button data-press="${q.id}:${i}" style="text-align:left">${esc(a.text)}</button>`).join("")}</div>`}</div>`).join("")}
-    <div class="dim">Lo que digas toca la moral de tus pilotos y lo que piensa la directiva.</div>
+    <div class="dim">Lo que digas toca la moral de tus pilotos y sus rivalidades.</div>
   </div></div>`;
 }
 

@@ -6,7 +6,8 @@
 // - Rivalidades (0 a 1): nacen de los toques y de los adelantamientos de ida y vuelta, y se apagan poco a poco. Se
 //   defienden más y se tocan más entre ellos (session.ts, rivalOf); Lobato y la radio lo dicen.
 import type { SeasonState } from "./season";
-import type { ResultRow } from "./session";
+import type { ResultRow, TeamDef } from "./session";
+import { carLevel } from "./development";
 import { clamp } from "./rng";
 import { hash } from "./caracter";
 
@@ -112,8 +113,8 @@ export function wantsRenew(s: SeasonState, nombre: string): boolean {
   return (hash(`${nombre}|${s.year ?? 2026}|${s.seed}`) % 1000) / 1000 >= (30 - m) / 30;
 }
 
-/** Lo que cambia una respuesta en la rueda de prensa: moral de tus pilotos (por nombre), rivalidad y directiva. */
-export interface PressEffect { moral?: Record<string, number>; rival?: { a: string; b: string; k: number }; board?: number }
+/** Lo que cambia una respuesta en la rueda de prensa: moral de tus pilotos (por nombre) y rivalidad. */
+export interface PressEffect { moral?: Record<string, number>; rival?: { a: string; b: string; k: number } }
 
 export function applyPress(s: SeasonState, e: PressEffect) {
   for (const [n, d] of Object.entries(e.moral ?? {})) (s.moral ??= {})[n] = clamp(moralOf(s, n) + d, 5, 100);
@@ -124,11 +125,15 @@ export function applyPress(s: SeasonState, e: PressEffect) {
     if (r) r.k = clamp(r.k + e.rival.k, 0, 1);
     s.rivals = list.filter((x) => x.k >= 0.15);
   }
-  if (e.board) s.boardMood = clamp((s.boardMood ?? 0) + e.board, -3, 3);
 }
 
-/** El puesto que se espera de tu coche en una carrera, según los objetivos de la directiva (como en prensa.ts). */
-export function expectedPos(objetivos: { kind: string; target: number }[] | undefined): number {
-  const goal = objetivos?.find((o) => o.kind !== "constructores")?.kind ?? "puntuar";
-  return goal === "victorias" ? 1 : goal === "podios" ? 3 : (objetivos?.[0]?.target ?? 10) <= 6 ? 8 : 10;
+/** El puesto de tu coche en la parrilla (1 el mejor), por su nivel (carLevel) al empezar la temporada. */
+export function carRank(teams: TeamDef[], teamId: string): number {
+  return teams.slice().sort((a, b) => carLevel(b) - carLevel(a)).findIndex((t) => t.id === teamId) + 1;
+}
+
+/** El puesto que se espera de tu coche en una carrera según lo bueno que es frente a la parrilla: los dos mejores,
+ *  ganar; 3.º y 4.º, el podio; el 5.º, puntos holgados; el resto, puntuar. Para la moral (moraleAfterRace). */
+export function expectedPos(rank: number): number {
+  return rank <= 2 ? 1 : rank <= 4 ? 3 : rank <= 5 ? 8 : 10;
 }

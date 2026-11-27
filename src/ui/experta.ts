@@ -1,12 +1,12 @@
-// El segundo comentarista (10.3): Begoña Arrieta, ingeniera de pista retirada (personaje inventado), en el box de la
-// retransmisión junto a Lobato. Donde él se emociona, ella explica el porqué: el undercut, la parada barata con el
+// El segundo comentarista (10.3): Toni Cuquerella, ingeniero y comentarista técnico, en el box de la retransmisión junto
+// a Lobato. Donde Lobato se emociona, él explica el porqué: el undercut, la parada barata con el
 // coche de seguridad, el compuesto que monta cada uno y si le llega, las estrategias distintas de los de delante y el
 // cruce entre lluvia y slicks. Solo interfaz: Math.random y lo que ya hay en la sesión; no cambia ningún resultado.
 import { Session, Car, RaceEvent, isRaceKind, isQualiKind } from "../sim/session";
 import { COMPOUNDS, DRY, WET } from "../sim/tyres";
 import type { Comment } from "./lobato";
 
-export const EXPERTA = "Begoña Arrieta";
+export const EXPERTA = "Toni Cuquerella";
 
 const pick = <T>(a: T[]): T => a[Math.floor(Math.random() * a.length)];
 const sur = (c: Car) => c.d.nombre.split(" ").slice(1).join(" ") || c.d.nombre;

@@ -1,0 +1,2663 @@
+{
+ "opts": {
+  "team": "ferrari",
+  "seed": 2,
+  "seasons": 4,
+  "mode": "real",
+  "preseason": true,
+  "develop": true,
+  "calendar": "corta"
+ },
+ "seasons": [
+  {
+   "year": 2026,
+   "playerTeam": "ferrari",
+   "teamName": "Ferrari",
+   "calendar": [
+    "suzuka",
+    "bahrein",
+    "monaco",
+    "silverstone",
+    "spa",
+    "monza",
+    "sepang",
+    "singapur",
+    "interlagos"
+   ],
+   "sprints": [
+    "singapur",
+    "interlagos"
+   ],
+   "budget": 40,
+   "devBonus": 0,
+   "devLeftStart": 24,
+   "levels0": {
+    "mercedes": 2.044,
+    "ferrari": 1.754,
+    "redbull": 1.829,
+    "mclaren": 1.762,
+    "racingbulls": 1.091,
+    "alpine": 0.997,
+    "haas": 0.747,
+    "audi": 1.043,
+    "williams": -0.667,
+    "astonmartin": -2.012,
+    "cadillac": -1.339
+   },
+   "carRank0": 4,
+   "spread0": 4.056,
+   "races": [
+    {
+     "round": 1,
+     "circuitId": "suzuka",
+     "sprint": false,
+     "winner": "George Russell",
+     "winnerTeam": "Mercedes",
+     "pole": "Lando Norris",
+     "mine": [
+      {
+       "nombre": "Lewis Hamilton",
+       "grid": 3,
+       "pos": 2,
+       "status": "fin",
+       "points": 18
+      },
+      {
+       "nombre": "Charles Leclerc",
+       "grid": 4,
+       "pos": 5,
+       "status": "fin",
+       "points": 10
+      }
+     ],
+     "dnfs": 2,
+     "dnfReasons": {
+      "avería": 1,
+      "daños tras el toque": 1
+     },
+     "dsq": 0,
+     "finished": 20,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 33.03,
+     "passes": 97,
+     "safety": 0,
+     "vsc": 0,
+     "red": false
+    },
+    {
+     "round": 2,
+     "circuitId": "bahrein",
+     "sprint": false,
+     "winner": "Kimi Antonelli",
+     "winnerTeam": "Mercedes",
+     "pole": "Kimi Antonelli",
+     "mine": [
+      {
+       "nombre": "Lewis Hamilton",
+       "grid": 4,
+       "pos": 3,
+       "status": "fin",
+       "points": 15
+      },
+      {
+       "nombre": "Charles Leclerc",
+       "grid": 5,
+       "pos": 6,
+       "status": "fin",
+       "points": 8
+      }
+     ],
+     "dnfs": 1,
+     "dnfReasons": {
+      "accidente": 1
+     },
+     "dsq": 0,
+     "finished": 21,
+     "shortened": false,
+     "wet": true,
+     "gridPens": 0,
+     "swaps": [
+      "🚑 Isack Hadjar (Red Bull Racing) se ha lesionado en el accidente: se pierde las 2 próximas carreras. Le sustituye Yuki Tsunoda."
+     ],
+     "secs": 30.919,
+     "passes": 20,
+     "safety": 0,
+     "vsc": 1,
+     "red": false
+    },
+    {
+     "round": 3,
+     "circuitId": "monaco",
+     "sprint": false,
+     "winner": "Lewis Hamilton",
+     "winnerTeam": "Ferrari",
+     "pole": "Kimi Antonelli",
+     "mine": [
+      {
+       "nombre": "Lewis Hamilton",
+       "grid": 15,
+       "pos": 1,
+       "status": "fin",
+       "points": 25
+      },
+      {
+       "nombre": "Charles Leclerc",
+       "grid": 4,
+       "pos": 8,
+       "status": "fin",
+       "points": 4
+      }
+     ],
+     "dnfs": 2,
+     "dnfReasons": {
+      "accidente": 2
+     },
+     "dsq": 0,
+     "finished": 20,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 27.303,
+     "passes": 37,
+     "safety": 2,
+     "vsc": 0,
+     "red": false
+    },
+    {
+     "round": 4,
+     "circuitId": "silverstone",
+     "sprint": false,
+     "winner": "Lewis Hamilton",
+     "winnerTeam": "Ferrari",
+     "pole": "Kimi Antonelli",
+     "mine": [
+      {
+       "nombre": "Lewis Hamilton",
+       "grid": 2,
+       "pos": 1,
+       "status": "fin",
+       "points": 25
+      },
+      {
+       "nombre": "Charles Leclerc",
+       "grid": 7,
+       "pos": 3,
+       "status": "fin",
+       "points": 15
+      }
+     ],
+     "dnfs": 3,
+     "dnfReasons": {
+      "avería": 2,
+      "accidente": 1
+     },
+     "dsq": 0,
+     "finished": 19,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 25.425,
+     "passes": 106,
+     "safety": 2,
+     "vsc": 0,
+     "red": false
+    },
+    {
+     "round": 5,
+     "circuitId": "spa",
+     "sprint": false,
+     "winner": "Charles Leclerc",
+     "winnerTeam": "Ferrari",
+     "pole": "Charles Leclerc",
+     "mine": [
+      {
+       "nombre": "Charles Leclerc",
+       "grid": 1,
+       "pos": 1,
+       "status": "fin",
+       "points": 25
+      },
+      {
+       "nombre": "Lewis Hamilton",
+       "grid": 5,
+       "pos": 2,
+       "status": "fin",
+       "points": 18
+      }
+     ],
+     "dnfs": 1,
+     "dnfReasons": {
+      "avería": 1
+     },
+     "dsq": 0,
+     "finished": 21,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 1,
+     "swaps": [],
+     "secs": 29.474,
+     "passes": 90,
+     "safety": 0,
+     "vsc": 0,
+     "red": false
+    },
+    {
+     "round": 6,
+     "circuitId": "monza",
+     "sprint": false,
+     "winner": "Kimi Antonelli",
+     "winnerTeam": "Mercedes",
+     "pole": "Kimi Antonelli",
+     "mine": [
+      {
+       "nombre": "Lewis Hamilton",
+       "grid": 5,
+       "pos": 4,
+       "status": "fin",
+       "points": 12
+      },
+      {
+       "nombre": "Charles Leclerc",
+       "grid": 6,
+       "pos": 6,
+       "status": "fin",
+       "points": 8
+      }
+     ],
+     "dnfs": 1,
+     "dnfReasons": {
+      "avería": 1
+     },
+     "dsq": 0,
+     "finished": 21,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 31.71,
+     "passes": 26,
+     "safety": 0,
+     "vsc": 0,
+     "red": false
+    },
+    {
+     "round": 7,
+     "circuitId": "sepang",
+     "sprint": false,
+     "winner": "Charles Leclerc",
+     "winnerTeam": "Ferrari",
+     "pole": "Max Verstappen",
+     "mine": [
+      {
+       "nombre": "Charles Leclerc",
+       "grid": 2,
+       "pos": 1,
+       "status": "fin",
+       "points": 25
+      },
+      {
+       "nombre": "Lewis Hamilton",
+       "grid": 5,
+       "pos": 4,
+       "status": "fin",
+       "points": 12
+      }
+     ],
+     "dnfs": 2,
+     "dnfReasons": {
+      "avería": 2
+     },
+     "dsq": 0,
+     "finished": 20,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 24.715,
+     "passes": 140,
+     "safety": 0,
+     "vsc": 0,
+     "red": false
+    },
+    {
+     "round": 8,
+     "circuitId": "singapur",
+     "sprint": true,
+     "winner": "Max Verstappen",
+     "winnerTeam": "Red Bull Racing",
+     "pole": "Max Verstappen",
+     "mine": [
+      {
+       "nombre": "Charles Leclerc",
+       "grid": 3,
+       "pos": 2,
+       "status": "fin",
+       "points": 25
+      },
+      {
+       "nombre": "Lewis Hamilton",
+       "grid": 2,
+       "pos": 7,
+       "status": "fin",
+       "points": 8
+      }
+     ],
+     "dnfs": 6,
+     "dnfReasons": {
+      "avería": 5,
+      "accidente": 1
+     },
+     "dsq": 0,
+     "finished": 16,
+     "shortened": false,
+     "wet": true,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 29.872,
+     "passes": 30,
+     "safety": 3,
+     "vsc": 1,
+     "red": false
+    },
+    {
+     "round": 9,
+     "circuitId": "interlagos",
+     "sprint": true,
+     "winner": "Kimi Antonelli",
+     "winnerTeam": "Mercedes",
+     "pole": "Charles Leclerc",
+     "mine": [
+      {
+       "nombre": "Charles Leclerc",
+       "grid": 1,
+       "pos": 3,
+       "status": "fin",
+       "points": 21
+      },
+      {
+       "nombre": "Lewis Hamilton",
+       "grid": 3,
+       "pos": 4,
+       "status": "fin",
+       "points": 19
+      }
+     ],
+     "dnfs": 2,
+     "dnfReasons": {
+      "avería": 1,
+      "accidente": 1
+     },
+     "dsq": 0,
+     "finished": 20,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 22.548,
+     "passes": 142,
+     "safety": 0,
+     "vsc": 0,
+     "red": true
+    }
+   ],
+   "news": [],
+   "expectedPos": 3,
+   "preseason": {
+    "laps": 149,
+    "fiabBonus": 0.047,
+    "secs": 15.599
+   },
+   "devLeftEnd": 0,
+   "levelsEnd": {
+    "mercedes": 2.524,
+    "ferrari": 2.323,
+    "redbull": 2.232,
+    "mclaren": 2.095,
+    "racingbulls": 1.592,
+    "alpine": 1.513,
+    "haas": 1.137,
+    "audi": 1.582,
+    "williams": -0.066,
+    "astonmartin": -1.183,
+    "cadillac": -0.578
+   },
+   "carRankEnd": 2,
+   "spreadEnd": 3.707,
+   "parts": [
+    {
+     "area": "motor",
+     "size": 2,
+     "ordered": 0,
+     "ready": 2,
+     "expect": 0.183,
+     "real": 0.172
+    },
+    {
+     "area": "fiab",
+     "size": 1,
+     "ordered": 1,
+     "ready": 3,
+     "expect": 0.032,
+     "real": 0.024
+    },
+    {
+     "area": "motor",
+     "size": 2,
+     "ordered": 2,
+     "ready": 4,
+     "expect": 0.183,
+     "real": 0.183
+    },
+    {
+     "area": "fiab",
+     "size": 1,
+     "ordered": 3,
+     "ready": 5,
+     "expect": 0.032,
+     "real": 0.028
+    }
+   ],
+   "aeroPkgs": [
+    {
+     "period": 0,
+     "ready": 3,
+     "expect": 0.196,
+     "real": 0.209,
+     "medido": 0.242,
+     "montar": true
+    },
+    {
+     "period": 1,
+     "ready": 6,
+     "expect": 0.196,
+     "real": 0.205,
+     "medido": 0.175,
+     "montar": true
+    }
+   ],
+   "champion": {
+    "nombre": "Lewis Hamilton",
+    "equipo": "Ferrari",
+    "puntos": 152
+   },
+   "constructors": [
+    {
+     "equipo": "Ferrari",
+     "puntos": 293
+    },
+    {
+     "equipo": "Mercedes",
+     "puntos": 238
+    },
+    {
+     "equipo": "Red Bull Racing",
+     "puntos": 163
+    },
+    {
+     "equipo": "McLaren",
+     "puntos": 129
+    },
+    {
+     "equipo": "Racing Bulls",
+     "puntos": 51
+    },
+    {
+     "equipo": "Alpine",
+     "puntos": 43
+    },
+    {
+     "equipo": "Audi",
+     "puntos": 33
+    },
+    {
+     "equipo": "Haas",
+     "puntos": 29
+    },
+    {
+     "equipo": "Cadillac",
+     "puntos": 2
+    },
+    {
+     "equipo": "Williams",
+     "puntos": 0
+    },
+    {
+     "equipo": "Aston Martin",
+     "puntos": 0
+    }
+   ],
+   "myPos": 1,
+   "myPoints": 293,
+   "myDrivers": [
+    {
+     "nombre": "Charles Leclerc",
+     "abrev": "LEC",
+     "pos": 2,
+     "puntos": 141,
+     "edad": 29,
+     "rating": 90.9,
+     "moral": 98.1
+    },
+    {
+     "nombre": "Lewis Hamilton",
+     "abrev": "HAM",
+     "pos": 1,
+     "puntos": 152,
+     "edad": 41,
+     "rating": 92.2,
+     "moral": 88.1
+    }
+   ],
+   "wins": {
+    "George Russell": 1,
+    "Kimi Antonelli": 3,
+    "Lewis Hamilton": 2,
+    "Charles Leclerc": 2,
+    "Max Verstappen": 1
+   },
+   "winnersDistinct": 5,
+   "teamsWinning": 3,
+   "poleToWin": 4,
+   "dnfRate": 0.101,
+   "swaps": [
+    "R3 Isack Hadjar → Yuki Tsunoda (lesión de Isack Hadjar)",
+    "R5 Yuki Tsunoda → Isack Hadjar (vuelve Isack Hadjar)"
+   ],
+   "hitos": 6,
+   "rivals": 2,
+   "grid": [
+    {
+     "equipo": "Mercedes",
+     "pilotos": [
+      "RUS28",
+      "ANT20"
+     ]
+    },
+    {
+     "equipo": "Ferrari",
+     "pilotos": [
+      "LEC29",
+      "HAM41"
+     ]
+    },
+    {
+     "equipo": "Red Bull Racing",
+     "pilotos": [
+      "VER29",
+      "HAD22"
+     ]
+    },
+    {
+     "equipo": "McLaren",
+     "pilotos": [
+      "NOR27",
+      "PIA25"
+     ]
+    },
+    {
+     "equipo": "Racing Bulls",
+     "pilotos": [
+      "LAW24",
+      "LIN19"
+     ]
+    },
+    {
+     "equipo": "Alpine",
+     "pilotos": [
+      "GAS30",
+      "COL23"
+     ]
+    },
+    {
+     "equipo": "Haas",
+     "pilotos": [
+      "OCO30",
+      "BEA21"
+     ]
+    },
+    {
+     "equipo": "Audi",
+     "pilotos": [
+      "HUL39",
+      "BOR22"
+     ]
+    },
+    {
+     "equipo": "Williams",
+     "pilotos": [
+      "SAI32",
+      "ALB30"
+     ]
+    },
+    {
+     "equipo": "Aston Martin",
+     "pilotos": [
+      "ALO45",
+      "STR28"
+     ]
+    },
+    {
+     "equipo": "Cadillac",
+     "pilotos": [
+      "PER36",
+      "BOT37"
+     ]
+    }
+   ],
+   "ages": {
+    "mean": 29,
+    "min": 19,
+    "max": 45
+   },
+   "ratings": {
+    "mean": 87.3,
+    "min": 81.2,
+    "max": 95.3
+   },
+   "poolSize": 41
+  },
+  {
+   "year": 2027,
+   "playerTeam": "ferrari",
+   "teamName": "Ferrari",
+   "calendar": [
+    "suzuka",
+    "bahrein",
+    "monaco",
+    "silverstone",
+    "spa",
+    "monza",
+    "sepang",
+    "singapur",
+    "interlagos"
+   ],
+   "sprints": [
+    "suzuka",
+    "bahrein",
+    "spa",
+    "monza"
+   ],
+   "budget": 40,
+   "devBonus": 0,
+   "devLeftStart": 24,
+   "levels0": {
+    "mercedes": 2.145,
+    "ferrari": 2.181,
+    "redbull": 2.403,
+    "mclaren": 1.841,
+    "racingbulls": 1.116,
+    "alpine": 1.771,
+    "haas": 1.487,
+    "audi": 1.519,
+    "williams": -0.398,
+    "astonmartin": -0.832,
+    "cadillac": -0.251
+   },
+   "carRank0": 2,
+   "spread0": 3.235,
+   "races": [
+    {
+     "round": 1,
+     "circuitId": "suzuka",
+     "sprint": true,
+     "winner": "Charles Leclerc",
+     "winnerTeam": "Ferrari",
+     "pole": "Max Verstappen",
+     "mine": [
+      {
+       "nombre": "Charles Leclerc",
+       "grid": 3,
+       "pos": 1,
+       "status": "fin",
+       "points": 28
+      },
+      {
+       "nombre": "Lewis Hamilton",
+       "grid": 4,
+       "pos": 2,
+       "status": "fin",
+       "points": 25
+      }
+     ],
+     "dnfs": 2,
+     "dnfReasons": {
+      "avería": 2
+     },
+     "dsq": 0,
+     "finished": 20,
+     "shortened": false,
+     "wet": true,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 29.249,
+     "wetRace": true,
+     "passes": 79,
+     "safety": 0,
+     "vsc": 0,
+     "red": false
+    },
+    {
+     "round": 2,
+     "circuitId": "bahrein",
+     "sprint": true,
+     "winner": "Max Verstappen",
+     "winnerTeam": "Red Bull Racing",
+     "pole": "Charles Leclerc",
+     "mine": [
+      {
+       "nombre": "Lewis Hamilton",
+       "grid": 14,
+       "pos": 6,
+       "status": "fin",
+       "points": 8
+      },
+      {
+       "nombre": "Charles Leclerc",
+       "grid": 1,
+       "pos": 7,
+       "status": "fin",
+       "points": 11
+      }
+     ],
+     "dnfs": 4,
+     "dnfReasons": {
+      "avería": 1,
+      "accidente": 2,
+      "accidente con OCO": 1
+     },
+     "dsq": 0,
+     "finished": 18,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [
+      "🚑 Gabriel Bortoleto (Audi) se ha lesionado en el accidente: se pierde las 2 próximas carreras. Le sustituye Yuki Tsunoda."
+     ],
+     "secs": 25.039,
+     "passes": 136,
+     "safety": 3,
+     "vsc": 0,
+     "red": true
+    },
+    {
+     "round": 3,
+     "circuitId": "monaco",
+     "sprint": false,
+     "winner": "Max Verstappen",
+     "winnerTeam": "Red Bull Racing",
+     "pole": "Max Verstappen",
+     "mine": [
+      {
+       "nombre": "Charles Leclerc",
+       "grid": 2,
+       "pos": 3,
+       "status": "fin",
+       "points": 15
+      },
+      {
+       "nombre": "Lewis Hamilton",
+       "grid": 6,
+       "pos": 5,
+       "status": "fin",
+       "points": 10
+      }
+     ],
+     "dnfs": 3,
+     "dnfReasons": {
+      "accidente": 2,
+      "avería": 1
+     },
+     "dsq": 0,
+     "finished": 19,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [
+      "🚑 Esteban Ocon (Haas) se ha lesionado en el accidente: se pierde la próxima carrera. Le sustituye Ryo Hirakawa."
+     ],
+     "secs": 24.735,
+     "passes": 14,
+     "safety": 1,
+     "vsc": 0,
+     "red": true
+    },
+    {
+     "round": 4,
+     "circuitId": "silverstone",
+     "sprint": false,
+     "winner": "Lewis Hamilton",
+     "winnerTeam": "Ferrari",
+     "pole": "Charles Leclerc",
+     "mine": [
+      {
+       "nombre": "Lewis Hamilton",
+       "grid": 6,
+       "pos": 1,
+       "status": "fin",
+       "points": 25
+      },
+      {
+       "nombre": "Charles Leclerc",
+       "grid": 1,
+       "pos": 3,
+       "status": "fin",
+       "points": 15
+      }
+     ],
+     "dnfs": 3,
+     "dnfReasons": {
+      "avería": 2,
+      "accidente": 1
+     },
+     "dsq": 0,
+     "finished": 19,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 25.773,
+     "passes": 96,
+     "safety": 0,
+     "vsc": 2,
+     "red": false
+    },
+    {
+     "round": 5,
+     "circuitId": "spa",
+     "sprint": true,
+     "winner": "Charles Leclerc",
+     "winnerTeam": "Ferrari",
+     "pole": "Charles Leclerc",
+     "mine": [
+      {
+       "nombre": "Charles Leclerc",
+       "grid": 1,
+       "pos": 1,
+       "status": "fin",
+       "points": 25
+      },
+      {
+       "nombre": "Lewis Hamilton",
+       "grid": 7,
+       "pos": 2,
+       "status": "fin",
+       "points": 24
+      }
+     ],
+     "dnfs": 1,
+     "dnfReasons": {
+      "accidente": 1
+     },
+     "dsq": 0,
+     "finished": 21,
+     "shortened": false,
+     "wet": true,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 22.445,
+     "wetRace": true,
+     "passes": 171,
+     "safety": 2,
+     "vsc": 0,
+     "red": true
+    },
+    {
+     "round": 6,
+     "circuitId": "monza",
+     "sprint": true,
+     "winner": "Charles Leclerc",
+     "winnerTeam": "Ferrari",
+     "pole": "Charles Leclerc",
+     "mine": [
+      {
+       "nombre": "Charles Leclerc",
+       "grid": 1,
+       "pos": 1,
+       "status": "fin",
+       "points": 30
+      },
+      {
+       "nombre": "Lewis Hamilton",
+       "grid": 4,
+       "pos": 3,
+       "status": "fin",
+       "points": 19
+      }
+     ],
+     "dnfs": 4,
+     "dnfReasons": {
+      "avería": 2,
+      "accidente": 1,
+      "daños tras el toque": 1
+     },
+     "dsq": 0,
+     "finished": 18,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 22.737,
+     "passes": 37,
+     "safety": 1,
+     "vsc": 0,
+     "red": false
+    },
+    {
+     "round": 7,
+     "circuitId": "sepang",
+     "sprint": false,
+     "winner": "George Russell",
+     "winnerTeam": "Mercedes",
+     "pole": "Lewis Hamilton",
+     "mine": [
+      {
+       "nombre": "Lewis Hamilton",
+       "grid": 1,
+       "pos": 4,
+       "status": "fin",
+       "points": 12
+      },
+      {
+       "nombre": "Charles Leclerc",
+       "grid": 3,
+       "pos": 8,
+       "status": "fin",
+       "points": 4
+      }
+     ],
+     "dnfs": 0,
+     "dnfReasons": {},
+     "dsq": 0,
+     "finished": 22,
+     "shortened": false,
+     "wet": true,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 24.991,
+     "passes": 108,
+     "safety": 0,
+     "vsc": 0,
+     "red": false
+    },
+    {
+     "round": 8,
+     "circuitId": "singapur",
+     "sprint": false,
+     "winner": "Max Verstappen",
+     "winnerTeam": "Red Bull Racing",
+     "pole": "Charles Leclerc",
+     "mine": [
+      {
+       "nombre": "Charles Leclerc",
+       "grid": 1,
+       "pos": 2,
+       "status": "fin",
+       "points": 18
+      },
+      {
+       "nombre": "Lewis Hamilton",
+       "grid": 6,
+       "pos": 10,
+       "status": "fin",
+       "points": 1
+      }
+     ],
+     "dnfs": 2,
+     "dnfReasons": {
+      "avería": 2
+     },
+     "dsq": 0,
+     "finished": 20,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 27.99,
+     "passes": 91,
+     "safety": 0,
+     "vsc": 0,
+     "red": false
+    },
+    {
+     "round": 9,
+     "circuitId": "interlagos",
+     "sprint": false,
+     "winner": "Max Verstappen",
+     "winnerTeam": "Red Bull Racing",
+     "pole": "Pierre Gasly",
+     "mine": [
+      {
+       "nombre": "Lewis Hamilton",
+       "grid": 3,
+       "pos": 2,
+       "status": "fin",
+       "points": 18
+      },
+      {
+       "nombre": "Charles Leclerc",
+       "grid": 6,
+       "pos": 3,
+       "status": "fin",
+       "points": 15
+      }
+     ],
+     "dnfs": 1,
+     "dnfReasons": {
+      "daños tras el toque": 1
+     },
+     "dsq": 0,
+     "finished": 21,
+     "shortened": false,
+     "wet": true,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 25.929,
+     "passes": 83,
+     "safety": 0,
+     "vsc": 0,
+     "red": false
+    }
+   ],
+   "news": [
+    "🏭 Desarrollo de invierno 2027 (ATR 70 %): túnel −0,84 s/vuelta, motor −0,04 s/vuelta, eficiencia ERS +1 %.",
+    "📅 Sprints 2027 (4 al azar): Japón, Baréin, Bélgica, Italia.",
+    "🏁 Nico Hülkenberg se retira a los 40 años (Audi).",
+    "🏁 Fernando Alonso se retira a los 46 años (Aston Martin).",
+    "🔁 Sergio Pérez deja Cadillac y se va a Audi.",
+    "🔁 Lance Stroll deja Aston Martin y se va a Cadillac.",
+    "✍️ Aston Martin ficha a Nikola Tsolov.",
+    "✍️ Aston Martin ficha a Colton Herta.",
+    "📈 Red Bull Racing acierta de lleno con el coche nuevo."
+   ],
+   "expectedPos": 1,
+   "preseason": {
+    "laps": 158,
+    "fiabBonus": 0.049,
+    "secs": 14.47
+   },
+   "devLeftEnd": 0,
+   "levelsEnd": {
+    "mercedes": 2.544,
+    "ferrari": 2.737,
+    "redbull": 2.756,
+    "mclaren": 2.133,
+    "racingbulls": 1.519,
+    "alpine": 2.133,
+    "haas": 1.838,
+    "audi": 2.031,
+    "williams": 0.762,
+    "astonmartin": -0.272,
+    "cadillac": 0.466
+   },
+   "carRankEnd": 2,
+   "spreadEnd": 3.028,
+   "parts": [
+    {
+     "area": "motor",
+     "size": 2,
+     "ordered": 0,
+     "ready": 2,
+     "expect": 0.176,
+     "real": 0.191
+    },
+    {
+     "area": "fiab",
+     "size": 1,
+     "ordered": 1,
+     "ready": 3,
+     "expect": 0.032,
+     "real": 0.038
+    },
+    {
+     "area": "motor",
+     "size": 2,
+     "ordered": 2,
+     "ready": 4,
+     "expect": 0.176,
+     "real": 0.226
+    },
+    {
+     "area": "fiab",
+     "size": 1,
+     "ordered": 3,
+     "ready": 5,
+     "expect": 0.032,
+     "real": 0.035
+    }
+   ],
+   "aeroPkgs": [
+    {
+     "period": 0,
+     "ready": 3,
+     "expect": 0.172,
+     "real": 0.204,
+     "medido": 0.264,
+     "montar": true
+    },
+    {
+     "period": 1,
+     "ready": 6,
+     "expect": 0.172,
+     "real": 0.201,
+     "medido": 0.062,
+     "montar": true
+    }
+   ],
+   "champion": {
+    "nombre": "Max Verstappen",
+    "equipo": "Red Bull Racing",
+    "puntos": 188
+   },
+   "constructors": [
+    {
+     "equipo": "Ferrari",
+     "puntos": 303
+    },
+    {
+     "equipo": "Red Bull Racing",
+     "puntos": 283
+    },
+    {
+     "equipo": "Mercedes",
+     "puntos": 238
+    },
+    {
+     "equipo": "McLaren",
+     "puntos": 118
+    },
+    {
+     "equipo": "Audi",
+     "puntos": 38
+    },
+    {
+     "equipo": "Alpine",
+     "puntos": 34
+    },
+    {
+     "equipo": "Haas",
+     "puntos": 32
+    },
+    {
+     "equipo": "Williams",
+     "puntos": 4
+    },
+    {
+     "equipo": "Racing Bulls",
+     "puntos": 3
+    },
+    {
+     "equipo": "Aston Martin",
+     "puntos": 0
+    },
+    {
+     "equipo": "Cadillac",
+     "puntos": 0
+    }
+   ],
+   "myPos": 1,
+   "myPoints": 303,
+   "myDrivers": [
+    {
+     "nombre": "Charles Leclerc",
+     "abrev": "LEC",
+     "pos": 2,
+     "puntos": 161,
+     "edad": 30,
+     "rating": 90.9,
+     "moral": 99.7
+    },
+    {
+     "nombre": "Lewis Hamilton",
+     "abrev": "HAM",
+     "pos": 3,
+     "puntos": 142,
+     "edad": 42,
+     "rating": 91.2,
+     "moral": 89
+    }
+   ],
+   "wins": {
+    "Charles Leclerc": 3,
+    "Max Verstappen": 4,
+    "Lewis Hamilton": 1,
+    "George Russell": 1
+   },
+   "winnersDistinct": 4,
+   "teamsWinning": 3,
+   "poleToWin": 3,
+   "dnfRate": 0.101,
+   "swaps": [
+    "R3 Gabriel Bortoleto → Yuki Tsunoda (lesión de Gabriel Bortoleto)",
+    "R5 Yuki Tsunoda → Gabriel Bortoleto (vuelve Gabriel Bortoleto)",
+    "R4 Esteban Ocon → Ryo Hirakawa (lesión de Esteban Ocon)",
+    "R5 Ryo Hirakawa → Esteban Ocon (vuelve Esteban Ocon)"
+   ],
+   "hitos": 12,
+   "rivals": 8,
+   "grid": [
+    {
+     "equipo": "Mercedes",
+     "pilotos": [
+      "RUS29",
+      "ANT21"
+     ]
+    },
+    {
+     "equipo": "Ferrari",
+     "pilotos": [
+      "LEC30",
+      "HAM42"
+     ]
+    },
+    {
+     "equipo": "Red Bull Racing",
+     "pilotos": [
+      "VER30",
+      "HAD23"
+     ]
+    },
+    {
+     "equipo": "McLaren",
+     "pilotos": [
+      "NOR28",
+      "PIA26"
+     ]
+    },
+    {
+     "equipo": "Racing Bulls",
+     "pilotos": [
+      "LAW25",
+      "LIN20"
+     ]
+    },
+    {
+     "equipo": "Alpine",
+     "pilotos": [
+      "GAS31",
+      "COL24"
+     ]
+    },
+    {
+     "equipo": "Haas",
+     "pilotos": [
+      "OCO31",
+      "BEA22"
+     ]
+    },
+    {
+     "equipo": "Audi",
+     "pilotos": [
+      "PER37",
+      "BOR23"
+     ]
+    },
+    {
+     "equipo": "Williams",
+     "pilotos": [
+      "SAI33",
+      "ALB31"
+     ]
+    },
+    {
+     "equipo": "Aston Martin",
+     "pilotos": [
+      "TSO21",
+      "HER27"
+     ]
+    },
+    {
+     "equipo": "Cadillac",
+     "pilotos": [
+      "STR29",
+      "BOT38"
+     ]
+    }
+   ],
+   "ages": {
+    "mean": 28.2,
+    "min": 20,
+    "max": 42
+   },
+   "ratings": {
+    "mean": 87.2,
+    "min": 81.2,
+    "max": 96.3
+   },
+   "poolSize": 38
+  },
+  {
+   "year": 2028,
+   "playerTeam": "ferrari",
+   "teamName": "Ferrari",
+   "calendar": [
+    "suzuka",
+    "bahrein",
+    "monaco",
+    "silverstone",
+    "spa",
+    "monza",
+    "sepang",
+    "singapur",
+    "interlagos"
+   ],
+   "sprints": [
+    "bahrein",
+    "sepang",
+    "singapur",
+    "interlagos"
+   ],
+   "budget": 40,
+   "devBonus": 0,
+   "devLeftStart": 24,
+   "levels0": {
+    "mercedes": 2.185,
+    "ferrari": 2.065,
+    "redbull": 2.219,
+    "mclaren": 1.083,
+    "racingbulls": 1.495,
+    "alpine": 1.843,
+    "haas": 1.481,
+    "audi": 1.259,
+    "williams": -0.435,
+    "astonmartin": -0.018,
+    "cadillac": 0.989
+   },
+   "carRank0": 3,
+   "spread0": 2.654,
+   "races": [
+    {
+     "round": 1,
+     "circuitId": "suzuka",
+     "sprint": false,
+     "winner": "Max Verstappen",
+     "winnerTeam": "Red Bull Racing",
+     "pole": "Max Verstappen",
+     "mine": [
+      {
+       "nombre": "Charles Leclerc",
+       "grid": 4,
+       "pos": 2,
+       "status": "fin",
+       "points": 18
+      },
+      {
+       "nombre": "Lewis Hamilton",
+       "grid": 10,
+       "pos": 7,
+       "status": "fin",
+       "points": 6
+      }
+     ],
+     "dnfs": 2,
+     "dnfReasons": {
+      "daños tras el toque": 1,
+      "accidente con LAW": 1
+     },
+     "dsq": 0,
+     "finished": 20,
+     "shortened": false,
+     "wet": true,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 29.904,
+     "wetRace": true,
+     "passes": 30,
+     "safety": 1,
+     "vsc": 0,
+     "red": false
+    },
+    {
+     "round": 2,
+     "circuitId": "bahrein",
+     "sprint": true,
+     "winner": "Max Verstappen",
+     "winnerTeam": "Red Bull Racing",
+     "pole": "Isack Hadjar",
+     "mine": [
+      {
+       "nombre": "Charles Leclerc",
+       "grid": 8,
+       "pos": 6,
+       "status": "fin",
+       "points": 15
+      },
+      {
+       "nombre": "Lewis Hamilton",
+       "grid": 7,
+       "pos": 10,
+       "status": "fin",
+       "points": 7
+      }
+     ],
+     "dnfs": 4,
+     "dnfReasons": {
+      "avería": 3,
+      "accidente": 1
+     },
+     "dsq": 0,
+     "finished": 18,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 23.456,
+     "passes": 88,
+     "safety": 1,
+     "vsc": 0,
+     "red": true
+    },
+    {
+     "round": 3,
+     "circuitId": "monaco",
+     "sprint": false,
+     "winner": "Max Verstappen",
+     "winnerTeam": "Red Bull Racing",
+     "pole": "Max Verstappen",
+     "mine": [
+      {
+       "nombre": "Lewis Hamilton",
+       "grid": 3,
+       "pos": 3,
+       "status": "fin",
+       "points": 15
+      },
+      {
+       "nombre": "Charles Leclerc",
+       "grid": 5,
+       "pos": 5,
+       "status": "fin",
+       "points": 10
+      }
+     ],
+     "dnfs": 3,
+     "dnfReasons": {
+      "accidente": 2,
+      "avería": 1
+     },
+     "dsq": 0,
+     "finished": 19,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [
+      "🚑 Valtteri Bottas (Cadillac) se ha lesionado en el accidente: se pierde las 2 próximas carreras. Le sustituye Zhou Guanyu."
+     ],
+     "secs": 27.606,
+     "passes": 16,
+     "safety": 3,
+     "vsc": 0,
+     "red": false
+    },
+    {
+     "round": 4,
+     "circuitId": "silverstone",
+     "sprint": false,
+     "winner": "Max Verstappen",
+     "winnerTeam": "Red Bull Racing",
+     "pole": "Max Verstappen",
+     "mine": [
+      {
+       "nombre": "Charles Leclerc",
+       "grid": 4,
+       "pos": 2,
+       "status": "fin",
+       "points": 18
+      },
+      {
+       "nombre": "Lewis Hamilton",
+       "grid": 3,
+       "pos": 3,
+       "status": "fin",
+       "points": 15
+      }
+     ],
+     "dnfs": 2,
+     "dnfReasons": {
+      "accidente con HAD": 1,
+      "avería": 1
+     },
+     "dsq": 0,
+     "finished": 20,
+     "shortened": false,
+     "wet": true,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 27.913,
+     "passes": 133,
+     "safety": 1,
+     "vsc": 0,
+     "red": false
+    },
+    {
+     "round": 5,
+     "circuitId": "spa",
+     "sprint": false,
+     "winner": "Max Verstappen",
+     "winnerTeam": "Red Bull Racing",
+     "pole": "Max Verstappen",
+     "mine": [
+      {
+       "nombre": "Lewis Hamilton",
+       "grid": 3,
+       "pos": 2,
+       "status": "fin",
+       "points": 18
+      },
+      {
+       "nombre": "Charles Leclerc",
+       "grid": 2,
+       "pos": 5,
+       "status": "fin",
+       "points": 10
+      }
+     ],
+     "dnfs": 0,
+     "dnfReasons": {},
+     "dsq": 0,
+     "finished": 22,
+     "shortened": false,
+     "wet": true,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 30.521,
+     "wetRace": true,
+     "passes": 106,
+     "safety": 0,
+     "vsc": 0,
+     "red": false
+    },
+    {
+     "round": 6,
+     "circuitId": "monza",
+     "sprint": false,
+     "winner": "Max Verstappen",
+     "winnerTeam": "Red Bull Racing",
+     "pole": "Max Verstappen",
+     "mine": [
+      {
+       "nombre": "Lewis Hamilton",
+       "grid": 12,
+       "pos": 3,
+       "status": "fin",
+       "points": 15
+      },
+      {
+       "nombre": "Charles Leclerc",
+       "grid": 5,
+       "pos": 19,
+       "status": "fin",
+       "points": 0
+      }
+     ],
+     "dnfs": 2,
+     "dnfReasons": {
+      "accidente con FOR": 1,
+      "accidente": 1
+     },
+     "dsq": 0,
+     "finished": 20,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 24.074,
+     "passes": 102,
+     "safety": 1,
+     "vsc": 0,
+     "red": true
+    },
+    {
+     "round": 7,
+     "circuitId": "sepang",
+     "sprint": true,
+     "winner": "Max Verstappen",
+     "winnerTeam": "Red Bull Racing",
+     "pole": "Isack Hadjar",
+     "mine": [
+      {
+       "nombre": "Lewis Hamilton",
+       "grid": 5,
+       "pos": 8,
+       "status": "fin",
+       "points": 9
+      },
+      {
+       "nombre": "Charles Leclerc",
+       "grid": 6,
+       "pos": 21,
+       "status": "out",
+       "reason": "avería (fallo eléctrico), se retira en boxes",
+       "points": 3
+      }
+     ],
+     "dnfs": 3,
+     "dnfReasons": {
+      "accidente": 1,
+      "avería": 2
+     },
+     "dsq": 0,
+     "finished": 19,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 23.626,
+     "passes": 133,
+     "safety": 0,
+     "vsc": 1,
+     "red": false
+    },
+    {
+     "round": 8,
+     "circuitId": "singapur",
+     "sprint": true,
+     "winner": "George Russell",
+     "winnerTeam": "Mercedes",
+     "pole": "Isack Hadjar",
+     "mine": [
+      {
+       "nombre": "Charles Leclerc",
+       "grid": 2,
+       "pos": 4,
+       "status": "fin",
+       "points": 12
+      },
+      {
+       "nombre": "Lewis Hamilton",
+       "grid": 11,
+       "pos": 11,
+       "status": "fin",
+       "points": 4
+      }
+     ],
+     "dnfs": 1,
+     "dnfReasons": {
+      "daños tras el toque": 1
+     },
+     "dsq": 0,
+     "finished": 21,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 25.381,
+     "passes": 76,
+     "safety": 0,
+     "vsc": 0,
+     "red": false
+    },
+    {
+     "round": 9,
+     "circuitId": "interlagos",
+     "sprint": true,
+     "winner": "Max Verstappen",
+     "winnerTeam": "Red Bull Racing",
+     "pole": "Max Verstappen",
+     "mine": [
+      {
+       "nombre": "Lewis Hamilton",
+       "grid": 7,
+       "pos": 5,
+       "status": "fin",
+       "points": 16
+      },
+      {
+       "nombre": "Charles Leclerc",
+       "grid": 5,
+       "pos": 8,
+       "status": "fin",
+       "points": 9
+      }
+     ],
+     "dnfs": 1,
+     "dnfReasons": {
+      "avería": 1
+     },
+     "dsq": 0,
+     "finished": 21,
+     "shortened": false,
+     "wet": true,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 23.029,
+     "passes": 57,
+     "safety": 0,
+     "vsc": 0,
+     "red": false
+    }
+   ],
+   "news": [
+    "🏭 Desarrollo de invierno 2028 (ATR 70 %): túnel −0,76 s/vuelta, motor −0,04 s/vuelta.",
+    "📅 Sprints 2028 (4 al azar): Baréin, Malasia, Singapur, São Paulo.",
+    "🔚 Cadillac no renueva a Lance Stroll.",
+    "🔁 Alexander Albon deja Williams y se va a Cadillac.",
+    "✍️ Williams ficha a Leonardo Fornaroli.",
+    "📉 El coche nuevo de Williams no funciona: va algo peor que el del año pasado.",
+    "📈 Cadillac acierta de lleno con el coche nuevo."
+   ],
+   "expectedPos": 3,
+   "preseason": {
+    "laps": 138,
+    "fiabBonus": 0.043,
+    "secs": 12.402
+   },
+   "devLeftEnd": 0,
+   "levelsEnd": {
+    "mercedes": 2.487,
+    "ferrari": 2.293,
+    "redbull": 2.617,
+    "mclaren": 1.722,
+    "racingbulls": 1.798,
+    "alpine": 2.25,
+    "haas": 1.688,
+    "audi": 1.642,
+    "williams": 0.245,
+    "astonmartin": 0.679,
+    "cadillac": 1.347
+   },
+   "carRankEnd": 3,
+   "spreadEnd": 2.372,
+   "parts": [
+    {
+     "area": "motor",
+     "size": 2,
+     "ordered": 0,
+     "ready": 2,
+     "expect": 0.165,
+     "real": 0.149
+    },
+    {
+     "area": "fiab",
+     "size": 1,
+     "ordered": 1,
+     "ready": 3,
+     "expect": 0.032,
+     "real": 0.015
+    },
+    {
+     "area": "motor",
+     "size": 2,
+     "ordered": 2,
+     "ready": 4,
+     "expect": 0.165,
+     "real": 0.075
+    },
+    {
+     "area": "fiab",
+     "size": 1,
+     "ordered": 3,
+     "ready": 5,
+     "expect": 0.032,
+     "real": 0.027
+    }
+   ],
+   "aeroPkgs": [
+    {
+     "period": 0,
+     "ready": 3,
+     "expect": 0.17,
+     "real": 0.144,
+     "medido": 0.1,
+     "montar": true
+    },
+    {
+     "period": 1,
+     "ready": 6,
+     "expect": 0.17,
+     "real": -0.057,
+     "medido": -0.044,
+     "montar": false
+    }
+   ],
+   "champion": {
+    "nombre": "Max Verstappen",
+    "equipo": "Red Bull Racing",
+    "puntos": 231
+   },
+   "constructors": [
+    {
+     "equipo": "Red Bull Racing",
+     "puntos": 326
+    },
+    {
+     "equipo": "Mercedes",
+     "puntos": 204
+    },
+    {
+     "equipo": "Ferrari",
+     "puntos": 200
+    },
+    {
+     "equipo": "McLaren",
+     "puntos": 93
+    },
+    {
+     "equipo": "Alpine",
+     "puntos": 83
+    },
+    {
+     "equipo": "Audi",
+     "puntos": 45
+    },
+    {
+     "equipo": "Haas",
+     "puntos": 44
+    },
+    {
+     "equipo": "Racing Bulls",
+     "puntos": 35
+    },
+    {
+     "equipo": "Cadillac",
+     "puntos": 14
+    },
+    {
+     "equipo": "Aston Martin",
+     "puntos": 9
+    },
+    {
+     "equipo": "Williams",
+     "puntos": 0
+    }
+   ],
+   "myPos": 3,
+   "myPoints": 200,
+   "myDrivers": [
+    {
+     "nombre": "Charles Leclerc",
+     "abrev": "LEC",
+     "pos": 5,
+     "puntos": 95,
+     "edad": 31,
+     "rating": 90.9,
+     "moral": 71.6
+    },
+    {
+     "nombre": "Lewis Hamilton",
+     "abrev": "HAM",
+     "pos": 2,
+     "puntos": 105,
+     "edad": 43,
+     "rating": 90.7,
+     "moral": 83.3
+    }
+   ],
+   "wins": {
+    "Max Verstappen": 8,
+    "George Russell": 1
+   },
+   "winnersDistinct": 2,
+   "teamsWinning": 2,
+   "poleToWin": 6,
+   "dnfRate": 0.091,
+   "swaps": [
+    "R4 Valtteri Bottas → Zhou Guanyu (lesión de Valtteri Bottas)",
+    "R6 Zhou Guanyu → Valtteri Bottas (vuelve Valtteri Bottas)"
+   ],
+   "hitos": 1,
+   "rivals": 8,
+   "grid": [
+    {
+     "equipo": "Mercedes",
+     "pilotos": [
+      "RUS30",
+      "ANT22"
+     ]
+    },
+    {
+     "equipo": "Ferrari",
+     "pilotos": [
+      "LEC31",
+      "HAM43"
+     ]
+    },
+    {
+     "equipo": "Red Bull Racing",
+     "pilotos": [
+      "VER31",
+      "HAD24"
+     ]
+    },
+    {
+     "equipo": "McLaren",
+     "pilotos": [
+      "NOR29",
+      "PIA27"
+     ]
+    },
+    {
+     "equipo": "Racing Bulls",
+     "pilotos": [
+      "LAW26",
+      "LIN21"
+     ]
+    },
+    {
+     "equipo": "Alpine",
+     "pilotos": [
+      "GAS32",
+      "COL25"
+     ]
+    },
+    {
+     "equipo": "Haas",
+     "pilotos": [
+      "OCO32",
+      "BEA23"
+     ]
+    },
+    {
+     "equipo": "Audi",
+     "pilotos": [
+      "PER38",
+      "BOR24"
+     ]
+    },
+    {
+     "equipo": "Williams",
+     "pilotos": [
+      "SAI34",
+      "FOR24"
+     ]
+    },
+    {
+     "equipo": "Aston Martin",
+     "pilotos": [
+      "TSO22",
+      "HER28"
+     ]
+    },
+    {
+     "equipo": "Cadillac",
+     "pilotos": [
+      "ALB32",
+      "BOT39"
+     ]
+    }
+   ],
+   "ages": {
+    "mean": 29,
+    "min": 21,
+    "max": 43
+   },
+   "ratings": {
+    "mean": 87.7,
+    "min": 82.3,
+    "max": 97.3
+   },
+   "poolSize": 39
+  },
+  {
+   "year": 2029,
+   "playerTeam": "ferrari",
+   "teamName": "Ferrari",
+   "calendar": [
+    "suzuka",
+    "bahrein",
+    "monaco",
+    "silverstone",
+    "spa",
+    "monza",
+    "sepang",
+    "singapur",
+    "interlagos"
+   ],
+   "sprints": [
+    "suzuka",
+    "monza",
+    "singapur",
+    "interlagos"
+   ],
+   "budget": 40,
+   "devBonus": 0,
+   "devLeftStart": 24,
+   "levels0": {
+    "mercedes": 2.185,
+    "ferrari": 2.169,
+    "redbull": 1.691,
+    "mclaren": 1.459,
+    "racingbulls": 2.121,
+    "alpine": 1.381,
+    "haas": 0.741,
+    "audi": 2.001,
+    "williams": 0.427,
+    "astonmartin": -0.382,
+    "cadillac": 1.039
+   },
+   "carRank0": 2,
+   "spread0": 2.567,
+   "races": [
+    {
+     "round": 1,
+     "circuitId": "suzuka",
+     "sprint": true,
+     "winner": "Max Verstappen",
+     "winnerTeam": "Red Bull Racing",
+     "pole": "Max Verstappen",
+     "mine": [
+      {
+       "nombre": "Lewis Hamilton",
+       "grid": 2,
+       "pos": 2,
+       "status": "fin",
+       "points": 22
+      },
+      {
+       "nombre": "Charles Leclerc",
+       "grid": 16,
+       "pos": 18,
+       "status": "fin",
+       "points": 5
+      }
+     ],
+     "dnfs": 0,
+     "dnfReasons": {},
+     "dsq": 0,
+     "finished": 22,
+     "shortened": false,
+     "wet": true,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 23.549,
+     "passes": 91,
+     "safety": 0,
+     "vsc": 0,
+     "red": false
+    },
+    {
+     "round": 2,
+     "circuitId": "bahrein",
+     "sprint": false,
+     "winner": "Lando Norris",
+     "winnerTeam": "Audi",
+     "pole": "Lando Norris",
+     "mine": [
+      {
+       "nombre": "Charles Leclerc",
+       "grid": 11,
+       "pos": 5,
+       "status": "fin",
+       "points": 10
+      },
+      {
+       "nombre": "Lewis Hamilton",
+       "grid": 3,
+       "pos": 6,
+       "status": "fin",
+       "points": 8
+      }
+     ],
+     "dnfs": 1,
+     "dnfReasons": {
+      "avería": 1
+     },
+     "dsq": 0,
+     "finished": 21,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 24.906,
+     "passes": 75,
+     "safety": 0,
+     "vsc": 0,
+     "red": false
+    },
+    {
+     "round": 3,
+     "circuitId": "monaco",
+     "sprint": false,
+     "winner": "Oliver Bearman",
+     "winnerTeam": "Haas",
+     "pole": "Max Verstappen",
+     "mine": [
+      {
+       "nombre": "Lewis Hamilton",
+       "grid": 3,
+       "pos": 11,
+       "status": "fin",
+       "points": 0
+      },
+      {
+       "nombre": "Charles Leclerc",
+       "grid": 7,
+       "pos": 16,
+       "status": "fin",
+       "points": 0
+      }
+     ],
+     "dnfs": 4,
+     "dnfReasons": {
+      "avería": 1,
+      "accidente": 3
+     },
+     "dsq": 0,
+     "finished": 18,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [
+      "🚑 Nikola Tsolov (Aston Martin) se ha lesionado en el accidente: se pierde las 3 próximas carreras. Le sustituye Jak Crawford."
+     ],
+     "secs": 30.406,
+     "passes": 24,
+     "safety": 3,
+     "vsc": 0,
+     "red": true
+    },
+    {
+     "round": 4,
+     "circuitId": "silverstone",
+     "sprint": false,
+     "winner": "Max Verstappen",
+     "winnerTeam": "Red Bull Racing",
+     "pole": "Max Verstappen",
+     "mine": [
+      {
+       "nombre": "Lewis Hamilton",
+       "grid": 6,
+       "pos": 4,
+       "status": "fin",
+       "points": 12
+      },
+      {
+       "nombre": "Charles Leclerc",
+       "grid": 4,
+       "pos": 22,
+       "status": "out",
+       "reason": "daños tras el toque",
+       "points": 0
+      }
+     ],
+     "dnfs": 4,
+     "dnfReasons": {
+      "accidente": 2,
+      "avería": 1,
+      "daños tras el toque": 1
+     },
+     "dsq": 0,
+     "finished": 18,
+     "shortened": false,
+     "wet": true,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 28.814,
+     "passes": 101,
+     "safety": 1,
+     "vsc": 1,
+     "red": false
+    },
+    {
+     "round": 5,
+     "circuitId": "spa",
+     "sprint": false,
+     "winner": "Kimi Antonelli",
+     "winnerTeam": "Mercedes",
+     "pole": "Kimi Antonelli",
+     "mine": [
+      {
+       "nombre": "Charles Leclerc",
+       "grid": 11,
+       "pos": 3,
+       "status": "fin",
+       "points": 15
+      },
+      {
+       "nombre": "Lewis Hamilton",
+       "grid": 3,
+       "pos": 7,
+       "status": "fin",
+       "points": 6
+      }
+     ],
+     "dnfs": 1,
+     "dnfReasons": {
+      "accidente": 1
+     },
+     "dsq": 0,
+     "finished": 21,
+     "shortened": false,
+     "wet": true,
+     "gridPens": 1,
+     "swaps": [],
+     "secs": 28.017,
+     "wetRace": true,
+     "passes": 97,
+     "safety": 1,
+     "vsc": 1,
+     "red": false
+    },
+    {
+     "round": 6,
+     "circuitId": "monza",
+     "sprint": true,
+     "winner": "Gabriel Bortoleto",
+     "winnerTeam": "Audi",
+     "pole": "Max Verstappen",
+     "mine": [
+      {
+       "nombre": "Lewis Hamilton",
+       "grid": 5,
+       "pos": 5,
+       "status": "fin",
+       "points": 14
+      },
+      {
+       "nombre": "Charles Leclerc",
+       "grid": 7,
+       "pos": 7,
+       "status": "fin",
+       "points": 12
+      }
+     ],
+     "dnfs": 0,
+     "dnfReasons": {},
+     "dsq": 0,
+     "finished": 22,
+     "shortened": false,
+     "wet": true,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 22.5,
+     "passes": 195,
+     "safety": 0,
+     "vsc": 0,
+     "red": false
+    },
+    {
+     "round": 7,
+     "circuitId": "sepang",
+     "sprint": false,
+     "winner": "Kimi Antonelli",
+     "winnerTeam": "Mercedes",
+     "pole": "Charles Leclerc",
+     "mine": [
+      {
+       "nombre": "Lewis Hamilton",
+       "grid": 3,
+       "pos": 6,
+       "status": "fin",
+       "points": 8
+      },
+      {
+       "nombre": "Charles Leclerc",
+       "grid": 1,
+       "pos": 22,
+       "status": "fin",
+       "points": 0
+      }
+     ],
+     "dnfs": 0,
+     "dnfReasons": {},
+     "dsq": 0,
+     "finished": 22,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 25.668,
+     "passes": 105,
+     "safety": 0,
+     "vsc": 0,
+     "red": false
+    },
+    {
+     "round": 8,
+     "circuitId": "singapur",
+     "sprint": true,
+     "winner": "Kimi Antonelli",
+     "winnerTeam": "Mercedes",
+     "pole": "Max Verstappen",
+     "mine": [
+      {
+       "nombre": "Lewis Hamilton",
+       "grid": 2,
+       "pos": 2,
+       "status": "fin",
+       "points": 24
+      },
+      {
+       "nombre": "Charles Leclerc",
+       "grid": 12,
+       "pos": 3,
+       "status": "fin",
+       "points": 16
+      }
+     ],
+     "dnfs": 1,
+     "dnfReasons": {
+      "avería": 1
+     },
+     "dsq": 0,
+     "finished": 21,
+     "shortened": false,
+     "wet": true,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 23.796,
+     "passes": 107,
+     "safety": 0,
+     "vsc": 0,
+     "red": false
+    },
+    {
+     "round": 9,
+     "circuitId": "interlagos",
+     "sprint": true,
+     "winner": "Kimi Antonelli",
+     "winnerTeam": "Mercedes",
+     "pole": "Kimi Antonelli",
+     "mine": [
+      {
+       "nombre": "Charles Leclerc",
+       "grid": 3,
+       "pos": 2,
+       "status": "fin",
+       "points": 21
+      },
+      {
+       "nombre": "Lewis Hamilton",
+       "grid": 5,
+       "pos": 5,
+       "status": "fin",
+       "points": 16
+      }
+     ],
+     "dnfs": 2,
+     "dnfReasons": {
+      "accidente con HAM": 1,
+      "accidente": 1
+     },
+     "dsq": 0,
+     "finished": 20,
+     "shortened": false,
+     "wet": true,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 25.019,
+     "wetRace": true,
+     "passes": 62,
+     "safety": 2,
+     "vsc": 0,
+     "red": false
+    }
+   ],
+   "news": [
+    "🏭 Desarrollo de invierno 2029 (ATR 75 %): túnel −1,15 s/vuelta, motor −0,04 s/vuelta.",
+    "🚀 El coche nuevo es un acierto: un paso enorme sobre el del año pasado.",
+    "📅 Sprints 2029 (4 al azar): Japón, Italia, Singapur, São Paulo.",
+    "🏁 Sergio Pérez se retira a los 39 años (Audi).",
+    "🏁 Valtteri Bottas se retira a los 40 años (Cadillac).",
+    "🔁 Lando Norris deja McLaren y se va a Audi.",
+    "🔁 Carlos Sainz deja Williams y se va a McLaren.",
+    "🔁 Colton Herta deja Aston Martin y se va a Cadillac.",
+    "✍️ Aston Martin ficha a Martinius Stenshorne.",
+    "✍️ Williams ficha a Yuki Tsunoda.",
+    "📈 Racing Bulls acierta de lleno con el coche nuevo.",
+    "📈 Audi acierta de lleno con el coche nuevo.",
+    "📉 El coche nuevo de Aston Martin no funciona: va algo peor que el del año pasado."
+   ],
+   "expectedPos": 1,
+   "preseason": {
+    "laps": 147,
+    "fiabBonus": 0.046,
+    "secs": 13.082
+   },
+   "devLeftEnd": 0,
+   "levelsEnd": {
+    "mercedes": 2.448,
+    "ferrari": 2.696,
+    "redbull": 2.101,
+    "mclaren": 2.029,
+    "racingbulls": 2.235,
+    "alpine": 1.877,
+    "haas": 0.85,
+    "audi": 2.409,
+    "williams": 0.958,
+    "astonmartin": 0.747,
+    "cadillac": 1.543
+   },
+   "carRankEnd": 1,
+   "spreadEnd": 1.949,
+   "parts": [
+    {
+     "area": "motor",
+     "size": 2,
+     "ordered": 0,
+     "ready": 2,
+     "expect": 0.16,
+     "real": 0.178
+    },
+    {
+     "area": "fiab",
+     "size": 1,
+     "ordered": 1,
+     "ready": 3,
+     "expect": 0.032,
+     "real": 0.03
+    },
+    {
+     "area": "motor",
+     "size": 2,
+     "ordered": 2,
+     "ready": 4,
+     "expect": 0.16,
+     "real": 0.187
+    },
+    {
+     "area": "fiab",
+     "size": 1,
+     "ordered": 3,
+     "ready": 5,
+     "expect": 0.032,
+     "real": 0.007
+    }
+   ],
+   "aeroPkgs": [
+    {
+     "period": 0,
+     "ready": 3,
+     "expect": 0.179,
+     "real": 0.218,
+     "medido": 0.221,
+     "montar": true
+    },
+    {
+     "period": 1,
+     "ready": 6,
+     "expect": 0.179,
+     "real": 0.178,
+     "medido": 0.197,
+     "montar": true
+    }
+   ],
+   "champion": {
+    "nombre": "Kimi Antonelli",
+    "equipo": "Mercedes",
+    "puntos": 196
+   },
+   "constructors": [
+    {
+     "equipo": "Mercedes",
+     "puntos": 285
+    },
+    {
+     "equipo": "Ferrari",
+     "puntos": 189
+    },
+    {
+     "equipo": "Audi",
+     "puntos": 157
+    },
+    {
+     "equipo": "Red Bull Racing",
+     "puntos": 129
+    },
+    {
+     "equipo": "Racing Bulls",
+     "puntos": 121
+    },
+    {
+     "equipo": "McLaren",
+     "puntos": 66
+    },
+    {
+     "equipo": "Alpine",
+     "puntos": 52
+    },
+    {
+     "equipo": "Haas",
+     "puntos": 46
+    },
+    {
+     "equipo": "Williams",
+     "puntos": 4
+    },
+    {
+     "equipo": "Cadillac",
+     "puntos": 4
+    },
+    {
+     "equipo": "Aston Martin",
+     "puntos": 0
+    }
+   ],
+   "myPos": 2,
+   "myPoints": 189,
+   "myDrivers": [
+    {
+     "nombre": "Charles Leclerc",
+     "abrev": "LEC",
+     "pos": 6,
+     "puntos": 79,
+     "edad": 32,
+     "rating": 90.9,
+     "moral": 65.2
+    },
+    {
+     "nombre": "Lewis Hamilton",
+     "abrev": "HAM",
+     "pos": 3,
+     "puntos": 110,
+     "edad": 44,
+     "rating": 89.7,
+     "moral": 79.6
+    }
+   ],
+   "wins": {
+    "Max Verstappen": 2,
+    "Lando Norris": 1,
+    "Oliver Bearman": 1,
+    "Kimi Antonelli": 4,
+    "Gabriel Bortoleto": 1
+   },
+   "winnersDistinct": 5,
+   "teamsWinning": 4,
+   "poleToWin": 5,
+   "dnfRate": 0.066,
+   "swaps": [
+    "R4 Nikola Tsolov → Jak Crawford (lesión de Nikola Tsolov)",
+    "R7 Jak Crawford → Nikola Tsolov (vuelve Nikola Tsolov)"
+   ],
+   "hitos": 1,
+   "rivals": 7,
+   "grid": [
+    {
+     "equipo": "Mercedes",
+     "pilotos": [
+      "RUS31",
+      "ANT23"
+     ]
+    },
+    {
+     "equipo": "Ferrari",
+     "pilotos": [
+      "LEC32",
+      "HAM44"
+     ]
+    },
+    {
+     "equipo": "Red Bull Racing",
+     "pilotos": [
+      "VER32",
+      "HAD25"
+     ]
+    },
+    {
+     "equipo": "McLaren",
+     "pilotos": [
+      "SAI35",
+      "PIA28"
+     ]
+    },
+    {
+     "equipo": "Racing Bulls",
+     "pilotos": [
+      "LAW27",
+      "LIN22"
+     ]
+    },
+    {
+     "equipo": "Alpine",
+     "pilotos": [
+      "GAS33",
+      "COL26"
+     ]
+    },
+    {
+     "equipo": "Haas",
+     "pilotos": [
+      "OCO33",
+      "BEA24"
+     ]
+    },
+    {
+     "equipo": "Audi",
+     "pilotos": [
+      "NOR30",
+      "BOR25"
+     ]
+    },
+    {
+     "equipo": "Williams",
+     "pilotos": [
+      "TSU29",
+      "FOR25"
+     ]
+    },
+    {
+     "equipo": "Aston Martin",
+     "pilotos": [
+      "TSO23",
+      "STE24"
+     ]
+    },
+    {
+     "equipo": "Cadillac",
+     "pilotos": [
+      "ALB33",
+      "HER29"
+     ]
+    }
+   ],
+   "ages": {
+    "mean": 28.8,
+    "min": 22,
+    "max": 44
+   },
+   "ratings": {
+    "mean": 88.1,
+    "min": 83.2,
+    "max": 97.3
+   },
+   "poolSize": 39
+  }
+ ],
+ "problems": [],
+ "secs": 1007.675
+}

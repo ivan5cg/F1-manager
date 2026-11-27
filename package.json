@@ -10,7 +10,9 @@
     "build": "vite build",
     "finde": "tsx scripts/finde.ts",
     "pista": "tsx scripts/pista.ts",
-    "check": "tsc --noEmit -p ."
+    "check": "tsc --noEmit -p .",
+    "partidas": "tsx scripts/partidas.ts",
+    "partidas:informe": "tsx scripts/partidas-informe.ts"
   },
   "keywords": [],
   "author": "",

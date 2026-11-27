@@ -145,18 +145,18 @@ export function createAudio(initial: SoundPrefs) {
   synth?.getVoices(); // algunos navegadores las cargan la primera vez que se piden
   /** Lee un texto: «radio» (tus pilotos y el ingeniero, como mucho uno cada 8 s) o «lobato» (otra voz). */
   function speak(text: string, who: "radio" | "lobato" | "experta", tone?: { pitch: number; rate: number }): boolean {
-    if (!synth || !prefs.sonido || (who === "radio" ? !prefs.voz : !prefs.vozLobato)) return false; // la experta, con la voz de los comentaristas
+    if (!synth || !prefs.sonido || (who === "radio" ? !prefs.voz : !prefs.vozLobato)) return false; // el experto técnico, con la voz de los comentaristas
     const now = performance.now();
     if (synth.speaking || synth.pending || now - lastSpeak < 8000) return false;
     const vs = spanishVoices();
     if (!vs.length) return false;
     const u = new SpeechSynthesisUtterance(text);
     // Lobato, con otra voz si la hay (y si no, más grave y más deprisa)
-    // la experta, con una tercera voz si la hay (y si no, más aguda y más pausada)
+    // el experto técnico (Toni Cuquerella), con una tercera voz si la hay (y si no, algo más grave y más pausada)
     u.voice = who === "lobato" ? vs[1] ?? vs[0] : who === "experta" ? vs[2] ?? vs[0] : vs[0];
     u.lang = u.voice.lang;
     u.rate = who === "lobato" ? 1.12 : who === "experta" ? 0.98 : 1.05;
-    u.pitch = who === "lobato" && !vs[1] ? 0.8 : who === "experta" && !vs[2] ? 1.2 : 1;
+    u.pitch = who === "lobato" && !vs[1] ? 0.8 : who === "experta" && !vs[2] ? 0.9 : 1;
     // cada piloto con su tono (voces.ts)
     if (tone) { u.pitch = tone.pitch; u.rate = tone.rate; }
     u.volume = Math.max(0.05, prefs.volumen * (who === "radio" ? prefs.radio : prefs.ambiente));

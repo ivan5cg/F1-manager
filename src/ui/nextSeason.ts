@@ -1,15 +1,14 @@
-// Fin de temporada y paso a la siguiente: lo que ha pasado, los objetivos, tus pilotos (renovar o cambiar) y el
+// Fin de temporada y paso a la siguiente: lo que ha pasado, tus pilotos (renovar o cambiar) y el
 // mercado de los demás (career.ts).
 import { BASE_TEAMS, MARKET, DRIVERS, TEAMS, CALENDARS, CIRCUITS, calendarOf, gridOf, who, atrPlan, devContext } from "./data";
 import { $, esc, setBack, sheet } from "./common";
 import type { SeasonState, SeatSwap } from "../sim/season";
 import { driverStandings, teamStandings, pointsFor, RACE_POINTS, SPRINT_POINTS } from "../sim/season";
 import { devLeft, atrAt, lastAeroPeriodRound, AERO_BANDS, splitAt, aeroPeriodOf, aduoMult, isWorks } from "../sim/development";
-import { objectiveStatus } from "../sim/objectives";
 import { MORAL0, moralOf, moralLabel, wantsRenew } from "../sim/morale";
 import { recordExtras } from "../sim/hitos";
 import { seatAt, gpOf, galaOf } from "./ritual";
-import { offSeason, initialContracts, rating, ageOf, FIRST_YEAR, objectivesBonus, SeasonRecord, OBJ_BONUS, OBJ_MALUS, salaryFor, clauseFor, midSeason, SeatNow, WinterPlan, DEFAULT_WINTER, developPlayerWinter, normalizeGridScale } from "../sim/career";
+import { offSeason, initialContracts, rating, ageOf, FIRST_YEAR, SeasonRecord, MAX_AGE, salaryFor, clauseFor, midSeason, SeatNow, WinterPlan, DEFAULT_WINTER, developPlayerWinter, normalizeGridScale } from "../sim/career";
 import { Rng } from "../sim/rng";
 import { publicDriver, trueTech, NEW_TEAM, PLAYER_TEAM_ID, clauseOf } from "../sim/market";
 import { saveSeason } from "./store";
@@ -17,13 +16,6 @@ import type { DriverDef, TeamDef } from "../sim/session";
 
 export const yearOf = (s: SeasonState) => s.year ?? FIRST_YEAR;
 const app = () => document.getElementById("app")!;
-
-/** Los objetivos de la temporada, cumplidos o no. */
-function objectivesDone(s: SeasonState): { text: string; done: boolean }[] {
-  const mine = DRIVERS.filter((d) => d.team.id === s.playerTeam).map((d) => d.id);
-  const races = calendarOf(s).length;
-  return (s.objetivos ?? []).map((o) => { const st = objectiveStatus(o, s, TEAMS, mine, races); return { text: st.text, done: st.state === "done" }; });
-}
 
 /** Lo que se guarda de la temporada que acaba. */
 export function seasonRecord(s: SeasonState): SeasonRecord {
@@ -38,7 +30,6 @@ export function seasonRecord(s: SeasonState): SeasonRecord {
       equipo: ts[tp].team.nombre, pos: tp + 1, puntos: ts[tp].points,
       pilotos: ds.map((x, i) => ({ x, i })).filter(({ x }) => x.id < 1000 && DRIVERS[x.id].team.id === s.playerTeam).map(({ x, i }) => ({ nombre: DRIVERS[x.id].d.nombre, pos: i + 1, puntos: x.points })),
     },
-    objetivos: objectivesDone(s),
     carreras: calendarOf(s).length,
     ...recordExtras(s, seatAt(s), gpOf),
     gala: galaOf(s),
@@ -53,17 +44,51 @@ function driverNow(s: SeasonState, abrev: string): DriverDef {
   return m ?? publicDriver(MARKET, BASE_TEAMS, abrev);
 }
 
-/** Los pilotos de la temporada que acaba: los de la IA (por equipo) y los tuyos, con sus valores de ese año. */
+/**
+ * El dueño de cada asiento (quien lo empezó, o quien entró por un fichaje o una destitución) y si sigue lesionado, con
+ * los cambios hasta la ronda `upTo` (índice; sin ella, todos). Los sustitutos no son dueños: si el sustituto de un
+ * lesionado también se lesiona y vuelve, el asiento sigue siendo del primero.
+ */
+function seatOwners(s: SeasonState, upTo = Infinity): Map<number, { owner: DriverDef; hurt: boolean; holder: DriverDef }> {
+  const m = new Map<number, { owner: DriverDef; hurt: boolean; holder: DriverDef }>();
+  for (const x of s.swaps ?? []) {
+    if (x.round > upTo) continue;
+    const o = m.get(x.seat) ?? { owner: x.out, hurt: false, holder: x.out };
+    if (/^lesión/.test(x.why)) { if (x.out.abrev === o.owner.abrev) o.hurt = true; }
+    else if (/^vuelve/.test(x.why)) { if (x.in.abrev === o.owner.abrev) o.hurt = false; }
+    else { o.owner = x.in; o.hurt = false; }
+    o.holder = x.in;
+    m.set(x.seat, o);
+  }
+  return m;
+}
+
+/**
+ * Lesionados que siguen de baja al acabar la temporada (la baja iba más allá de la última carrera, así que no hay
+ * «vuelve»): se curan en invierno y recuperan su asiento. Por asiento, el lesionado y quien lo ocupa ahora.
+ */
+export function healedOverWinter(s: SeasonState): Map<number, { out: DriverDef; sub: DriverDef }> {
+  const m = new Map<number, { out: DriverDef; sub: DriverDef }>();
+  for (const [seat, o] of seatOwners(s)) if (o.hurt && o.holder.abrev !== o.owner.abrev) m.set(seat, { out: o.owner, sub: o.holder });
+  return m;
+}
+
+/** Los pilotos de la temporada que acaba: los de la IA (por equipo) y los tuyos, con sus valores de ese año (los
+ *  lesionados que no habían vuelto, otra vez en su asiento). */
 function rosters(s: SeasonState): { ai: TeamDef[]; mine: DriverDef[]; fin: TeamDef[] } {
   const races = calendarOf(s).length;
-  const fin = gridOf(s, races).teams;
+  const healed = healedOverWinter(s);
+  let seat = 0;
+  const fin = gridOf(s, races).teams.map((t) => ({ ...t, pilotos: t.pilotos.map((d) => healed.get(seat++)?.out ?? d) }));
   const custom = !!s.equipo;
   const base = s.grid ?? BASE_TEAMS;
   const ai = fin.filter((t) => t.id !== (custom ? PLAYER_TEAM_ID : s.playerTeam)).map((t) => {
     const b = base.find((x) => x.id === t.id) ?? t;
     return { ...b, pilotos: t.pilotos.map((d) => driverNow(s, d.abrev)) };
   });
-  const mine = custom ? s.equipo!.pilotos.map((a) => driverNow(s, a)) : (fin.find((t) => t.id === s.playerTeam)?.pilotos ?? []).map((d) => driverNow(s, d.abrev));
+  // «crear equipo»: tus pilotos están en s.equipo, que ya tiene al sustituto (syncMine)
+  const back = new Map([...healed.values()].map((x) => [x.sub.abrev, x.out.abrev]));
+  const mine = custom ? s.equipo!.pilotos.map((a) => driverNow(s, back.get(a) ?? a)) : (fin.find((t) => t.id === s.playerTeam)?.pilotos ?? []).map((d) => driverNow(s, d.abrev));
   return { ai, mine, fin };
 }
 
@@ -104,17 +129,6 @@ export function staffCost(s: SeasonState, st: StaffChoice): number {
   return Math.round(c * 10) / 10;
 }
 
-/** ¿Te despide la directiva? Tres temporadas seguidas sin cumplir ningún objetivo (tras el aviso de la segunda). */
-export function firedNow(s: SeasonState): boolean {
-  const rec = objectivesDone(s);
-  return rec.length > 0 && rec.every((o) => !o.done) && (s.aviso ?? 0) >= 2;
-}
-
-/** Las ofertas tras un despido (con equipo real): los dos equipos peor clasificados del mundial, sin el tuyo. */
-export function firingOffers(s: SeasonState): TeamDef[] {
-  return teamStandings(s, TEAMS).map((x) => x.team).filter((t) => t.id !== s.playerTeam).slice(-2).reverse();
-}
-
 /** Sortea los fines de semana sprint de una temporada desde 2027 (10 al azar en calendario completo; proporcional en corto). */
 export function randomSprintsFor(cal: string[], year: number, seed: number): { formatos: Record<string, "normal" | "sprint">; sprintIds: string[] } {
   const n = cal.length >= 12 ? Math.min(10, cal.length) : Math.min(cal.length, Math.max(2, Math.round((10 * cal.length) / 23)));
@@ -131,7 +145,7 @@ export function randomSprintsFor(cal: string[], year: number, seed: number): { f
   return { formatos, sprintIds };
 }
 
-export function buildNextSeason(s: SeasonState, choices: { keep: boolean; sign?: string }[], opts: { staff?: StaffChoice; newTeam?: string; winter?: WinterPlan } = {}): SeasonState {
+export function buildNextSeason(s: SeasonState, choices: { keep: boolean; sign?: string }[], opts: { staff?: StaffChoice; winter?: WinterPlan } = {}): SeasonState {
   const y = yearOf(s) + 1;
   const { ai, mine, fin } = rosters(s);
   const taken = new Set([...ai.flatMap((t) => t.pilotos.map((d) => d.abrev)), ...mine.map((d) => d.abrev)]);
@@ -140,7 +154,8 @@ export function buildNextSeason(s: SeasonState, choices: { keep: boolean; sign?:
   const salaries = salariesOf(s, allTeams.flatMap((t) => t.pilotos));
   const meanAgarre = BASE_TEAMS.reduce((a, t) => a + t.agarre, 0) / BASE_TEAMS.length;
   const meanPotencia = BASE_TEAMS.reduce((a, t) => a + t.potencia, 0) / BASE_TEAMS.length;
-  const departed = (s.swaps ?? []).map((x) => x.out).filter((d, i, a) => !taken.has(d.abrev) && a.findIndex((z) => z.abrev === d.abrev) === i);
+  // los que han salido de un asiento este año (y los sustitutos de los lesionados que vuelven) quedan libres
+  const departed = (s.swaps ?? []).flatMap((x) => [x.out, x.in]).filter((d, i, a) => !taken.has(d.abrev) && a.findIndex((z) => z.abrev === d.abrev) === i);
   const basePool = poolOf(s, taken);
   const pool0 = [...basePool, ...departed.filter((d) => !basePool.some((p) => p.abrev === d.abrev))];
   const races = calendarOf(s).length;
@@ -170,9 +185,13 @@ export function buildNextSeason(s: SeasonState, choices: { keep: boolean; sign?:
   const winterNews: string[] = [
     `🏭 Desarrollo de invierno ${y} (ATR ${myAtrW} %): túnel ${sec(wRes.summary.aero)}/vuelta, motor −${(wRes.summary.motor * 0.22).toFixed(2).replace(".", ",")} s/vuelta${wRes.summary.energiaCut > 0.004 ? `, eficiencia ERS +${Math.round(wRes.summary.energiaCut * 100)} %` : ""}${wRes.summary.fiabCut > 0.01 ? `, fiabilidad −${Math.round(wRes.summary.fiabCut * 100)} %` : ""}${wRes.summary.aireSucioCut > 0.004 ? `, estela −${Math.round(wRes.summary.aireSucioCut * 100)} %` : ""}.`,
   ];
+  // el coche nuevo: casi siempre un paso grande, a veces un acierto enorme y alguna vez nada o algo peor
+  const k = wRes.summary.concept;
+  if (k >= 1.6) winterNews.push("🚀 El coche nuevo es un acierto: un paso enorme sobre el del año pasado.");
+  else if (k < 0) winterNews.push("😬 El concepto nuevo no funciona: el coche es algo peor que el del año pasado.");
+  else if (k < 0.35) winterNews.push("😐 El coche nuevo apenas mejora el del año pasado.");
 
   const rec = seasonRecord(s);
-  const done = rec.objetivos.filter((o) => o.done).length;
   const seed = (s.seed * 7 + 13) % 1_000_000;
   const cal = s.calendar ? [...s.calendar] : [...CALENDARS.corta.ids];
   // 2026 mantiene los 6 sprints reales; desde 2027 se sortean 10 sprints al azar (proporcional en calendario corto)
@@ -190,21 +209,14 @@ export function buildNextSeason(s: SeasonState, choices: { keep: boolean; sign?:
     history: [...(s.history ?? []), rec],
     // el reparto ATR del año que viene sale de la clasificación de constructores de este
     atrOrder: teamStandings(s, fin).map((x) => x.team.id),
-    // los objetivos suben o bajan el presupuesto; las cláusulas que has pagado salen de él
-    devBonus: (rec.objetivos.length ? objectivesBonus(done, rec.objetivos.length) : 0) - out.cost,
-    aviso: rec.objetivos.length && done === 0 ? (s.aviso ?? 0) + 1 : 0,
+    // las cláusulas que has pagado salen del presupuesto de desarrollo
+    devBonus: -out.cost,
     // la moral vuelve a medias hacia lo normal en invierno; las rivalidades se enfrían, pero no se olvidan
     ...(s.moral ? { moral: Object.fromEntries(Object.entries(s.moral).map(([n, m]) => [n, Math.round((MORAL0 + (m - MORAL0) * 0.5) * 10) / 10])) } : {}),
     ...(s.hitos ? { hitos: s.hitos } : {}),
     ...(s.records ? { records: s.records } : {}),
     ...(s.rivals ? { rivals: s.rivals.map((r) => ({ ...r, k: Math.round(r.k * 0.6 * 100) / 100 })).filter((r) => r.k >= 0.15) } : {}),
   };
-  // despedido y con una oferta aceptada: a otro equipo, de cero (sin aviso ni premio ni castigo de la directiva)
-  if (opts.newTeam && !s.equipo) {
-    next.playerTeam = opts.newTeam;
-    next.aviso = 0;
-    next.devBonus = 0;
-  }
   if (s.equipo) {
     next.equipo = { ...s.equipo, pilotos: out.mine.map((d) => d.abrev), ...(opts.staff ?? {}) };
     // un jefe o un técnico de otro equipo se paga con su cláusula, del presupuesto de desarrollo
@@ -237,11 +249,10 @@ export function offSeasonScreen(s: SeasonState, onDone: (next: SeasonState) => v
   const teamOf = new Map(ai.flatMap((t) => t.pilotos.map((d) => [d.abrev, t.nombre] as [string, string])));
   const others = ai.flatMap((t) => t.pilotos).sort((a, b) => rating(b) - rating(a));
   const options = [...pool, ...others];
-  const done = rec.objetivos.filter((o) => o.done).length;
-  const bonus = rec.objetivos.length ? objectivesBonus(done, rec.objetivos.length) : 0;
-  const warn = rec.objetivos.length && done === 0 && (s.aviso ?? 0) >= 1;
   // con la moral por los suelos, alguno no quiere renovar: hay que buscarle sustituto
-  const refuses = mine.map((d) => (contracts[d.abrev] ?? y) <= y && !wantsRenew(s, d.nombre));
+  // y con más de MAX_AGE años se retira: también hay que buscarle sustituto
+  const retires = mine.map((d) => ageOf(d, y + 1) > MAX_AGE);
+  const refuses = mine.map((d, i) => retires[i] || ((contracts[d.abrev] ?? y) <= y && !wantsRenew(s, d.nombre)));
   const choices = mine.map(() => ({ keep: true, sign: undefined as string | undefined }));
   refuses.forEach((no, i) => { if (no) { choices[i].keep = false; choices[i].sign = options.find((p) => !choices.some((o) => !o.keep && o.sign === p.abrev))?.abrev; } });
   const cost = () => choices.reduce((a, c, i) => a + (c.keep ? 0 : swapCost(s, mine[i], c.sign, contracts, sal, ai)), 0);
@@ -259,33 +270,12 @@ export function offSeasonScreen(s: SeasonState, onDone: (next: SeasonState) => v
     return `<div class="list-item" style="display:block">
       <div class="row"><b class="grow">${esc(d.nombre)}</b><span class="small dim">${ageOf(d, y + 1)} años en ${y + 1} · ritmo ${d.ritmo} · ${sal[d.abrev] ?? salaryFor(d)} M/año</span></div>
       <div class="small"><span class="${ml.cls}">${ml.icon} ${ml.text}</span> <span class="dim">(moral ${Math.round(moralOf(s, d.nombre))})</span></div>
-      <div class="small ${refuses[i] ? "redt" : ends ? "yellow" : "dim"}">${refuses[i] ? "Se le acaba el contrato y no quiere renovar: está harto del equipo." : ends ? `Se le acaba el contrato (renovar: pide ${salaryFor(d)} M/año).` : `Con contrato hasta ${until}: romperlo cuesta ${out} M.`}</div>
+      <div class="small ${refuses[i] ? "redt" : ends ? "yellow" : "dim"}">${retires[i] ? `Se retira: en ${y + 1} tendría ${ageOf(d, y + 1)} años (como mucho se corre con ${MAX_AGE}).` : refuses[i] ? "Se le acaba el contrato y no quiere renovar: está harto del equipo." : ends ? `Se le acaba el contrato (renovar: pide ${salaryFor(d)} M/año).` : `Con contrato hasta ${until}: romperlo cuesta ${out} M.`}</div>
       <div class="seg" style="margin-top:4px">${refuses[i] ? "" : `<button data-keep="${i}" class="${c.keep ? "on" : ""}">${ends ? "Renovar" : "Seguir"}</button>`}<button data-swap="${i}" class="${c.keep ? "" : "on"}">Cambiar</button></div>
       ${c.keep ? "" : `<select data-sign="${i}" style="width:100%">${options.filter((p) => !choices.some((o, j) => j !== i && !o.keep && o.sign === p.abrev)).map((p) => `<option value="${p.abrev}" ${c.sign === p.abrev ? "selected" : ""}>${optLabel(p)}</option>`).join("")}</select>
       <div class="small dim">Cuesta ${swapCost(s, d, c.sign, contracts, sal, ai)} M del presupuesto de desarrollo de ${y + 1}.</div>`}
     </div>`;
   };
-  // despedido: la directiva prescinde de ti; con un equipo real, dos ofertas de los de abajo
-  if (firedNow(s)) {
-    const offers = s.equipo ? [] : firingOffers(s);
-    app().innerHTML = `<div style="padding-bottom:16px">
-      <div class="panel"><div class="hd"><span class="t">🚪 Despedido</span><button id="back">Temporada</button></div><div class="bd">
-        <div><b>${esc(rec.mine.equipo)}</b> acaba ${rec.mine.pos}.º de constructores y, por tercera temporada seguida, sin cumplir ningún objetivo. ${s.equipo ? "Los inversores toman el control del equipo y prescinden de ti." : "La directiva ha decidido prescindir de ti."}</div>
-        <div class="small dim" style="margin-top:6px">${rec.objetivos.map((o) => `❌ ${esc(o.text)}`).join(" · ")}</div>
-      </div></div>
-      ${offers.length ? `<div class="panel"><div class="hd"><span class="t">Ofertas para ${y + 1}</span></div><div class="bd">
-        <div class="small" style="margin-bottom:6px">Hay quien todavía confía en ti, aunque sea para empezar desde abajo. Llegas sin aviso de la directiva y con objetivos nuevos.</div>
-        ${offers.map((t) => `<button class="big-cta" data-offer="${t.id}" style="width:100%;margin:4px 0;border-left:6px solid ${t.color}">Aceptar la oferta de ${esc(t.nombre)}</button>`).join("")}
-      </div></div>` : ""}
-      <div style="padding:0 10px"><button id="end" style="width:100%">Dejar la Fórmula 1 (termina la partida)</button></div>
-    </div>`;
-    setBack(onBack);
-    $("#back").onclick = onBack;
-    document.querySelectorAll<HTMLElement>("[data-offer]").forEach((b) => (b.onclick = () => onDone(buildNextSeason(s, mine.map(() => ({ keep: true })), { newTeam: b.dataset.offer }))));
-    $("#end").onclick = () => { if (!confirm("¿Dejar la partida aquí? Se queda guardada como terminada.")) return; s.despedido = y; saveSeason(s); onBack(); };
-    window.scrollTo(0, 0);
-    return;
-  }
   // «crear equipo»: el equipo técnico para el año que viene (jefe, director técnico y motor)
   const staff: StaffChoice | null = s.equipo ? { jefe: s.equipo.jefe, tecnico: s.equipo.tecnico, motor: s.equipo.motor } : null;
   const teamName = (id: string | null) => (id ? BASE_TEAMS.find((t) => t.id === id)?.nombre ?? id : "");
@@ -313,7 +303,7 @@ export function offSeasonScreen(s: SeasonState, onDone: (next: SeasonState) => v
     const cv = myFin.curvas ?? [0, 0, 0];
     const fmtC = (x: number) => `${x >= 0 ? "+" : "−"}${Math.abs(x).toFixed(2).replace(".", ",")}`;
     return `<div class="panel"><div class="hd"><span class="t">Desarrollo de invierno (${y} → ${y + 1})</span><span class="small">ATR ${myAtrW} %</span></div><div class="bd">
-      <div class="small dim" style="margin-bottom:6px">Todo lo ganado este año se conserva. Reparte el trabajo de fábrica entre la última carrera de ${y} y los test de pretemporada de ${y + 1} en Barcelona. Carácter actual: lenta ${fmtC(cv[0])} · media ${fmtC(cv[1])} · rápida ${fmtC(cv[2])} · resistencia ${fmtC(myFin.resistencia)}.</div>
+      <div class="small dim" style="margin-bottom:6px">Todo lo ganado este año se conserva, y el invierno es cuando más cambian los coches: el nuevo suele dar un paso grande (más que todo un año de evoluciones), a veces un acierto enorme y, alguna vez, no mejora o sale algo peor. Reparte el trabajo de fábrica entre la última carrera de ${y} y los test de pretemporada de ${y + 1} en Barcelona. Carácter actual: lenta ${fmtC(cv[0])} · media ${fmtC(cv[1])} · rápida ${fmtC(cv[2])} · resistencia ${fmtC(myFin.resistencia)}.</div>
       <div class="small" style="font-weight:700;margin:6px 0 4px">Túnel de viento invernal</div>
       ${AERO_BANDS.map((b, i) => `<div class="tunrow"><div><b>${b.name}</b> <span class="mono">${pctW(winter.aeroSplit[i])}</span><br><span class="small dim">${b.what}</span></div>
         <div class="seg"><button data-wa="${i}" data-d="-1"${winter.aeroSplit[i] > 0.001 ? "" : " disabled"}>−</button><button data-wa="${i}" data-d="1"${winter.aeroSplit[i] < 0.999 ? "" : " disabled"}>+</button></div></div>`).join("")}
@@ -350,13 +340,8 @@ export function offSeasonScreen(s: SeasonState, onDone: (next: SeasonState) => v
         <div>🏆 Campeón: <b>${esc(rec.champion.nombre)}</b> (${esc(rec.champion.equipo)}, ${rec.champion.puntos} pts) · constructores: <b>${esc(rec.constructores.equipo)}</b></div>
         <div class="small" style="margin-top:4px">${esc(rec.mine.equipo)}: ${rec.mine.pos}.º de constructores · ${rec.mine.pilotos.map((p) => `${esc(p.nombre)} ${p.pos}.º`).join(" · ")}</div>
       </div></div>
-      ${rec.objetivos.length ? `<div class="panel"><div class="hd"><span class="t">La directiva</span><span class="small">${done} de ${rec.objetivos.length} objetivos</span></div><div class="bd small">
-        ${rec.objetivos.map((o) => `<div>${o.done ? "✅" : "❌"} ${esc(o.text)}</div>`).join("")}
-        <div style="margin-top:6px">Presupuesto de desarrollo para ${y + 1}: <b class="${bonus >= 0 ? "green" : "redt"}">${bonus >= 0 ? "+" : "−"}${Math.abs(bonus)} M</b> (${OBJ_BONUS} M más por cada objetivo cumplido y ${OBJ_MALUS} M menos por cada uno fallado)${cost() ? `, y <b class="redt">−${Math.round(cost() * 10) / 10} M</b> en cláusulas` : ""}.</div>
-        ${warn ? `<div class="redt" style="margin-top:6px">⚠️ Segunda temporada seguida sin cumplir ningún objetivo: la directiva avisa de que, si el año que viene tampoco cumples ninguno, te despide.</div>` : done === 0 && rec.objetivos.length ? `<div class="yellow" style="margin-top:6px">La directiva no está nada contenta.</div>` : ""}
-      </div></div>` : ""}
       <div class="panel"><div class="hd"><span class="t">Tus pilotos para ${y + 1}</span></div><div class="bd" style="padding:0">${mine.map(card).join("")}
-        <div class="small dim" style="padding:6px 10px">Se puede fichar a cualquiera: a los libres y los de la F2, o a uno de otro equipo pagando su cláusula (la mitad de lo que le queda por cobrar); romper el contrato de uno tuyo también se paga. Las cláusulas salen del presupuesto de desarrollo. Con los años, los jóvenes ganan ritmo y oficio y los mayores pierden algo de ritmo; alguno se retira. Los demás equipos renuevan o fichan por su cuenta, y suben novatos de la F2.</div>
+        <div class="small dim" style="padding:6px 10px">Se puede fichar a cualquiera: a los libres y los de la F2, o a uno de otro equipo pagando su cláusula (la mitad de lo que le queda por cobrar); romper el contrato de uno tuyo también se paga. Las cláusulas salen del presupuesto de desarrollo. Con los años, los jóvenes ganan ritmo y oficio; desde los ~35 se pierde algo de ritmo, poco a poco, y alguno se retira (los que siguen arriba aguantan más). Los demás equipos renuevan o fichan por su cuenta, y suben novatos de la F2.</div>
       </div></div>
       ${staffPanel()}
       ${winterPanel()}
@@ -387,7 +372,7 @@ export function historyPanel(s: SeasonState): string {
   if (!h.length) return "";
   return `<div class="panel"><div class="hd"><span class="t">Temporadas anteriores</span></div><div class="bd" style="padding:0">
     <table class="tv"><tr><th>Año</th><th>Campeón</th><th>Constructores</th><th>Tú</th></tr>
-    ${h.slice().reverse().map((r) => `<tr><td class="mono">${r.year}</td><td>${esc(r.champion.nombre)}</td><td>${esc(r.constructores.equipo)}</td><td class="mono">${r.mine.pos}.º · ${r.objetivos.filter((o) => o.done).length}/${r.objetivos.length}</td></tr>`).join("")}
+    ${h.slice().reverse().map((r) => `<tr><td class="mono">${r.year}</td><td>${esc(r.champion.nombre)}</td><td>${esc(r.constructores.equipo)}</td><td class="mono">${r.mine.pos}.º</td></tr>`).join("")}
     </table></div></div>`;
 }
 
@@ -445,7 +430,10 @@ export function applyMidSeason(s: SeasonState): string[] {
 /** «Crear equipo»: tus pilotos de ahora en el equipo que fichaste (para la temporada siguiente). */
 function syncMine(s: SeasonState) {
   if (!s.equipo) return;
-  const mine = seatsAt(s, s.round).filter((x) => x.player).map((x) => x.d);
+  // el sustituto de un lesionado no es un fichaje: el lesionado sigue siendo tuyo (si no, su equipo de antes lo
+  // recuperaría en la parrilla mientras está de baja, y su reserva desaparecería)
+  const owners = seatOwners(s, s.round);
+  const mine = seatsAt(s, s.round).filter((x) => x.player).map((x) => { const o = owners.get(x.seat); return o?.hurt ? o.owner : x.d; });
   s.equipo = { ...s.equipo, pilotos: mine.map((d) => d.abrev) };
   if (s.misPilotos) s.misPilotos = mine.map((d) => s.misPilotos!.find((m) => m.abrev === d.abrev) ?? d);
 }

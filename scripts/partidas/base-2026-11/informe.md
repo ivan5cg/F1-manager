@@ -1,0 +1,163 @@
+## Temporada con equipo real (5 partidas, 20 temporadas, 180 carreras)
+
+Problemas detectados: **0**
+
+| Partida | Año | Equipo | Coche (puesto ini→fin) | Constructores | Pts | Objetivos | Aviso | Presup. | Campeón | Ganadores distintos |
+|---|---|---|---|---|---|---|---|---|---|---|
+| cadillac #5 | 2026 | Cadillac | 10→10 | 10.º | 6 | 2/2 | 0 | 40 M (+0) | Kimi Antonelli (Mercedes, 156) | 6 pilotos / 4 equipos |
+| cadillac #5 | 2027 | Cadillac | 10→10 | 9.º | 19 | 2/2 | 0 | 52 M (+12) | George Russell (Mercedes, 160) | 5 pilotos / 4 equipos |
+| cadillac #5 | 2028 | Cadillac | 11→9 | 11.º | 0 | 0/2 | 0 | 52 M (+12) | Kimi Antonelli (Mercedes, 206) | 5 pilotos / 4 equipos |
+| cadillac #5 | 2029 | Cadillac | 10→11 | 10.º | 1 | 2/2 | 1 | 30 M (-10) | Kimi Antonelli (Mercedes, 164) | 6 pilotos / 5 equipos |
+| ferrari #2 | 2026 | Ferrari | 4→2 | 1.º | 293 | 2/2 | 0 | 40 M (+0) | Lewis Hamilton (Ferrari, 152) | 5 pilotos / 3 equipos |
+| ferrari #2 | 2027 | Ferrari | 2→1 | 3.º | 203 | 0/2 | 0 | 52 M (+12) | Max Verstappen (Red Bull Racing, 200) | 4 pilotos / 3 equipos |
+| ferrari #2 | 2028 | Ferrari | 2→2 | 4.º | 151 | 0/2 | 1 | 30 M (-10) | Max Verstappen (Red Bull Racing, 156) | 5 pilotos / 3 equipos |
+| ferrari #2 | 2029 | Ferrari | 2→1 | 3.º | 149 | 1/2 | 2 | 30 M (-10) | Max Verstappen (Red Bull Racing, 201) | 6 pilotos / 4 equipos |
+| haas #4 | 2026 | Haas | 8→7 | 8.º | 18 | 2/2 | 0 | 40 M (+0) | Max Verstappen (Red Bull Racing, 191) | 3 pilotos / 3 equipos |
+| haas #4 | 2027 | Haas | 7→8 | 8.º | 16 | 1/2 | 0 | 52 M (+12) | Max Verstappen (Red Bull Racing, 185) | 5 pilotos / 4 equipos |
+| haas #4 | 2028 | Haas | 8→8 | 7.º | 22 | 2/2 | 0 | 41 M (+1) | Kimi Antonelli (Mercedes, 179) | 5 pilotos / 3 equipos |
+| haas #4 | 2029 | Haas | 8→8 | 7.º | 37 | 2/2 | 0 | 52 M (+12) | Kimi Antonelli (Mercedes, 166) | 4 pilotos / 3 equipos |
+| mclaren #1 | 2026 | McLaren | 3→2 | 4.º | 160 | 2/2 | 0 | 40 M (+0) | Lewis Hamilton (Ferrari, 148) | 7 pilotos / 4 equipos |
+| mclaren #1 | 2027 | McLaren | 2→2 | 3.º | 202 | 1/2 | 0 | 52 M (+12) | Kimi Antonelli (Mercedes, 181) | 6 pilotos / 4 equipos |
+| mclaren #1 | 2028 | McLaren | 3→2 | 2.º | 208 | 2/2 | 0 | 41 M (+1) | Kimi Antonelli (Mercedes, 200) | 5 pilotos / 4 equipos |
+| mclaren #1 | 2029 | McLaren | 3→3 | 3.º | 191 | 2/2 | 0 | 52 M (+12) | Charles Leclerc (Ferrari, 171) | 5 pilotos / 4 equipos |
+| williams #3 | 2026 | Williams | 9→9 | 10.º | 1 | 1/2 | 0 | 40 M (+0) | Max Verstappen (Red Bull Racing, 140) | 4 pilotos / 3 equipos |
+| williams #3 | 2027 | Williams | 9→10 | 9.º | 8 | 1/2 | 0 | 41 M (+1) | Charles Leclerc (Ferrari, 170) | 5 pilotos / 4 equipos |
+| williams #3 | 2028 | Williams | 10→10 | 10.º | 0 | 1/2 | 0 | 41 M (+1) | Max Verstappen (Red Bull Racing, 193) | 3 pilotos / 2 equipos |
+| williams #3 | 2029 | Williams | 10→10 | 9.º | 10 | 2/2 | 0 | 41 M (+1) | Kimi Antonelli (Mercedes, 210) | 6 pilotos / 5 equipos |
+
+**Carreras.** Abandonos por carrera 2,24 (acaban 19,8); motivos: avería 218, accidente 145, choque con otro 25, daños tras un toque 16. Descalificados: 0. Carreras acortadas: 0. Fines de semana con alguna sesión mojada: 62 (carrera mojada: 0). Coche de seguridad en 53 %, virtual en 36 %, bandera roja en 39 (22 %; monaco 11, monza 6, interlagos 5). Adelantamientos por carrera 78,9. La pole gana el 41 %. Sanciones de parrilla arrastradas: 8. Tiempo de cálculo por fin de semana: 32,7 s.
+
+**Tus pilotos.** 360 salidas, 31 abandonos (9 %): avería 16, accidente 11, choque con otro 2, daños tras un toque 2. Victorias 16, podios 44.
+
+**Campeones.** Kimi Antonelli 8, Max Verstappen 7, Lewis Hamilton 2, Charles Leclerc 2, George Russell 1. Por equipo: Mercedes 9, Red Bull Racing 7, Ferrari 4. Puntos del campeón: 176,4 de media (140–210). Ganadores distintos por temporada: 5,0.
+
+**Coches (nivel, carLevel).** Diferencia entre el mejor y el peor al empezar y al acabar cada año, y el equipo con mejor coche al empezar:
+
+| Año | Hueco inicio | Hueco final | Mejor coche al empezar (veces) |
+|---|---|---|---|
+| 2026 | 4,06 | 3,61 | mercedes 5 |
+| 2027 | 3,20 | 2,80 | mercedes 4, ferrari 1 |
+| 2028 | 2,45 | 2,14 | mercedes 3, redbull 1, ferrari 1 |
+| 2029 | 2,00 | 1,76 | mercedes 3, redbull 1, audi 1 |
+
+**Desarrollo.** Piezas pedidas por temporada 4,0 (rinden 0,96× lo esperado de media; 10 decepcionan). Paquetes aerodinámicos 2,0 por temporada, 36 montados de 40; salen mal (real < 50 % de lo esperado) 7; se montó uno malo 3 veces y se descartó uno bueno 0. Presupuesto que queda sin gastar al acabar: 2,2 M.
+
+**Pilotos.** Edad media de la parrilla por año: 2026 28,9 (19–45) · 2027 27,8 (20–46) · 2028 27,7 (21–43) · 2029 28,6 (22–44). Valoración media: 2026 87,2 · 2027 86,8 · 2028 87,0 · 2029 87,3. Libres en el mercado: 2026 40,6 · 2027 38,6 · 2028 39,0 · 2029 39,2.
+
+**Mercado entre temporadas** (15 inviernos): retiradas 24, no renovados 1, traspasos 9, novatos 0, fichajes 25, tus fichajes 1.
+**A mitad de temporada:** 43 cambios (23 lesiones, 3 destituciones, 17 otros).
+
+**Moral de tus pilotos al acabar:** 57,3 de media (27.8–99.8). Rivalidades vivas: 5,0. Hitos por temporada: 1,6.
+**Test de pretemporada:** 140,6 vueltas de tus pilotos (bonus de fiabilidad 4,4 %), 18,4 s de cálculo.
+**Sprints por temporada:** 2026 2,0 · 2027 4,0 · 2028 4,0 · 2029 4,0.
+
+## Crea tu equipo (9 partidas, 36 temporadas, 324 carreras)
+
+Problemas detectados: **1**
+- propio semilla 10: 2029 R9 interlagos: sprint: un coche que acaba detrás de uno que no
+
+| Partida | Año | Equipo | Coche (puesto ini→fin) | Constructores | Pts | Objetivos | Aviso | Presup. | Campeón | Ganadores distintos |
+|---|---|---|---|---|---|---|---|---|---|---|
+| propio #1 | 2026 | Propio 1 | 8→5 | 5.º | 56 | 2/2 | 0 | 45 M (+0) | Max Verstappen (Red Bull Racing, 135) | 5 pilotos / 4 equipos |
+| propio #1 | 2027 | Propio 1 | 7→5 | 5.º | 78 | 2/2 | 0 | 62 M (+12) | Lando Norris (McLaren, 167) | 6 pilotos / 4 equipos |
+| propio #1 | 2028 | Propio 1 | 5→2 | 4.º | 94 | 2/2 | 0 | 61 M (+12) | Kimi Antonelli (Mercedes, 195) | 5 pilotos / 3 equipos |
+| propio #1 | 2029 | Propio 1 | 3→1 | 2.º | 216 | 2/2 | 0 | 61 M (+12) | Lando Norris (McLaren, 150) | 5 pilotos / 4 equipos |
+| propio #10 | 2026 | Propio 10 | 10→9 | 9.º | 22 | 2/2 | 0 | 31 M (+0) | George Russell (Mercedes, 160) | 4 pilotos / 3 equipos |
+| propio #10 | 2027 | Propio 10 | 10→9 | 12.º | 0 | 0/2 | 0 | 55 M (+12) | Kimi Antonelli (Mercedes, 186) | 4 pilotos / 3 equipos |
+| propio #10 | 2028 | Propio 10 | 9→10 | 12.º | 0 | 0/2 | 1 | 33 M (-10) | George Russell (Mercedes, 155) | 5 pilotos / 4 equipos |
+| propio #10 | 2029 | Propio 10 | 10→10 | 9.º | 14 | 2/2 | 2 | 40 M (-10) | Max Verstappen (Audi, 181) | 4 pilotos / 3 equipos |
+| propio #2 | 2026 | Propio 2 | 9→9 | 9.º | 11 | 2/2 | 0 | 41 M (+0) | Max Verstappen (Red Bull Racing, 150) | 6 pilotos / 4 equipos |
+| propio #2 | 2027 | Propio 2 | 9→9 | 7.º | 31 | 2/2 | 0 | 61 M (+12) | George Russell (Mercedes, 172) | 4 pilotos / 3 equipos |
+| propio #2 | 2028 | Propio 2 | 10→10 | 9.º | 6 | 2/2 | 0 | 62 M (+12) | Charles Leclerc (Ferrari, 183) | 5 pilotos / 3 equipos |
+| propio #2 | 2029 | Propio 2 | 10→8 | 11.º | 6 | 2/2 | 0 | 62 M (+12) | Charles Leclerc (Ferrari, 161) | 5 pilotos / 4 equipos |
+| propio #3 | 2026 | Propio 3 | 5→5 | 8.º | 26 | 1/2 | 0 | 47 M (+0) | Max Verstappen (Red Bull Racing, 144) | 5 pilotos / 4 equipos |
+| propio #3 | 2027 | Propio 3 | 5→4 | 5.º | 44 | 2/2 | 0 | 51 M (+1) | Charles Leclerc (Ferrari, 199) | 4 pilotos / 3 equipos |
+| propio #3 | 2028 | Propio 3 | 3→3 | 5.º | 62 | 0/2 | 0 | 62 M (+12) | Lando Norris (McLaren, 163) | 5 pilotos / 3 equipos |
+| propio #3 | 2029 | Propio 3 | 2→2 | 6.º | 76 | 0/2 | 1 | 40 M (-10) | Kimi Antonelli (Mercedes, 119) | 6 pilotos / 6 equipos |
+| propio #4 | 2026 | Propio 4 | 11→10 | 12.º | 0 | 0/2 | 0 | 35 M (+0) | Max Verstappen (Red Bull Racing, 156) | 5 pilotos / 3 equipos |
+| propio #4 | 2027 | Propio 4 | 11→9 | 8.º | 16 | 2/2 | 1 | 36 M (-10) | Max Verstappen (Red Bull Racing, 205) | 3 pilotos / 2 equipos |
+| propio #4 | 2028 | Propio 4 | 10→9 | 7.º | 3 | 2/2 | 0 | 58 M (+12) | Isack Hadjar (Red Bull Racing, 187) | 4 pilotos / 3 equipos |
+| propio #4 | 2029 | Propio 4 | 10→9 | 12.º | 0 | 0/2 | 0 | 56 M (+12) | Isack Hadjar (Red Bull Racing, 171) | 4 pilotos / 3 equipos |
+| propio #5 | 2026 | Propio 5 | 10→9 | 9.º | 2 | 2/2 | 0 | 35 M (+0) | George Russell (Mercedes, 200) | 3 pilotos / 2 equipos |
+| propio #5 | 2027 | Propio 5 | 9→9 | 8.º | 18 | 2/2 | 0 | 58 M (+12) | Kimi Antonelli (Mercedes, 213) | 4 pilotos / 3 equipos |
+| propio #5 | 2028 | Propio 5 | 9→7 | 6.º | 54 | 2/2 | 0 | 56 M (+12) | Kimi Antonelli (Mercedes, 191) | 4 pilotos / 3 equipos |
+| propio #5 | 2029 | Propio 5 | 7→6 | 5.º | 52 | 2/2 | 0 | 62 M (+12) | Leonardo Fornaroli (Ferrari, 153) | 7 pilotos / 4 equipos |
+| propio #6 | 2026 | Propio 6 | 8→6 | 8.º | 30 | 2/2 | 0 | 47 M (+0) | Kimi Antonelli (Mercedes, 142) | 6 pilotos / 4 equipos |
+| propio #6 | 2027 | Propio 6 | 7→6 | 6.º | 34 | 2/2 | 0 | 62 M (+12) | Max Verstappen (Red Bull Racing, 223) | 3 pilotos / 3 equipos |
+| propio #6 | 2028 | Propio 6 | 7→5 | 7.º | 20 | 2/2 | 0 | 62 M (+12) | Max Verstappen (Red Bull Racing, 179) | 5 pilotos / 4 equipos |
+| propio #6 | 2029 | Propio 6 | 5→5 | 6.º | 72 | 2/2 | 0 | 62 M (+12) | Isack Hadjar (Red Bull Racing, 169) | 4 pilotos / 3 equipos |
+| propio #8 | 2026 | Propio 8 | 5→4 | 5.º | 153 | 2/2 | 0 | 50 M (+0) | Max Verstappen (Red Bull Racing, 138) | 6 pilotos / 4 equipos |
+| propio #8 | 2027 | Propio 8 | 4→4 | 4.º | 156 | 2/2 | 0 | 48 M (+12) | George Russell (Mercedes, 178) | 6 pilotos / 4 equipos |
+| propio #8 | 2028 | Propio 8 | 4→2 | 2.º | 185 | 2/2 | 0 | 48 M (+12) | Kimi Antonelli (Propio 8, 158) | 6 pilotos / 5 equipos |
+| propio #8 | 2029 | Propio 8 | 3→2 | 2.º | 232 | 2/2 | 0 | 48 M (+12) | Kimi Antonelli (Propio 8, 160) | 4 pilotos / 4 equipos |
+| propio #9 | 2026 | Propio 9 | 7→7 | 6.º | 49 | 2/2 | 0 | 43 M (+0) | Max Verstappen (Red Bull Racing, 164) | 5 pilotos / 4 equipos |
+| propio #9 | 2027 | Propio 9 | 8→9 | 7.º | 25 | 2/2 | 0 | 62 M (+12) | Max Verstappen (Red Bull Racing, 160) | 4 pilotos / 4 equipos |
+| propio #9 | 2028 | Propio 9 | 8→10 | 9.º | 15 | 2/2 | 0 | 62 M (+12) | Kimi Antonelli (Mercedes, 145) | 4 pilotos / 4 equipos |
+| propio #9 | 2029 | Propio 9 | 10→10 | 9.º | 15 | 2/2 | 0 | 62 M (+12) | Kimi Antonelli (Mercedes, 167) | 6 pilotos / 5 equipos |
+
+**Carreras.** Abandonos por carrera 2,77 (acaban 21,2); motivos: avería 512, accidente 285, choque con otro 69, daños tras un toque 30. Descalificados: 0. Carreras acortadas: 0. Fines de semana con alguna sesión mojada: 119 (carrera mojada: 14). Coche de seguridad en 60 %, virtual en 37 %, bandera roja en 70 (22 %; monaco 17, singapur 16, silverstone 9). Adelantamientos por carrera 92,4. La pole gana el 39 %. Sanciones de parrilla arrastradas: 14. Tiempo de cálculo por fin de semana: 37,4 s.
+
+**Tus pilotos.** 648 salidas, 85 abandonos (13 %): avería 41, accidente 28, choque con otro 8, daños tras un toque 8. Victorias 16, podios 32.
+
+**Campeones.** Max Verstappen 11, Kimi Antonelli 10, George Russell 5, Lando Norris 3, Charles Leclerc 3, Isack Hadjar 3, Leonardo Fornaroli 1. Por equipo: Red Bull Racing 13, Mercedes 13, Ferrari 4, McLaren 3, Propio 8 2, Audi 1. Puntos del campeón: 168,9 de media (119–223). Ganadores distintos por temporada: 4,8.
+
+**Coches (nivel, carLevel).** Diferencia entre el mejor y el peor al empezar y al acabar cada año, y el equipo con mejor coche al empezar:
+
+| Año | Hueco inicio | Hueco final | Mejor coche al empezar (veces) |
+|---|---|---|---|
+| 2026 | 4,06 | 3,84 | mercedes 9 |
+| 2027 | 3,59 | 3,51 | mercedes 6, ferrari 1, redbull 2 |
+| 2028 | 3,36 | 3,38 | redbull 3, audi 1, mercedes 4, ferrari 1 |
+| 2029 | 3,23 | 3,37 | racingbulls 1, audi 1, mercedes 4, ferrari 1, redbull 2 |
+
+**Desarrollo.** Piezas pedidas por temporada 5,1 (rinden 1,00× lo esperado de media; 43 decepcionan). Paquetes aerodinámicos 2,0 por temporada, 64 montados de 72; salen mal (real < 50 % de lo esperado) 8; se montó uno malo 0 veces y se descartó uno bueno 4. Presupuesto que queda sin gastar al acabar: 2,9 M.
+
+**Pilotos.** Edad media de la parrilla por año: 2026 28,7 (19–45) · 2027 27,4 (20–46) · 2028 27,5 (21–47) · 2029 28,2 (22–48). Valoración media: 2026 86,7 · 2027 86,1 · 2028 86,4 · 2029 86,7. Libres en el mercado: 2026 37,9 · 2027 38,4 · 2028 38,9 · 2029 39,1.
+
+**Mercado entre temporadas** (27 inviernos): retiradas 44, no renovados 8, traspasos 31, novatos 0, fichajes 52, tus fichajes 0.
+**A mitad de temporada:** 90 cambios (48 lesiones, 5 destituciones, 37 otros).
+
+**Moral de tus pilotos al acabar:** 54,2 de media (19.2–100). Rivalidades vivas: 6,8. Hitos por temporada: 1,3.
+**Test de pretemporada:** 132,1 vueltas de tus pilotos (bonus de fiabilidad 4,1 %), 18,9 s de cálculo.
+**Sprints por temporada:** 2026 2,0 · 2027 4,0 · 2028 4,0 · 2029 4,0.
+
+**Crea tu equipo.**
+
+| Partida | Año | Pilotos | Jefe / técnico / motor | Techo gastado | Queda | Arrastre | Unidades de potencia (usadas/rotas) |
+|---|---|---|---|---|---|---|---|
+| #1 | 2026 | CRA 21 (79.8), POU 23 (81.1) | Andrea Stella / James Allison / ferrari | 59,3 | 40,7 | - | CRA 3/1, POU 3/0 |
+| #1 | 2027 | CRA 22 (82.4), POU 24 (82.8) | Andrea Stella / James Allison / ferrari | 47,0 | 53,0 | 0.52 | CRA 3/0, POU 3/0 |
+| #1 | 2028 | CRA 23 (83.9), POU 25 (82.8) | Andrea Stella / James Allison / ferrari | 51,9 | 48,1 | 0.92 | CRA 3/0, POU 3/0 |
+| #1 | 2029 | CRA 24 (85.9), POU 26 (83.1) | Andrea Stella / James Allison / ferrari | 51,9 | 48,1 | 1.11 | CRA 3/0, POU 3/0 |
+| #10 | 2026 | HAD 22 (84.5), LEC 29 (91.4) | Laurent Mekies / Dan Fallows / honda | 88,0 | 12,0 | - | HAD 2/0, LEC 3/0 |
+| #10 | 2027 | HAD 23 (83.9), LEC 30 (91.4) | Laurent Mekies / Dan Fallows / honda | 64,7 | 35,3 | 0.36 | HAD 3/0, LEC 3/0 |
+| #10 | 2028 | HAD 24 (84.9), LEC 31 (89.9) | Laurent Mekies / Dan Fallows / honda | 64,7 | 35,3 | 0.59 | HAD 3/1, LEC 3/1 |
+| #10 | 2029 | HAD 25 (85.9), LEC 32 (87.7) | Laurent Mekies / Dan Fallows / honda | 49,1 | 50,9 | 0.75 | HAD 2/0, LEC 2/0 |
+| #2 | 2026 | VIL 25 (75.4), ALO 45 (92) | Andreas Seidl / Enrico Cardile / ferrari | 67,5 | 32,5 | - | VIL 3/0, ALO 3/0 |
+| #2 | 2027 | VIL 26 (75.4), ALO 46 (90.5) | Andreas Seidl / Enrico Cardile / ferrari | 52,9 | 47,1 | 0.51 | VIL 2/0, ALO 2/0 |
+| #2 | 2028 | VIL 27 (76.9), ALO 47 (88.9) | Andreas Seidl / Enrico Cardile / ferrari | 46,1 | 53,9 | 0.84 | VIL 3/0, ALO 3/0 |
+| #2 | 2029 | VIL 28 (77.2), ALO 48 (87.3) | Andreas Seidl / Enrico Cardile / ferrari | 40,9 | 59,1 | 1.05 | VIL 3/0, ALO 3/0 |
+| #3 | 2026 | MAI 26 (78.1), ZHO 27 (82.1) | Flavio Briatore / Pierre Waché / ferrari | 56,6 | 43,4 | - | MAI 3/0, ZHO 3/0 |
+| #3 | 2027 | MAI 27 (79.1), ZHO 28 (80.6) | Flavio Briatore / Pierre Waché / ferrari | 41,9 | 58,1 | 0.47 | MAI 3/0, ZHO 3/0 |
+| #3 | 2028 | MAI 28 (78.5), ZHO 29 (82.1) | Flavio Briatore / Pierre Waché / ferrari | 43,3 | 56,7 | 0.72 | MAI 3/0, ZHO 3/2 |
+| #3 | 2029 | MAI 29 (77.9), ZHO 30 (80.6) | Flavio Briatore / Pierre Waché / ferrari | 43,2 | 56,8 | 0.93 | MAI 3/0, ZHO 3/0 |
+| #4 | 2026 | VIL 25 (78.3), RUS 28 (90.8) | Andrea Stella / David Sanchez / ferrari | 79,5 | 20,5 | - | VIL 3/0, RUS 3/0 |
+| #4 | 2027 | VIL 26 (77.7), RUS 29 (91.8) | Andrea Stella / David Sanchez / ferrari | 58,5 | 41,5 | 0.8 | VIL 2/0, RUS 3/0 |
+| #4 | 2028 | VIL 27 (77.1), RUS 30 (91.3) | Andrea Stella / David Sanchez / ferrari | 58,5 | 41,5 | 1.39 | VIL 3/0, RUS 3/0 |
+| #4 | 2029 | VIL 28 (78.1), RUS 31 (91.3) | Andrea Stella / David Sanchez / ferrari | 61,2 | 38,8 | 1.75 | VIL 3/0, RUS 3/0 |
+| #5 | 2026 | LEC 29 (92.5), IWA 25 (83.9) | Graeme Lowdon / Andrea De Zordo / ferrari | 79,5 | 20,5 | - | LEC 3/0, IWA 3/0 |
+| #5 | 2027 | LEC 30 (92.7), IWA 26 (84.9) | Graeme Lowdon / Andrea De Zordo / ferrari | 58,0 | 42,0 | 0.85 | LEC 2/0, IWA 2/0 |
+| #5 | 2028 | LEC 31 (91.1), IWA 27 (86.5) | Graeme Lowdon / Andrea De Zordo / ferrari | 61,1 | 38,9 | 1.62 | LEC 3/0, IWA 3/0 |
+| #5 | 2029 | LEC 32 (90.5), IWA 28 (86.5) | Graeme Lowdon / Andrea De Zordo / ferrari | 46,7 | 53,3 | 1.96 | LEC 3/0, IWA 3/0 |
+| #6 | 2026 | OCO 30 (83.4), MAI 26 (79.6) | Jonathan Wheatley / James Allison / mercedes | 55,1 | 44,9 | - | OCO 3/0, MAI 3/0 |
+| #6 | 2027 | OCO 31 (81.4), MAI 27 (81.5) | Jonathan Wheatley / James Allison / mercedes | 50,0 | 50,0 | 0.51 | OCO 3/0, MAI 3/0 |
+| #6 | 2028 | OCO 32 (81.4), MAI 28 (83.2) | Jonathan Wheatley / James Allison / mercedes | 46,3 | 53,7 | 0.74 | OCO 3/1, MAI 3/0 |
+| #6 | 2029 | OCO 33 (80.7), MAI 29 (83.5) | Jonathan Wheatley / James Allison / mercedes | 45,7 | 54,3 | 0.95 | OCO 3/0, MAI 3/1 |
+| #8 | 2026 | ZHO 27 (82.5), ANT 20 (94.7) | Oliver Oakes / Enrico Cardile / redbullford | 50,0 | 50,0 | - | ZHO 3/0, ANT 3/0 |
+| #8 | 2027 | ZHO 28 (82.5), ANT 21 (95.8) | Oliver Oakes / Enrico Cardile / redbullford | 78,1 | 21,9 | 0.58 | ZHO 3/0, ANT 3/0 |
+| #8 | 2028 | ZHO 29 (82), ANT 22 (96.9) | Oliver Oakes / Enrico Cardile / redbullford | 77,2 | 22,8 | 0.79 | ZHO 3/0, ANT 3/0 |
+| #8 | 2029 | ZHO 30 (82.9), ANT 23 (97.4) | Oliver Oakes / Enrico Cardile / redbullford | 77,2 | 22,8 | 1.01 | ZHO 3/1, ANT 3/0 |
+| #9 | 2026 | RUS 28 (91.6), BEN 21 (85) | Alan Permane / Aldo Costa / audi | 65,0 | 35,0 | - | RUS 3/1, BEN 3/1 |
+| #9 | 2027 | TSO 21 (83.6), BEN 22 (85.9) | Alan Permane / Aldo Costa / audi | 49,5 | 50,5 | 0.04 | TSO 3/1, BEN 3/2 |
+| #9 | 2028 | TSO 22 (83.2), BEN 23 (89.4) | Alan Permane / Aldo Costa / audi | 22,7 | 77,3 | -0.02 | TSO 2/1, BEN 3/1 |
+| #9 | 2029 | TSO 23 (84.3), BEN 24 (91) | Alan Permane / Aldo Costa / audi | 24,4 | 75,6 | -0.15 | TSO 3/1, BEN 2/0 |

@@ -6,7 +6,6 @@ import type { Compound } from "./tyres";
 import type { CustomTeam } from "./market";
 import type { PuState } from "./powerunit";
 import type { DevState } from "./development";
-import type { Objective } from "./objectives";
 
 export const RACE_POINTS = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1];
 export const SPRINT_POINTS = [8, 7, 6, 5, 4, 3, 2, 1];
@@ -34,7 +33,7 @@ export interface RoundResult {
   sprintTable?: number[];
   summary?: RaceSummary;
   sprintSummary?: RaceSummary;
-  /** Lo que escribió la directiva tras la carrera. */
+  /** Lo que escribió la directiva tras la carrera (partidas de antes de quitarla: ya no se enseña). */
   board?: string;
 }
 
@@ -54,16 +53,14 @@ export interface SeasonState {
   pu?: Record<number, PuState>;
   /** Desarrollo del coche por piezas (las temporadas de antes no lo tienen: su coche mejora solo, como entonces). */
   dev?: DevState;
-  /** Objetivos de la directiva para la temporada (se ponen al abrirla por primera vez). */
-  objetivos?: Objective[];
+  /** Objetivos de la directiva (partidas de antes de quitarla, en noviembre de 2026: ya no se usan). */
+  objetivos?: { kind: string; target: number }[];
   // ---- varias temporadas (career.ts): las de la primera temporada no tienen nada de esto (es 2026)
   /** Año de la temporada (sin él, 2026). */
   year?: number;
   /** Moral de tus pilotos (por nombre, 0 a 100) y rivalidades entre pilotos (ver morale.ts). */
   moral?: Record<string, number>;
   rivals?: { a: string; b: string; k: number }[];
-  /** Lo que piensa la directiva de lo dicho en la rueda de prensa (−3 a 3); se le pasa al escribir tras la carrera. */
-  boardMood?: number;
   /** Hitos de tu equipo en la partida (todas las temporadas) y el mejor tiempo de cada circuito (ver hitos.ts). */
   hitos?: { year: number; round: number; circuitId: string; gp: string; icon: string; text: string }[];
   records?: Record<string, { t: number; nombre: string; year: number }>;
@@ -87,10 +84,6 @@ export interface SeasonState {
   history?: SeasonRecord[];
   news?: string[];
   devBonus?: number;
-  /** La directiva te despidió al acabar este año y dejaste la partida ahí (13: despido). */
-  despedido?: number;
-  /** Temporadas seguidas sin cumplir ningún objetivo (con dos, la directiva avisa de que el jefe peligra; con tres, despide). */
-  aviso?: number;
   /** Cambios de piloto a mitad de temporada (lesiones, destituciones, tus fichajes), en orden. */
   swaps?: SeatSwap[];
   /** Reparto ATR de túnel de viento y CFD con el que empieza la temporada: ids de equipo en el orden de la

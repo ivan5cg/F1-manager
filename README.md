@@ -11,7 +11,7 @@ Es una web para el móvil (se instala como aplicación desde el navegador) y fun
 - mensajes con pestaña blanca en diagonal («RADIO DEL EQUIPO», «DIRECCIÓN DE CARRERA») sobre barra oscura,
 - hora local con icono del cielo, temperaturas, lluvia media y máxima y agua por sector,
 - rótulos de piloto con la posición en caja roja y diferencias en caja amarilla,
-- **la prensa y la directiva tras cada carrera:** la portada de un periódico inventado con el titular del gran premio (tu victoria o tu podio, una remontada, una carrera de locos, un paseo de principio a fin...) y tres breves (cómo le ha ido a tu equipo, la remontada del día, la vuelta rápida, el abandono de alguien de delante). En temporada, además, un mensaje de la directiva según lo que se esperaba de tu coche, con aviso cuando un objetivo se cumple, se pone feo o ya no se puede. Las dos cosas se vuelven a ver desde el calendario,
+- **la prensa tras cada carrera:** la portada de un periódico inventado con el titular del gran premio (tu victoria o tu podio, una remontada, una carrera de locos, un paseo de principio a fin...) y tres breves (cómo le ha ido a tu equipo, la remontada del día, la vuelta rápida, el abandono de alguien de delante). Se vuelve a ver desde el calendario,
 - **cascos con diseño propio:** cada piloto lleva el suyo en todas las pantallas (torre, podio, clasificaciones, gran premio, escenarios) y en el 3D, siempre el mismo: tres colores (a menudo los de su bandera) y uno de nueve motivos (franjas, rayo, estrella, flechas, degradado...), sacados de su nombre. El color del equipo va en la franja de abajo. Diseños inventados, no los de verdad,
 - velocímetro de cada uno de tus pilotos con velocidad, marcha, acelerador, freno, batería y modo adelantamiento,
 - en la tarjeta de cada piloto, su coche visto desde arriba con las cuatro ruedas: el color es la temperatura frente a la ventana del compuesto (azul frío, verde bien, amarillo al borde, rojo caliente) y el relleno, la banda que queda (la simulación lleva cada eje, así que las dos ruedas de un eje van iguales),
@@ -96,27 +96,24 @@ En la realidad, en 2026 el GP de Baréin no se corrió en Sakhir: se trasladó a
     paquetes: uno que sale mal no lo montan («En el paddock» lo cuenta).
   - Las temporadas empezadas antes del túnel de viento siguen con la aerodinámica por piezas (una de cada cuatro
     decepciona) y sus rivales como estaban.
-- **Objetivos de la directiva:** al empezar la temporada, dos según lo bueno que es tu coche frente a la parrilla
-  (por ejemplo, «acabar entre los 5 primeros de constructores» y «subir 2 veces al podio»; con el peor coche,
-  «puntuar en 2 carreras»). Se ven en la pantalla de temporada con cómo van, y se marcan cuando ya no se pueden
-  cumplir.
-  En el calendario completo se piden más (las mismas por carrera). Al acabar, cumplirlos sube el presupuesto de
-  desarrollo del año siguiente (6 M por objetivo) y fallarlos lo baja (5 M); dos temporadas seguidas sin cumplir
-  ninguno y la directiva avisa de que el jefe de equipo peligra, y a la **tercera te despide**: con un equipo real, te
-  ofrecen los dos equipos peor clasificados del mundial (sigues la partida con el que elijas, sin aviso y con objetivos
-  nuevos) o dejas la Fórmula 1 y la partida se queda terminada; con «crea tu equipo», los inversores toman el control
-  y la partida termina. Durante ese último año, la directiva te lo recuerda tras las malas carreras.
+- **Sin directiva ni objetivos** (desde noviembre de 2026): eran demasiado arbitrarios (con uno de los dos mejores
+  coches se cumplían el 20 %; con uno del medio, el 90 %). El presupuesto de desarrollo ya no depende de los
+  resultados (40 M con un equipo real; en «crea tu equipo», según el techo) y nadie te despide. Las partidas de antes
+  conservan sus objetivos en el historial, pero ya no cuentan.
 - **Equipo técnico entre temporadas** («crea tu equipo»): en la pantalla de fin de temporada puedes cambiar de jefe de
   equipo, director técnico o motor. Fichar a uno de otro equipo cuesta su cláusula, que sale del presupuesto de
   desarrollo, y su equipo se queda con un interino; los salarios y el motor cuentan en el techo de gasto del año
   siguiente. Lo que valen de verdad no se sabe hasta verlos trabajar.
 - **Varias temporadas:** al acabar el año, «Empezar la temporada 2027» (y así cada año) en la misma partida. Antes se
-  ve el resumen (campeones, tu puesto, los objetivos y lo que cambia el presupuesto) y se decide qué hacer con tus
+  ve el resumen (campeones y tu puesto) y se decide qué hacer con tus
   pilotos: seguir (o renovar si se les acaba el contrato) o cambiarlos por otro. Se puede fichar a cualquiera: a los
   libres, a los reservas, a los de la F2 o a uno de otro equipo pagando su cláusula (la mitad de lo que le queda por
   cobrar); romper el contrato de uno tuyo también se paga. Las cláusulas salen del presupuesto de desarrollo.
-  - **Pilotos:** cumplen años. Mejoran hasta los ~28, se mantienen y empeoran desde los ~33; desde los 33 alguno se
-    retira (los que siguen arriba aguantan más). Los contratos de la primera temporada son una estimación del juego.
+  - **Pilotos:** cumplen años. Mejoran hasta los ~27, se mantienen hasta los ~34 y desde ahí pierden poco a poco
+    (unos 2-3 puntos de ritmo de los 34 a los 40, como Alonso o Hamilton, que siguen arriba pasados los 40). Desde los
+    34 alguno se retira; los que siguen siendo buenos aguantan más, hasta los ~44, cuando ya pesa la edad. **Nadie
+    corre con más de 50 años**, tampoco tus pilotos: en la pantalla de fin de temporada, el que se pasaría se retira y
+    hay que elegirle sustituto. Los contratos de la primera temporada son una estimación del juego.
   - **Mercado:** cada equipo renueva a quien le sirve según lo bueno que es su coche, y los mejores coches eligen
     primero; a veces uno se lleva al que acababa contrato en un equipo peor. Los asientos libres se llenan con los
     mejores que queden: libres, reservas y los de la **F2**. Está la parrilla real de F2 de 2026 (Câmara, Tsolov,
@@ -132,8 +129,17 @@ En la realidad, en 2026 el GP de Baréin no se corrió en Sakhir: se trasladó a
   - **Salarios:** cada piloto cobra según lo bueno que es (de ~0,5 M un novato a ~55 M el mejor). En «crea tu
     equipo», desde la segunda temporada el techo de gasto lo ocupan los salarios de ese año (tus pilotos, jefe y
     técnico) y el motor, y lo que sobra va al desarrollo, como en la primera.
-  - **Coches:** el del año siguiente sale de cómo acabó cada uno, con su desarrollo, con una regresión a la media:
-    se conserva un 65 % de la ventaja o la desventaja. Con «crea tu equipo», el tuyo ya no es un equipo nuevo.
+  - **Coches:** el del año siguiente sale de cómo acabó cada uno, con todo su desarrollo, más el **coche nuevo del
+    invierno**, que es cuando más cambian los coches (conceptos nuevos). El paso medio (~0,8 s/vuelta) es mayor que
+    todo un año de evoluciones, y cada equipo tiene el suyo:
+    - casi siempre es un paso grande, y a veces un gran acierto (hasta ×1,75 del medio);
+    - 1 de cada 10 veces apenas mejora;
+    - 1 de cada 12 sale algo peor que el del año pasado (como mucho ×−0,25: la mayor mejora es 7 veces la peor caída).
+
+    La cuota ATR y los rendimientos decrecientes ayudan algo a los de atrás. Así el orden se mueve en invierno unas
+    tres veces más que antes y el hueco del mejor al peor se queda en 2-4 a lo largo de los años. Las noticias del
+    mercado cuentan los grandes aciertos y los coches fallidos, y si el tuyo ha salido bien. Con «crea tu equipo», el
+    tuyo ya no es un equipo nuevo.
   - En «crea tu equipo» los valores reales (ocultos) de pilotos, jefe, técnico y motor no cambian de un año a otro;
     los pilotos sí cambian con la edad. La pantalla de temporada guarda las temporadas anteriores.
   - `npx tsx scripts/temporadas.ts [temporadas] [semilla] [equipo|propio] [--completo]` pasa varias temporadas sin
@@ -382,7 +388,8 @@ entre ellos, ninguno levante: más toques.
 temporada (el gran premio suelto y los escenarios, como siempre).
 - **Moral** de cada uno de tus pilotos (0 a 100, 60 lo normal), que dura toda la temporada y se ve en la pantalla de
   temporada, en el fin de semana y con una cara en su ficha durante la sesión. Tras cada carrera sube con los buenos
-  resultados (más si superan lo que se espera del coche), con ganar al compañero y cuando el equipo le da paso; baja
+  resultados (más si superan lo que se espera del coche según su puesto en la parrilla: ganar con uno de los dos
+  mejores, podio con el 3.º o el 4.º, puntos con el resto), con ganar al compañero y cuando el equipo le da paso; baja
   sin puntos, con un abandono, por detrás del compañero y, sobre todo, cuando le haces **dejar pasar a su compañero**
   (−7). Con el tiempo vuelve poco a poco a lo normal; en invierno, a medias.
 - Lo que cambia: un poco de **ritmo** (unas 5 centésimas por vuelta en los extremos); si **obedece** (por debajo de
@@ -395,7 +402,7 @@ temporada (el gran premio suelto y los escenarios, como siempre).
   dos!») y tus pilotos también por radio. Se ven en la pantalla de temporada.
 - **Rueda de prensa** antes de cada carrera: una o dos preguntas según cómo va la temporada (dos carreras sin
   puntos, favoritismo, una rivalidad, el piloto que no arranca o qué esperáis desde la parrilla). Cada respuesta toca
-  la moral de tus pilotos, la rivalidad o lo que piensa la directiva, que lo comenta en su mensaje tras la carrera.
+  la moral de tus pilotos o la rivalidad.
 - `npx tsx scripts/moral.ts [circuito] [carreras] [equipo]` mide cuánto desobedece cada carácter según su moral, lo
   que cambia la vuelta y cuántas rivalidades nacen en una serie de carreras.
 
@@ -418,8 +425,8 @@ temporada (el gran premio suelto y los escenarios, como siempre).
   sabría Lobato y la gala.
 
 **La retransmisión y el público** (`src/ui/experta.ts`, `audio.ts`, `map3d.ts`):
-- **Begoña Arrieta**, ingeniera de pista retirada (personaje inventado), comenta junto a Lobato en la caja de la
-  izquierda y en Radio (pestaña verde), con su propia voz. Donde él se emociona, ella explica: el undercut de verdad
+- **Toni Cuquerella**, ingeniero y comentarista técnico, comenta junto a Lobato en la caja de la izquierda y en Radio
+  (pestaña verde), con su propia voz. Donde Lobato se emociona, él explica: el undercut de verdad
   (para con alguien a tiro delante que aún no ha parado) o la respuesta a la parada del de detrás, lo que cuesta
   parar con coche de seguridad o virtual en ese circuito, el compuesto que monta cada uno de los de delante y si le
   llega hasta el final, las estrategias cruzadas en cabeza, las gomas gastadas, el aire sucio y el cruce entre lluvia
@@ -682,7 +689,7 @@ volumen general, de motores, de ambiente y de radio, y las voces de la radio y d
 ## Tests
 
 ```bash
-npm test             # tipos (tsc) y todos los tests: ~1,5 min con 4 núcleos
+npm test             # tipos (tsc) y todos los tests: ~3 min con 4 núcleos
 npm run test:rapido  # solo los rápidos (~1 s)
 ```
 
@@ -690,11 +697,35 @@ npm run test:rapido  # solo los rápidos (~1 s)
   medida), el programa de libres con paquete y el orden de los coches de 2026.
 - `tests/banco-*.test.ts` (en paralelo): dos carreras en seco por circuito en Mónaco, Monza, Hungaroring,
   Silverstone, Spa, Suzuka, Las Vegas y Baréin (parrilla por ritmo, como `scripts/auditoria/rapida.ts`). Los
-  adelantamientos de cada uno, ±35 % de su calibración; nadie descalificado; entre 0,9 y 2 paradas por coche; como
-  mucho 12 doblados; al menos 12 coches en meta. Con el umbral viejo de Mónaco (2,2) el test falla: 5 adelantamientos
-  por carrera.
+  adelantamientos de cada uno, ±35 % de su calibración; nadie descalificado; entre 0,9 y 2 cambios de neumáticos
+  por coche (las paradas y los cambios con bandera roja, que no son parada: con dos rojas, en Las Vegas casi nadie
+  para); como mucho 12 doblados; al menos 12 coches en meta. Con el umbral viejo de Mónaco (2,2) el test falla: 5
+  adelantamientos por carrera.
 - Si un cambio mueve los adelantamientos a propósito, se recalibra el circuito y se actualiza su referencia en el
   fichero del banco (`pass`, de `rapida.ts 1-2 <circuito>`).
+- `tests/temporada.test.ts`: el modo temporada a lo largo de 4 temporadas, con equipo real (8 equipos × 5 semillas)
+  y con «crea tu equipo» (5 equipos al azar dentro del techo), con las carreras por ritmo (unos segundos): nada que
+  no debería pasar (pilotos o dorsales repetidos, libres que también corren, contratos vencidos, puntos que no
+  cuadran, valores sin sentido), años seguidos, misma semilla = misma partida, presupuesto sin directiva, tu
+  equipo y tu equipo técnico entre temporadas, edades y retiradas, pilotos nuevos, hueco entre coches, el coche nuevo
+  del invierno (probabilidades y cuánto mueve el orden), moral, sprints sorteados desde 2027 y renovaciones. Y los fallos
+  arreglados en noviembre de 2026 (ver [docs/PRUEBAS-TEMPORADA.md](docs/PRUEBAS-TEMPORADA.md)): un lesionado al
+  acabar el año recupera su asiento, tu piloto lesionado en «crea tu equipo» no corre con su equipo de antes y los
+  jóvenes de la F2 no repiten dorsal.
+- `tests/temporada-real-*.test.ts` (en paralelo): lo mismo con la simulación entera (libres, clasificación, sprint y
+  carrera) en dos temporadas de dos carreras, con equipo real y con equipo propio.
+- El jugador automático de esos tests es `tests/partida.ts`: lleva la partida como la interfaz (presupuesto, túnel
+  de viento, test de pretemporada, fines de semana simulados, unidades de potencia, sanciones, moral,
+  cambios a mitad de temporada e invierno). Para partidas largas con la simulación entera, una por proceso:
+
+```bash
+npm run partidas -- williams 3 4 --salida=partidas/williams-3.json   # equipo, semilla, temporadas (~25 min)
+npm run partidas -- propio 1 4 --sin-test --salida=partidas/propio-1.json
+npm run partidas:informe -- partidas informe.md                       # resumen de todas en Markdown
+```
+
+  Opciones: `--rapida` (carreras por ritmo), `--sin-test` (salta el test de pretemporada), `--sin-desarrollo` (no
+  pide piezas), `--completo` (calendario de 24) y `--rondas=N` (solo las N primeras carreras).
 
 ## Simular sin interfaz
 
