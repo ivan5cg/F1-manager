@@ -63,7 +63,9 @@ export interface RaceLog {
   dsq: number;
   finished: number;
   shortened: boolean;
+  /** Alguna sesión del fin de semana con la pista mojada (wetRace: la carrera). */
   wet: boolean;
+  wetRace?: boolean;
   passes?: number;
   safety?: number;
   vsc?: number;
@@ -401,7 +403,7 @@ function realWeekend(s: SeasonState, r: number, calIds: string[], where: string,
     if (kinds.length > 6) { fail(where, `demasiadas sesiones: ${kinds.join(",")}`); break; }
     const sess = runSession(wk, kind);
     if (!sess.finished) fail(where, `${kind} no termina (${(sess.wall / 60).toFixed(0)} min)`);
-    if (sess.avgWater() > 0.2) wet = true;
+    if (sess.avgWater() > 0.2) { wet = true; if (kind === "RACE") extra.wetRace = true; }
     // finishSession
     wk.finish(sess);
     settlePkg(s, wk);

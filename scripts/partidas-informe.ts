@@ -12,6 +12,8 @@ const mean = (a: number[]) => (a.length ? a.reduce((x, y) => x + y, 0) / a.lengt
 const f1 = (x: number) => x.toFixed(1).replace(".", ",");
 const f2 = (x: number) => x.toFixed(2).replace(".", ",");
 const pct = (x: number) => `${Math.round(x * 100)} %`;
+/** Motivo de abandono agrupado: avería, accidente (solo o con otro) o daños tras un toque. */
+const why = (r?: string) => !r ? "?" : /^avería/.test(r) ? "avería" : /^accidente con/.test(r) ? "choque con otro" : /^accidente/.test(r) ? "accidente" : /daños/.test(r) ? "daños tras un toque" : r;
 
 for (const mode of ["real", "propio"] as const) {
   const rs = runs.filter((r) => (mode === "propio") === (r.opts.team === "propio"));
@@ -32,16 +34,16 @@ for (const mode of ["real", "propio"] as const) {
   // carreras
   const dnf = mean(races.map((x) => x.dnfs)), fin = mean(races.map((x) => x.finished));
   const reasons: Record<string, number> = {};
-  for (const x of races) for (const [k, v] of Object.entries(x.dnfReasons)) reasons[k] = (reasons[k] ?? 0) + v;
+  for (const x of races) for (const [k, v] of Object.entries(x.dnfReasons)) reasons[why(k)] = (reasons[why(k)] ?? 0) + v;
   p(`**Carreras.** Abandonos por carrera ${f2(dnf)} (acaban ${f1(fin)}); motivos: ${Object.entries(reasons).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join(", ")}. `
-    + `Descalificados: ${races.reduce((a, x) => a + x.dsq, 0)}. Carreras acortadas: ${races.filter((x) => x.shortened).length}. Mojadas: ${races.filter((x) => x.wet).length}. `
-    + `Coche de seguridad en ${pct(races.filter((x) => (x.safety ?? 0) > 0).length / races.length)}, virtual en ${pct(races.filter((x) => (x.vsc ?? 0) > 0).length / races.length)}, bandera roja en ${races.filter((x) => x.red).length}. `
+    + `Descalificados: ${races.reduce((a, x) => a + x.dsq, 0)}. Carreras acortadas: ${races.filter((x) => x.shortened).length}. Fines de semana con alguna sesión mojada: ${races.filter((x) => x.wet).length}${races.some((x) => x.wetRace !== undefined || x.wet) ? ` (carrera mojada: ${races.filter((x) => x.wetRace).length})` : ""}. `
+    + `Coche de seguridad en ${pct(races.filter((x) => (x.safety ?? 0) > 0).length / races.length)}, virtual en ${pct(races.filter((x) => (x.vsc ?? 0) > 0).length / races.length)}, bandera roja en ${races.filter((x) => x.red).length} (${pct(races.filter((x) => x.red).length / races.length)}; ${Object.entries(races.filter((x) => x.red).reduce((a, x) => { a[x.circuitId] = (a[x.circuitId] ?? 0) + 1; return a; }, {} as Record<string, number>)).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k, v]) => `${k} ${v}`).join(", ")}). `
     + `Adelantamientos por carrera ${f1(mean(races.filter((x) => x.passes !== undefined).map((x) => x.passes!)))}. `
     + `La pole gana el ${pct(races.filter((x) => x.pole && x.pole === x.winner).length / races.length)}. Sanciones de parrilla arrastradas: ${races.reduce((a, x) => a + x.gridPens, 0)}. `
     + `Tiempo de cálculo por fin de semana: ${f1(mean(races.map((x) => x.secs)))} s.`);
   p();
   const myDnf = races.flatMap((x) => x.mine).filter((m) => m.status !== "fin");
-  p(`**Tus pilotos.** ${races.flatMap((x) => x.mine).length} salidas, ${myDnf.length} abandonos (${pct(myDnf.length / Math.max(1, races.flatMap((x) => x.mine).length))}): ${Object.entries(myDnf.reduce((a, m) => { const k = (m.reason ?? m.status).replace(/ \(.*\)$/, ""); a[k] = (a[k] ?? 0) + 1; return a; }, {} as Record<string, number>)).map(([k, v]) => `${k} ${v}`).join(", ")}. `
+  p(`**Tus pilotos.** ${races.flatMap((x) => x.mine).length} salidas, ${myDnf.length} abandonos (${pct(myDnf.length / Math.max(1, races.flatMap((x) => x.mine).length))}): ${Object.entries(myDnf.reduce((a, m) => { const k = why(m.reason ?? m.status); a[k] = (a[k] ?? 0) + 1; return a; }, {} as Record<string, number>)).map(([k, v]) => `${k} ${v}`).join(", ")}. `
     + `Victorias ${races.filter((x) => x.mine.some((m) => m.pos === 1 && m.status === "fin")).length}, podios ${races.reduce((a, x) => a + x.mine.filter((m) => m.pos <= 3 && m.status === "fin").length, 0)}.`);
   p();
   // campeones y dominio
