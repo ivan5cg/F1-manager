@@ -525,6 +525,7 @@ function checkSeasonStart(s: SeasonState, Y: number, custom: boolean, fail: (w: 
 
 function checkRound(s: SeasonState, r: number, race: ResultRow[], sprint: ResultRow[] | undefined, where: string, fail: (w: string, x: string) => void) {
   const n = DRIVERS.length;
+  const ri0 = () => s.rounds[s.rounds.length - 1];
   for (const [name, rows] of [["carrera", race], ["sprint", sprint]] as const) {
     if (!rows) continue;
     if (rows.length !== n) fail(where, `${name}: ${rows.length} filas para ${n} coches`);
@@ -532,7 +533,14 @@ function checkRound(s: SeasonState, r: number, race: ResultRow[], sprint: Result
     if (ids.some((x, i) => x !== i)) fail(where, `${name}: ids que no cuadran (${ids.join(",")})`);
     // los que acaban, antes que los que no; y por tiempo
     let seenOut = false;
-    for (const x of rows) { if (x.status !== "fin") seenOut = true; else if (seenOut) { fail(where, `${name}: un coche que acaba detrás de uno que no`); break; } }
+    for (const x of rows) {
+      if (x.status !== "fin") seenOut = true;
+      else if (seenOut) {
+        const tab = name === "sprint" ? ri0()?.sprintTable : ri0()?.raceTable;
+        fail(where, `${name}: un coche que acaba detrás de uno que no (${rows.map((y, i) => `${i + 1}:${y.id}${y.status === "fin" ? "" : `[${y.status} ${y.reason ?? ""} ${y.laps}v]`}`).join(" ")}${tab ? `; acortada, puntos ${tab.join("-")}` : ""})`);
+        break;
+      }
+    }
     for (const x of rows) if (x.status === "fin" && !Number.isFinite(x.time)) fail(where, `${name}: tiempo ${x.time}`);
     const fin = rows.filter((x) => x.status === "fin");
     if (fin.length < Math.min(10, n / 2)) fail(where, `${name}: solo acaban ${fin.length}`);
