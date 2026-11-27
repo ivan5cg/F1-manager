@@ -13,7 +13,7 @@
  "poleFuente":"Verstappen 1:31.373, clasificación del 10 de octubre de 2026",
  "aero": {"cl": 1.18, "cd": 1.1},
  "abrasividad": 0.9, "compuestos": ["C3", "C4", "C5"], "compuestosFuente": "Pirelli 2026: duro, medio, blando",
- "boxes": {"lado":"izquierda","entrada": 380, "salida": 220, "perdida": 28.0, "limite": 60},
+ "boxes": {"lado":"izquierda","entrada": 380, "salida": 220, "perdida": 24.5, "limite": 60},
  "horario": {"fp1": "V 16:30", "sq": "V 20:30", "sprint": "S 17:00", "q": "S 21:00", "carrera": "D 20:00"},
  "adelantamientos": {"objetivo": 34.8, "umbral": 2.87, "fuente": "media de adelantamientos por carrera (f1-race-review.com)"},
  "clima": {"latitud": 1.29, "maxima": 31, "minima": 25, "dispersion": 1.2, "sol": 22, "viento": 8, "pequenas": 0.7, "pesos": {"seco": 35, "chubascos": 50, "frente": 5, "llovizna": 10}, "tardeConvectiva": 0.8, "fuente": "Octubre en Singapur: máxima 30-31 °C, mínima 25-26 °C, 17-21 días de lluvia, tormentas frecuentes (weatherapi.com, weather2travel.com)"},

@@ -21,3 +21,7 @@ __pycache__/
 
 # resultados de la auditoría de la simulación (scripts/auditoria/lote.mjs): se regeneran con las semillas
 /auditoria-out/
+
+# datos reales de telemetría y caché de FastF1 (pesan cientos de MB / GB)
+/datos-reales/
+/f1_cache/

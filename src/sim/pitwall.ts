@@ -12,10 +12,9 @@ const OUT_LAP: Record<Compound, number> = { S: 0.6, M: 0.9, H: 1.3, I: 0.5, W: 0
 /** Pérdida total de una parada ahora mismo (calle de boxes + parada), según la bandera. */
 export function pitLoss(sess: Session, c: Car): number {
   const def = sess.track.def;
-  // la calle de boxes está medida para que la pérdida sea la del circuito con una parada de 2,4 s
-  // (menos ~1 s que el circuito ya cuenta en la entrada y la salida); se corrige con la del equipo
+  // la calle de boxes está medida para que la pérdida neta en carrera sea la del circuito con una parada de 2,4 s
   const nose = c.wing > 0 && (c.nose === "yes" || (c.nose !== "no" && sess.wingLoss(c) * (sess.laps - sess.lapsDone(c)) > NOSE_TIME));
-  let loss = def.boxes.perdida - 1.0 + (c.team.boxes - 2.4);
+  let loss = def.boxes.perdida + (c.team.boxes - 2.4);
   if (sess.flag === "sc" || sess.flag === "sc_in") loss *= pitLossUnder(sess, "sc");
   else if (sess.flag === "vsc") loss *= pitLossUnder(sess, "vsc");
   // el cambio de morro y la sanción se cumplen parados: la neutralización no los acorta

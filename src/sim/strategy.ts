@@ -123,6 +123,9 @@ function stintCost(sess: Session, car: Car, k: TeamKnowledge, c: Compound, from:
   if (p.cum) t = p.cum[from + laps] - p.cum[from];
   else { t = 0; for (let a = from; a < from + laps; a++) t += p.dt[a]; }
   const w = p.wear[from + laps - 1];
+  const cliff = COMPOUNDS[c].cliff;
+  // si la tanda se pasa del precipicio, en carrera aiModes obliga a bajar a Conservar/Gestionar (cuesta ritmo real)
+  if (w > cliff - 0.02) t += (w - (cliff - 0.02)) * 85;
   if (w > 0.93) t += (w - 0.93) * 400;
   return t;
 }
@@ -134,7 +137,7 @@ export function pitLoss(sess: Session): number {
     const s = i * tr.ds;
     if (s >= tr.pit.entry || s < tr.pit.exit) tPortion += tr.ds / tr.vref[i];
   }
-  return tr.pit.laneLength / tr.pit.limit - tPortion * 1.05 + 2;
+  return tr.pit.laneLength / tr.pit.limit - tPortion * 1.07;
 }
 
 /**
@@ -148,8 +151,8 @@ export function pitLossUnder(sess: Session, flag: "vsc" | "sc"): number {
     const s = i * tr.ds;
     if (s >= tr.pit.entry || s < tr.pit.exit) { tG += tr.ds / tr.vref[i]; tN += tr.ds / Math.min(tr.vref[i], cap); }
   }
-  const lane = tr.pit.laneLength / tr.pit.limit + 2;
-  return clamp((lane - tN * 1.05) / Math.max(1, lane - tG * 1.05), 0.2, 1);
+  const lane = tr.pit.laneLength / tr.pit.limit + 2.4;
+  return clamp((lane - tN * 1.07) / Math.max(1, lane - tG * 1.07), 0.2, 1);
 }
 
 /** Juegos disponibles (sin el montado), del menos al más gastado. */
@@ -186,14 +189,14 @@ export function planStrategy(sess: Session, car: Car, k: TeamKnowledge, fromLap 
  * tracciona peor y tarda en calentar, y los puestos perdidos cuestan luego. Sin esto, salir con duro o con medio daba
  * igual y la mitad de la parrilla salía con duro.
  */
-const START_COST: Partial<Record<Compound, number>> = { H: 1.2 };
+const START_COST: Partial<Record<Compound, number>> = { H: 1.8, S: -0.9 };
 /**
  * Lo que se suma desde las primeras filas (en la pole entero, y menos cuanto más atrás; nada desde la undécima): delante, cada puesto que se pierde
  * en la arrancada o en las primeras vueltas con el duro frío es uno que se había ganado en la clasificación y que luego
- * hay que recuperar en pista o en boxes, y la primera tanda larga deja al de detrás el undercut. Sin esto, una de cada
- * cuatro poles salía con duro y ganaba el 17 % de las veces (con medio, el 41 %; en 2026 la pole ganó el 71 %).
+ * hay que recuperar en pista o en boxes, y la primera tanda larga deja al de detrás el undercut. Con el blando se
+ * tracciona mejor en la arrancada (en 2026 ~30 % sale con blando, ~59 % con medio y ~7 % con duro).
  */
-const START_FRONT: Partial<Record<Compound, number>> = { H: 4 };
+const START_FRONT: Partial<Record<Compound, number>> = { H: 4.5, S: -0.6 };
 /** En la sprint pesa más: es corta y sin paradas, lo que se pierde en la salida ya no se recupera. */
 const SPRINT_START_K = 2.5;
 
@@ -205,7 +208,7 @@ function enumeratePlans(sess: Session, car: Car, k: TeamKnowledge, fromLap = 0, 
   const keep = (t: number) => { if (t < bestT) bestT = t; return t <= bestT + margin; };
   const remain = total - fromLap;
   // pérdida en boxes + lo que cuesta perder posición en pista (tráfico al volver)
-  const loss = pitLoss(sess) + car.team.boxes + 1.0 + sess.trafficCost;
+  const loss = pitLoss(sess) + car.team.boxes + sess.trafficCost;
   const avail = availableSets(car);
   // keepUsed: se para ahora, en plena carrera; los compuestos ya usados siguen contando para la regla
   const used = curC || keepUsed ? new Set(car.usedCompounds) : new Set<Compound>();
@@ -234,9 +237,11 @@ function enumeratePlans(sess: Session, car: Car, k: TeamKnowledge, fromLap = 0, 
   for (const st of starts) {
     const c0 = st.c, a0 = st.age;
     const id0 = st.own ? avail[c0][0]?.id : undefined;
-    // salida: con el duro se tracciona peor y, frío, se pierden puestos en la primera vuelta que luego cuesta recuperar
+    // salida: con el duro se tracciona peor y, frío, se pierden puestos en la primera vuelta; el bono de tracción del blando solo aplica a juegos frescos
     const gridPos = Math.max(0, sess.lapOrder[0]?.indexOf(car.id) ?? 10);
-    const startCost = st.own && fromLap === 0 && (isRace || sess.kind === "SPRINT") ? ((START_COST[c0] ?? 0) + (START_FRONT[c0] ?? 0) * Math.max(0, 1 - gridPos / 10)) * (isRace ? 1 : SPRINT_START_K) : 0;
+    const scBase = c0 === "S" && a0 > 2 ? 0 : (START_COST[c0] ?? 0);
+    const scFront = c0 === "S" && a0 > 2 ? 0 : (START_FRONT[c0] ?? 0);
+    const startCost = st.own && fromLap === 0 && (isRace || sess.kind === "SPRINT") ? (scBase + scFront * Math.max(0, 1 - gridPos / 10)) * (isRace ? 1 : SPRINT_START_K) : 0;
     const idx = (c: Compound, n: number) => n + (st.own && c === c0 ? 1 : 0); // índice del juego libre
     if (ruleOk([c0])) { const t = startCost + stintCost(sess, car, k, c0, a0, remain); if (keep(t)) options.push({ stints: [{ c: c0, endLap: total, setId: id0 }], total: t }); }
     for (const c2 of DRY) {
@@ -316,7 +321,7 @@ export function planOptions(sess: Session, car: Car, k: TeamKnowledge, n = 3): P
     let t = 0, from = 0;
     plan.stints.forEach((st, i) => {
       t += stintCost(sess, car, kk, st.c, ageFor(kk, st.c, st.setId), st.endLap - from);
-      if (i > 0) t += pitLoss(sess) + car.team.boxes + 1.0 + sess.trafficCost;
+      if (i > 0) t += pitLoss(sess) + car.team.boxes + sess.trafficCost;
       from = st.endLap;
     });
     return t;
@@ -405,7 +410,7 @@ function weatherCall(sess: Session, car: Car): Compound | null {
     return Math.min(45, (1 - g / gRef) * 100 * sess.secPerGrip) + Math.max(0, 0.92 - g / best) * 45;
   };
   const bestAt = (w: number) => kinds.reduce((b, x) => (steadyGrip(x, w, tT) > steadyGrip(b, w, tT) ? x : b));
-  const stopT = pitLoss(sess) + car.team.boxes + 1;
+  const stopT = pitLoss(sess) + car.team.boxes;
   const stop = stopT * (sess.flag === "sc" || sess.flag === "sc_in" ? pitLossUnder(sess, "sc") : sess.flag === "vsc" ? pitLossUnder(sess, "vsc") : 1);
   const beyond = left * lapMin > H + 2; // queda carrera después de lo que se mira
   const endBest = bestAt(water[water.length - 1] * bias);
@@ -558,7 +563,7 @@ export function aiDecide(sess: Session, car: Car, adviceOnly = false): string | 
 
   // lo listo que es el muro: los buenos ven la jugada casi siempre; los flojos, a veces una vuelta tarde
   const sharp = clamp(0.5 + (k.strategy - 60) / 70, 0.3, 0.95);
-  const lossGreen = pitLoss(sess) + car.team.boxes + 1.0;
+  const lossGreen = pitLoss(sess) + car.team.boxes;
   const sp = COMPOUNDS[cur];
   const age = tyreAge(sess, car, k);
   const prof = stintProfile(sess, car, k, cur);
@@ -569,12 +574,12 @@ export function aiDecide(sess: Session, car: Car, adviceOnly = false): string | 
     const pn = stintProfile(sess, car, k, next.c);
     return prof.dt[Math.min(MAX_AGE - 1, age + 1)] - pn.dt[1] - WARM_UP[next.c];
   };
-  // ¿aguanta el siguiente juego si se monta ya? (parar antes alarga lo que queda)
+  // ¿aguanta el siguiente juego si se monta ya? (parar antes alarga lo que queda; dejar margen antes del precipicio)
   const nextLasts = () => {
     if (!next) return false;
     const pn = stintProfile(sess, car, k, next.c);
     const n2 = (next.endLap ?? total) - done;
-    return n2 < MAX_AGE && pn.wear[Math.max(0, n2 - 1)] < COMPOUNDS[next.c].cliff + 0.03;
+    return n2 < MAX_AGE && pn.wear[Math.max(0, n2 - 1)] < COMPOUNDS[next.c].cliff - 0.04;
   };
   const ord = sess.order();
   const me = ord.indexOf(car);
@@ -672,22 +677,21 @@ export function aiDecide(sess: Session, car: Car, adviceOnly = false): string | 
         break;
       }
     }
-    // ataque: atascado detrás de uno al que no se pasa en pista y con la parada cerca: se adelanta en boxes
+    // ataque: atascado detrás de un rival al que no se pasa en pista y con la parada cerca: se adelanta en boxes
+    // (sin hacer undercut deliberado al compañero de equipo que va delante con la misma estrategia)
     if (!box && early >= 1 && early <= 5 && car.aheadId >= 0 && nextLasts()) {
       const a = sess.carById(car.aheadId);
       const g = sess.gapBetween(a, car);
       const fg = freshGain();
-      if (rival(a) && a.stops === car.stops && !a.pitRequest && g < 1.6 && (car.stuck?.n ?? 0) >= 1 && fg > 0.5 && g < fg * 2.2 + 0.3 && traffic(lossGreen) < 1.6 && stack < 0.5 && sess.rng.chance(0.25 + 0.6 * sharp)) { box = true; why = "undercut"; say = `no pasamos a ${a.d.abrev} en pista: podemos ganarle el puesto en boxes`; }
+      if (rival(a) && a.team !== car.team && a.stops === car.stops && !a.pitRequest && g < 1.6 && (car.stuck?.n ?? 0) >= 1 && fg > 0.5 && g < fg * 2.2 + 0.3 && traffic(lossGreen) < 1.6 && stack < 0.5 && sess.rng.chance(0.25 + 0.6 * sharp)) { box = true; why = "undercut"; say = `no pasamos a ${a.d.abrev} en pista: podemos ganarle el puesto en boxes`; }
     }
     // prioridad del de delante: con un rival de su vuelta a tiro de undercut detrás, con gomas de la misma edad (le
-    // toca parar como a él) y la ventana abierta, el muro no espera a que pare el otro: para primero. Esperar a
-    // reaccionar no sirve, porque el undercut de una vuelta vale ~2 s (banco de auditoría) y el rival suele ir
-    // a menos de eso. Sin esto, la pole solo acababa delante de su compañero en dos de cada tres carreras (en 2026,
-    // 17 de 18): casi todos los que le ganaban en boxes habían parado antes.
-    if (!box && early >= 1 && early <= 3 && nextLasts() && traffic(lossGreen) < 1.6 && stack < 0.5) {
+    // toca parar como a él) y la ventana abierta, el muro no espera a que pare el otro: para primero.
+    if (!box && early >= 1 && early <= 4 && nextLasts() && traffic(lossGreen) < 1.6 && stack < 0.5) {
       const b = ord[me + 1];
-      const threat = clamp(2 * freshGain() + 0.5, 1, 4);
-      if (b && rival(b) && b.team !== car.team && b.stops === car.stops && !b.pitRequest && (b.tyres?.laps ?? 0) >= car.tyres.laps - 4 && sess.gapBetween(car, b) < threat && sess.rng.chance(0.6 * sharp)) {
+      const threat = clamp(2 * freshGain() + 0.6, 1.2, 4.2);
+      const coverP = me < 3 ? 0.85 * sharp : 0.65 * sharp;
+      if (b && rival(b) && b.team !== car.team && b.stops === car.stops && !b.pitRequest && (b.tyres?.laps ?? 0) >= car.tyres.laps - 4 && sess.gapBetween(car, b) < threat && sess.rng.chance(coverP)) {
         box = true; why = "cubrir"; say = `${b.d.abrev} viene a ${sess.gapBetween(car, b).toFixed(1)} s y nos puede hacer el undercut: paramos antes que él`;
       }
     }
@@ -768,7 +772,7 @@ export function aiModes(sess: Session, car: Car, left: number) {
   else if (sess.flag === "green") {
     for (const o of sess.cars) {
       if (o === car || o.loc !== "track" || o.stops !== car.stops + 1 || o.lastPitLap < done - 3) continue;
-      const eff = sess.gapBetween(car, o) - (pitLoss(sess) + car.team.boxes + 1);
+      const eff = sess.gapBetween(car, o) - (pitLoss(sess) + car.team.boxes);
       if (eff > -4 && eff < 5) { want = Math.max(want, 3); break; }
     }
   }
@@ -821,13 +825,14 @@ export function aiErs(sess: Session, car: Car) {
   if (ph === "out" || ph === "cool" || ph === "in") { car.ers = 0; return; }
   if (ph === "push") { car.ers = car.soc > 0.8 ? 2 : 1; return; }
   const attacking = car.followGap < 0.9 && car.aheadId >= 0 && !(car.coolUntil !== undefined && sess.lapsDone(car) < car.coolUntil);
-  const defending = (car.chased ?? 99) < 0.8;
+  const chased = car.chased ?? 99;
+  const defending = chased < 1.0;
   // la batería sube y baja dentro de la vuelta: el modo se decide con la media reciente
   const soc = car.socAvg ?? car.soc;
   if (soc < 0.6) car.ers = 0;
   else if (attacking && soc > 1.2) car.ers = car.followGap < 0.5 ? 3 : 2;
-  // defenderse también gasta: sin batería en la recta, el modo adelantamiento del otro no tiene respuesta
-  else if (defending && soc > 1.0) car.ers = soc > 2 ? 2 : 1;
+  // defenderse también gasta: en 2026 sin batería en recta el modo adelantamiento del otro pasa sin oposición
+  else if (defending && soc > 1.1) car.ers = chased < 0.5 && soc > 1.6 ? 3 : soc > 1.3 ? 2 : 1;
   else if (soc < 2.2) car.ers = 0;
   else if (soc > 3.6) car.ers = 2;
   else car.ers = 1;
@@ -864,7 +869,8 @@ function setForPractice(sess: Session, car: Car, c: Compound): TyreSet | undefin
 
 /** Prepara una tanda. Para el jugador, setId fuerza un juego concreto. */
 export function makeRun(sess: Session, car: Car, kind: Run["kind"], c: Compound, laps: number, at = 0, setId?: string): Run | null {
-  const set = setId ? car.e.sets.find((s) => s.id === setId) : kind === "quali" ? pickSet(car, c, true) : setForPractice(sess, car, c) ?? (kind === "long" ? pickSet(car, c, false) : undefined);
+  // respetar siempre la reserva de carrera de setForPractice (sin quemar el último M/H nuevo en FP3)
+  const set = setId ? car.e.sets.find((s) => s.id === setId) : kind === "quali" ? pickSet(car, c, true) : setForPractice(sess, car, c);
   if (!set) return null;
   const fuel = kind === "long" ? Math.min(75, 12 + laps * sess.fuelPerLap * 1.1 + 25) : kind === "inst" ? 20 : kind === "test" ? 12 + laps * sess.fuelPerLap * 1.1 + 8 : QUALI_FUEL + laps * 2 * sess.fuelPerLap;
   return { kind, setId: set.id, pushLaps: laps, fuel, at };
@@ -890,16 +896,21 @@ export function practiceProgram(sess: Session, car: Car): Run[] {
     add("qsim", "S", 2, r.range(34, 42));
     if (r.chance(0.55)) add("long", other(lc), r.int(4, 7), r.range(45, 51));
   } else if (sess.kind === "FP2") {
-    if (r.chance(0.5)) add("qsim", "M", 2, r.range(1, 5)); // reglajes
-    add("qsim", "S", 2, r.range(6, 12));
-    if (r.chance(0.5)) add("qsim", "S", r.int(1, 2), r.range(14, 20));
-    const lc: Compound = r.chance(0.5) ? "S" : "M";
-    add("long", lc, r.int(12, 16), r.range(24, 30));
-    if (r.chance(0.75)) add("long", other(lc), r.int(6, 9), r.range(44, 49));
+    if (r.chance(0.65)) add("qsim", "M", r.int(2, 3), r.range(1, 5)); // reglajes y referencia con medio
+    add("qsim", "S", 2, r.range(7, 13));
+    if (r.chance(0.65)) add("qsim", "S", r.int(1, 2), r.range(15, 21));
+    const lc: Compound = r.chance(0.42) ? "M" : r.chance(0.65) ? "S" : "H";
+    add("long", lc, r.int(13, 17), r.range(24, 30));
+    if (r.chance(0.82)) add("long", other(lc), r.int(7, 10), r.range(43, 48));
   } else {
-    add("qsim", "M", r.int(2, 3), r.range(2, 8)); // reglajes
+    // FP3: si ya solo queda el juego nuevo de M para carrera, usar un S usado de libres (sin tocar la reserva de Q ni de carrera)
+    if (!makeRun(sess, car, "qsim", "M", 2, 0)) add("qsim", "S", r.int(2, 3), r.range(2, 8));
+    else add("qsim", "M", r.int(2, 3), r.range(2, 8));
     add("qsim", "S", 2, r.range(12, 20));
-    if (r.chance(0.6)) add("long", "M", r.int(5, 7), r.range(24, 32));
+    if (r.chance(0.65)) {
+      if (makeRun(sess, car, "long", "M", 5, 0)) add("long", "M", r.int(5, 7), r.range(24, 32));
+      else add("long", "S", r.int(5, 7), r.range(24, 32));
+    }
     add("qsim", "S", r.int(1, 2), r.range(38, 46));
   }
   // paquete aerodinámico nuevo en tu coche: el programa del viernes cambia tandas largas por pruebas de piezas

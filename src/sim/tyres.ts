@@ -45,13 +45,14 @@ export interface CompoundSpec {
 // (pole en mojado de Interlagos 2024, 1:23.405, frente a 1:08.899 en seco el mismo fin de semana).
 const SLICK_WATER = [[0, 1], [0.05, 0.945], [0.1, 0.895], [0.2, 0.825], [0.3, 0.765], [0.5, 0.665], [0.8, 0.565], [1.2, 0.48], [2, 0.39], [3, 0.33]] as const;
 
-// ~1,2-1,3 % de agarre entre compuestos = ~0,5 s por vuelta en un circuito como Silverstone (Pirelli: 0,3-0,6 s por
-// escalón). La pérdida progresiva (slope × desgaste por vuelta) es en Silverstone ~0,12 / 0,07 / 0,04 s por vuelta; el
-// desgaste por vuelta y el precipicio dan la vida de cada compuesto (~16 / 30 / 45 vueltas allí).
+// ~1,2-1,3 % de agarre entre compuestos = ~0,45-0,55 s por vuelta en un circuito medio (Pirelli 2026).
+// Calibrado con el perfil global de la temporada 2026 (21 GP): vidas típicas ~20-25 / 27-32 / 34-40 vueltas
+// (relación S/H ~1,7×, en vez de 3×) para que el blando sea un neumático real de carrera (salida y último stint)
+// y el duro no sea eterno en cualquier asfalto, combinando carreras a 1 y 2 paradas según abrasividad y calor.
 export const COMPOUNDS: Record<Compound, CompoundSpec> = {
-  S: { name: "Blando", short: "S", color: "#E8452C", base: 1.0, opt: 95, window: 12, slope: 0.078, wear: 0.036, cliff: 0.72, water: SLICK_WATER, cooling: 1, grainK: 1.35, blisterK: 0.8 },
-  M: { name: "Medio", short: "M", color: "#F2D23C", base: 0.987, opt: 103, window: 13, slope: 0.085, wear: 0.0175, cliff: 0.74, water: SLICK_WATER, cooling: 1, grainK: 1.0, blisterK: 1.0 },
-  H: { name: "Duro", short: "H", color: "#F2F2F2", base: 0.978, opt: 111, window: 14, slope: 0.075, wear: 0.0118, cliff: 0.76, water: SLICK_WATER, cooling: 1, grainK: 0.75, blisterK: 1.25 },
+  S: { name: "Blando", short: "S", color: "#E8452C", base: 1.0, opt: 95, window: 12, slope: 0.068, wear: 0.0275, cliff: 0.74, water: SLICK_WATER, cooling: 1, grainK: 1.35, blisterK: 0.8 },
+  M: { name: "Medio", short: "M", color: "#F2D23C", base: 0.987, opt: 103, window: 13, slope: 0.075, wear: 0.0195, cliff: 0.75, water: SLICK_WATER, cooling: 1, grainK: 1.0, blisterK: 1.0 },
+  H: { name: "Duro", short: "H", color: "#F2F2F2", base: 0.978, opt: 111, window: 14, slope: 0.068, wear: 0.0140, cliff: 0.77, water: SLICK_WATER, cooling: 1, grainK: 0.75, blisterK: 1.25 },
   I: { name: "Intermedio", short: "I", color: "#3CC35A", base: 1.0, opt: 88, window: 16, slope: 0.035, wear: 0.03, cliff: 0.75,
     water: [[0, 0.875], [0.1, 0.835], [0.2, 0.8], [0.35, 0.77], [0.5, 0.748], [0.8, 0.718], [1.2, 0.675], [1.8, 0.605], [2.5, 0.535], [3, 0.485]], cooling: 0.55, grainK: 1.1, blisterK: 1.1 },
   W: { name: "Lluvia", short: "W", color: "#3A7BE8", base: 1.0, opt: 80, window: 18, slope: 0.03, wear: 0.026, cliff: 0.78,
@@ -220,7 +221,7 @@ export function steadyGrip(c: Compound, water: number, trackT = 22): number {
   const t = newSet(c);
   // energía media por eje en una vuelta típica: delante 0,9, detrás 1,1
   for (const [a, side, e] of [[t.F, 11, 0.9], [t.R, -2, 1.1]] as const) {
-    a.tBulk = 0.45 * trackT + 0.15 * (trackT - 5) + 79 * e + side - 34 * wet * sp.cooling;
+    a.tBulk = 14.4 + 0.30 * (trackT - 32) + 0.15 * (trackT - 5) + 79 * e + side - 34 * wet * sp.cooling;
     a.tSurf = a.tBulk - 12 * wet * sp.cooling;
   }
   return setGrip(t, water);
@@ -295,9 +296,10 @@ export function updateSet(t: TyreSet, env: TyreEnv, dt: number, lapRef: number, 
     const a = front ? t.F : t.R;
     const eLoc = front ? env.eF : env.eR;
     const slideX = (front ? env.slideF : env.slideR) ?? 0;
-    // apretar calienta, pero menos que proporcional (el piloto gestiona la temperatura)
+    // apretar calienta, pero menos que proporcional (el piloto gestiona la temperatura); la carcasa acopla al asfalto
+    // de forma moderada (14,4 + 0,30×(trackT−32), igual a 32 °C: evita congelar a 15 °C y sobrecalentar en Q a 52 °C)
     const e = eLoc * (1 + 0.45 * (env.push - 1));
-    const eq = 0.45 * env.trackT + 0.15 * env.airT + 79 * Math.min(e, 2.2) + hidden.thermalOffset - 34 * wet * sp.cooling + (front ? 11 : -2);
+    const eq = 14.4 + 0.30 * (env.trackT - 32) + 0.15 * env.airT + 79 * Math.min(e, 2.2) + hidden.thermalOffset - 34 * wet * sp.cooling + (front ? 11 : -2);
     a.tBulk += ((eq - a.tBulk) * dt) / 32;
     // deslizar calienta la superficie (el aire sucio hace patinar el delantero y lo recalienta)
     const surfEq = a.tBulk + 30 * (eLoc - 1) + 35 * (env.push - 1) + 12 * slideX - 12 * wet * sp.cooling;
@@ -305,12 +307,13 @@ export function updateSet(t: TyreSet, env: TyreEnv, dt: number, lapRef: number, 
     const tTread = treadT(a);
 
     const over = a.tBulk - (sp.opt + sp.window * 0.5);
-    // el calor gasta más goma, pero sin dispararse: con /22 un blando no aguantaba 6 vueltas en un asfalto exigente
-    let wMult = over > 0 ? Math.exp(over / 30) : 1;
-    if (a.tBulk < sp.opt - sp.window) wMult *= 1.15;
+    // el calor gasta más goma, pero sin dispararse; el desgaste en frío ya lo aporta el graining (GRAIN_TEAR)
+    const wMult = over > 0 ? Math.exp(over / 30) : 1;
+    // sensibilidad térmica del asfalto (global 2026): pistas frías (<25 °C) desgastan menos; calientes (>42 °C), bastante más
+    const trackHeatW = DRY.includes(t.c) ? clamp(1 + (env.trackT - 34) * 0.013, 0.74, 1.35) : 1;
     const waterW = waterWear(t.c, env.water);
     const axleShare = front ? env.eF : env.eR;
-    const rate = (sp.wear * hidden.wearMult[t.c] * env.abrasiveness * env.carWear * axleShare * Math.pow(env.push, 1.6) * wMult * waterW) / lapRef;
+    const rate = (sp.wear * hidden.wearMult[t.c] * env.abrasiveness * env.carWear * axleShare * Math.pow(env.push, 1.6) * wMult * trackHeatW * waterW) / lapRef;
     // con ampollas se arrancan trozos; con graining la banda patina sobre los rollitos y se gasta más
     a.wear = clamp(a.wear + rate * dt * (1 + 0.8 * a.blister + 0.3 * a.grain), 0, 1);
 

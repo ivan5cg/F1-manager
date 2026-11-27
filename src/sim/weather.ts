@@ -168,6 +168,17 @@ function sunFactor(clockMin: number) {
   return clamp(Math.sin((Math.PI * (h - 6.5)) / 13), 0, 1);
 }
 
+/**
+ * Calentamiento solar efectivo del asfalto (0..1): sigue al sol con ~1,2 h de inercia térmica (pico a las 14:15) y
+ * retiene parte del calor acumulado al atardecer/noche (carreras nocturnas cálidas como Singapur o Baréin).
+ */
+function asphaltSun(clockMin: number) {
+  const h = clockMin / 60;
+  const direct = clamp(Math.sin((Math.PI * (h - 7.5)) / 13.5), 0, 1);
+  const lag = h >= 15 && h <= 23 ? 0.24 * Math.exp(-Math.pow((h - 19.2) / 2.4, 2)) : 0;
+  return clamp(direct + lag * (1 - direct), 0, 1);
+}
+
 /** Temperatura del aire "de cielo despejado" según la hora: mínima al alba, máxima a las 15:00. */
 function diurnal(w: WeatherState) {
   const h = w.clock / 60;
@@ -318,7 +329,7 @@ export function createDayWeather(rng: Rng, climate: Climate, scenario: Scenario,
   }
   w.cloud = cloudAt(w, 0, 0);
   w.airT = diurnal(w);
-  w.trackT = w.airT + climate.sol * (1 - w.cloud) * sunFactor(w.clock) + 1;
+  w.trackT = w.airT + climate.sol * 1.15 * (1 - 0.85 * w.cloud) * asphaltSun(w.clock) + 1.5;
   w.history = [snapshot(w)];
   return w;
 }
@@ -368,7 +379,7 @@ export function stepWeather(w: WeatherState, dtMin: number): void {
   const rainHere = rainAt(w, 0, 0);
   const airEq = diurnal(w) - 3.5 * Math.min(1, rainHere / 4) - 2 * w.cloud * sunFactor(w.clock);
   w.airT += ((airEq - w.airT) * dtMin) / 12;
-  const trackEq = w.airT + cl.sol * (1 - w.cloud) * sunFactor(w.clock) + 1 - (rainHere > 0.2 ? 3 + 4 * Math.min(1, rainHere / 5) : 0);
+  const trackEq = w.airT + cl.sol * 1.15 * (1 - 0.85 * w.cloud) * asphaltSun(w.clock) + 1.5 - (rainHere > 0.2 ? 3 + 4 * Math.min(1, rainHere / 5) : 0);
   w.trackT += ((trackEq - w.trackT) * dtMin) / 9;
   // radar: un fotograma cada 3 minutos, los últimos 30
   if (Math.floor(prevClock / 3) !== Math.floor(w.clock / 3)) {

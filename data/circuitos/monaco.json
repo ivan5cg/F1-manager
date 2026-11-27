@@ -12,7 +12,7 @@
  "poleFuente": "Antonelli 1:12.051, clasificación del 6 de junio de 2026 (FIA)",
  "aero": {"cl": 1.2, "cd": 1.12},
  "abrasividad": 0.75, "compuestos": ["C3", "C4", "C5"], "compuestosFuente": "Pirelli 2026: duro, medio, blando",
- "boxes": {"lado":"derecha","entrada": 250, "salida": 160, "perdida": 20.0, "limite": 60},
+ "boxes": {"lado":"derecha","entrada": 250, "salida": 160, "perdida": 21.5, "limite": 60},
  "horario": {"fp1": "V 13:30", "fp2": "V 17:00", "fp3": "S 12:30", "q": "S 16:00", "carrera": "D 15:00"},
  "adelantamientos": {"objetivo": 8.8, "umbral": 1.04, "fuente": "media de adelantamientos por carrera (f1-race-review.com); 4 en 2024"},
  "clima": {"latitud": 43.73, "maxima": 23, "minima": 18, "dispersion": 2.5, "sol": 20, "viento": 12, "pequenas": 0.5, "pesos": {"seco": 68, "chubascos": 20, "frente": 8, "llovizna": 4}, "tardeConvectiva": 0.4, "fuente": "Junio en Mónaco: máxima 21-24 °C según la fuente, ~9 días de lluvia (weather2travel.com)"},

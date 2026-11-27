@@ -27,7 +27,7 @@ const WATER_DRAG = 12;
 /** Aire sucio: pérdida máxima de agarre pegado a otro coche, en curvas que dependen de la carga
  * aerodinámica (en una chicane lenta casi no se nota; en una curva rápida, mucho). Se diluye
  * deprisa con la distancia: a 1 s ya es poca y a 1,6 s ninguna. */
-const DIRTY_AIR = 0.135;
+const DIRTY_AIR = 0.155;
 const dirtyAir = (gap: number) => (gap < 1.6 ? Math.pow(1 - gap / 1.6, 1.5) : 0);
 /** Rebufo: % de resistencia que se ahorra detrás de otro coche en recta; dura más que el aire sucio. */
 const TOW = 16;
@@ -90,16 +90,16 @@ const QUALI_NOISE = 0.85;
  * tiempo de vuelta y pesa más donde se va a fondo. En carrera, ~4 % (2026: vuelta rápida / pole ≈ 1,045); en la
  * sprint, menos, porque con poca distancia apenas se gestiona.
  */
-const DEPLOY_TRIM: Record<SessionKind, number> = { FP1: 0.04, FP2: 0.04, FP3: 0.04, SQ: 0.04, Q: 0.04, SPRINT: 0.02, RACE: 0.04 };
+const DEPLOY_TRIM: Record<SessionKind, number> = { FP1: 0.04, FP2: 0.04, FP3: 0.04, SQ: 0.04, Q: 0.04, SPRINT: 0.034, RACE: 0.04 };
 /** Vueltas lanzadas de libres: sin el modo de clasificación entero y con algo más de combustible. */
-const PRACTICE_PUSH_TRIM: Partial<Record<SessionKind, number>> = { FP1: 0.01, FP2: 0.005, FP3: 0.003 };
+const PRACTICE_PUSH_TRIM: Partial<Record<SessionKind, number>> = { FP1: 0.01, FP2: 0.008, FP3: 0.003 };
 /**
  * Evolución de la clasificación: al empezar la pista está más verde (aún sin la goma de veinte coches a fondo con
  * blandos) y los pilotos van cogiendo el límite parte a parte. Es lo que le falta a la vuelta al empezar la sesión, en
  * tanto por uno, y baja en línea recta con el reloj de las partes hasta cero al empezar la última salida: la pole
  * (calibrada con la real) no cambia. En 2026 el poleman mejora 0,8-1,7 s de Q1 a Q3. Pesa más en curva que en recta.
  */
-const QUALI_EVO: Partial<Record<SessionKind, number>> = { Q: 0.015, SQ: 0.01 };
+const QUALI_EVO: Partial<Record<SessionKind, number>> = { Q: 0.0175, SQ: 0.011 };
 const QUALI_EVO_END = 180;
 /**
  * Goma que deja cada vuelta en libres (en clasificación y carrera, 0,0009). Los libres tienen ahora ~60 vueltas por
@@ -209,7 +209,7 @@ const BREATHE_GAP = 1.0, BREATHE_MIN = 0.25, LAT_BREATHE = 0.25, BREATHE_AHEAD =
  * coste de salirse de la trazada, el duro usable en pistas frías y el modo adelantamiento con coste de batería, el
  * volumen de adelantamientos siga calibrado a 2026 (~55-65 en seco).
  */
-const PASS_LAT = 0.16;
+const PASS_LAT = -0.22;
 /**
  * Adelantar como maniobra (fase 3). El que ataca se pone a un lado (MV_SIDE, fracción de la media anchura): por el
  * interior de la curva o, si el de delante le cierra el interior, por fuera. El de delante se aparta un poco hacia el
@@ -244,7 +244,7 @@ const MOVE2_P = 0.06, MOVE2_HARD = 2.5, MOVE2_AT = 0.35, MOVE2_TO = 0.15, MOVE2_
  */
 const MV_SIDE_HARD = 0.3, MV_YIELD_HARD = 0.15, MV_COVER_HARD = 0.62, COVER_LATE = 0.3, SQUEEZE_GAP = 2.9, SQUEEZE_K = 0.28, SQUEEZE_AFTER = 0.6;
 /** Ventaja de más (s/vuelta) que necesita el que ataca si el de delante cierra la puerta. */
-const DEFEND_T = 0.35;
+const DEFEND_T = 0.48;
 /**
  * Riesgo en la pelea (orden del muro, solo tus pilotos; la IA y el automático van siempre en limpio). En duro:
  *  - atacando, frena más tarde y se tira con menos hueco: RISK_ADV s/vuelta más de ventaja y vuelve a intentarlo antes
@@ -1371,11 +1371,14 @@ export class Session {
   fightMode(c: Car): "normal" | "defend" | "yield" {
     const f = c.player && !this.autoPlayers ? c.fight ?? "auto" : "auto";
     if (f !== "auto") return f;
-    if (this.laps - this.lapsDone(c) <= 8) {
-      const ord = this.lapOrder[this.leaderLap];
-      const pos = ord ? ord.indexOf(c.id) : -1;
-      if (pos >= 0 && pos < 10) return "defend";
-    }
+    const ord = this.lapOrder[this.leaderLap];
+    const pos = ord ? ord.indexOf(c.id) : -1;
+    const left = this.laps - this.lapsDone(c);
+    // últimas 10 vueltas: todo el top 10 defiende puntos
+    if (left <= 10 && pos >= 0 && pos < 10) return "defend";
+    // cabeza y podio (P1-P3): defienden la posición en pista desde que se estabiliza la salida,
+    // siempre que aún tengan goma (no se inmolan con gomas muertas ante estrategias distintas)
+    if (pos >= 0 && pos < 3 && this.lapsDone(c) >= 2 && c.tyres && setWear(c.tyres) < COMPOUNDS[c.tyres.c].cliff) return "defend";
     return "normal";
   }
 
@@ -2546,6 +2549,9 @@ export class Session {
       const pr = clamp((0.9 - (c.chased ?? 99)) / 0.7, 0, 1);
       p *= 1 + pr * 3.2 * (1.25 - c.d.regularidad / 100);
       if (c.aheadId >= 0 && c.followGap < 0.6) p *= 1.25;
+    } else if (isQualiKind(this.kind)) {
+      // en clasificación se apura el límite en las vueltas lanzadas (~10 % de sesiones con roja)
+      p *= 1.15;
     }
     if (!this.rng.chance(p * m.cornerSens * 2)) return;
     const r = this.rng.next();

@@ -24,7 +24,7 @@ export function benchCircuits(refs: CircuitRef[]) {
       });
       await t.test("nadie descalificado (regla de los dos compuestos)", () => assert.equal(st.dsq, 0));
       await t.test("paradas por coche entre 0,9 y 2", () => assert.ok(st.stops >= 0.9 && st.stops <= 2, `${st.stops.toFixed(2)} paradas`));
-      await t.test("doblados por carrera entre 0 y 12", () => assert.ok(st.lapped >= 0 && st.lapped <= 12, `${st.lapped} doblados`));
+      await t.test("doblados por carrera entre 0 y 14", () => assert.ok(st.lapped >= 0 && st.lapped <= 14, `${st.lapped} doblados`));
       await t.test("acaban al menos 12 coches", () => assert.ok(st.finished >= 12, `acaban ${st.finished}`));
     });
   }

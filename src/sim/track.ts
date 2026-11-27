@@ -456,14 +456,14 @@ export function buildTrack(def: any): Track {
   const mainDetect = runs[0] ? (runs[0].start - 1 + N) % N : N - 1;
   ms[mainDetect].moDetect = true;
 
-  // calle de boxes: longitud para que la pérdida (sin la parada) sea la real del circuito
+  // calle de boxes: longitud para que la pérdida neta en carrera (con parada de 2,4 s y tramo saltado a ~1,07× pole) sea la del circuito
   const pitLim = def.boxes.limite / 3.6;
   let tPortion = 0;
   for (let i = 0; i < n; i++) {
     const s = i * ds;
     if (s >= length - def.boxes.entrada || s < def.boxes.salida) tPortion += base.dt[i];
   }
-  const laneLength = (def.boxes.perdida - 2.4 - 1.0 + tPortion) * pitLim;
+  const laneLength = (def.boxes.perdida - 2.4 + tPortion * 1.07) * pitLim;
   const urban = urbanLevel(def);
   const street = urban >= 1;
   const { wReal, wr } = widthProfile(def, n, ds, urban);
