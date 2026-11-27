@@ -162,6 +162,6 @@ impacto (detalle y líneas de código en el informe):
   pasada de `calibra-pole.mjs`, que mide tras la primera). Las de lluvia y sprint siguen siendo las de `base-2026-11b/`.
 
 Pendiente (en el informe, «Pendiente»; medido otra vez con `base-2026-11d/`): el azar en cabeza (la pole gana el 39 %);
-el duro, que lo usa casi todo el mundo (94 %; el blando, 20 %); Hungaroring, algo bajo de adelantamientos; y la
-temperatura del asfalto de Suzuka, que las fuentes de 2026 no aclaran. (Silverstone no tenía error de pole: era una Q3
-mojada en la media; Mónaco, recalibrado.)
+el duro, que lo usa casi todo el mundo (94 %; el blando, 20 %); y la temperatura del asfalto de Suzuka, que las
+fuentes de 2026 no aclaran. (Silverstone no tenía error de pole: era una Q3 mojada en la media; Mónaco y Hungaroring,
+recalibrados.)

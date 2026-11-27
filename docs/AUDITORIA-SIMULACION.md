@@ -561,7 +561,8 @@ unos 13 °C corta. No se cambia el clima con datos tan dispares.
   12 por carrera. Sigue siendo el más difícil: con 1-1,5 s/vuelta de ventaja se pasa un 10 % de las vueltas (en
   Silverstone, un 52 %), y hacen falta más de 2 s para tener opciones. Ya en la calibración original se quedaba en
   el 0,43 del objetivo.
-- **Hungaroring**, algo bajo en el mismo banco (44,5 frente a 57,6 de objetivo).
+- ~~**Hungaroring**, algo bajo en el mismo banco (44,5 frente a 57,6 de objetivo).~~ **Hecho:** umbral de 2,51 a 1,97
+  con el mismo método: 59,7 sin la primera vuelta (objetivo 57,6). Sigue por encima del de Silverstone (1,25).
 - **Suzuka:** confirmar la temperatura del asfalto con una fuente fiable antes de tocar su clima.
 
 ## Fuentes
