@@ -866,7 +866,7 @@ function setForPractice(sess: Session, car: Car, c: Compound): TyreSet | undefin
 export function makeRun(sess: Session, car: Car, kind: Run["kind"], c: Compound, laps: number, at = 0, setId?: string): Run | null {
   const set = setId ? car.e.sets.find((s) => s.id === setId) : kind === "quali" ? pickSet(car, c, true) : setForPractice(sess, car, c) ?? (kind === "long" ? pickSet(car, c, false) : undefined);
   if (!set) return null;
-  const fuel = kind === "long" ? Math.min(75, 12 + laps * sess.fuelPerLap * 1.1 + 25) : kind === "inst" ? 20 : QUALI_FUEL + laps * 2 * sess.fuelPerLap;
+  const fuel = kind === "long" ? Math.min(75, 12 + laps * sess.fuelPerLap * 1.1 + 25) : kind === "inst" ? 20 : kind === "test" ? 12 + laps * sess.fuelPerLap * 1.1 + 8 : QUALI_FUEL + laps * 2 * sess.fuelPerLap;
   return { kind, setId: set.id, pushLaps: laps, fuel, at };
 }
 
@@ -901,6 +901,16 @@ export function practiceProgram(sess: Session, car: Car): Run[] {
     add("qsim", "S", 2, r.range(12, 20));
     if (r.chance(0.6)) add("long", "M", r.int(5, 7), r.range(24, 32));
     add("qsim", "S", r.int(1, 2), r.range(38, 46));
+  }
+  // paquete aerodinámico nuevo en tu coche: el programa del viernes cambia tandas largas por pruebas de piezas
+  // (en un fin de semana normal, libres 1 y 2; en uno sprint, el único libre)
+  if (car.player && sess.pkgTest && sess.pkgTest !== "neumaticos" && (sess.kind === "FP1" || sess.kind === "FP2")) {
+    const longs = runs.filter((x) => x.kind === "long");
+    const swap = sess.pkgTest === "validar" ? longs : sess.kind === "FP1" ? longs.slice(0, 1) : [];
+    for (const x of swap) {
+      const t = makeRun(sess, car, "test", "M", Math.min(8, Math.max(5, x.pushLaps)), x.at);
+      if (t) runs[runs.indexOf(x)] = t;
+    }
   }
   for (let i = 1; i < runs.length; i++) runs[i].at = Math.max(runs[i].at ?? 0, (runs[i - 1].at ?? 0) + 60);
   return runs;

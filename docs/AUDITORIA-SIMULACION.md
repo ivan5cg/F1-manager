@@ -512,15 +512,50 @@ atrás se sigue ganando el 28 % (en 2026, el 10 %).
 pedía nada: seguía con el pinchazo hasta el final y le descalificaban por la regla de los dos compuestos (Spa, semilla
 4). Ahora monta el que haya, mejor de otro compuesto que el que llevaba.
 
-## Pendiente (26 de noviembre de 2026)
+## Medida tras los cambios de 2026 (27 de noviembre de 2026)
 
-- **El azar en cabeza** (punto 4 de arriba).
-- **El duro, ahora casi siempre** (91 % de los coches; el blando, 14 %). El objetivo de la auditoría era un 60-75 %. En
-  Spa sigue siendo poco (38 %). La raíz está en el modelo de temperatura: mide la energía de cada curva relativa a la
-  vuelta y no ve lo que exige cada circuito (Suzuka, Spa o Silverstone frente a Las Vegas o Mónaco). Por eso el tren
-  delantero va frío en casi todas partes y un solo coeficiente decide el duro en todo el calendario.
-- **Comprobar las temperaturas de asfalto de Shanghái y Suzuka** (13-23 °C en la carrera simulada) contra las reales de
-  2026. Si la pista real va más caliente, parte de lo del duro en frío se arregla en el clima del circuito.
+Tras #49 llegaron a main dos commits directos que cambian la carrera (aero activa X/Z, modo adelantamiento real,
+desarrollo ATR, la IA que pelea en duro y un ajuste de adelantamientos: `0f9cf4a` y `d19dfa8`) y el ATR del jugador
+(#50). Se volvió a pasar el mismo lote (`lote.mjs hoy seco 1-4`, 96 fines de semana) para ver dónde queda lo pendiente.
+Salida de los analizadores en `scripts/auditoria/base-2026-11d/`.
+
+| Métrica (carrera en seco) | #49 (`base-2026-11c`) | Ahora (`base-2026-11d`) | Real 2026 |
+|---|---|---|---|
+| Gana la pole | 44 % | 39 % | 71 % |
+| Gana desde P4 o más atrás | 29 % | 24 % | 10 % |
+| Gana el que lidera tras la vuelta 1 | 46 % | 49 % | — |
+| Cambios de líder por carrera (en pista / boxes) | 3,48 (1,42 / 1,98) | 3,04 (1,42 / 1,57) | — |
+| Usa el duro / el blando (todas) | 91 / 14 % | 94 / 20 % | — |
+| Duro en Shanghái / Suzuka / Spa / Las Vegas | 73 / 64 / 38 / 63 % | 67 / 69 / 67 / 80 % | medio y duro |
+| Adelantamientos por carrera (sin la primera vuelta) | 74 | 81 | (calibrado así) |
+| Doblados por carrera (media / mediana) | 5,5 / 6 | 5,7 / 6 | 6,0 / 8 |
+| Pole − objetivo (mediana en seco) | +0,02 s | +0,02 s | 0 |
+| Sprint: gana la pole | 55 % | 77 % | — |
+
+- **El azar en cabeza sigue igual o algo peor** (la pole gana el 39 %). Cuando no gana la pole, el ganador se le pone
+  delante en boxes el 44 % de las veces (antes el 30 %) y en pista el 29 % (antes el 44 %): ahora pesa más el ciclo de
+  paradas que los adelantamientos. Mercedes gana el 63 % (real 57 %).
+- **El duro, aún más usado** (94 %). En Spa sube del 38 al 67 %, que era lo que faltaba allí, pero en el resto ya casi
+  todos lo llevan.
+- **Adelantamientos:** suben de 74 a 81 por carrera. Mónaco baja a 3,3 (antes 7,3).
+- Silverstone tiene un error de pole de +2,6 s (igual que en `base-2026-11c`), que el resto de circuitos no tiene.
+  Habría que mirarlo con `pole.ts silverstone 1-6`.
+
+**Temperatura del asfalto en Shanghái y Suzuka.** La simulación da 13-23 °C en carrera. Lo publicado de 2026 no se
+pone de acuerdo: Honda da 16 °C de aire y 24 °C de asfalto en Shanghái (nublado) y 16/36 °C en Suzuka (nublado);
+Ferrari.com, 27/38 °C en Shanghái y 14/19 °C en Suzuka. Shanghái cuadra con Honda; Suzuka, según la fuente, va bien o
+unos 13 °C corta. No se cambia el clima con datos tan dispares.
+
+## Pendiente (27 de noviembre de 2026)
+
+- **El azar en cabeza** (punto 4 de la segunda tanda y la tabla de arriba): la pole gana el 39 %, desde P4+ el 24 %. Ahora
+  lo que más la tumba es el ciclo de paradas entre los de cabeza (`repite.ts`, `cabeza.js`).
+- **El duro, casi siempre** (94 % de los coches; el blando, 20 %). La raíz sigue siendo la misma: el modelo de
+  temperatura mide la energía de cada curva relativa a la vuelta y no ve lo que exige cada circuito, así que el tren
+  delantero va frío en casi todas partes y un solo coeficiente (`COLD_LOSS`) decide el duro en todo el calendario.
+- **Silverstone:** +2,6 s de error de pole.
+- **Mónaco:** 3,3 adelantamientos por carrera; habría que recalibrar su umbral.
+- **Suzuka:** confirmar la temperatura del asfalto con una fuente fiable antes de tocar su clima.
 
 ## Fuentes
 

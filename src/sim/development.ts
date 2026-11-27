@@ -21,7 +21,141 @@ export interface DevPart {
   expect: number; // lo que se espera (unidades del área)
   real: number; // lo que rinde de verdad (no se ve hasta que llega)
 }
-export interface DevState { budget: number; parts: DevPart[] }
+export interface DevState {
+  budget: number;
+  parts: DevPart[];
+  /** Sistema de túnel de viento (temporadas desde noviembre de 2026): sin él, la aerodinámica va por piezas. */
+  aero?: AeroPlan;
+}
+
+// ------------------------------------------------------------------ túnel de viento y CFD (aerodinámica)
+//
+// La aerodinámica no se compra: cada periodo (3 rondas en el calendario corto, 4 en el completo) el equipo tiene las
+// horas de túnel y CFD que le da su cuota ATR, y las reparte entre cuatro proyectos (curva lenta, media y rápida y
+// eficiencia en recta). Al acabar el periodo sale un paquete que llega a la carrera siguiente. Lo que rinde de verdad
+// no se sabe: en los libres se mide (mejor cuantas más vueltas de prueba de piezas) y antes de la primera
+// clasificación se decide si se monta. La fabricación se lleva una parte fija del presupuesto (AERO_RESERVE).
+
+export type AeroBand = 0 | 1 | 2 | 3;
+export const AERO_BANDS = [
+  { name: "Curva lenta", short: "lenta", what: "tracción y frenada: Mónaco, Singapur, Hungría" },
+  { name: "Curva media", short: "media", what: "la mayoría de circuitos" },
+  { name: "Curva rápida", short: "rápida", what: "carga a alta velocidad: Silverstone, Suzuka, Spa" },
+  { name: "Eficiencia en recta", short: "recta", what: "menos resistencia: Monza, Las Vegas, Bakú" },
+];
+/** Lo que ganan en una temporada entera los paquetes de un equipo medio con ATR medio (agarre en un circuito medio;
+ *  lo mismo que DEV_RIVAL · 8, lo que da a los rivales). */
+export const AERO_SEASON = 0.48;
+/** Parte del presupuesto que se lleva fabricar los paquetes aerodinámicos. */
+export const AERO_RESERVE = 0.4;
+/** Paquetes que salen mal: rinden poco o incluso hacen el coche más lento. */
+export const AERO_BAD = 0.12;
+/** Eficiencia en recta: unidades de resistencia por unidad de agarre (iguales en un circuito medio; ver rendimiento.ts). */
+export const DRAG_PER_GRIP = 2.8;
+
+export type TestProgram = "validar" | "equilibrado" | "neumaticos";
+export const TEST_PROGRAMS: Record<TestProgram, { name: string; what: string }> = {
+  validar: { name: "Validar el paquete", what: "Las tandas largas del viernes se dedican a comparar piezas: sabrás bien lo que da, pero llegarás con menos datos de neumáticos." },
+  equilibrado: { name: "Equilibrado", what: "Una tanda larga para el paquete y el resto, como siempre." },
+  neumaticos: { name: "Priorizar neumáticos", what: "Casi no se prueba: lo que da el paquete se sabrá con mucho error." },
+};
+
+export interface AeroPkg {
+  period: number;
+  ready: number; // ronda (índice) en la que llega
+  split: number[]; // reparto de las horas (4, suma 1)
+  atr: number; // cuota ATR con la que se hizo
+  expect: number; // lo que esperan tus ingenieros (agarre en un circuito medio)
+  real: number; // lo que da de verdad (puede ser negativo)
+  /** Libres: programa elegido, vueltas de prueba de piezas (y el resto de vueltas de libres), lo medido y su error. */
+  programa?: TestProgram;
+  laps?: number;
+  otherLaps?: number;
+  medido?: number;
+  sigma?: number;
+  /** ¿Se monta? Sin decidir, va en el coche (en los libres se prueba). */
+  montar?: boolean;
+}
+export interface AeroPlan {
+  /** Fabricación de los paquetes del año (M, fijo al empezar). */
+  reserva: number;
+  /** Reparto de las horas de cada periodo (el último que se tocó vale para los siguientes). */
+  reparto: Record<number, number[]>;
+  pkgs: AeroPkg[];
+}
+
+/** Rondas por periodo de túnel. */
+export const aeroPeriodLen = (cal: number) => (cal <= 9 ? 3 : 4);
+export const aeroPeriodOf = (round: number, cal: number) => Math.floor(round / aeroPeriodLen(cal));
+/** Ronda (índice) en la que llega el paquete de un periodo (o null si cae fuera del calendario). */
+export function aeroPkgRound(period: number, cal: number): number | null {
+  const r = (period + 1) * aeroPeriodLen(cal);
+  return r < cal ? r : null;
+}
+/** Paquetes que caben en la temporada. */
+export const aeroPkgCount = (cal: number) => Math.max(0, Math.ceil(cal / aeroPeriodLen(cal)) - 1);
+export const DEFAULT_SPLIT = [0.25, 0.25, 0.25, 0.25];
+/** Reparto vigente en un periodo: el suyo o el último anterior. */
+export function splitAt(a: AeroPlan, period: number): number[] {
+  for (let p = period; p >= 0; p--) if (a.reparto[p]) return a.reparto[p];
+  return DEFAULT_SPLIT;
+}
+export function newAeroPlan(budget: number): AeroPlan {
+  return { reserva: Math.round(budget * AERO_RESERVE), reparto: {}, pkgs: [] };
+}
+/** Lo que se espera del paquete de un periodo (agarre en un circuito medio). devK: ritmo del director técnico (1 medio). */
+export function aeroExpect(cal: number, atr: number, devK: number): number {
+  const n = aeroPkgCount(cal);
+  if (!n) return 0;
+  const seasonScale = cal > 9 ? 1 : (cal - 1) / 8;
+  return (AERO_SEASON * seasonScale * devK * atrMult(atr)) / n;
+}
+/** Hace el paquete de un periodo ya terminado (siempre el mismo para la misma semilla). */
+export function makeAeroPkg(a: AeroPlan, period: number, cal: number, seed: number, atr: number, devK = 1, realK = devK): AeroPkg | null {
+  const ready = aeroPkgRound(period, cal);
+  if (ready === null) return null;
+  const r = new Rng(((seed * 2654435761) ^ (period * 7919 + 0xa3c5)) >>> 0);
+  const expect = aeroExpect(cal, atr, devK);
+  const f = r.chance(AERO_BAD) ? r.range(-0.5, 0.4) : clamp(r.gauss(1.02, 0.15), 0.75, 1.35);
+  return { period, ready, split: [...splitAt(a, period)], atr, expect, real: expect * f * (realK / Math.max(0.01, devK)) };
+}
+/** Error de la medida en libres (agarre): sin vueltas de prueba de piezas, ±0,11 s (lo que se intuye del resto de
+ *  vueltas); con unas 16 (programa equilibrado), ±0,05 s; con ~40 (validar), ±0,035 s. */
+export function aeroSigma(laps: number, otherLaps = 0): number {
+  return 0.16 / Math.sqrt(1 + (laps + 0.02 * otherLaps) / 2) / 0.98;
+}
+/** Lo medido en libres (siempre lo mismo para el mismo paquete y las mismas vueltas). */
+export function measurePkg(p: AeroPkg, seed: number): void {
+  const sigma = aeroSigma(p.laps ?? 0, p.otherLaps ?? 0);
+  const r = new Rng(((seed * 40503) ^ (p.period * 9973 + 0x51ed)) >>> 0);
+  p.sigma = sigma;
+  p.medido = p.real + r.gauss(0, sigma);
+}
+/**
+ * Las horas del último periodo (que ya no dan paquete en la temporada) van al coche del año siguiente: lo que se
+ * espera de un paquete con la cuota ATR de ese periodo y el ritmo del director técnico (agarre en un circuito medio).
+ * Vale para todos los equipos; al pasar de año se compara con la media, así que lo que cuenta es la diferencia de
+ * ATR (el que acabó peor trabaja más horas para el coche nuevo).
+ */
+export function nextYearAero(cal: number, atr: number, devK = 1): number {
+  return aeroExpect(cal, atr, devK);
+}
+/** Ronda (índice) con la que empieza el último periodo de túnel (el que trabaja para el año siguiente). */
+export const lastAeroPeriodRound = (cal: number) => (Math.ceil(cal / aeroPeriodLen(cal)) - 1) * aeroPeriodLen(cal);
+
+/** Lo que aportan los paquetes montados hasta una ronda: agarre por tipo de curva y resistencia (negativa: menos). */
+export function aeroGains(a: AeroPlan | undefined, round: number): { curvas: [number, number, number]; drag: number; total: number } {
+  const curvas: [number, number, number] = [0, 0, 0];
+  let drag = 0, total = 0;
+  for (const p of a?.pkgs ?? []) {
+    if (p.ready > round || p.montar === false) continue;
+    // repartido entre los tipos de curva: concentrar da más donde se concentra (en un circuito medio, lo mismo)
+    for (let i = 0; i < 3; i++) curvas[i] += 3 * p.real * p.split[i];
+    drag -= p.real * p.split[3] * DRAG_PER_GRIP;
+    total += p.real;
+  }
+  return { curvas, drag, total };
+}
 
 export const DEV_AREAS: Record<DevArea, { name: string; what: string; unit: string }> = {
   aero: { name: "Aerodinámica", what: "más agarre en curva", unit: "agarre" },
@@ -55,7 +189,7 @@ export function devBudget(leftOfCap: number | null): number {
 }
 export const newDev = (leftOfCap: number | null): DevState => ({ budget: devBudget(leftOfCap), parts: [] });
 export const devSpent = (d: DevState) => d.parts.reduce((a, p) => a + p.cost, 0);
-export const devLeft = (d: DevState) => Math.round((d.budget - devSpent(d)) * 10) / 10;
+export const devLeft = (d: DevState) => Math.round((d.budget - devSpent(d) - (d.aero?.reserva ?? 0)) * 10) / 10;
 
 /** Lo que se espera de una pieza (con el ritmo de desarrollo del equipo, 1 = medio). aeroK: el multiplicador ATR de
  *  túnel de viento y CFD del equipo cuando se pide (solo cuenta en aerodinámica). */
@@ -70,7 +204,8 @@ export function orderPart(d: DevState, area: DevArea, size: DevSize, round: numb
   const id = d.parts.length ? Math.max(...d.parts.map((p) => p.id)) + 1 : 1;
   const r = new Rng(((seed * 2654435761) ^ (id * 40503 + 0x9e37)) >>> 0);
   const expect = devExpect(area, size, devK, aeroK);
-  const f = r.chance(0.25) ? r.range(0.2, 0.7) : clamp(r.gauss(1.02, 0.15), 0.75, 1.35);
+  // con el sistema de túnel, las piezas salen mal tan a menudo como los paquetes (AERO_BAD); antes, una de cada cuatro
+  const f = r.chance(d.aero ? AERO_BAD : 0.25) ? r.range(0.2, 0.7) : clamp(r.gauss(1.02, 0.15), 0.75, 1.35);
   // el director técnico puede ser mejor o peor de lo que decía su informe (realK frente a devK)
   const p: DevPart = { id, area, size, cost: sz.cost, ordered: round, ready: round + sz.delay, expect, real: expect * f * (realK / Math.max(0.01, devK)) };
   d.parts.push(p);
@@ -87,13 +222,20 @@ export function devGains(d: DevState | undefined, round: number, works: boolean)
 /** El equipo del jugador con sus piezas montadas. */
 export function applyDev(t: TeamDef, d: DevState | undefined, round: number): TeamDef {
   const g = devGains(d, round, isWorks(t));
-  if (!g.aero && !g.motor && !g.fiab) return t;
-  return { ...t, agarre: t.agarre + g.aero, potencia: t.potencia + g.motor, consumo: (t.consumo ?? 1) * (1 - g.fuel), fiabilidad: t.fiabilidad * (1 - g.fiab) };
+  const a = aeroGains(d?.aero, round);
+  if (!g.aero && !g.motor && !g.fiab && !a.total) return t;
+  const cv = t.curvas ?? [0, 0, 0];
+  return {
+    ...t, agarre: t.agarre + g.aero, potencia: t.potencia + g.motor, consumo: (t.consumo ?? 1) * (1 - g.fuel), fiabilidad: t.fiabilidad * (1 - g.fiab),
+    ...(a.total ? { curvas: [cv[0] + a.curvas[0], cv[1] + a.curvas[1], cv[2] + a.curvas[2]] as [number, number, number], resistencia: t.resistencia + a.drag } : {}),
+  };
 }
 
 // ------------------------------------------------------------------ desarrollo asimétrico de rivales (equipo real / ATR)
 
 export interface RivalPackage {
+  /** Lo midieron mal en libres y no lo montan. */
+  pulled?: boolean;
   teamId: string;
   team: string;
   round: number; // ronda (índice >= 1) en la que se estrena
@@ -136,7 +278,13 @@ const rivalCarLevel = (t: TeamDef) => t.agarre + 0.4 * t.potencia - 0.3 * t.resi
  * de la revisión de mitad de año (a 30 de junio en la real): la clasificación tras `mid.round` carreras, que vale
  * desde esa ronda (índice) hasta el final. Un equipo que no está en el orden cuenta como el último.
  */
-export interface AtrPlan { start: string[]; mid?: { round: number; order: string[] } }
+export interface AtrPlan {
+  start: string[];
+  mid?: { round: number; order: string[] };
+  /** Temporadas con el túnel de viento del jugador: los rivales también miden sus paquetes y no montan los malos
+   *  (y salen mal menos a menudo: AERO_BAD). */
+  v2?: boolean;
+}
 
 /** Ronda (índice) de la revisión de mitad de año: tras ~el 45 % del calendario (Austria, la 11.ª de 24); sin ella en
  *  calendarios de menos de 4 carreras. */
@@ -234,11 +382,20 @@ export function rivalDevAt(base: TeamDef[], seed: number, round: number, totalRo
       const pkgR = rng.int(lo, hi);
       prevR = pkgR;
       const expect = totalAeroExp * 0.8 * weights[i] * kAt(pkgR);
-      const f = rng.chance(0.22) ? rng.range(0.25, 0.65) : clamp(rng.gauss(1.03, 0.18), 0.72, 1.42);
+      let f = atrPlan.v2
+        ? (rng.chance(AERO_BAD) ? rng.range(-0.5, 0.4) : clamp(rng.gauss(1.03, 0.18), 0.72, 1.42))
+        : (rng.chance(0.22) ? rng.range(0.25, 0.65) : clamp(rng.gauss(1.03, 0.18), 0.72, 1.42));
+      let pulled = false;
+      if (atrPlan.v2) {
+        // lo miden en sus libres (con su propio azar, para no mover el resto) y no montan lo que sale negativo
+        const mr = new Rng(((seed * 2654435761) ^ hashId(`val:${t.id}:${i}`)) >>> 0);
+        const sigma = clamp(0.09 - (t.estrategia - 80) * 0.003, 0.03, 0.12) / 0.98;
+        if (expect * f + mr.gauss(0, sigma) <= 0) { f = 0; pulled = true; }
+      }
       const real = expect * f;
-      const verdict: RivalPackage["verdict"] = f < 0.7 ? "fallo" : f > 1.2 ? "salto" : "ok";
+      const verdict: RivalPackage["verdict"] = pulled || f < 0.7 ? "fallo" : f > 1.2 ? "salto" : "ok";
       if (pkgR <= rNow) aero += real;
-      if (pkgR === rNow) arrivals.push({ teamId: t.id, team: t.nombre, round: pkgR, area: "aero", expect, real, verdict });
+      if (pkgR === rNow) arrivals.push({ teamId: t.id, team: t.nombre, round: pkgR, area: "aero", expect, real, verdict, pulled });
     }
 
     // Unidad de potencia del motorista (oficial 100 %, cliente 55 %)

@@ -155,7 +155,9 @@ function sideView(st: Record<DevArea, St>, id: string, y = 0, fa = 6, ra = 14, d
 function devStates(d: DevState, round: number): { st: Record<DevArea, St>; when: Partial<Record<DevArea, number>> } {
   const st: Record<DevArea, St> = { aero: "", motor: "", fiab: "" };
   const when: Partial<Record<DevArea, number>> = {};
-  for (const p of d.parts) {
+  // con el túnel de viento, los paquetes aerodinámicos montados (o el que se prueba ese fin de semana) cuentan como piezas
+  const pk = (d.aero?.pkgs ?? []).filter((p) => p.montar !== false).map((p) => ({ area: "aero" as DevArea, ready: p.ready }));
+  for (const p of [...d.parts, ...pk]) {
     if (p.ready <= round) st[p.area] = "on";
     else { if (st[p.area] !== "on") st[p.area] = "wait"; when[p.area] = Math.min(when[p.area] ?? 99, p.ready); }
   }

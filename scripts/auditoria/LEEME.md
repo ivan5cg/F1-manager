@@ -56,7 +56,9 @@ npx tsx scripts/auditoria/desarrollo.ts 1-40 23
   todas las de otra). Las medias de ritmo, neumáticos o neutralizaciones apenas cambian, pero lo que dependa de la
   salida o del orden en cabeza (gana la pole, gana desde P4+, la sprint) medido antes de esa fecha está sesgado, y la
   referencia `base-2026-11/` también.
-- **Referencia actual:** `base-2026-11c/` (ver el punto 9 de «Estado»). La anterior, `base-2026-11b/` (26 de noviembre de 2026, con el punto 6 hecho y una semilla por circuito):
+- **Referencia actual:** `base-2026-11d/` (27 de noviembre de 2026, el código de main tras #50 y los commits de aero
+  activa y ATR; `lote.mjs hoy seco 1-4`): `seco.txt` (con `--por-circuito`), `cabeza.txt` y `equipos.txt`. La anterior,
+  `base-2026-11c/` (ver el punto 9 de «Estado»). La de antes, `base-2026-11b/` (26 de noviembre de 2026, con el punto 6 hecho y una semilla por circuito):
   `seco.txt` (`lote.mjs ref-seco seco 1-4`, con `--por-circuito`), `lluvia-agregado.txt` y `lluvia-sesiones.txt` (los
   tres lotes de lluvia de arriba, juntos), `sprint.txt` (`--formato=sprint`, semillas 1-2), `cabeza.txt` y
   `curvas-neumaticos.txt` (`deg.ts`).
@@ -159,5 +161,6 @@ impacto (detalle y líneas de código en el informe):
   `cabeza.txt`, `equipos.txt` (`equipos.mjs` y `carrera-equipos.mjs`), `curvas-neumaticos.txt` y `pole.txt` (la segunda
   pasada de `calibra-pole.mjs`, que mide tras la primera). Las de lluvia y sprint siguen siendo las de `base-2026-11b/`.
 
-Pendiente (en el informe, «Pendiente»): el azar en cabeza; el duro, que ahora lo usa casi todo el mundo (91 %; el blando,
-14 %); y comprobar si el asfalto de Shanghái y Suzuka está demasiado frío en el clima de esos circuitos.
+Pendiente (en el informe, «Pendiente»; medido otra vez con `base-2026-11d/`): el azar en cabeza (la pole gana el 39 %);
+el duro, que lo usa casi todo el mundo (94 %; el blando, 20 %); el error de pole de Silverstone (+2,6 s); los pocos
+adelantamientos de Mónaco (3,3); y la temperatura del asfalto de Suzuka, que las fuentes de 2026 no aclaran.

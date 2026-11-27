@@ -28,7 +28,7 @@ import market from "../../data/mercado-2026.json";
 import { buildTrack, Track } from "../sim/track";
 import type { TeamDef, DriverDef } from "../sim/session";
 import { buildGrid, GridChange, Market, PLAYER_TEAM_ID, costOf, trueTech } from "../sim/market";
-import { applyDev, applyGridDev, AtrPlan, atrAt, atrCarOrder, atrMidRound, atrOrderByPoints } from "../sim/development";
+import { applyDev, applyGridDev, AtrPlan, atrAt, atrCarOrder, atrMidRound, atrOrderByPoints, aeroPkgCount, aeroPkgRound, aeroPeriodLen, makeAeroPkg } from "../sim/development";
 import { type SeasonState, type SeatSwap, personId, teamStandings } from "../sim/season";
 
 /** Los 11 equipos reales (modo clásico y base del modo «crear equipo»). */
@@ -144,11 +144,12 @@ export function atrPlan(s: SeasonState): AtrPlan {
   const base = s.grid ?? BASE_TEAMS;
   const start = s.atrOrder?.length ? s.atrOrder : atrCarOrder(base, s.equipo ? [PLAYER_TEAM_ID] : []);
   const mid = atrMidRound(calendarOf(s).length);
-  if (mid === null || s.rounds.length < mid) return { start };
+  const v2 = s.dev?.aero ? { v2: true } : {};
+  if (mid === null || s.rounds.length < mid) return { start, ...v2 };
   // los asientos van en el orden de la parrilla (en «crear equipo», el tuyo al final)
   const seats = (s.equipo ? [...base, { ...base[0], id: PLAYER_TEAM_ID, pilotos: s.equipo.pilotos.map(() => base[0].pilotos[0]) }] : base) as TeamDef[];
   const pts = new Map(teamStandings({ ...s, rounds: s.rounds.slice(0, mid) }, seats).map((x) => [x.team.id, x.points]));
-  return { start, mid: { round: mid, order: atrOrderByPoints(pts, start) } };
+  return { start, mid: { round: mid, order: atrOrderByPoints(pts, start) }, ...v2 };
 }
 
 /** Tu cuota ATR (%) en una ronda. */
@@ -170,6 +171,24 @@ export function devContext(s: SeasonState): { left: number | null; pubK: number;
   }
   return { left: MARKET.techo - spent, pubK: pub / 0.06, realK: real / 0.06 };
 }
+/**
+ * Túnel de viento: hace los paquetes de los periodos ya terminados (al llegar a la ronda en que se estrenan). Devuelve
+ * true si ha hecho alguno (hay que guardar la temporada). Lo que se mide en libres y la decisión de montarlo van aparte.
+ */
+export function ensureAeroPkgs(s: SeasonState): boolean {
+  const a = s.dev?.aero;
+  if (!a) return false;
+  const cal = calendarOf(s).length, ctx = devContext(s);
+  let made = false;
+  for (let p = 0; p < aeroPkgCount(cal); p++) {
+    const ready = aeroPkgRound(p, cal);
+    if (ready === null || ready > s.round || a.pkgs.some((x) => x.period === p)) continue;
+    const pk = makeAeroPkg(a, p, cal, s.equipo ? (s.trueSeed ?? s.seed) : s.seed, myAtr(s, p * aeroPeriodLen(cal)), ctx.pubK, ctx.realK);
+    if (pk) { a.pkgs.push(pk); made = true; }
+  }
+  return made;
+}
+
 let CUR: SeasonState | null = null;
 /** Quién es un piloto del mundial de la temporada activa (con los que ya no corren). */
 export const person = (id: number) => who(CUR, id);

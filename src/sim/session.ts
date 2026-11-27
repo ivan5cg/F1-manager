@@ -3,6 +3,7 @@
 // tiempo que tardaría ÉL en ese minisector con su adherencia, potencia, resistencia y masa de ese
 // instante. Aire sucio, rebufo, modo adelantamiento, tapones y adelantamientos salen de las
 // distancias reales entre coches.
+import type { TestProgram } from "./development";
 import { Rng, clamp } from "./rng";
 import { caracterOf, type Caracter } from "./caracter";
 import { Track, Minisector, msTimeAtGrip, MIN_MASS, REF_CAR } from "./track";
@@ -376,7 +377,7 @@ export interface Entrant {
 export type Loc = "garage" | "lane_out" | "track" | "lane_in" | "pit" | "out" | "fin";
 export type RunPhase = "out" | "push" | "cool" | "in" | "long";
 export interface Run {
-  kind: "inst" | "qsim" | "long" | "quali";
+  kind: "inst" | "qsim" | "long" | "quali" | "test"; // test: prueba de piezas (vueltas a ritmo constante, sin datos de neumáticos)
   setId: string;
   pushLaps: number; // vueltas lanzadas (qsim/quali) o de tanda (long)
   fuel: number; // kg
@@ -490,6 +491,8 @@ export interface Car {
   elimPart?: number;
   qPlan?: { part: number; deps: number[]; urgentAt?: number; banker?: boolean };
   sessionLaps: number;
+  /** Vueltas de prueba de piezas en libres (validan el paquete aerodinámico del jugador). */
+  testLaps: number;
   pitWhy?: string;
   stintW0: number; // desgaste del juego al montarlo
   stintL0: number; // vueltas que llevaba
@@ -627,6 +630,8 @@ export interface SessionOptions {
   moral?: Record<number, number>;
   /** Rivalidades de la temporada: [coche, coche, intensidad de 0 a 1]. */
   rivals?: [number, number, number][];
+  /** Libres con un paquete aerodinámico nuevo en tu coche: el programa del equipo para probarlo (ver development.ts). */
+  pkgTest?: TestProgram;
 }
 
 /** Una tanda larga de libres, resumida: ritmo medio sin combustible y caída por vuelta. */
@@ -701,6 +706,7 @@ export class Session {
   partT = 0; // tiempo transcurrido en la parte
   inBreak = 0; // segundos de descanso entre partes
   sprintWeekend: boolean;
+  pkgTest?: TestProgram;
   leaderId = -1;
   secStart: number[]; // primer minisector de cada sector
   secBest = [Infinity, Infinity, Infinity]; // mejores sectores de la sesión
@@ -805,6 +811,7 @@ export class Session {
     this.rubber = opt.rubber;
     this.hidden = opt.hidden;
     this.sprintWeekend = opt.sprintWeekend;
+    this.pkgTest = opt.pkgTest;
     this.lapRefRace = this.track.refLap;
     this.tRef = this.track.ms.map((m) => msTimeAtGrip(m, 1));
     {
@@ -897,7 +904,7 @@ export class Session {
         ...this.carPace(d.ritmo, team, e.form ?? 0),
         wearMult: team.desgaste * (1.18 - d.neumaticos * 0.002),
         slowPuncture: false, autoPush: !e.player, autoErs: true, auto: true, gapWant: 2.5,
-        queue: [], eliminated: false, sessionLaps: 0, stintW0: 0, stintL0: 0, learnedLap: -99, lastImpede: -1,
+        queue: [], eliminated: false, sessionLaps: 0, testLaps: 0, stintW0: 0, stintL0: 0, learnedLap: -99, lastImpede: -1,
         secCur: [NaN, NaN, NaN], secLast: [NaN, NaN, NaN], secBest: [Infinity, Infinity, Infinity], lastLapValid: true, bestTyreByPart: [], bestSecs: [], bestSecsByPart: [], bestWaterByPart: [], stintLog: [], puKm: 0,
       };
       const su = opt.setup?.cars[e.id];
@@ -2310,7 +2317,7 @@ export class Session {
     c.lapW0 = this.avgWater();
     c.lapValid = true;
     // fase siguiente
-    if (run.phase === "out") run.phase = run.kind === "long" ? "long" : run.kind === "inst" ? "in" : "push";
+    if (run.phase === "out") run.phase = run.kind === "long" || run.kind === "test" ? "long" : run.kind === "inst" ? "in" : "push";
     else if (run.phase === "push") {
       const lapT = c.lapTimes[c.lapTimes.length - 1] ?? this.track.refLap;
       // sin un tiempo que valga y con reloj para una de enfriamiento y otra lanzada: se queda fuera
@@ -2450,7 +2457,9 @@ export class Session {
     if (c.tyres) this.inspect(c, c.tyres);
     if (run && c.tyres) {
       c.tyres.laps++;
-      if (run.kind === "long" || run.lapsData.length >= 3) learnFromRun(this, c, run);
+      // la prueba de piezas no da datos de neumáticos (ritmo constante y poco combustible): valida el paquete
+      if (run.kind === "test") c.testLaps += run.lapsData.length;
+      else if (run.kind === "long" || run.lapsData.length >= 3) learnFromRun(this, c, run);
       if (run.kind === "long" && run.lapsData.length >= 4) this.recordLongRun(c, run.lapsData, run.fuel, c.tyres.c);
     }
     c.loc = "garage";

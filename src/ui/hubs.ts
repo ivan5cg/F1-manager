@@ -1,5 +1,5 @@
 import type { SessionSnapshot } from "../sim/snapshot";
-import { TEAMS, BASE_TEAMS, MARKET, CIRCUITS, ROUNDS, DRIVERS, GRID_CHANGES, getTrack, calendarOf, devContext, atrPlan, myAtr, gridOf, CALENDARS, circuitOf, devRounds, person, whoAt, useSeason } from "./data";
+import { TEAMS, BASE_TEAMS, MARKET, CIRCUITS, ROUNDS, DRIVERS, GRID_CHANGES, getTrack, calendarOf, devContext, atrPlan, myAtr, gridOf, ensureAeroPkgs, CALENDARS, circuitOf, devRounds, person, whoAt, useSeason } from "./data";
 import { rivalTechMult } from "../sim/market";
 import { objectivesFor, objectiveStatus } from "../sim/objectives";
 import { DEV_AREAS, DEV_SIZES, MOTOR_CAP, DevArea, DevSize, devLeft, devExpect, orderPart, newDev, isWorks, devGains, rivalDevAt, atrMult, atrMidRound } from "../sim/development";
@@ -25,6 +25,8 @@ import { headlines, portadaHtml, boardHtml } from "./prensa";
 import { moodPanel, syncMood, prensaHtml, wirePrensa } from "./vestuario";
 import { previaHtml, galaHtml, galaOf, trophyRoomHtml, hitosHtml } from "./ritual";
 import { devPlanoHtml, setupPlanoHtml } from "./planos";
+import { perfPanel, drawPerfChart } from "./rendimiento";
+import { tunnelHtml, wireTunnel, pkgWeekendHtml, wirePkgWeekend, settlePkg } from "./tunel";
 
 export interface Nav {
   home(): void;
@@ -257,6 +259,8 @@ export function seasonScreen(nav: Nav, s: SeasonState) {
   if (!s.dev && s.round === 0 && !s.rounds.length) { s.dev = newDev(devContext(s).left); saveSeason(s); }
   // objetivos de la directiva: según cómo era el coche frente a la parrilla al empezar
   if (!s.objetivos) { s.objetivos = objectivesFor(gridOf(s, 0).teams, s.playerTeam, calendarOf(s).length); saveSeason(s); }
+  // túnel de viento: el paquete del periodo que acaba de terminar
+  if (ensureAeroPkgs(s)) { saveSeason(s); useSeason(s); }
   const ds = driverStandings(s, DRIVERS.length);
   const ts = teamStandings(s, TEAMS);
   const ROUNDS_S = calendarOf(s);
@@ -302,6 +306,7 @@ export function seasonScreen(nav: Nav, s: SeasonState) {
         </div>`;
       }).join("")}</div>
     </div></div>
+    ${perfPanel(s)}
     <div class="panel"><div class="hd"><span class="t">Mundial de pilotos</span></div><div class="bd" style="padding:0">
       ${s.rounds.length ? `<canvas class="champchart" id="champchart"></canvas><div class="small dim" style="padding:0 10px 6px">Puntos acumulados ronda a ronda: los cinco primeros y tus pilotos (línea gruesa).</div>` : ""}
       <table class="tv">${ds.map((x, i) => {
@@ -326,11 +331,15 @@ export function seasonScreen(nav: Nav, s: SeasonState) {
   if (strip && nextCard) strip.scrollLeft = Math.max(0, nextCard.offsetLeft - 12);
   const cc = document.getElementById("champchart") as HTMLCanvasElement | null;
   if (cc) requestAnimationFrame(() => drawChampChart(cc, s, ROUNDS_S));
+  const pc = document.getElementById("perfchart") as HTMLCanvasElement | null;
+  if (pc) requestAnimationFrame(() => drawPerfChart(pc, s));
   document.querySelectorAll<HTMLElement>("[data-round]").forEach((el) => (el.onclick = () => { const r = s.rounds.find((x) => x.round === Number(el.dataset.round)); if (r) roundSheet(r, s.playerTeam, (s.hitos ?? []).filter((h) => h.year === yearOf(s))); }));
   if (!done) $("#go").onclick = () => {
     if (!s.weekend || s.weekend.round !== s.round + 1) {
       s.weekend = newWeekend(s.round + 1, circuitOf(s, ROUNDS_S[s.round]), TEAMS, s.seed * 1000 + s.round * 97 + 1);
       s.weekend.year = yearOf(s);
+      // paquete aerodinámico nuevo: el programa de libres para probarlo (el último elegido, o equilibrado)
+      if (s.dev?.aero?.pkgs.some((p) => p.ready === s.round)) s.weekend.pkgTest = s.dev.aero.pkgs.find((p) => p.ready === s.round)!.programa ?? "equilibrado";
       syncMood(s);
       // sanciones sin cumplir de la carrera anterior: puestos en esta parrilla (por nombre: el asiento puede cambiar)
       if (s.gridPens?.length) {
@@ -350,6 +359,7 @@ export function seasonScreen(nav: Nav, s: SeasonState) {
     if (ny) ny.onclick = () => offSeasonScreen(s, (next) => nav.nextSeason(next), () => nav.season());
   }
   wireDev(s, () => { const y = window.scrollY; seasonScreen(nav, s); window.scrollTo(0, y); });
+  wireTunnel(s, () => { const y = window.scrollY; seasonScreen(nav, s); window.scrollTo(0, y); });
   const sb = document.getElementById("swapbtn");
   if (sb) sb.onclick = () => swapSheet(s, () => { saveSeason(s); useSeason(s); seasonScreen(nav, s); });
   const en = document.getElementById("expnow");
@@ -372,9 +382,10 @@ function objectivesPanel(s: SeasonState, races: number, done: boolean): string {
 }
 
 // --------------------------------------------------------------- desarrollo
-// Lo que gana el coche, en tiempo por vuelta aproximado (un circuito medio, de 90 s): 1 de agarre son ~0,38 s y
-// 1 de potencia, ~0,15 s. Para la fiabilidad, cuánto bajan las averías.
-const AERO_S = 0.38, POWER_S = 0.15;
+// Lo que gana el coche, en tiempo por vuelta aproximado (un circuito medio, de 90 s): 1 de agarre son ~0,98 s y
+// 1 de potencia, ~0,22 s (los pesos de rendimiento.ts, ajustados a la clasificación del banco; antes, 0,38 y 0,15,
+// de antes de TEAM_SPREAD). Para la fiabilidad, cuánto bajan las averías.
+const AERO_S = 0.98, POWER_S = 0.22;
 const fmtS = (x: number) => `${x >= 0 ? "−" : "+"}${Math.abs(x).toFixed(2).replace(".", ",")} s`;
 function devGainText(area: DevArea, x: number): string {
   if (area === "aero") return `${fmtS(x * AERO_S)}/vuelta`;
@@ -393,7 +404,7 @@ function devPanel(s: SeasonState, team: TeamDef, cal: string[], done: boolean): 
     midR === null ? "" : atrNext === null ? `Se revisa con la clasificación de constructores tras el ${gp(midR - 1)}: cuanto peor vayas, más túnel.` : "Revisada a mitad de año con la clasificación de constructores."}`;
   const now = devGains(d, s.round, isWorks(team));
   const cap = isWorks(team) ? MOTOR_CAP.works : MOTOR_CAP.client;
-  const order = done ? "" : `<div class="devorder">${(Object.keys(DEV_AREAS) as DevArea[]).map((a) => `<div class="devrow"><div><b>${DEV_AREAS[a].name}</b><br><span class="small dim">${DEV_AREAS[a].what}${a === "motor" ? ` (tope de la temporada: ${devGainText("motor", cap)}${isWorks(team) ? "" : ", eres cliente"})` : ""}</span></div><div class="seg">${([1, 2, 3] as DevSize[]).map((z) => {
+  const order = done ? "" : `<div class="devorder">${(Object.keys(DEV_AREAS) as DevArea[]).filter((a) => !(d.aero && a === "aero")).map((a) => `<div class="devrow"><div><b>${DEV_AREAS[a].name}</b><br><span class="small dim">${DEV_AREAS[a].what}${a === "motor" ? ` (tope de la temporada: ${devGainText("motor", cap)}${isWorks(team) ? "" : ", eres cliente"})` : ""}</span></div><div class="seg">${([1, 2, 3] as DevSize[]).map((z) => {
       const sz = DEV_SIZES[z], ready = s.round + sz.delay, ok = left >= sz.cost && ready < cal.length;
       return `<button data-dev="${a}" data-size="${z}"${ok ? "" : " disabled"} title="${sz.name}: ${sz.cost} M, llega para el ${gp(ready)}">${sz.name}<br><span class="small">${sz.cost} M · ${devGainText(a, devExpect(a, z, ctx.pubK, aeroK))}</span></button>`;
     }).join("")}</div></div>`).join("")}</div>`;
@@ -409,8 +420,8 @@ function devPanel(s: SeasonState, team: TeamDef, cal: string[], done: boolean): 
     const byGain = rivals.slice().sort((a, b) => (b.aero * AERO_S + b.motor * POWER_S) - (a.aero * AERO_S + a.motor * POWER_S));
     const news = arrivals.map((p) => {
       const icon = p.area === "motor" ? "⚡" : p.verdict === "salto" ? "🚀" : p.verdict === "fallo" ? "⚠️" : "📦";
-      const label = p.area === "motor" ? "mejora de unidad de potencia" : p.verdict === "salto" ? "gran salto aerodinámico" : p.verdict === "fallo" ? "paquete aerodinámico que decepciona" : "paquete aerodinámico";
-      return `${icon} <b>${esc(p.team)}</b>: ${label} (${devGainText(p.area, p.real)})`;
+      const label = p.area === "motor" ? "mejora de unidad de potencia" : p.pulled ? "paquete aerodinámico que no funciona: no lo montan" : p.verdict === "salto" ? "gran salto aerodinámico" : p.verdict === "fallo" ? "paquete aerodinámico que decepciona" : "paquete aerodinámico";
+      return `${icon} <b>${esc(p.team)}</b>: ${label}${p.pulled ? "" : ` (${devGainText(p.area, p.real)})`}`;
     });
     const top = byGain.slice(0, 3).map((x) => `${esc(x.team)} (${fmtS(x.aero * AERO_S + x.motor * POWER_S)} · ATR ${x.atr}%)`);
     const tail = byGain.slice(-1)[0];
@@ -420,7 +431,7 @@ function devPanel(s: SeasonState, team: TeamDef, cal: string[], done: boolean): 
     </div>`;
   }
   return `<div class="panel"><div class="hd"><span class="t">Desarrollo del coche</span><span class="small">Quedan <b>${String(left).replace(".", ",")} M</b> de ${d.budget} M</span></div><div class="bd">
-    <div class="small" style="margin-bottom:6px">Pide piezas con el presupuesto de la temporada: las pequeñas y medianas tardan 2 rondas en llegar y las grandes, 3. Una de cada cuatro rinde menos de lo que esperaban tus ingenieros. ${cal.length > 1 ? atrText + " " : ""}${s.equipo ? "Los rivales traen paquetes discretos según su director técnico y su cuota ATR de túnel de viento (70–120 %)." : "Los rivales traen paquetes discretos a lo largo del año según su cuota ATR de túnel de viento (70–120 %): unos aciertan grandes saltos y otros tropiezan."}</div>
+    ${d.aero ? `${tunnelHtml(s, done)}<div class="small" style="margin:8px 0 6px;padding-top:6px;border-top:1px solid rgba(255,255,255,.08)">Motor y fiabilidad se compran con el presupuesto (la fabricación de los paquetes aerodinámicos ya se lleva ${d.aero.reserva} M): las piezas pequeñas y medianas tardan 2 rondas en llegar y las grandes, 3.</div>` : `<div class="small" style="margin-bottom:6px">Pide piezas con el presupuesto de la temporada: las pequeñas y medianas tardan 2 rondas en llegar y las grandes, 3. Una de cada cuatro rinde menos de lo que esperaban tus ingenieros. ${cal.length > 1 ? atrText + " " : ""}${s.equipo ? "Los rivales traen paquetes discretos según su director técnico y su cuota ATR de túnel de viento (70–120 %)." : "Los rivales traen paquetes discretos a lo largo del año según su cuota ATR de túnel de viento (70–120 %): unos aciertan grandes saltos y otros tropiezan."}</div>`}
     ${devPlanoHtml(d, s.round, (r) => (r < cal.length ? CIRCUITS[cal[r]].gp.replace("Gran Premio de ", "GP de ").replace(/ \(.*\)$/, "") : "después de la última carrera"))}
     ${now.aero || now.motor || now.fiab ? `<div class="small" style="margin-bottom:6px">Ya en el coche: ${[now.aero ? `aerodinámica ${devGainText("aero", now.aero)}` : "", now.motor ? `motor ${devGainText("motor", now.motor)}` : "", now.fiab ? `fiabilidad ${devGainText("fiab", now.fiab)}` : ""].filter(Boolean).join(" · ")}.</div>` : ""}
     ${order}
@@ -611,6 +622,8 @@ export function weekendScreen(nav: Nav, s: SeasonState, pending: SessionSnapshot
   if (!s.gp && !st.moral) { syncMood(s); saveSeason(s); }
   const def = CIRCUITS[st.circuitId];
   const track = getTrack(st.circuitId);
+  // tras los libres: lo medido del paquete aerodinámico nuevo (y la parrilla con o sin él)
+  if (!s.gp && settlePkg(s, new Weekend(st, track, TEAMS, s.playerTeam))) saveSeason(s);
   const wk = new Weekend(st, track, TEAMS, s.playerTeam);
   const team = TEAMS.find((t) => t.id === s.playerTeam)!;
   const next = wk.nextKind();
@@ -639,6 +652,7 @@ export function weekendScreen(nav: Nav, s: SeasonState, pending: SessionSnapshot
     </div></div>
     ${st.next === 0 && !pending ? previaHtml(s, st, outlook.find((o) => o.kind === "RACE")?.rain) : ""}
     ${tips.length ? `<div class="panel"><div class="hd"><span class="t">¿Y ahora qué?</span></div><div class="bd small">${tips.map((t) => `<div class="tip">${t}</div>`).join("")}</div></div>` : ""}
+    ${s.gp ? "" : pkgWeekendHtml(s, wk, !!pending)}
     ${next === "RACE" && !pending && !s.gp ? prensaHtml(s, st) : ""}
     <div class="panel"><div class="hd"><span class="t">Programa y previsión</span></div><div class="bd" style="padding:0">
       ${sessions.map((kind, i) => {
@@ -672,6 +686,7 @@ export function weekendScreen(nav: Nav, s: SeasonState, pending: SessionSnapshot
   wirePu(st, redraw);
   wirePrensa(s, st, redraw);
   wireSetup(wk, team, redraw);
+  if (!s.gp) wirePkgWeekend(s, wk, redraw);
   setBack(() => nav.season());
   $("#back").onclick = () => (s.gp ? nav.home() : nav.season());
   if (next && pending) $("#resume").onclick = () => nav.session(pending.kind, pending);

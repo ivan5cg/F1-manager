@@ -1901,21 +1901,24 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     });
   }
   function practiceSheet(c: Car) {
-    let type: "inst" | "qsim" | "long" = "long";
+    let type: "inst" | "qsim" | "long" | "test" = "long";
+    // paquete aerodinámico nuevo: también se puede salir a probarlo (vueltas que lo validan y no dan datos de gomas)
+    const pkg = !!sess.pkgTest;
     let laps = 8;
     let setId: string | undefined;
     const inGarage = c.loc === "garage";
     const draw = (el: HTMLElement) => {
       el.querySelector("#types")!.querySelectorAll("button").forEach((x) => x.classList.toggle("on", x.getAttribute("data-t") === type));
-      el.querySelector<HTMLElement>("#lapsbox")!.style.display = type === "long" ? "" : "none";
+      el.querySelector<HTMLElement>("#lapsbox")!.style.display = type === "long" || type === "test" ? "" : "none";
     };
-    const runName = (r: { kind: string; pushLaps: number }) => (r.kind === "long" ? `tanda de ${r.pushLaps} v` : r.kind === "qsim" ? "sim. de clasificación" : "instalación");
+    const runName = (r: { kind: string; pushLaps: number }) => (r.kind === "long" ? `tanda de ${r.pushLaps} v` : r.kind === "test" ? `prueba de piezas de ${r.pushLaps} v` : r.kind === "qsim" ? "sim. de clasificación" : "instalación");
     // lo que ya está programado para después (solo si el programa lo llevas tú)
     const queueHtml = () => (!c.auto && c.queue.length ? `<div class="small" style="margin:6px 0">Programado para después: ${c.queue.map((r, j) => { const st = c.e.sets.find((x) => x.id === r.setId); return `<span class="pill">${st ? tyreHtml(st.c) : ""} ${runName(r)} <button data-unq="${j}" class="x" title="Quitar">✕</button></span>`; }).join(" ")}</div>` : "");
     open(`<b class="up">Tanda de ${esc(c.d.nombre)}</b>
       <div class="small dim">Una tanda larga mide el desgaste real del compuesto y reduce el error de tus ingenieros. Gasta neumáticos: los juegos usados se pueden devolver tras la sesión.${inGarage ? "" : ` <span class="yellow">${esc(c.d.abrev)} está en pista: lo que elijas saldrá en cuanto vuelva al garaje.</span>`}${c.auto ? " Al programarla, el programa pasa a llevarlo tú." : ""}</div>
       <div id="qbox">${queueHtml()}</div>
-      <div class="seg" id="types"><button data-t="inst">Instalación</button><button data-t="qsim">Simulación de clasificación</button><button data-t="long">Tanda larga</button></div>
+      <div class="seg" id="types"><button data-t="inst">Instalación</button><button data-t="qsim">Simulación de clasificación</button><button data-t="long">Tanda larga</button>${pkg ? `<button data-t="test">Prueba de piezas</button>` : ""}</div>
+      ${pkg ? `<div class="small dim">Prueba de piezas: vueltas a ritmo constante para medir el paquete aerodinámico nuevo (cuantas más, mejor se sabe lo que da), pero no dan datos de neumáticos.</div>` : ""}
       <div id="lapsbox"><h2>Vueltas</h2><div class="seg" id="laps">${[5, 8, 12, 16].map((n) => `<button data-n="${n}" class="${n === laps ? "on" : ""}">${n}</button>`).join("")}</div></div>
       <h2>Juego <span class="dim small" style="text-transform:none">· el % es la goma que queda</span></h2>${setButtons(c, () => true)}
       <div class="btnrow" style="padding:0"><button data-close>Cancelar</button><button class="red" id="go" disabled>${inGarage ? "Salir" : "Programar"}</button></div>`, (el, close) => {
@@ -1930,7 +1933,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       }));
       el.querySelector<HTMLButtonElement>("#go")!.onclick = () => {
         const set = c.e.sets.find((s) => s.id === setId)!;
-        const run = makeRun(sess, c, type, set.c, type === "long" ? laps : type === "qsim" ? 2 : 1, 0, setId);
+        const run = makeRun(sess, c, type, set.c, type === "long" || type === "test" ? laps : type === "qsim" ? 2 : 1, 0, setId);
         // al coger tú el programa se descarta el que tenía preparado el equipo
         if (c.auto) { c.auto = false; c.queue = []; }
         if (!run) showToast("No puede salir ahora.", 2500);

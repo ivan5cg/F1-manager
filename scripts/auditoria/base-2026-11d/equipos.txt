@@ -1,0 +1,16 @@
+90 fines de semana secos
+equipo        clasif. %  carrera %  carrera/clasif.  modo medio  vueltas limpias
+mercedes          0.00      0.00             NaN        1.84              32
+ferrari           0.23      0.44            1.90        1.78              23
+redbull           0.33      0.43            1.29        1.81              22
+mclaren           0.51      0.42            0.83        1.73              18
+racingbulls       1.10      1.28            1.16        1.63              15
+audi              1.12      1.43            1.28        1.67              17
+alpine            1.17      1.57            1.35        1.67              19
+haas              1.41      1.53            1.09        1.78              19
+williams          2.85      2.54            0.89        1.69              22
+cadillac          3.29      2.89            0.88        1.64              19
+astonmartin       3.64      3.37            0.93        1.63              26
+92 carreras secas · doblados por carrera: media 5.74 mediana 6 · sin doblados 17 %
+carrera (% frente a Mercedes, tiempo total del mejor coche): mercedes 0.00 · mclaren 0.20 · ferrari 0.20 · redbull 0.23 · racingbulls 0.95 · alpine 0.99 · audi 0.99 · haas 1.10 · williams 1.41 · cadillac 1.58 · astonmartin 1.69
+doblados por equipo (total): {"williams":110,"cadillac":109,"astonmartin":105,"racingbulls":44,"audi":42,"alpine":47,"haas":57,"redbull":3,"mclaren":6,"ferrari":5}

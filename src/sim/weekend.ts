@@ -11,6 +11,7 @@ import { SessionSnapshot, snapshotConditions, applySnapshot } from "./snapshot";
 import type { RaceSummary } from "./season";
 import { PuState, autoFit, bestSpare, clonePu, fitUnit, newPu, puPenalty } from "./powerunit";
 import { SetupState, SessionSetup, newSetupState, carSetup } from "./setup";
+import type { TestProgram } from "./development";
 
 export interface WeekendState {
   round: number;
@@ -41,6 +42,10 @@ export interface WeekendState {
   memo?: { wins: Record<string, number>; myCareerWins: Record<string, number>; poles: Record<string, number>; winStreak: Record<string, number> };
   /** Puestos de sanción en la parrilla de la carrera que vienen de la anterior (una sanción sin cumplir). */
   gridPens?: Record<number, { places: number; why: string }>;
+  /** Paquete aerodinámico nuevo en tu coche: el programa de libres para probarlo y las vueltas que llevan tus pilotos
+   *  probándolo (test) y en el resto de tandas (other). */
+  pkgTest?: TestProgram;
+  pkgLaps?: { test: number; other: number };
 }
 
 /**
@@ -221,6 +226,7 @@ export class Weekend {
       year: this.st.year,
       moral: this.st.moral,
       rivals: this.st.rivals,
+      pkgTest: kind.startsWith("FP") ? this.st.pkgTest : undefined,
     });
     if (kind === "RACE") {
       for (const [id, p] of Object.entries(this.st.pu ?? {})) {
@@ -259,6 +265,7 @@ export class Weekend {
       year: this.st.year,
       moral: this.st.moral,
       rivals: this.st.rivals,
+      pkgTest: kind.startsWith("FP") ? this.st.pkgTest : undefined,
     });
     applySnapshot(sess, snap);
     return sess;
@@ -289,6 +296,10 @@ export class Weekend {
       // y las vueltas de la sprint afinan la estimación del reglaje
       for (const c of sess.cars) { const k = this.st.setup.teams[c.team.id]; if (k) k.laps += Math.round(c.sessionLaps * 0.5 || c.lapTimes.length * 0.5); }
       this.st.setup.locked = undefined;
+    }
+    if (sess.kind.startsWith("FP") && this.st.pkgTest) {
+      const pl = (this.st.pkgLaps ??= { test: 0, other: 0 });
+      for (const c of sess.cars) if (c.player) { pl.test += c.testLaps; pl.other += Math.max(0, c.sessionLaps - c.testLaps); }
     }
     if (sess.kind.startsWith("FP")) {
       // las vueltas de libres afinan lo que sabe cada equipo del reglaje
