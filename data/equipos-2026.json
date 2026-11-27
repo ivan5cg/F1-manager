@@ -54,6 +54,7 @@
   },
   {
    "id": "ferrari",
+   "ritmoCarrera": 0.21,
    "nombre": "Ferrari",
    "motor": "Ferrari",
    "color": "#E8002D",
@@ -105,6 +106,7 @@
   },
   {
    "id": "redbull",
+   "ritmoCarrera": 0.1,
    "nombre": "Red Bull Racing",
    "motor": "Red Bull Ford",
    "color": "#3671C6",
@@ -156,6 +158,7 @@
   },
   {
    "id": "mclaren",
+   "ritmoCarrera": -0.09,
    "nombre": "McLaren",
    "motor": "Mercedes",
    "color": "#FF8000",
