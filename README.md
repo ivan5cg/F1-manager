@@ -62,14 +62,35 @@ En la realidad, en 2026 el GP de Baréin no se corrió en Sakhir: se trasladó a
 
 - **Formato normal:** Libres 1, Libres 2, Libres 3, Clasificación (Q1 18', Q2 15', Q3 12'; caen 6 y 6; con tu equipo hay 24 coches y en Q1 caen 7) y Carrera.
 - **Formato sprint:** Libres 1, Clasificación sprint (SQ1 12', SQ2 10', SQ3 8'; medios en SQ1 y SQ2, blandos en SQ3), Sprint (unos 100 km: 21 vueltas en Singapur, 24 en Interlagos, 19 en Shanghái y Miami, 23 en Montreal, 17 en Silverstone y 24 en Zandvoort), Clasificación y Carrera.
-- **Desarrollo del coche** (en la pantalla de temporada): un presupuesto por temporada (40 M con un equipo real; en
-  «crea tu equipo», de 25 a 50 M según lo que quedó del techo de gasto) para pedir piezas de aerodinámica (agarre),
-  motor y eficiencia (potencia y algo menos de consumo, con un tope en la temporada más bajo si el motor es de
-  cliente) y fiabilidad (menos averías). Pequeñas (4 M) y medianas (8 M) tardan 2 rondas en llegar; grandes (14 M),
-  3. Una de cada cuatro rinde menos de lo esperado y el resto, entre algo menos y algo más; se decide con la semilla
-  de la temporada. Con un equipo real los rivales mejoran por su cuenta a un ritmo fijo (el mismo que da de media
-  gastar el presupuesto en aerodinámica); en «crea tu equipo» siguen evolucionando según su director técnico, y el
-  tuyo marca cuánto rinde cada M. Las temporadas empezadas antes de esto siguen como estaban.
+- **Rendimiento de los coches** (en la pantalla de temporada, encima del mundial): lo que le falta a cada coche frente al
+  más rápido en una vuelta de 1:30 (solo el coche: sin pilotos ni circuito), con lo ganado o perdido desde la ronda
+  anterior y desde la primera, y una gráfica ronda a ronda. Sale del coche con el que corre cada uno en cada gran
+  premio (tus paquetes y piezas, los de los rivales). `npx tsx scripts/rendimiento.ts [equipo|propio] [semilla]
+  [--completo] [--tunel[=lenta,media,rápida,recta]]` saca la misma tabla.
+- **Desarrollo del coche** (en la pantalla de temporada). Un presupuesto por temporada (40 M con un equipo real; en
+  «crea tu equipo», de 25 a 50 M según lo que quedó del techo de gasto) y las horas de túnel de viento y CFD:
+  - **La aerodinámica no se compra** (`src/sim/development.ts`, `src/ui/tunel.ts`). El año se parte en periodos (3
+    rondas en el calendario corto, 4 en el completo) y en cada uno tienes las horas que te da tu **cuota ATR**: del
+    70 % del primero de constructores del año anterior al 120 % del último, revisada a mitad de año. Las repartes entre
+    curva lenta, media y rápida y eficiencia en recta; al acabar el periodo sale un paquete que llega a la carrera
+    siguiente (el del último periodo va al coche del año que viene). Concentrar da más donde concentras: un paquete
+    de curva lenta vale mucho en Mónaco y poco en Monza. Lo que se espera de cada uno sube con el ATR (×0,84 a ×1,18)
+    y con tu director técnico. La fabricación se lleva el 40 % del presupuesto.
+  - **Se prueba en los libres.** Uno de cada ocho paquetes sale mal: da poco o hace el coche más lento. Antes de los
+    libres 1 eliges el programa: **validar** (las tandas largas del viernes pasan a ser pruebas de piezas: ±0,035 s
+    de error, pero llegas al domingo sabiendo peor cuánto gasta cada neumático), **equilibrado** (una tanda larga para
+    el paquete: ±0,05 s) o **priorizar neumáticos** (±0,11 s). Al simular los libres, el equipo lo cumple; jugándolos,
+    hay un tipo de tanda «Prueba de piezas». Antes de la clasificación ves lo medido y decides si se monta (desde
+    ahí, parque cerrado); si no decides, el equipo lo monta cuando lo medido es positivo. Lo que da de verdad se ve
+    tras correr con él. `npx tsx scripts/tunel.ts [circuito] [semilla] [equipo] [--sprint]` compara los tres programas.
+  - **Motor y fiabilidad** siguen por piezas con el presupuesto: pequeñas (4 M) y medianas (8 M) tardan 2 rondas en
+    llegar; grandes (14 M), 3; motor y eficiencia (potencia y algo menos de consumo, con un tope en la temporada más
+    bajo si el motor es de cliente) y fiabilidad (menos averías). Una de cada ocho rinde menos de lo esperado.
+  - **Los rivales** traen paquetes según su ATR (2 a 4 en la temporada, con aciertos y fallos), la evolución de su
+    motorista y algo de fiabilidad; en «crea tu equipo», además según su director técnico. También miden sus
+    paquetes: uno que sale mal no lo montan («En el paddock» lo cuenta).
+  - Las temporadas empezadas antes del túnel de viento siguen con la aerodinámica por piezas (una de cada cuatro
+    decepciona) y sus rivales como estaban.
 - **Objetivos de la directiva:** al empezar la temporada, dos según lo bueno que es tu coche frente a la parrilla
   (por ejemplo, «acabar entre los 5 primeros de constructores» y «subir 2 veces al podio»; con el peor coche,
   «puntuar en 2 carreras»). Se ven en la pantalla de temporada con cómo van, y se marcan cuando ya no se pueden

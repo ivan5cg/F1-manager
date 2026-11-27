@@ -4,11 +4,12 @@ import "./style.css";
 document.documentElement.dataset.tema = "grafito";
 import { TEAMS, CIRCUITS, ROUNDS, DRIVERS, getTrack, useSeason, devContext, CALENDARS, circuitOf, calendarOf } from "./data";
 import { applyMidSeason } from "./nextSeason";
-import { newDev } from "../sim/development";
+import { newDev, newAeroPlan } from "../sim/development";
 import { builderScreen, PLAYER_TEAM_ID } from "./teamBuilder";
 import { GP_SLOT, loadSeason, saveSeason, loadSession, clearSession, isParked, setActiveSlot, deleteSlot, initStore, roomyStorage, askPersist, slotList, loadPrefs, getActiveSlot } from "./store";
 import type { SessionSnapshot } from "../sim/snapshot";
 import { startScreen, seasonScreen, weekendScreen, resultsScreen, longRunsPanel, teamPickerScreen, Nav } from "./hubs";
+import { settlePkg } from "./tunel";
 import { sessionView } from "./sessionView";
 import { scenariosScreen } from "./scenarios";
 import { gpSetupScreen, gpSeason, gpWeekend, gpDoneScreen, gpPickOf, type GpPick } from "./grandPrix";
@@ -44,6 +45,8 @@ function finishSession(wk: Weekend, kind: SessionKind, sess: Session) {
   const st = wk.st;
   clearSession();
   wk.finish(sess);
+  // tras el último libre: lo medido del paquete aerodinámico nuevo y, si no lo has decidido, si se monta
+  if (!s.gp) settlePkg(s, wk);
   const gp = CIRCUITS[st.circuitId].gp;
   const sum = isRaceKind(kind) ? buildSummary(sess) : null;
   const rows0 = sess.results();
@@ -169,6 +172,8 @@ function newSeason(slot: number, s: SeasonState) {
   s.dev = newDev(devContext(s).left); // presupuesto de desarrollo de la temporada
   // temporadas siguientes: los objetivos del año pasado suben o bajan el presupuesto
   if (s.devBonus) s.dev.budget = Math.max(15, s.dev.budget + s.devBonus);
+  // la aerodinámica va por horas de túnel de viento (ATR) y paquetes que se validan en libres
+  s.dev.aero = newAeroPlan(s.dev.budget);
   // la primera partida: se pide al navegador que no borre los datos por su cuenta
   if (!slotList().some((x) => x.season)) askPersist();
   deleteSlot(slot);
