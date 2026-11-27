@@ -1371,11 +1371,13 @@ export class Session {
   fightMode(c: Car): "normal" | "defend" | "yield" {
     const f = c.player && !this.autoPlayers ? c.fight ?? "auto" : "auto";
     if (f !== "auto") return f;
-    if (this.laps - this.lapsDone(c) <= 8) {
-      const ord = this.lapOrder[this.leaderLap];
-      const pos = ord ? ord.indexOf(c.id) : -1;
-      if (pos >= 0 && pos < 10) return "defend";
-    }
+    const ord = this.lapOrder[this.leaderLap];
+    const pos = ord ? ord.indexOf(c.id) : -1;
+    if (this.laps - this.lapsDone(c) <= 8 && pos >= 0 && pos < 10) return "defend";
+    // el líder cierra la puerta toda la carrera (menos la primera vuelta): es la posición que más vale y en 2026 la
+    // pole ganó el 71 % de las carreras. Antes solo en las ocho últimas vueltas, y a la pole la pasaban en pista
+    // estando en cabeza en el 41 % de las carreras
+    if (pos === 0 && this.lapsDone(c) > 0) return "defend";
     return "normal";
   }
 
@@ -2620,6 +2622,11 @@ export class Session {
       this.log({ kind: "info", text: `🔁 ${a.d.abrev} deja pasar a ${c.d.abrev}`, carId: c.id });
       return;
     }
+    // órdenes de equipo: los equipos de la IA no dejan que sus pilotos se peleen; el de detrás mantiene la posición
+    // salvo que el equipo le abra paso (letPass, si es claramente más rápido). En 2026 la pole acabó delante de su
+    // compañero en 17 de 18 carreras; con los compañeros peleando libremente, el de la pole perdía con su compañero el
+    // 22 % de las que tenía Mercedes. Con tus pilotos decides tú (salvo simulando la carrera hasta el final).
+    if (a.team === c.team && isRaceKind(this.kind) && (!c.player || this.autoPlayers) && this.lapsDone(c) > 0) return;
     const lap1 = this.lapsDone(c) === 0;
     // recién adelantado: sale de la frenada fuera de la trazada y sin tracción, no puede devolverla enseguida
     if (c.passedBy && c.passedBy.id === a.id && this.t - c.passedBy.t < 7) return;
