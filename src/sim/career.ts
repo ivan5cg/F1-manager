@@ -11,12 +11,27 @@
 import { Rng, clamp } from "./rng";
 import type { TeamDef, DriverDef } from "./session";
 import type { SeatSwap } from "./season";
+import { carLevel, catchUpMult, aduoMult, atrMult, isWorks, DRAG_PER_GRIP } from "./development";
 
 export const FIRST_YEAR = 2026;
-/** Cuánto de la ventaja (o desventaja) del coche al acabar la temporada se conserva al año siguiente. */
+/** @deprecated Mantenido solo por compatibilidad: la evolución entre años ahora ocurre 100 % vía desarrollo de invierno. */
 export const CAR_CARRY = 0.65;
 /** Presupuesto de desarrollo de más (o de menos) por cada objetivo cumplido (o fallado), en M. */
 export const OBJ_BONUS = 6, OBJ_MALUS = 5;
+
+/** Plan de desarrollo en fábrica durante el invierno (entre la última carrera del año X y la primera del año Y). */
+export interface WinterPlan {
+  /** Reparto de horas de túnel de viento en invierno: [curva lenta, media, rápida, eficiencia en recta] (suma 1). */
+  aeroSplit: [number, number, number, number];
+  /** Enfoque de fábrica: [chasis y ritmo de carrera, unidad de potencia, fiabilidad] (suma 1). */
+  factoryFocus: [number, number, number];
+}
+export const DEFAULT_WINTER: WinterPlan = {
+  aeroSplit: [0.25, 0.25, 0.25, 0.25],
+  factoryFocus: [0.45, 0.35, 0.20],
+};
+
+export { carLevel };
 
 /** Lo que se guarda de cada temporada terminada. */
 export interface SeasonRecord {
@@ -138,17 +153,17 @@ export function f2Newcomer(year: number, rng: Rng, used: Set<string>, numbers: S
   return { ...d, ritmo: r(d.ritmo), regularidad: r(d.regularidad), neumaticos: r(d.neumaticos), lluvia: r(d.lluvia), ataque: r(d.ataque), defensa: r(d.defensa), salida: r(d.salida), nacimiento: year - rng.int(18, 19), debut: undefined, serie: "F2" };
 }
 
-/** Lo bueno que es un coche (para ordenar la parrilla). */
-export const carLevel = (t: TeamDef) => t.agarre + 0.4 * t.potencia - 0.3 * t.resistencia;
-
 export interface OffSeasonInput {
   year: number; // la temporada que empieza
   seed: number;
-  /** Los equipos de la IA tal como acabaron la temporada (con su desarrollo) y su base de la temporada que acaba. */
+  /** Todos los equipos tal como acabaron la temporada (con todas sus mejoras en pista) y los de la IA de base. */
   final: TeamDef[];
   base: TeamDef[];
-  /** Media de agarre a la que vuelven los coches (la de la primera temporada). */
+  /** Medias de referencia de la parrilla 2026 (para directiva FIA uniforme que evita inflación de tiempos sin tocar huecos). */
   meanAgarre: number;
+  meanPotencia?: number;
+  /** Cuota ATR (%) de cada equipo en el último periodo (para el trabajo invernal de túnel). */
+  atrByTeam?: Record<string, number>;
   /** Pilotos sin equipo (libres, reservas, novatos). */
   pool: DriverDef[];
   contracts: Record<string, number>;
@@ -286,16 +301,165 @@ export function offSeason(inp: OffSeasonInput): OffSeasonOutput {
   // (los mejores, y los jóvenes de la F2 que pueden llegar)
   pool = pool.sort((a, b) => rating(b) + (ageOf(b, y) <= 21 ? 3 : 0) - rating(a) - (ageOf(a, y) <= 21 ? 3 : 0)).slice(0, 40);
 
-  // 6. coches: regresión a la media desde como acabó cada uno
+  // 6. coches de la IA: 100 % vía desarrollo de invierno (conservan TODO lo ganado en el año + mejoras invernales
+  //    con ATR, rendimientos decrecientes del reglamento y concesiones ADUO de motor; cero reseteos ni CAR_CARRY).
   const finals = new Map(inp.final.map((t) => [t.id, t]));
-  const endMean = inp.final.reduce((a, t) => a + t.agarre, 0) / Math.max(1, inp.final.length);
+  const topLevel = Math.max(...inp.final.map(carLevel));
+  const topPot = Math.max(...inp.final.map((t) => t.potencia));
+
+  // Evolución invernal de unidad de potencia compartida por motorista (con concesiones FIA ADUO)
+  const puWinter = new Map<string, number>();
+  const motors = [...new Set(inp.final.map((t) => t.motor))];
+  for (const m of motors) {
+    const mPow = Math.max(...inp.final.filter((t) => t.motor === m).map((t) => t.potencia));
+    const aduoK = aduoMult(mPow, topPot, true);
+    const roll = clamp(rng.gauss(1.0, 0.22), 0.55, 1.45);
+    puWinter.set(m, 0.16 * aduoK * roll);
+  }
+
   const base = teams.map(({ t, seats }) => {
     const f = finals.get(t.id) ?? t;
-    return { ...t, pilotos: seats as DriverDef[], agarre: Math.round((inp.meanAgarre + CAR_CARRY * (f.agarre - endMean) + rng.gauss(0, 0.3)) * 100) / 100 };
+    const cv0: [number, number, number] = f.curvas ? [f.curvas[0], f.curvas[1], f.curvas[2]] : [0, 0, 0];
+    const atr = inp.atrByTeam?.[t.id] ?? 95;
+    const atrK = atrMult(atr);
+    const cuK = catchUpMult(carLevel(f), topLevel);
+    const aeroRoll = clamp(rng.gauss(1.0, 0.28), 0.35, 1.65);
+    const winterAero = 0.30 * atrK * cuK * aeroRoll;
+
+    // La IA concentra sus horas de túnel invernal parcialmente en sus debilidades de curva/recta
+    const w0 = clamp(0.25 - cv0[0] * 0.25, 0.10, 0.45);
+    const w1 = clamp(0.25 - cv0[1] * 0.25, 0.10, 0.45);
+    const w2 = clamp(0.25 - cv0[2] * 0.25, 0.10, 0.45);
+    const w3 = clamp(0.25 + f.resistencia * 0.25, 0.10, 0.40);
+    const ws = w0 + w1 + w2 + w3;
+    const sp = [w0 / ws, w1 / ws, w2 / ws, w3 / ws];
+    const cvNew: [number, number, number] = [
+      cv0[0] + 3 * winterAero * sp[0],
+      cv0[1] + 3 * winterAero * sp[1],
+      cv0[2] + 3 * winterAero * sp[2],
+    ];
+    // Re-centrar media de curvas dentro de agarre (conservación exacta: agarre + curvas[i] idéntico)
+    const cMean = (cvNew[0] + cvNew[1] + cvNew[2]) / 3;
+    const agarre = f.agarre + cMean;
+    const curvas: [number, number, number] = [
+      Math.round((cvNew[0] - cMean) * 100) / 100,
+      Math.round((cvNew[1] - cMean) * 100) / 100,
+      Math.round((cvNew[2] - cMean) * 100) / 100,
+    ];
+    const resistencia = Math.round(clamp(f.resistencia - winterAero * sp[3] * DRAG_PER_GRIP, -0.55, 0.55) * 100) / 100;
+
+    // Motor invernal (100 % oficial, 75 % cliente)
+    const puGain = (puWinter.get(f.motor) ?? 0) * (isWorks(f) ? 1 : 0.75);
+    const potencia = f.potencia + puGain;
+
+    // Fiabilidad invernal: conserva mejoras del año + maduración en fábrica (sin resetear nunca)
+    const fiabCut = Math.max(0, f.fiabilidad - 0.88) * clamp(rng.gauss(0.28, 0.08), 0.10, 0.48);
+    const fiabilidad = Math.round(Math.max(0.88, f.fiabilidad - fiabCut) * 100) / 100;
+
+    // Ritmo de carrera: mejora con el desarrollo de chasis/aero invernal si tiene déficit
+    const rc0 = f.ritmoCarrera ?? 0;
+    const rcGain = rc0 < 0.3 ? Math.min(0.3 - rc0, winterAero * clamp(rng.gauss(0.55, 0.15), 0.2, 0.9)) : 0;
+    const ritmoCarrera = Math.round((rc0 + rcGain) * 100) / 100;
+
+    return {
+      ...f,
+      pilotos: seats as DriverDef[],
+      agarre: Math.round(agarre * 100) / 100,
+      potencia: Math.round(potencia * 100) / 100,
+      resistencia,
+      fiabilidad,
+      curvas,
+      ritmoCarrera,
+    };
   });
   // salarios solo de los que tienen equipo
   for (const k of Object.keys(salaries)) if (!base.some((t) => t.pilotos.some((d) => d.abrev === k)) && !mine.some((d) => d.abrev === k)) delete salaries[k];
   return { base, mine, pool, contracts, salaries, news, cost: Math.round(cost * 10) / 10 };
+}
+
+/**
+ * Desarrollo invernal del coche del jugador (mismas reglas orgánicas que la IA: conserva el 100 % de las mejoras
+ * del año anterior y suma el trabajo invernal elegido por el jugador en túnel de viento y fábrica).
+ */
+export function developPlayerWinter(
+  myFin: TeamDef,
+  allFinals: TeamDef[],
+  atr: number,
+  plan: WinterPlan,
+  seed: number,
+  year: number,
+  devK = 1,
+): { team: TeamDef; summary: { aero: number; motor: number; fiabCut: number; rcGain: number } } {
+  const rng = new Rng(((seed * 53) ^ (year * 1997) ^ 0x71e3) >>> 0);
+  const topLevel = Math.max(...allFinals.map(carLevel));
+  const topPot = Math.max(...allFinals.map((t) => t.potencia));
+  const atrK = atrMult(atr);
+  const cuK = catchUpMult(carLevel(myFin), topLevel);
+  const [fChassis, fMotor, fFiab] = plan.factoryFocus;
+  const spSum = plan.aeroSplit.reduce((a, b) => a + b, 0) || 1;
+  const sp = plan.aeroSplit.map((x) => x / spSum);
+
+  // 1. Aero invernal (túnel de viento + enfoque de chasis en fábrica)
+  const aeroRoll = clamp(rng.gauss(1.0, 0.12), 0.72, 1.30);
+  const chassisMult = 0.80 + 0.45 * fChassis;
+  const winterAero = 0.30 * atrK * cuK * devK * chassisMult * aeroRoll;
+  const cv0: [number, number, number] = myFin.curvas ? [myFin.curvas[0], myFin.curvas[1], myFin.curvas[2]] : [0, 0, 0];
+  const cvNew: [number, number, number] = [
+    cv0[0] + 3 * winterAero * sp[0],
+    cv0[1] + 3 * winterAero * sp[1],
+    cv0[2] + 3 * winterAero * sp[2],
+  ];
+  const cMean = (cvNew[0] + cvNew[1] + cvNew[2]) / 3;
+  const agarre = Math.round((myFin.agarre + cMean) * 100) / 100;
+  const curvas: [number, number, number] = [
+    Math.round((cvNew[0] - cMean) * 100) / 100,
+    Math.round((cvNew[1] - cMean) * 100) / 100,
+    Math.round((cvNew[2] - cMean) * 100) / 100,
+  ];
+  const resistencia = Math.round(clamp(myFin.resistencia - winterAero * sp[3] * DRAG_PER_GRIP, -0.55, 0.55) * 100) / 100;
+
+  // 2. Unidad de potencia invernal (con concesiones ADUO si el motor va rezagado)
+  const works = isWorks(myFin);
+  const aduoK = aduoMult(myFin.potencia, topPot, works);
+  const motorRoll = clamp(rng.gauss(1.0, 0.12), 0.75, 1.28);
+  const motorBase = works ? 0.18 : 0.11;
+  const motorGain = motorBase * aduoK * (0.50 + 1.45 * fMotor) * devK * motorRoll;
+  const potencia = Math.round((myFin.potencia + motorGain) * 100) / 100;
+
+  // 3. Fiabilidad invernal (sin resetear; cuanto más frágil, más margen al invertir enfoque)
+  const fiabRoll = clamp(rng.gauss(1.0, 0.10), 0.80, 1.22);
+  const fiabCut = Math.max(0, myFin.fiabilidad - 0.88) * clamp(0.14 + 0.65 * fFiab, 0.12, 0.60) * fiabRoll;
+  const fiabilidad = Math.round(Math.max(0.88, myFin.fiabilidad - fiabCut) * 100) / 100;
+
+  // 4. Ritmo de carrera invernal (mejora con el trabajo de chasis y aero en tandas largas)
+  const rc0 = myFin.ritmoCarrera ?? 0;
+  const rcGain = rc0 < 0.35 ? Math.min(0.35 - rc0, winterAero * (0.35 + 0.75 * fChassis)) : 0;
+  const ritmoCarrera = Math.round((rc0 + rcGain) * 100) / 100;
+
+  return {
+    team: { ...myFin, agarre, potencia, resistencia, fiabilidad, curvas, ritmoCarrera },
+    summary: { aero: winterAero, motor: motorGain, fiabCut, rcGain },
+  };
+}
+
+/**
+ * Directiva FIA uniforme de cambio de año: desplaza la escala de toda la parrilla en la misma cantidad exacta
+ * para mantener los tiempos por vuelta realistas a lo largo de 5-10 temporadas SIN alterar ni una milésima
+ * las diferencias entre equipos.
+ */
+export function normalizeGridScale(teams: TeamDef[], refMeanAgarre: number, refMeanPotencia: number): TeamDef[] {
+  if (!teams.length) return teams;
+  const mAg = teams.reduce((a, t) => a + t.agarre, 0) / teams.length;
+  const mPot = teams.reduce((a, t) => a + t.potencia, 0) / teams.length;
+  // Solo recortar si la media global sube por encima de la referencia + 0,25 (los coches pueden evolucionar algo, sin dispararse)
+  const dAg = mAg > refMeanAgarre + 0.25 ? mAg - (refMeanAgarre + 0.15) : 0;
+  const dPot = mPot > refMeanPotencia + 0.25 ? mPot - (refMeanPotencia + 0.15) : 0;
+  if (!dAg && !dPot) return teams;
+  return teams.map((t) => ({
+    ...t,
+    agarre: Math.round((t.agarre - dAg) * 100) / 100,
+    potencia: Math.round((t.potencia - dPot) * 100) / 100,
+  }));
 }
 
 /** Presupuesto de desarrollo del año siguiente según los objetivos: más por cada uno cumplido, menos por cada fallado. */

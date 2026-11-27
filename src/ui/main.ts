@@ -3,7 +3,7 @@ import "./style.css";
 // tema visual (las fichas de color están en style.css)
 document.documentElement.dataset.tema = "grafito";
 import { TEAMS, CIRCUITS, ROUNDS, DRIVERS, getTrack, useSeason, devContext, CALENDARS, circuitOf, calendarOf } from "./data";
-import { applyMidSeason } from "./nextSeason";
+import { applyMidSeason, yearOf } from "./nextSeason";
 import { newDev, newAeroPlan } from "../sim/development";
 import { builderScreen, PLAYER_TEAM_ID } from "./teamBuilder";
 import { GP_SLOT, loadSeason, saveSeason, loadSession, clearSession, isParked, setActiveSlot, deleteSlot, initStore, roomyStorage, askPersist, slotList, loadPrefs, getActiveSlot } from "./store";
@@ -15,7 +15,7 @@ import { scenariosScreen } from "./scenarios";
 import { gpSetupScreen, gpSeason, gpWeekend, gpDoneScreen, gpPickOf, type GpPick } from "./grandPrix";
 import { SeasonState, driverStandings, teamStandings, pointsFor, RACE_POINTS, SPRINT_POINTS } from "../sim/season";
 import { podiumHtml, standingsHtml, animateCounts, shareSheet } from "./podium";
-import { Weekend } from "../sim/weekend";
+import { Weekend, newPreseasonWeekend } from "../sim/weekend";
 import { Session, SessionKind, SESSION_NAMES, isRaceKind } from "../sim/session";
 import { raceSummaryHtml, drawRaceSummary, buildSummary, photosHtml } from "./summary";
 import { takeLastPhotos } from "./photos";
@@ -47,12 +47,21 @@ function finishSession(wk: Weekend, kind: SessionKind, sess: Session) {
   wk.finish(sess);
   // tras el último libre: lo medido del paquete aerodinámico nuevo y, si no lo has decidido, si se monta
   if (!s.gp) settlePkg(s, wk);
-  const gp = CIRCUITS[st.circuitId].gp;
+  const gp = kind === "TEST" ? `Test de Pretemporada ${yearOf(s)} · Barcelona` : CIRCUITS[st.circuitId].gp;
   const sum = isRaceKind(kind) ? buildSummary(sess) : null;
   const rows0 = sess.results();
   if (sum) st.summaries = { ...st.summaries, [kind]: sum };
   let extra = "", board = "", hitos = "";
-  if (kind === "RACE" && s.gp) {
+  if (kind === "TEST") {
+    const myLaps = rows0.filter((r) => DRIVERS[r.id]?.team.id === s.playerTeam).reduce((a, r) => a + r.laps, 0);
+    const fiabBonus = Math.min(0.05, Math.round((myLaps / 160) * 0.05 * 1000) / 1000);
+    s.preseason = { done: true, results: rows0, longRuns: sess.longRuns, myLaps, fiabBonus };
+    s.weekend = null;
+    useSeason(s);
+    extra = `<div class="panel"><div class="hd"><span class="t">Balance del test (8 h · Barcelona)</span></div><div class="bd small">
+      Tus pilotos han completado <b>${myLaps} vueltas</b> en la jornada de marzo en Montmeló.${fiabBonus > 0 ? ` El rodaje ha permitido pulir detalles de fiabilidad: <b class="green">−${(fiabBonus * 100).toFixed(1).replace(".", ",")} % averías</b> para toda la temporada ${yearOf(s)}.` : ""}
+    </div></div>` + (sess.longRuns.length ? longRunsPanel(sess.longRuns.map((r) => ({ kind, r })), s.playerTeam) : "");
+  } else if (kind === "RACE" && s.gp) {
     // gran premio suelto: sin mundial ni cambios de pilotos
     s.rounds.push({ round: st.round, circuitId: st.circuitId, q: st.results.Q, sprint: st.results.SPRINT, race: st.results.RACE, raceTable: st.scoring?.RACE, sprintTable: st.scoring?.SPRINT, summary: st.summaries?.RACE, sprintSummary: st.summaries?.SPRINT });
     s.round++;
@@ -115,7 +124,7 @@ function finishSession(wk: Weekend, kind: SessionKind, sess: Session) {
       + hitos // los hitos de tu equipo, como rótulo justo bajo el podio
       + `<div style="padding:0 10px"><button class="big-cta" id="sharebtn">Compartir resultado</button></div>`;
   }
-  resultsScreen(kind, rows, s, gp, extra, () => (kind === "RACE" ? nav.season() : nav.weekend()), top);
+  resultsScreen(kind, rows, s, gp, extra, () => (kind === "RACE" || kind === "TEST" ? nav.season() : nav.weekend()), top);
   if (sum) requestAnimationFrame(() => drawRaceSummary(sum));
   animateCounts();
   const sb = document.getElementById("sharebtn");
@@ -144,7 +153,7 @@ function enter() {
   // (salvo que el jugador saliera de ella a propósito: entonces espera en el fin de semana)
   const pending = pendingSnap();
   if (pending && !isParked()) nav.session(pending.kind, pending);
-  else if (pending) nav.weekend();
+  else if (pending) (pending.kind === "TEST" ? nav.season() : nav.weekend());
   else {
     if (loadSession()) clearSession();
     if (season) nav.season(); else nav.home();
@@ -219,15 +228,25 @@ const nav: Nav = {
   gp() { gpSetupScreen(nav, startGp); },
   openGp() { nav.open(GP_SLOT); },
   nextSeason(next: SeasonState) { newSeason(getActiveSlot(), next); },
-  weekend() { if (season?.weekend) weekendScreen(nav, season, pendingSnap()); else nav.season(); window.scrollTo(0, 0); },
+  preseason(sim = false) {
+    const s = season!;
+    const pend = pendingSnap();
+    if (!s.weekend || !s.weekend.preseason) {
+      s.weekend = newPreseasonWeekend(CIRCUITS.barcelona, TEAMS, s.seed * 1000 + 7, yearOf(s));
+      saveSeason(s);
+    }
+    if (sim) nav.simulate("TEST");
+    else nav.session("TEST", pend && pend.kind === "TEST" ? pend : undefined);
+  },
+  weekend() { if (season?.weekend && !season.weekend.preseason) weekendScreen(nav, season, pendingSnap()); else nav.season(); window.scrollTo(0, 0); },
   session(kind: SessionKind, snap?: SessionSnapshot) {
     const s = season!;
     // al retomar una sesión a medias, el fin de semana es el de la instantánea (neumáticos ya usados, etc.)
     if (snap) s.weekend = snap.weekend;
     const st = s.weekend!;
     const wk = new Weekend(st, getTrack(st.circuitId), TEAMS, s.playerTeam);
-    // salir a medias: la sesión queda guardada y se retoma con «Reanudar» en el fin de semana
-    sessionView(wk, kind, (sess) => finishSession(wk, kind, sess), snap, () => nav.weekend());
+    // salir a medias: la sesión queda guardada y se retoma con «Reanudar»
+    sessionView(wk, kind, (sess) => finishSession(wk, kind, sess), snap, () => (kind === "TEST" ? nav.season() : nav.weekend()));
   },
   scenarios() {
     // al volver, la parrilla vuelve a ser la de la partida activa

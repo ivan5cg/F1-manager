@@ -13,13 +13,15 @@ self.onmessage = (ev: MessageEvent<{ raw: string; playerTeam: string; teams: Tea
   const sess = wk.restore(snap);
   const race = isRaceKind(sess.kind);
   const t0 = sess.wall;
+  const totalS = sess.parts.length ? 70 * 60 : sess.durationS || 3600;
+  const maxWall = t0 + Math.max(6 * 3600, totalS + 3600);
   let last = 0;
-  while (!sess.finished && sess.wall < t0 + 6 * 3600) {
+  while (!sess.finished && sess.wall < maxWall) {
     for (let i = 0; i < 500 && !sess.finished; i++) sess.step();
     const now = performance.now();
     if (now - last > 100) {
       last = now;
-      const p = race ? sess.leaderLap / sess.laps : (sess.wall - t0) / Math.max(1, (sess.parts.length ? 70 * 60 : 3600) - t0);
+      const p = race ? sess.leaderLap / sess.laps : (sess.wall - t0) / Math.max(1, totalS - t0);
       (self as unknown as Worker).postMessage({ type: "progress", p: Math.min(1, p) });
     }
   }

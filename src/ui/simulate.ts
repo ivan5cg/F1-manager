@@ -26,7 +26,8 @@ function adoptFinal(sess: Session, wk: Weekend, fin: SessionSnapshot) {
 export function runToEnd(sess: Session, wk: Weekend, onProgress: (p: number) => void, onDone: () => void) {
   const race = isRaceKind(sess.kind);
   const t0 = sess.wall;
-  const est = () => (race ? sess.leaderLap / sess.laps : (sess.wall - t0) / Math.max(1, (sess.parts.length ? 70 * 60 : 3600) - t0));
+  const totalS = sess.parts.length ? 70 * 60 : sess.durationS || 3600;
+  const est = () => (race ? sess.leaderLap / sess.laps : (sess.wall - t0) / Math.max(1, totalS - t0));
   const chunk = () => {
     const lim = performance.now() + 30;
     while (!sess.finished && performance.now() < lim) for (let i = 0; i < 200 && !sess.finished; i++) sess.step();

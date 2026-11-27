@@ -3,9 +3,9 @@
 // clasificación hereda el agua y las nubes de la mañana).
 import { Rng, clamp } from "./rng";
 import { Track } from "./track";
-import { Compound, HiddenTyre, TyreSet, allocation, setWear, DRY, applyNomination } from "./tyres";
+import { Compound, HiddenTyre, TyreSet, allocation, testAllocation, setWear, DRY, applyNomination } from "./tyres";
 import { Climate, Scenario, WeatherState, createDayWeather, stepWeather, rainAt, pickScenario, evaporation, waterStep } from "./weather";
-import { Session, SessionKind, Entrant, TeamDef, ResultRow, isRaceKind, LongRun } from "./session";
+import { Session, SessionKind, Entrant, TeamDef, ResultRow, isRaceKind, isPracticeKind, LongRun } from "./session";
 import { TeamKnowledge, buildKnowledge } from "./strategy";
 import { SessionSnapshot, snapshotConditions, applySnapshot } from "./snapshot";
 import type { RaceSummary } from "./season";
@@ -46,6 +46,8 @@ export interface WeekendState {
    *  probándolo (test) y en el resto de tandas (other). */
   pkgTest?: TestProgram;
   pkgLaps?: { test: number; other: number };
+  /** Test de pretemporada (8 h en Barcelona con el tiempo típico de marzo). */
+  preseason?: boolean;
 }
 
 /**
@@ -64,7 +66,47 @@ export function preparePu(st: WeekendState, prev: Record<number, PuState> | unde
 
 export const NORMAL_SESSIONS: SessionKind[] = ["FP1", "FP2", "FP3", "Q", "RACE"];
 export const SPRINT_SESSIONS: SessionKind[] = ["FP1", "SQ", "SPRINT", "Q", "RACE"];
+export const TEST_SESSIONS: SessionKind[] = ["TEST"];
 export const DAY_NAMES = ["Viernes", "Sábado", "Domingo"];
+
+/** Clima típico de marzo en Montmeló (Barcelona-Catalunya) para los test de pretemporada. */
+export const BARCELONA_MARCH_CLIMA: Climate = {
+  latitud: 41.57,
+  maxima: 16.5,
+  minima: 8.5,
+  dispersion: 2.8,
+  sol: 15,
+  viento: 14,
+  pequenas: 0.45,
+  pesos: { seco: 64, chubascos: 14, frente: 10, llovizna: 12 },
+  tardeConvectiva: 0.25,
+};
+
+/** Definición del circuito de Barcelona adaptada al test de pretemporada (marzo, 8 h). */
+export function preseasonDef(barcelonaDef: any, year: number): any {
+  return {
+    ...barcelonaDef,
+    gp: `Test de Pretemporada ${year} · Barcelona`,
+    fecha: `${year}-03-04`,
+    formato: "normal",
+    clima: {
+      ...BARCELONA_MARCH_CLIMA,
+      fuente: "Marzo en Montmeló: máxima ~16,5 °C, mínima ~8,5 °C, mañanas frescas y algún chubasco o llovizna primaveral",
+    },
+    horario: { test: "V 09:00", fp1: "V 09:00", fp2: "V 13:00", fp3: "S 09:00", q: "S 14:00", carrera: "D 14:00" },
+  };
+}
+
+/** Crea el estado del test de pretemporada de 8 horas en Barcelona (tiempo típico de marzo). */
+export function newPreseasonWeekend(barcelonaDef: any, teams: TeamDef[], seed: number, year: number): WeekendState {
+  const def = preseasonDef(barcelonaDef, year);
+  const st = newWeekend(0, def, teams, seed);
+  st.preseason = true;
+  st.year = year;
+  let id = 0;
+  for (const t of teams) for (const _ of t.pilotos) st.sets[id++] = testAllocation();
+  return st;
+}
 const DAY_FULL: Record<string, string> = { J: "Jueves", V: "Viernes", S: "Sábado", D: "Domingo" };
 /** Los tres días del fin de semana de un circuito (letras): casi siempre viernes a domingo; en Bakú y Las Vegas, de jueves a sábado. */
 const daysOf = (def: any): string => def.dias ?? "VSD";
@@ -88,10 +130,22 @@ export function weekendForm(seed: number, who: string): number {
   return FORM * Math.sqrt(-2 * Math.log(u[0])) * Math.cos(2 * Math.PI * u[1]);
 }
 
+/** Vueltas de una sprint (~100 km, reglamento FIA): el dato del circuito o calculado desde su longitud. */
+export function sprintLapsOf(def: any, trackLengthM?: number): number {
+  if (def.vueltasSprint) return def.vueltasSprint;
+  if (trackLengthM && trackLengthM > 500) return Math.max(12, Math.round(100_000 / trackLengthM));
+  return Math.max(12, Math.round((def.vueltas ?? 60) / 3));
+}
+
 export const horarioFor = (def: any, sprint: boolean) => {
   const h = def.horario, o = def.horarioOtro;
   if (o && Boolean(h?.sq) !== sprint) return o;
-  return h;
+  if (Boolean(h?.sq) === sprint) return h;
+  // circuito sin horarioOtro: sintetizar horario sprint o normal conservando sus días y horas locales
+  if (sprint) {
+    return { fp1: h.fp1, sq: h.fp2 ?? h.fp1, sprint: h.fp3 ?? h.q, q: h.q, carrera: h.carrera };
+  }
+  return { fp1: h.fp1, fp2: h.sq ?? h.fp1, fp3: h.sprint ?? h.q, q: h.q, carrera: h.carrera };
 };
 
 export function newWeekend(round: number, def: any, teams: TeamDef[], seed: number): WeekendState {
@@ -140,11 +194,12 @@ export class Weekend {
   }
 
   get def() { return this.track.def; }
-  sessions(): SessionKind[] { return this.st.sprint ? SPRINT_SESSIONS : NORMAL_SESSIONS; }
+  sessions(): SessionKind[] { return this.st.preseason ? TEST_SESSIONS : this.st.sprint ? SPRINT_SESSIONS : NORMAL_SESSIONS; }
   nextKind(): SessionKind | null { return this.sessions()[this.st.next] ?? null; }
 
   /** Día (0..2) y hora local (min) de una sesión. */
   when(kind: SessionKind): { day: number; clock: number } {
+    if (kind === "TEST") return { day: 0, clock: 9 * 60 };
     const key = { FP1: "fp1", FP2: "fp2", FP3: "fp3", SQ: "sq", Q: "q", SPRINT: "sprint", RACE: "carrera" }[kind];
     const txt: string = horarioFor(this.def, this.st.sprint)[key];
     const [d, hm] = txt.split(" ");
@@ -169,7 +224,8 @@ export class Weekend {
   /** Tiempo real del día desde las 9:00 hasta la hora pedida, con el agua en pista. */
   conditions(day: number, clock: number): { weather: WeatherState; water: number[]; rubberLoss: number } {
     const d = this.st.days[day];
-    const w = createDayWeather(new Rng(d.seed), this.def.clima, d.scenario, this.st.anomaly + day * 0.3, 9 * 60);
+    const clima: Climate = this.st.preseason ? BARCELONA_MARCH_CLIMA : this.def.clima;
+    const w = createDayWeather(new Rng(d.seed), clima, d.scenario, this.st.anomaly + day * 0.3, 9 * 60);
     const ms = this.track.ms;
     const water = new Array(ms.length).fill(0);
     let rubberLoss = 0;
@@ -219,8 +275,8 @@ export class Weekend {
       water: cond.water,
       rubber,
       grid: isRaceKind(kind) ? this.grid(kind) : undefined,
-      minutes: 60,
-      laps: kind === "SPRINT" ? this.def.vueltasSprint : this.def.vueltas,
+      minutes: kind === "TEST" ? 480 : 60,
+      laps: kind === "SPRINT" ? sprintLapsOf(this.def, this.track.length) : this.def.vueltas,
       sprintWeekend: this.st.sprint,
       setup: this.sessionSetup(kind),
       year: this.st.year,
@@ -257,8 +313,8 @@ export class Weekend {
       water: cond.water,
       waterOff: cond.waterOff,
       rubber: snap.sess.rubber as number,
-      minutes: 60,
-      laps: kind === "SPRINT" ? this.def.vueltasSprint : this.def.vueltas,
+      minutes: kind === "TEST" ? 480 : 60,
+      laps: kind === "SPRINT" ? sprintLapsOf(this.def, this.track.length) : this.def.vueltas,
       sprintWeekend: this.st.sprint,
       restore: true,
       setup: this.sessionSetup(kind),
@@ -301,7 +357,7 @@ export class Weekend {
       const pl = (this.st.pkgLaps ??= { test: 0, other: 0 });
       for (const c of sess.cars) if (c.player) { pl.test += c.testLaps; pl.other += Math.max(0, c.sessionLaps - c.testLaps); }
     }
-    if (sess.kind.startsWith("FP")) {
+    if (isPracticeKind(sess.kind) && sess.kind !== "TEST") {
       // las vueltas de libres afinan lo que sabe cada equipo del reglaje
       if (this.st.setup) for (const c of sess.cars) { const k = this.st.setup.teams[c.team.id]; if (k) k.laps += c.sessionLaps; }
       // reglamento FIA: en fin de semana normal se devuelven 2 juegos de seco tras cada libre (6 en total → 7 para Q+carrera);

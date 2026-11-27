@@ -2,10 +2,15 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { benchRace, circuit, TEAMS } from "../scripts/banco";
-import { Weekend, newWeekend } from "../src/sim/weekend";
+import { Weekend, newWeekend, newPreseasonWeekend, sprintLapsOf, horarioFor, BARCELONA_MARCH_CLIMA } from "../src/sim/weekend";
 import {
-  newAeroPlan, makeAeroPkg, aeroGains, aeroPkgCount, aeroPkgRound, aeroSigma, measurePkg, newDev, devLeft, AERO_BAD, DRAG_PER_GRIP,
+  newAeroPlan, makeAeroPkg, aeroGains, aeroPkgCount, aeroPkgRound, aeroSigma, measurePkg, aeroPosterior,
+  newDev, devLeft, AERO_BAD, DRAG_PER_GRIP, aduoMult, motorCapFor, catchUpMult, carLevel as simCarLevel,
 } from "../src/sim/development";
+import { developPlayerWinter, DEFAULT_WINTER, normalizeGridScale } from "../src/sim/career";
+import { objectivesFor } from "../src/sim/objectives";
+import { randomSprintsFor } from "../src/ui/nextSeason";
+import { CIRCUITS, CALENDARS } from "../src/ui/data";
 import { carLevel } from "../src/ui/rendimiento";
 
 test("la simulación es determinista: la misma carrera da lo mismo dos veces", () => {
@@ -80,4 +85,75 @@ test("rendimiento: el orden de los coches de 2026 (Mercedes delante, Aston Marti
   assert.equal(order[0], "mercedes");
   assert.equal(order[order.length - 1], "astonmartin");
   assert.deepEqual(order.slice(0, 4).sort(), ["ferrari", "mclaren", "mercedes", "redbull"]);
+  const simOrder = [...TEAMS].sort((a, b) => simCarLevel(b) - simCarLevel(a)).map((t) => t.id);
+  assert.equal(simOrder[0], "mercedes");
+  assert.equal(simOrder[simOrder.length - 1], "astonmartin");
+  // ritmoCarrera de 2026 medido por equipo (no -0.8 plano)
+  const rcs = new Set(TEAMS.map((t) => t.ritmoCarrera ?? 0));
+  assert.ok(rcs.size >= 7, `ritmoCarrera debe variar por equipo: ${[...rcs]}`);
+});
+
+test("concesiones ADUO FIA 2026, objetivos de fondo y posterior bayesiano del túnel", () => {
+  const merc = TEAMS.find((t) => t.id === "mercedes")!;
+  const am = TEAMS.find((t) => t.id === "astonmartin")!;
+  assert.equal(aduoMult(merc.potencia, merc.potencia, true), 1);
+  assert.ok(aduoMult(am.potencia, merc.potencia, true) > 1.35, "Honda recibe concesiones ADUO");
+  assert.ok(motorCapFor(am, merc.potencia) > 1.0, "Tope de motor ampliado por ADUO");
+  assert.ok(catchUpMult(simCarLevel(am), simCarLevel(merc)) > catchUpMult(simCarLevel(merc), simCarLevel(merc)));
+  // Objetivos P11 en calendario de 23 carreras: 2 carreras puntuando (no 5)
+  const objAM = objectivesFor(TEAMS, "astonmartin", 23);
+  const scoreObj = objAM.find((o) => o.kind === "puntuar")!;
+  assert.equal(scoreObj.target, 2);
+  // Posterior bayesiano: ruido leve negativo (-0.002 con sigma 0.075) no descarta paquete esperado de +0.11
+  const pNoisy = { period: 0, ready: 4, split: [0.25, 0.25, 0.25, 0.25], atr: 115, expect: 0.11, real: 0.095, medido: -0.002, sigma: 0.075 };
+  assert.ok(aeroPosterior(pNoisy).mean > 0, "no descarta falso negativo leve");
+  // Un paquete muy negativo (-0.10 con sigma 0.04) sí se descarta
+  const pBad = { period: 0, ready: 4, split: [0.25, 0.25, 0.25, 0.25], atr: 115, expect: 0.11, real: -0.04, medido: -0.10, sigma: 0.04 };
+  assert.ok(aeroPosterior(pBad).mean < 0, "sí descarta paquete malo claro");
+});
+
+test("sprints 2027+: 10 al azar con vueltas y horarios válidos en los 24 circuitos", () => {
+  const cal = CALENDARS.completa.ids;
+  const s27 = randomSprintsFor(cal, 2027, 42);
+  const s28 = randomSprintsFor(cal, 2028, 42);
+  assert.equal(s27.sprintIds.length, 10);
+  assert.equal(s28.sprintIds.length, 10);
+  assert.notDeepEqual(s27.sprintIds, s28.sprintIds, "cambian al azar entre temporadas");
+  for (const def of Object.values(CIRCUITS)) {
+    assert.ok(sprintLapsOf(def) >= 12, `${def.id} vueltasSprint`);
+    const hs = horarioFor(def, true);
+    const hn = horarioFor(def, false);
+    assert.ok(hs.fp1 && hs.sq && hs.sprint && hs.q && hs.carrera, `${def.id} horario sprint`);
+    assert.ok(hn.fp1 && hn.fp2 && hn.fp3 && hn.q && hn.carrera, `${def.id} horario normal`);
+  }
+});
+
+test("desarrollo de invierno conserva mejoras y normalización uniforme mantiene intactas las brechas", () => {
+  const am = TEAMS.find((t) => t.id === "astonmartin")!;
+  const res = developPlayerWinter(am, TEAMS, 120, DEFAULT_WINTER, 101, 2027, 1);
+  assert.ok(res.team.potencia > am.potencia, "motor mejora en invierno");
+  assert.ok(res.team.fiabilidad < am.fiabilidad, "fiabilidad mejora y no se resetea");
+  assert.ok((res.team.ritmoCarrera ?? 0) > (am.ritmoCarrera ?? 0), "ritmo de carrera mejora con el desarrollo");
+  // Normalización uniforme conserva las diferencias entre equipos
+  const boosted = TEAMS.map((t) => ({ ...t, agarre: t.agarre + 0.6, potencia: t.potencia + 0.5 }));
+  const gapBefore = boosted[0].agarre - boosted[boosted.length - 1].agarre;
+  const norm = normalizeGridScale(boosted, 0.71, 0.2);
+  const gapAfter = norm[0].agarre - norm[norm.length - 1].agarre;
+  assert.ok(Math.abs(gapBefore - gapAfter) < 0.02, "brechas entre equipos intactas");
+});
+
+test("test de pretemporada de 8 horas en Barcelona (clima de marzo)", () => {
+  const { def, track } = circuit("barcelona");
+  const st = newPreseasonWeekend(def, TEAMS, 202601, 2026);
+  assert.equal(st.preseason, true);
+  assert.equal(st.circuitId, "barcelona");
+  assert.equal(BARCELONA_MARCH_CLIMA.maxima, 16.5);
+  const wk = new Weekend(st, track, TEAMS, "astonmartin");
+  assert.deepEqual(wk.sessions(), ["TEST"]);
+  const sess = wk.build("TEST");
+  assert.equal(sess.durationS, 480 * 60, "dura exactamente 8 horas");
+  // Avanzar 40 minutos para comprobar que los coches salen y completan vueltas sin errores
+  for (let i = 0; i < 40 * 60 * 20 && !sess.finished; i++) sess.step();
+  const totalLaps = sess.results().reduce((a, r) => a + r.laps, 0);
+  assert.ok(totalLaps > 100, `deben completarse vueltas en el test: ${totalLaps}`);
 });

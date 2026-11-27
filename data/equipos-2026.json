@@ -1,5 +1,5 @@
 {
- "_nota": "Parrilla real 2026 (lista de inscritos FIA). agarre/potencia/resistencia en % respecto a la referencia; desgaste <1 cuida neumáticos; boxes: segundos parado; fiabilidad: multiplicador de averías; estrategia/meteo 0-100. agarre y potencia salen de las clasificaciones de 2026 (Wikipedia): el nivel de cada coche, de los GP 13-21 (Monza-Las Vegas); el carácter (curvas: lo que gana o pierde en curva lenta, media y rápida sobre su agarre) y la potencia de cada motor, de las 20 clasificaciones secas del año, ajustados con el modelo de pista del juego (scripts/auditoria/rendimiento-2026.md). ritmoCarrera: % de agarre que el coche pierde en carrera además de lo del sábado (los siete que no son de cabeza: en 2026 la zona media acababa doblada). nacimiento: año de nacimiento; debut: año de su primera carrera de F1.",
+ "_nota": "Parrilla real 2026 (lista de inscritos FIA). agarre/potencia/resistencia en % respecto a la referencia; desgaste <1 cuida neumáticos; boxes: segundos parado; fiabilidad: multiplicador de averías; estrategia/meteo 0-100. agarre y potencia salen de las clasificaciones de 2026 (Wikipedia): el nivel de cada coche, de los GP 13-21 (Monza-Las Vegas); el carácter (curvas: lo que gana o pierde en curva lenta, media y rápida sobre su agarre) y la potencia de cada motor, de las 20 clasificaciones secas del año, ajustados con el modelo de pista del juego (scripts/auditoria/rendimiento-2026.md). ritmoCarrera: % de agarre extra que el coche gana o pierde en tandas limpias de carrera frente a su clasificación, medido por equipo sobre las vueltas limpias en aire libre de los GP 13-21 de 2026 (datos-reales/2026/_consolidado/laps_all.parquet); a partir de 2027 evoluciona únicamente mediante mejoras. nacimiento: año de nacimiento; debut: año de su primera carrera de F1.",
  "equipos": [
   {
    "id": "mercedes",
@@ -54,6 +54,7 @@
   },
   {
    "id": "ferrari",
+   "ritmoCarrera": 0.25,
    "nombre": "Ferrari",
    "motor": "Ferrari",
    "color": "#E8002D",
@@ -105,6 +106,7 @@
   },
   {
    "id": "redbull",
+   "ritmoCarrera": 0.3,
    "nombre": "Red Bull Racing",
    "motor": "Red Bull Ford",
    "color": "#3671C6",
@@ -156,6 +158,7 @@
   },
   {
    "id": "mclaren",
+   "ritmoCarrera": 0.1,
    "nombre": "McLaren",
    "motor": "Mercedes",
    "color": "#FF8000",
@@ -207,7 +210,7 @@
   },
   {
    "id": "racingbulls",
-   "ritmoCarrera": -0.8,
+   "ritmoCarrera": -1.1,
    "nombre": "Racing Bulls",
    "motor": "Red Bull Ford",
    "color": "#6C98FF",
@@ -259,7 +262,7 @@
   },
   {
    "id": "alpine",
-   "ritmoCarrera": -0.8,
+   "ritmoCarrera": -0.85,
    "nombre": "Alpine",
    "motor": "Mercedes",
    "color": "#2293D1",
@@ -311,7 +314,7 @@
   },
   {
    "id": "haas",
-   "ritmoCarrera": -0.8,
+   "ritmoCarrera": -0.7,
    "nombre": "Haas",
    "motor": "Ferrari",
    "color": "#9AA0A6",
@@ -363,7 +366,7 @@
   },
   {
    "id": "audi",
-   "ritmoCarrera": -0.8,
+   "ritmoCarrera": -0.95,
    "nombre": "Audi",
    "motor": "Audi",
    "color": "#C8102E",
@@ -415,7 +418,7 @@
   },
   {
    "id": "williams",
-   "ritmoCarrera": -0.8,
+   "ritmoCarrera": -0.95,
    "nombre": "Williams",
    "motor": "Mercedes",
    "color": "#64C4FF",
@@ -519,7 +522,7 @@
   },
   {
    "id": "cadillac",
-   "ritmoCarrera": -0.8,
+   "ritmoCarrera": -1.2,
    "nombre": "Cadillac",
    "motor": "Ferrari",
    "color": "#E6E6E6",

@@ -4,12 +4,10 @@
 import type { SeasonState } from "./season";
 import { teamStandings } from "./season";
 import type { TeamDef } from "./session";
+import { carLevel } from "./development";
 
 export type ObjKind = "constructores" | "victorias" | "podios" | "puntuar";
 export interface Objective { kind: ObjKind; target: number }
-
-/** Lo bueno que es un coche, para ordenar la parrilla al poner los objetivos. */
-const carLevel = (t: TeamDef) => t.agarre + 0.4 * t.potencia - 0.3 * t.resistencia;
 
 /** Objetivos de una temporada a partir de la parrilla de salida (el puesto del coche del jugador en ella). */
 export function objectivesFor(teams: TeamDef[], playerTeam: string, races = 9): Objective[] {
@@ -21,7 +19,8 @@ export function objectivesFor(teams: TeamDef[], playerTeam: string, races = 9): 
   if (r <= 2) return [champ, { kind: "victorias", target: k(2) }];
   if (r <= 4) return [champ, { kind: "podios", target: k(2) }];
   if (r <= 7) return [champ, { kind: "puntuar", target: k(5) }];
-  return [champ, { kind: "puntuar", target: k(2) }];
+  if (r <= 9) return [champ, { kind: "puntuar", target: k(2) }];
+  return [champ, { kind: "puntuar", target: Math.max(1, Math.round(races / 11)) }];
 }
 
 export interface ObjStatus { text: string; now: string; state: "done" | "failed" | "on" | "off" }

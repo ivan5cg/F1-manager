@@ -90,9 +90,9 @@ const QUALI_NOISE = 0.85;
  * tiempo de vuelta y pesa más donde se va a fondo. En carrera, ~4 % (2026: vuelta rápida / pole ≈ 1,045); en la
  * sprint, menos, porque con poca distancia apenas se gestiona.
  */
-const DEPLOY_TRIM: Record<SessionKind, number> = { FP1: 0.04, FP2: 0.04, FP3: 0.04, SQ: 0.04, Q: 0.04, SPRINT: 0.034, RACE: 0.04 };
-/** Vueltas lanzadas de libres: sin el modo de clasificación entero y con algo más de combustible. */
-const PRACTICE_PUSH_TRIM: Partial<Record<SessionKind, number>> = { FP1: 0.01, FP2: 0.008, FP3: 0.003 };
+const DEPLOY_TRIM: Record<SessionKind, number> = { TEST: 0.04, FP1: 0.04, FP2: 0.04, FP3: 0.04, SQ: 0.04, Q: 0.04, SPRINT: 0.034, RACE: 0.04 };
+/** Vueltas lanzadas de libres y test: sin el modo de clasificación entero y con algo más de combustible. */
+const PRACTICE_PUSH_TRIM: Partial<Record<SessionKind, number>> = { TEST: 0.008, FP1: 0.01, FP2: 0.008, FP3: 0.003 };
 /**
  * Evolución de la clasificación: al empezar la pista está más verde (aún sin la goma de veinte coches a fondo con
  * blandos) y los pilotos van cogiendo el límite parte a parte. Es lo que le falta a la vuelta al empezar la sesión, en
@@ -295,12 +295,13 @@ export function eraOf(year: number): Era {
   return { ayuda: "ninguna", ers: 0, vsc: false, activeAero: false };
 }
 
-export type SessionKind = "FP1" | "FP2" | "FP3" | "SQ" | "Q" | "SPRINT" | "RACE";
+export type SessionKind = "TEST" | "FP1" | "FP2" | "FP3" | "SQ" | "Q" | "SPRINT" | "RACE";
 export const SESSION_NAMES: Record<SessionKind, string> = {
-  FP1: "Libres 1", FP2: "Libres 2", FP3: "Libres 3", SQ: "Clasificación sprint", Q: "Clasificación", SPRINT: "Sprint", RACE: "Carrera",
+  TEST: "Test de pretemporada", FP1: "Libres 1", FP2: "Libres 2", FP3: "Libres 3", SQ: "Clasificación sprint", Q: "Clasificación", SPRINT: "Sprint", RACE: "Carrera",
 };
 export const isRaceKind = (k: SessionKind) => k === "RACE" || k === "SPRINT";
 export const isQualiKind = (k: SessionKind) => k === "Q" || k === "SQ";
+export const isPracticeKind = (k: SessionKind) => k === "TEST" || k.startsWith("FP");
 
 export interface QPart { name: string; minutes: number; advance: number | null; compound?: Compound }
 export const Q_PARTS: QPart[] = [
@@ -915,7 +916,7 @@ export class Session {
     }
     if (opt.restore) { /* el estado llega de una instantánea */ }
     else if (isRaceKind(this.kind)) this.setupRace(opt.grid ?? opt.entrants.map((e) => e.id));
-    else if (this.kind.startsWith("FP")) for (const c of this.cars) c.queue = practiceProgram(this, c);
+    else if (isPracticeKind(this.kind)) for (const c of this.cars) c.queue = practiceProgram(this, c);
   }
 
   get L() { return this.track.length; }
@@ -2292,7 +2293,7 @@ export class Session {
     c.tyres!.laps++;
     c.sessionLaps++;
     this.tyreLap(c);
-    this.rubber = Math.min(1, this.rubber + (this.kind.startsWith("FP") ? RUBBER_FP_LAP : 0.0009));
+    this.rubber = Math.min(1, this.rubber + (isPracticeKind(this.kind) ? RUBBER_FP_LAP : 0.0009));
     const wasPush = run.phase === "push" || run.phase === "long";
     // vuelta estropeada (anulada, o con una salida de pista o un bloqueo): si da tiempo, la IA lo vuelve a intentar
     const ruined = run.phase === "push" && c.lapStart > 0 && (!c.lapValid || (!!c.fx && c.fx.t > c.lapStart));

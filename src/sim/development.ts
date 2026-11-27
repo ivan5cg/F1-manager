@@ -103,42 +103,102 @@ export function splitAt(a: AeroPlan, period: number): number[] {
 export function newAeroPlan(budget: number): AeroPlan {
   return { reserva: Math.round(budget * AERO_RESERVE), reparto: {}, pkgs: [] };
 }
+/** Nivel medio del coche (agarre, carácter medio en curvas, potencia, resistencia y ritmo de carrera). */
+export function carLevel(t: TeamDef): number {
+  const cv = t.curvas ?? [0, 0, 0];
+  const grip = t.agarre + (cv[0] + cv[1] + cv[2]) / 3;
+  return grip + 0.4 * t.potencia - 0.3 * t.resistencia + 0.35 * (t.ritmoCarrera ?? 0);
+}
+
+/**
+ * Concesiones FIA 2026 (ADUO) para motoristas rezagados: si la unidad de potencia está claramente por debajo del mejor
+ * motor de la parrilla (> 0,6 puntos), dispone de más margen de banco y mejoras más efectivas (hasta ×1,45 oficial).
+ */
+export function aduoMult(potencia: number, topPotencia: number, works = true): number {
+  const gap = topPotencia - potencia;
+  if (gap <= 0.6) return 1;
+  const bonus = clamp((gap - 0.6) * 0.22, 0, 0.45);
+  return 1 + (works ? bonus : bonus * 0.5);
+}
+
+/** Tope de mejora de motor en la temporada, contando concesiones ADUO si el motor va rezagado. */
+export function motorCapFor(t: TeamDef, topPotencia?: number): number {
+  const works = isWorks(t);
+  const base = works ? MOTOR_CAP.works : MOTOR_CAP.client;
+  if (topPotencia === undefined) return base;
+  return Math.round(base * aduoMult(t.potencia, topPotencia, works) * 100) / 100;
+}
+
+/**
+ * Rendimientos decrecientes del reglamento: cuanto más cerca está un coche del techo técnico del mejor, menos rinde
+ * cada hora de túnel; cuanto más atrás, más concepto y margen quedan por exprimir (si se desarrolla).
+ */
+export function catchUpMult(level: number, topLevel: number): number {
+  const gap = Math.max(0, topLevel - level);
+  return clamp(0.82 + gap * 0.16, 0.82, 1.38);
+}
+
 /** Lo que se espera del paquete de un periodo (agarre en un circuito medio). devK: ritmo del director técnico (1 medio). */
-export function aeroExpect(cal: number, atr: number, devK: number): number {
+export function aeroExpect(cal: number, atr: number, devK: number, catchUpK = 1): number {
   const n = aeroPkgCount(cal);
   if (!n) return 0;
   const seasonScale = cal > 9 ? 1 : (cal - 1) / 8;
-  return (AERO_SEASON * seasonScale * devK * atrMult(atr)) / n;
+  return (AERO_SEASON * seasonScale * devK * atrMult(atr) * catchUpK) / n;
 }
 /** Hace el paquete de un periodo ya terminado (siempre el mismo para la misma semilla). */
-export function makeAeroPkg(a: AeroPlan, period: number, cal: number, seed: number, atr: number, devK = 1, realK = devK): AeroPkg | null {
+export function makeAeroPkg(a: AeroPlan, period: number, cal: number, seed: number, atr: number, devK = 1, realK = devK, catchUpK = 1): AeroPkg | null {
   const ready = aeroPkgRound(period, cal);
   if (ready === null) return null;
   const r = new Rng(((seed * 2654435761) ^ (period * 7919 + 0xa3c5)) >>> 0);
-  const expect = aeroExpect(cal, atr, devK);
+  const expect = aeroExpect(cal, atr, devK, catchUpK);
   const f = r.chance(AERO_BAD) ? r.range(-0.5, 0.4) : clamp(r.gauss(1.02, 0.15), 0.75, 1.35);
   return { period, ready, split: [...splitAt(a, period)], atr, expect, real: expect * f * (realK / Math.max(0.01, devK)) };
 }
 /** Error de la medida en libres (agarre): sin vueltas de prueba de piezas, ±0,11 s (lo que se intuye del resto de
- *  vueltas); con unas 16 (programa equilibrado), ±0,05 s; con ~40 (validar), ±0,035 s. */
-export function aeroSigma(laps: number, otherLaps = 0): number {
-  return 0.16 / Math.sqrt(1 + (laps + 0.02 * otherLaps) / 2) / 0.98;
+ *  vueltas); con unas 16 (programa equilibrado), ±0,05 s; con ~40 (validar), ±0,035 s. En fines de semana sprint,
+ *  los rastrillos aero en FP1 compensan parcialmente la falta de FP2/FP3. */
+export function aeroSigma(laps: number, otherLaps = 0, sprint = false): number {
+  const eff = sprint ? laps * 1.35 : laps;
+  return 0.16 / Math.sqrt(1 + (eff + 0.02 * otherLaps) / 2) / 0.98;
 }
 /** Lo medido en libres (siempre lo mismo para el mismo paquete y las mismas vueltas). */
-export function measurePkg(p: AeroPkg, seed: number): void {
-  const sigma = aeroSigma(p.laps ?? 0, p.otherLaps ?? 0);
+export function measurePkg(p: AeroPkg, seed: number, sprint = false): void {
+  const sigma = aeroSigma(p.laps ?? 0, p.otherLaps ?? 0, sprint);
   const r = new Rng(((seed * 40503) ^ (p.period * 9973 + 0x51ed)) >>> 0);
   p.sigma = sigma;
   p.medido = p.real + r.gauss(0, sigma);
 }
 /**
+ * Estimación posterior del paquete combinando lo esperado (88 % bueno alrededor de `expect`, 12 % malo en [−0,5..0,4])
+ * con la medida ruidosa de libres (`medido ± sigma`). Evita descartar paquetes buenos por un ruido leve cerca de cero.
+ */
+export function aeroPosterior(p: AeroPkg): { mean: number; probPos: number } {
+  if (p.medido === undefined || !p.sigma || p.sigma <= 0 || p.expect <= 0) {
+    const v = p.medido ?? p.expect;
+    return { mean: v, probPos: v > 0 ? 1 : 0 };
+  }
+  const mu = p.expect * 1.02, sd = Math.max(1e-4, p.expect * 0.15);
+  const lo = -0.5 * p.expect, hi = 1.45 * p.expect, N = 60, dx = (hi - lo) / N;
+  const badLo = -0.5 * p.expect, badHi = 0.4 * p.expect, badDens = 1 / Math.max(1e-6, badHi - badLo);
+  const norm = (x: number, m: number, s: number) => Math.exp(-0.5 * ((x - m) / s) ** 2) / (s * 2.5066282746);
+  let wSum = 0, xSum = 0, pPos = 0;
+  for (let i = 0; i <= N; i++) {
+    const x = lo + i * dx;
+    const prior = (1 - AERO_BAD) * norm(x, mu, sd) + (x >= badLo && x <= badHi ? AERO_BAD * badDens : 0);
+    const w = prior * norm(p.medido, x, p.sigma);
+    wSum += w;
+    xSum += w * x;
+    if (x > 0) pPos += w;
+  }
+  if (wSum <= 0) return { mean: p.medido, probPos: p.medido > 0 ? 1 : 0 };
+  return { mean: xSum / wSum, probPos: pPos / wSum };
+}
+/**
  * Las horas del último periodo (que ya no dan paquete en la temporada) van al coche del año siguiente: lo que se
  * espera de un paquete con la cuota ATR de ese periodo y el ritmo del director técnico (agarre en un circuito medio).
- * Vale para todos los equipos; al pasar de año se compara con la media, así que lo que cuenta es la diferencia de
- * ATR (el que acabó peor trabaja más horas para el coche nuevo).
  */
-export function nextYearAero(cal: number, atr: number, devK = 1): number {
-  return aeroExpect(cal, atr, devK);
+export function nextYearAero(cal: number, atr: number, devK = 1, catchUpK = 1): number {
+  return aeroExpect(cal, atr, devK, catchUpK);
 }
 /** Ronda (índice) con la que empieza el último periodo de túnel (el que trabaja para el año siguiente). */
 export const lastAeroPeriodRound = (cal: number) => (Math.ceil(cal / aeroPeriodLen(cal)) - 1) * aeroPeriodLen(cal);
@@ -191,19 +251,20 @@ export const newDev = (leftOfCap: number | null): DevState => ({ budget: devBudg
 export const devSpent = (d: DevState) => d.parts.reduce((a, p) => a + p.cost, 0);
 export const devLeft = (d: DevState) => Math.round((d.budget - devSpent(d) - (d.aero?.reserva ?? 0)) * 10) / 10;
 
-/** Lo que se espera de una pieza (con el ritmo de desarrollo del equipo, 1 = medio). aeroK: el multiplicador ATR de
- *  túnel de viento y CFD del equipo cuando se pide (solo cuenta en aerodinámica). */
-export const devExpect = (area: DevArea, size: DevSize, devK: number, aeroK = 1) => DEV_RATE[area] * DEV_SIZES[size].cost * devK * (area === "aero" ? aeroK : 1);
+/** Lo que se espera de una pieza (con el ritmo de desarrollo del equipo, 1 = medio). aeroK: multiplicador ATR en
+ *  aerodinámica; motorK: multiplicador ADUO FIA 2026 si el motor está rezagado. */
+export const devExpect = (area: DevArea, size: DevSize, devK: number, aeroK = 1, motorK = 1) =>
+  DEV_RATE[area] * DEV_SIZES[size].cost * devK * (area === "aero" ? aeroK : area === "motor" ? motorK : 1);
 
-/** Pide una pieza en la ronda `round`. Lo que rinde de verdad sale de la semilla (una de cada cuatro decepciona).
- *  devK: ritmo de desarrollo del equipo según el informe (1 = medio); realK: el de verdad; aeroK: multiplicador ATR
- *  del equipo en esa ronda (las piezas aerodinámicas se diseñan con las horas de túnel y CFD que le tocan). */
-export function orderPart(d: DevState, area: DevArea, size: DevSize, round: number, seed: number, devK = 1, realK = devK, aeroK = 1): DevPart | null {
+/** Pide una pieza en la ronda `round`. Lo que rinde de verdad sale de la semilla.
+ *  devK: ritmo de desarrollo del equipo según el informe (1 = medio); realK: el de verdad; aeroK: multiplicador ATR;
+ *  motorK: multiplicador ADUO FIA 2026 para motores rezagados. */
+export function orderPart(d: DevState, area: DevArea, size: DevSize, round: number, seed: number, devK = 1, realK = devK, aeroK = 1, motorK = 1): DevPart | null {
   const sz = DEV_SIZES[size];
   if (devLeft(d) < sz.cost - 1e-9) return null;
   const id = d.parts.length ? Math.max(...d.parts.map((p) => p.id)) + 1 : 1;
   const r = new Rng(((seed * 2654435761) ^ (id * 40503 + 0x9e37)) >>> 0);
-  const expect = devExpect(area, size, devK, aeroK);
+  const expect = devExpect(area, size, devK, aeroK, motorK);
   // con el sistema de túnel, las piezas salen mal tan a menudo como los paquetes (AERO_BAD); antes, una de cada cuatro
   const f = r.chance(d.aero ? AERO_BAD : 0.25) ? r.range(0.2, 0.7) : clamp(r.gauss(1.02, 0.15), 0.75, 1.35);
   // el director técnico puede ser mejor o peor de lo que decía su informe (realK frente a devK)
@@ -213,20 +274,26 @@ export function orderPart(d: DevState, area: DevArea, size: DevSize, round: numb
 }
 
 /** Lo que llevan las piezas que ya han llegado en la ronda `round`, por área (con los topes). */
-export function devGains(d: DevState | undefined, round: number, works: boolean): { aero: number; motor: number; fuel: number; fiab: number } {
+export function devGains(d: DevState | undefined, round: number, works: boolean, motorCap?: number): { aero: number; motor: number; fuel: number; fiab: number } {
   const sum = (a: DevArea) => (d?.parts ?? []).filter((p) => p.area === a && p.ready <= round).reduce((x, p) => x + p.real, 0);
-  const motor = Math.min(sum("motor"), works ? MOTOR_CAP.works : MOTOR_CAP.client);
+  const cap = motorCap ?? (works ? MOTOR_CAP.works : MOTOR_CAP.client);
+  const motor = Math.min(sum("motor"), cap);
   return { aero: sum("aero"), motor, fuel: Math.min(FUEL_CAP, motor * FUEL_PER_POWER), fiab: Math.min(FIAB_CAP, sum("fiab")) };
 }
 
 /** El equipo del jugador con sus piezas montadas. */
-export function applyDev(t: TeamDef, d: DevState | undefined, round: number): TeamDef {
-  const g = devGains(d, round, isWorks(t));
+export function applyDev(t: TeamDef, d: DevState | undefined, round: number, topPotencia?: number): TeamDef {
+  const g = devGains(d, round, isWorks(t), motorCapFor(t, topPotencia));
   const a = aeroGains(d?.aero, round);
   if (!g.aero && !g.motor && !g.fiab && !a.total) return t;
   const cv = t.curvas ?? [0, 0, 0];
+  const aeroAll = g.aero + a.total;
+  // las mejoras aerodinámicas y de chasis también afinan el ritmo de carrera si el coche arrastra déficit en tandas largas
+  const rc0 = t.ritmoCarrera ?? 0;
+  const rcGain = aeroAll > 0 && rc0 < 0.25 ? Math.min(0.25 - rc0, aeroAll * 0.35) : 0;
   return {
     ...t, agarre: t.agarre + g.aero, potencia: t.potencia + g.motor, consumo: (t.consumo ?? 1) * (1 - g.fuel), fiabilidad: t.fiabilidad * (1 - g.fiab),
+    ...(rcGain ? { ritmoCarrera: Math.round((rc0 + rcGain) * 1000) / 1000 } : {}),
     ...(a.total ? { curvas: [cv[0] + a.curvas[0], cv[1] + a.curvas[1], cv[2] + a.curvas[2]] as [number, number, number], resistencia: t.resistencia + a.drag } : {}),
   };
 }
@@ -270,8 +337,6 @@ export function atrPercent(rank: number, total: number): number {
 /** Multiplicador aerodinámico derivado del ATR (P1 ≈ 0,84×, media ≈ 1,01×, último ≈ 1,18×). */
 export const atrMult = (atr: number) => 0.84 + 0.34 * clamp((atr - 70) / 50, 0, 1);
 
-const rivalCarLevel = (t: TeamDef) => t.agarre + 0.4 * t.potencia - 0.3 * t.resistencia;
-
 /**
  * Reparto ATR de una temporada, como el de la FIA: el orden (ids de equipo, del 1.º al último) con el que empieza,
  * que es la clasificación de constructores del año anterior (en la primera temporada, el nivel de los coches), y el
@@ -292,7 +357,7 @@ export const atrMidRound = (totalRounds: number) => (totalRounds >= 4 ? Math.rou
 
 /** Orden de partida si no hay clasificación del año anterior: por nivel del coche (y los `last`, equipos nuevos, al final). */
 export function atrCarOrder(base: TeamDef[], last: string[] = []): string[] {
-  return [...base.slice().sort((a, b) => rivalCarLevel(b) - rivalCarLevel(a)).map((t) => t.id).filter((id) => !last.includes(id)), ...last];
+  return [...base.slice().sort((a, b) => carLevel(b) - carLevel(a)).map((t) => t.id).filter((id) => !last.includes(id)), ...last];
 }
 
 /** Orden por puntos (los empates, como en el orden `prev`). */
@@ -337,18 +402,23 @@ export function rivalDevAt(base: TeamDef[], seed: number, round: number, totalRo
 
   const seasonScale = totalRounds > 9 ? 1 : maxR / 8;
   const prog = rNow / maxR;
+  const topLevel = Math.max(...base.map(carLevel));
+  const topPotencia = Math.max(...base.map((t) => t.potencia));
 
   // Evoluciones de unidad de potencia por motorista (2 olas en calendarios de >= 6 carreras, 1 en cortos)
+  // Con concesiones FIA 2026 (ADUO): los motoristas rezagados ganan más margen por ola.
   const puWaves = new Map<string, { round: number; gain: number; expect: number; verdict: "salto" | "ok" | "fallo" }[]>();
   const motors = [...new Set(base.map((t) => t.motor))];
   for (const m of motors) {
     const rng = new Rng(((seed * 2654435761) ^ hashId("pu:" + m)) >>> 0);
+    const mPow = Math.max(...base.filter((t) => t.motor === m).map((t) => t.potencia));
+    const aduoK = aduoMult(mPow, topPotencia, true);
     const waves: { round: number; gain: number; expect: number; verdict: "salto" | "ok" | "fallo" }[] = [];
     const anchors = maxR >= 6 ? [0.35, 0.72] : [0.5];
     for (const a of anchors) {
       const wr = clamp(Math.round(a * maxR + rng.range(-0.08, 0.08) * maxR), 1, maxR);
-      // ~0,15 de potencia en la temporada (repartida entre sus olas), menos en calendarios cortos
-      const expect = (0.15 * seasonScale) / anchors.length;
+      // ~0,15 de potencia en la temporada (repartida entre sus olas), escalado por ADUO si el motor está rezagado
+      const expect = (0.15 * seasonScale * aduoK) / anchors.length;
       const f = rng.chance(0.2) ? rng.range(0.35, 0.65) : clamp(rng.gauss(1.0, 0.2), 0.7, 1.4);
       const gain = expect * f;
       waves.push({ round: wr, gain, expect, verdict: f < 0.7 ? "fallo" : f > 1.2 ? "salto" : "ok" });
@@ -364,8 +434,9 @@ export function rivalDevAt(base: TeamDef[], seed: number, round: number, totalRo
     const orgK = (t.estrategia - 80) * 0.002; // ligera ventaja organizativa (±3 %)
     const techK = clamp(techMult?.get(t.id) ?? 1, 0.35, 1.85); // en «crear equipo», peso del director técnico real
     const teamK = clamp(rng.gauss(1.0, 0.15) + orgK, 0.68, 1.35);
-    // lo que ganaría en la temporada con un ATR medio (×1); cada parte se multiplica por el ATR de cuando se hizo
-    const totalAeroExp = DEV_RIVAL * 8 * seasonScale * teamK * techK;
+    const cuK = catchUpMult(carLevel(t), topLevel);
+    // lo que ganaría en la temporada con un ATR medio (×1); rendimientos decrecientes según cercanía al líder
+    const totalAeroExp = DEV_RIVAL * 8 * seasonScale * teamK * techK * cuK;
 
     // 20 % refinamiento continuo (puesta a punto, pequeños apéndices) + 80 % en paquetes discretos
     let aero = 0;
@@ -409,7 +480,7 @@ export function rivalDevAt(base: TeamDef[], seed: number, round: number, totalRo
         arrivals.push({ teamId: t.id, team: t.nombre, round: w.round, area: "motor", expect: w.expect, real: gain, verdict: w.verdict });
       }
     }
-    motor = Math.min(motor, works ? MOTOR_CAP.works : MOTOR_CAP.client);
+    motor = Math.min(motor, motorCapFor(t, topPotencia));
     const fuel = Math.min(FUEL_CAP, motor * FUEL_PER_POWER);
 
     // Maduración de fiabilidad a lo largo del año (más margen si el coche empezó frágil)
@@ -424,16 +495,20 @@ export function rivalDevAt(base: TeamDef[], seed: number, round: number, totalRo
 /** Aplica el desarrollo del jugador (`applyDev`) y las curvas asimétricas ATR de los rivales para una ronda. */
 export function applyGridDev(base: TeamDef[], seed: number, round: number, totalRounds: number, playerTeamId: string, playerDev?: DevState, plan?: AtrPlan): TeamDef[] {
   const rivals = rivalDevAt(base, seed, round, totalRounds, undefined, plan);
+  const topPotencia = Math.max(...base.map((t) => t.potencia));
   return base.map((t) => {
-    if (t.id === playerTeamId) return applyDev(t, playerDev, round);
+    if (t.id === playerTeamId) return applyDev(t, playerDev, round, topPotencia);
     const g = rivals.get(t.id);
     if (!g || (!g.aero && !g.motor && !g.fiab)) return t;
+    const rc0 = t.ritmoCarrera ?? 0;
+    const rcGain = g.aero > 0 && rc0 < 0.25 ? Math.min(0.25 - rc0, g.aero * 0.35) : 0;
     return {
       ...t,
       agarre: t.agarre + g.aero,
       potencia: t.potencia + g.motor,
       consumo: (t.consumo ?? 1) * (1 - g.fuel),
       fiabilidad: t.fiabilidad * (1 - g.fiab),
+      ...(rcGain ? { ritmoCarrera: Math.round((rc0 + rcGain) * 1000) / 1000 } : {}),
     };
   });
 }

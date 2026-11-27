@@ -149,6 +149,14 @@ export function allocation(sprint: boolean): TyreSet[] {
   return sets;
 }
 
+/** Juegos de un piloto para la jornada de test de pretemporada (8 h en Barcelona): suficientes para ~90-120 vueltas. */
+export function testAllocation(): TyreSet[] {
+  const n: Record<Compound, number> = { S: 10, M: 12, H: 10, I: 8, W: 4 };
+  const sets: TyreSet[] = [];
+  for (const c of ALL) for (let i = 1; i <= n[c]; i++) sets.push(newSet(c, `${c}${i}`));
+  return sets;
+}
+
 export const setWear = (t: TyreSet) => Math.max(t.F.wear, t.R.wear);
 export const isNew = (t: TyreSet) => t.laps === 0;
 

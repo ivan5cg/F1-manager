@@ -851,6 +851,8 @@ function setForPractice(sess: Session, car: Car, c: Compound): TyreSet | undefin
   const sets = avail(c);
   const fresh = sets.filter((s) => s.laps === 0);
   const usedOk = sets.filter((s) => s.laps > 0 && setWear(s) < 0.55).sort((a, b) => setWear(a) - setWear(b));
+  // Test de pretemporada: sin reserva de clasificación ni de carrera
+  if (sess.kind === "TEST") return fresh[0] ?? usedOk[0];
   if (c === "S") return fresh.length > reserveSoft(sess) ? fresh[0] : usedOk[0];
   // en finde normal hay que devolver 6 juegos tras libres y llegar a carrera con ≥3 M+H (≥1 M y ≥1 H)
   const freshM = avail("M").filter((s) => s.laps === 0).length;
@@ -870,7 +872,12 @@ function setForPractice(sess: Session, car: Car, c: Compound): TyreSet | undefin
 /** Prepara una tanda. Para el jugador, setId fuerza un juego concreto. */
 export function makeRun(sess: Session, car: Car, kind: Run["kind"], c: Compound, laps: number, at = 0, setId?: string): Run | null {
   // respetar siempre la reserva de carrera de setForPractice (sin quemar el último M/H nuevo en FP3)
-  const set = setId ? car.e.sets.find((s) => s.id === setId) : kind === "quali" ? pickSet(car, c, true) : setForPractice(sess, car, c);
+  let set = setId ? car.e.sets.find((s) => s.id === setId) : kind === "quali" ? pickSet(car, c, true) : setForPractice(sess, car, c);
+  // prueba de paquete aero: si llueve o no queda el compuesto pedido, usar intermedios o el mejor seco libre para no perder la validación
+  if (!set && kind === "test" && !setId) {
+    const order: Compound[] = sess.avgWater() > 0.25 ? ["I", "W", "M", "H", "S"] : ["M", "H", "S", "I"];
+    for (const alt of order) { set = setForPractice(sess, car, alt); if (set) break; }
+  }
   if (!set) return null;
   const fuel = kind === "long" ? Math.min(75, 12 + laps * sess.fuelPerLap * 1.1 + 25) : kind === "inst" ? 20 : kind === "test" ? 12 + laps * sess.fuelPerLap * 1.1 + 8 : QUALI_FUEL + laps * 2 * sess.fuelPerLap;
   return { kind, setId: set.id, pushLaps: laps, fuel, at };
@@ -888,7 +895,21 @@ export function practiceProgram(sess: Session, car: Car): Run[] {
   // de clasificación con blando y tandas largas con el depósito lleno; cada uno con su orden y su número de salidas.
   // (Antes, 15 / 15 / 6 vueltas por piloto y los 22 con el mismo programa en los libres 3; en la F1 real, ~25 / ~28 / ~18.)
   const other = (c: Compound): Compound => (c === "M" ? (r.chance(0.6) ? "S" : "H") : "M");
-  if (sess.kind === "FP1") {
+  if (sess.kind === "TEST") {
+    // Jornada completa de 8 h (09:00–17:00 = 480 min) en Barcelona: ~75-100 vueltas por coche entre correlación aero,
+    // tandas largas de fiabilidad/neumáticos y vueltas rápidas de simulación de clasificación al final de la tarde.
+    add("inst", "M", 1, r.range(1, 10));
+    add("test", "M", r.int(6, 9), r.range(16, 36));
+    add("qsim", "M", r.int(3, 4), r.range(55, 80));
+    add("long", "H", r.int(14, 18), r.range(100, 130));
+    add("long", "M", r.int(12, 16), r.range(165, 195));
+    // pausa de mediodía (~13:00–13:45 = min 240–285)
+    add("test", "H", r.int(6, 9), r.range(275, 300));
+    add("long", "M", r.int(15, 20), r.range(315, 345));
+    add("qsim", "S", r.int(2, 3), r.range(385, 410));
+    add("qsim", "S", r.int(2, 3), r.range(425, 448));
+    add("long", "S", r.int(8, 12), r.range(452, 462));
+  } else if (sess.kind === "FP1") {
     add("inst", "M", 1, r.range(0, 4));
     add("qsim", "M", r.int(2, 3), r.range(6, 12)); // reglajes
     const lc: Compound = r.chance(0.55) ? "M" : r.chance(0.6) ? "H" : "S";
@@ -914,12 +935,15 @@ export function practiceProgram(sess: Session, car: Car): Run[] {
     add("qsim", "S", r.int(1, 2), r.range(38, 46));
   }
   // paquete aerodinámico nuevo en tu coche: el programa del viernes cambia tandas largas por pruebas de piezas
-  // (en un fin de semana normal, libres 1 y 2; en uno sprint, el único libre)
+  // (en un fin de semana normal, libres 1 y 2; en uno sprint, el único libre — con tandas algo más largas para compensar)
   if (car.player && sess.pkgTest && sess.pkgTest !== "neumaticos" && (sess.kind === "FP1" || sess.kind === "FP2")) {
     const longs = runs.filter((x) => x.kind === "long");
     const swap = sess.pkgTest === "validar" ? longs : sess.kind === "FP1" ? longs.slice(0, 1) : [];
+    const comp: Compound = sess.avgWater() > 0.25 ? "I" : "M";
+    const maxL = sess.sprintWeekend ? 10 : 8;
+    const minL = sess.sprintWeekend ? 7 : 5;
     for (const x of swap) {
-      const t = makeRun(sess, car, "test", "M", Math.min(8, Math.max(5, x.pushLaps)), x.at);
+      const t = makeRun(sess, car, "test", comp, Math.min(maxL, Math.max(minL, x.pushLaps)), x.at);
       if (t) runs[runs.indexOf(x)] = t;
     }
   }
@@ -934,7 +958,7 @@ export function practiceProgram(sess: Session, car: Car): Run[] {
  */
 export function teamTakesOver(sess: Session, car: Car) {
   car.auto = true;
-  if (sess.parts.length || !sess.kind.startsWith("FP") || car.queue.length) return;
+  if (sess.parts.length || !(sess.kind === "TEST" || sess.kind.startsWith("FP")) || car.queue.length) return;
   const now = sess.partT;
   let runs = practiceProgram(sess, car).filter((r) => (r.at ?? 0) > now);
   if (!runs.length && sess.remaining() > 12 * 60) {

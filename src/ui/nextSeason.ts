@@ -1,15 +1,16 @@
 // Fin de temporada y paso a la siguiente: lo que ha pasado, los objetivos, tus pilotos (renovar o cambiar) y el
 // mercado de los demás (career.ts).
-import { BASE_TEAMS, MARKET, DRIVERS, TEAMS, CALENDARS, calendarOf, gridOf, who, atrPlan, devContext } from "./data";
+import { BASE_TEAMS, MARKET, DRIVERS, TEAMS, CALENDARS, CIRCUITS, calendarOf, gridOf, who, atrPlan, devContext } from "./data";
 import { $, esc, setBack, sheet } from "./common";
 import type { SeasonState, SeatSwap } from "../sim/season";
 import { driverStandings, teamStandings, pointsFor, RACE_POINTS, SPRINT_POINTS } from "../sim/season";
-import { devLeft, aeroGains, atrAt, nextYearAero, lastAeroPeriodRound } from "../sim/development";
+import { devLeft, atrAt, lastAeroPeriodRound, AERO_BANDS, splitAt, aeroPeriodOf, aduoMult, isWorks } from "../sim/development";
 import { objectiveStatus } from "../sim/objectives";
 import { MORAL0, moralOf, moralLabel, wantsRenew } from "../sim/morale";
 import { recordExtras } from "../sim/hitos";
 import { seatAt, gpOf, galaOf } from "./ritual";
-import { offSeason, initialContracts, rating, ageOf, FIRST_YEAR, objectivesBonus, SeasonRecord, CAR_CARRY, OBJ_BONUS, OBJ_MALUS, salaryFor, clauseFor, midSeason, SeatNow } from "../sim/career";
+import { offSeason, initialContracts, rating, ageOf, FIRST_YEAR, objectivesBonus, SeasonRecord, OBJ_BONUS, OBJ_MALUS, salaryFor, clauseFor, midSeason, SeatNow, WinterPlan, DEFAULT_WINTER, developPlayerWinter, normalizeGridScale } from "../sim/career";
+import { Rng } from "../sim/rng";
 import { publicDriver, trueTech, NEW_TEAM, PLAYER_TEAM_ID, clauseOf } from "../sim/market";
 import { saveSeason } from "./store";
 import type { DriverDef, TeamDef } from "../sim/session";
@@ -114,7 +115,23 @@ export function firingOffers(s: SeasonState): TeamDef[] {
   return teamStandings(s, TEAMS).map((x) => x.team).filter((t) => t.id !== s.playerTeam).slice(-2).reverse();
 }
 
-export function buildNextSeason(s: SeasonState, choices: { keep: boolean; sign?: string }[], opts: { staff?: StaffChoice; newTeam?: string } = {}): SeasonState {
+/** Sortea los fines de semana sprint de una temporada desde 2027 (10 al azar en calendario completo; proporcional en corto). */
+export function randomSprintsFor(cal: string[], year: number, seed: number): { formatos: Record<string, "normal" | "sprint">; sprintIds: string[] } {
+  const n = cal.length >= 12 ? Math.min(10, cal.length) : Math.min(cal.length, Math.max(2, Math.round((10 * cal.length) / 23)));
+  const rng = new Rng(((seed * 19) ^ (year * 313) ^ 0x5a17) >>> 0);
+  const pool = [...cal];
+  // Fisher-Yates determinista
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = rng.int(0, i);
+    [pool[i], pool[j]] = [pool[j], pool[i]];
+  }
+  const picked = new Set(pool.slice(0, n));
+  const sprintIds = cal.filter((id) => picked.has(id));
+  const formatos: Record<string, "normal" | "sprint"> = Object.fromEntries(cal.map((id) => [id, picked.has(id) ? "sprint" : "normal"]));
+  return { formatos, sprintIds };
+}
+
+export function buildNextSeason(s: SeasonState, choices: { keep: boolean; sign?: string }[], opts: { staff?: StaffChoice; newTeam?: string; winter?: WinterPlan } = {}): SeasonState {
   const y = yearOf(s) + 1;
   const { ai, mine, fin } = rosters(s);
   const taken = new Set([...ai.flatMap((t) => t.pilotos.map((d) => d.abrev)), ...mine.map((d) => d.abrev)]);
@@ -122,40 +139,54 @@ export function buildNextSeason(s: SeasonState, choices: { keep: boolean; sign?:
   const contracts = s.contracts ?? initialContracts(allTeams, yearOf(s), s.seed);
   const salaries = salariesOf(s, allTeams.flatMap((t) => t.pilotos));
   const meanAgarre = BASE_TEAMS.reduce((a, t) => a + t.agarre, 0) / BASE_TEAMS.length;
+  const meanPotencia = BASE_TEAMS.reduce((a, t) => a + t.potencia, 0) / BASE_TEAMS.length;
   const departed = (s.swaps ?? []).map((x) => x.out).filter((d, i, a) => !taken.has(d.abrev) && a.findIndex((z) => z.abrev === d.abrev) === i);
   const basePool = poolOf(s, taken);
   const pool0 = [...basePool, ...departed.filter((d) => !basePool.some((p) => p.abrev === d.abrev))];
+  const races = calendarOf(s).length;
+  const plan = atrPlan(s);
+  const r0 = lastAeroPeriodRound(races);
+  const atrByTeam = Object.fromEntries(fin.map((t) => [t.id, atrAt(plan, t.id, r0)]));
   const out = offSeason({
-    year: y, seed: s.seed, final: fin, base: ai, meanAgarre, pool: pool0, contracts, salaries,
+    year: y, seed: s.seed, final: fin, base: ai, meanAgarre, meanPotencia, atrByTeam, pool: pool0, contracts, salaries,
     mine: mine.map((d, i) => ({ d, keep: choices[i]?.keep ?? true, sign: choices[i]?.sign })),
   });
-  // tu coche: lo mismo que los demás, desde como acabó el tuyo
-  const endMean = fin.reduce((a, t) => a + t.agarre, 0) / fin.length;
+
+  // Desarrollo invernal del coche del jugador (100 % orgánico desde cómo acabó su coche + plan invernal elegido)
   const myId = s.equipo ? PLAYER_TEAM_ID : s.playerTeam;
   const myFin = fin.find((t) => t.id === myId)!;
-  // los paquetes del túnel van en las curvas y la resistencia: para el coche nuevo cuentan como agarre (circuito medio)
-  const races = calendarOf(s).length;
-  const myAero = aeroGains(s.dev?.aero, races - 1).total;
-  let myAgarre = meanAgarre + CAR_CARRY * (myFin.agarre + myAero - endMean);
-  // túnel de viento: las horas del último periodo van al coche nuevo de cada uno (frente a la media de la parrilla)
-  let nextAero: { mine: number; news: string } | null = null;
-  if (s.dev?.aero) {
-    const plan = atrPlan(s), r0 = lastAeroPeriodRound(races), realK = devContext(s).realK;
-    const bonus = new Map(fin.map((t) => [t.id, nextYearAero(races, atrAt(plan, t.id, r0), t.id === myId ? realK : 1)]));
-    const mean = [...bonus.values()].reduce((a, b) => a + b, 0) / Math.max(1, bonus.size);
-    out.base = out.base.map((t) => ({ ...t, agarre: Math.round((t.agarre + (bonus.get(t.id) ?? mean) - mean) * 100) / 100 }));
-    const mineB = (bonus.get(myId) ?? mean) - mean;
-    myAgarre += mineB;
-    const sec = (x: number) => `${x >= 0 ? "−" : "+"}${Math.abs(x * 0.98).toFixed(2).replace(".", ",")} s`;
-    nextAero = { mine: mineB, news: `🌬️ Las horas de túnel del final de ${yearOf(s)} (ATR ${atrAt(plan, myId, r0)} %) dejan tu coche de ${y} en ${sec(mineB)}/vuelta frente a lo que traen los demás.` };
-  }
+  const lastPer = aeroPeriodOf(Math.max(0, races - 1), races);
+  const defaultSplit = s.dev?.aero ? splitAt(s.dev.aero, lastPer) : DEFAULT_WINTER.aeroSplit;
+  const winterPlan: WinterPlan = opts.winter ?? {
+    aeroSplit: [defaultSplit[0], defaultSplit[1], defaultSplit[2], defaultSplit[3]],
+    factoryFocus: [...DEFAULT_WINTER.factoryFocus],
+  };
+  const myAtrW = atrByTeam[myId] ?? 95;
+  const devK = devContext(s).realK;
+  const wRes = developPlayerWinter(myFin, fin, myAtrW, winterPlan, s.seed, y, devK);
+  const myNextCar: TeamDef = { ...wRes.team, pilotos: out.mine };
+
+  const sec = (x: number) => `${x >= 0 ? "−" : "+"}${Math.abs(x * 0.98).toFixed(2).replace(".", ",")} s`;
+  const winterNews: string[] = [
+    `🏭 Desarrollo de invierno ${y} (ATR ${myAtrW} %): túnel ${sec(wRes.summary.aero)}/vuelta, motor −${(wRes.summary.motor * 0.22).toFixed(2).replace(".", ",")} s/vuelta${wRes.summary.fiabCut > 0.01 ? `, fiabilidad −${Math.round(wRes.summary.fiabCut * 100)} %` : ""}${wRes.summary.rcGain > 0.01 ? `, ritmo de carrera +${wRes.summary.rcGain.toFixed(2).replace(".", ",")} %` : ""}.`,
+  ];
+
   const rec = seasonRecord(s);
   const done = rec.objetivos.filter((o) => o.done).length;
   const seed = (s.seed * 7 + 13) % 1_000_000;
+  const cal = s.calendar ? [...s.calendar] : [...CALENDARS.corta.ids];
+  // 2026 mantiene los 6 sprints reales; desde 2027 se sortean 10 sprints al azar (proporcional en calendario corto)
+  const spr = y >= 2027 ? randomSprintsFor(cal, y, seed) : null;
+  if (spr) {
+    const names = spr.sprintIds.map((id) => CIRCUITS[id]?.gp.replace("Gran Premio de ", "").replace(/ \(.*\)$/, "") ?? id);
+    winterNews.push(`📅 Sprints ${y} (${spr.sprintIds.length} al azar): ${names.join(", ")}.`);
+  }
+
   const next: SeasonState = {
     v: 1, playerTeam: s.playerTeam, seed, round: 0, weekend: null, rounds: [],
-    calendar: s.calendar ? [...s.calendar] : [...CALENDARS.corta.ids], ...(s.formatos ? { formatos: { ...s.formatos } } : {}),
-    year: y, trueSeed: s.trueSeed ?? s.seed, pool: out.pool, contracts: out.contracts, salaries: out.salaries, news: nextAero ? [nextAero.news, ...out.news] : out.news,
+    calendar: cal,
+    ...(spr ? { formatos: spr.formatos } : s.formatos ? { formatos: { ...s.formatos } } : {}),
+    year: y, trueSeed: s.trueSeed ?? s.seed, pool: out.pool, contracts: out.contracts, salaries: out.salaries, news: [...winterNews, ...out.news],
     history: [...(s.history ?? []), rec],
     // el reparto ATR del año que viene sale de la clasificación de constructores de este
     atrOrder: teamStandings(s, fin).map((x) => x.team.id),
@@ -178,18 +209,17 @@ export function buildNextSeason(s: SeasonState, choices: { keep: boolean; sign?:
     next.equipo = { ...s.equipo, pilotos: out.mine.map((d) => d.abrev), ...(opts.staff ?? {}) };
     // un jefe o un técnico de otro equipo se paga con su cláusula, del presupuesto de desarrollo
     if (opts.staff) next.devBonus = (next.devBonus ?? 0) - staffCost(s, opts.staff);
-    next.grid = out.base;
+    const normAll = normalizeGridScale([...out.base, myNextCar], meanAgarre, meanPotencia);
+    next.grid = normAll.slice(0, out.base.length);
+    const myNorm = normAll[normAll.length - 1];
     next.misPilotos = out.mine;
     // lo que conserva tu coche frente al que haría tu director técnico de cero; ya no es un equipo nuevo
     const tech = MARKET.tecnicos.find((x) => x.nombre === s.equipo!.tecnico);
     const design = (tech ? trueTech(tech, s.trueSeed ?? s.seed).diseno : 0) + NEW_TEAM.agarre;
-    next.carry = Math.round((myAgarre - design - NEW_TEAM.agarre * 0.5) * 100) / 100;
+    next.carry = Math.round((myNorm.agarre - design - NEW_TEAM.agarre * 0.5) * 100) / 100;
   } else {
-    const mineBase = (s.grid ?? BASE_TEAMS).find((t) => t.id === s.playerTeam)!;
-    // la potencia que ganaste con piezas de motor también se conserva en parte
-    const pw = mineBase.potencia + CAR_CARRY * (myFin.potencia - mineBase.potencia);
-    const mineNext: TeamDef = { ...mineBase, pilotos: out.mine, agarre: Math.round(myAgarre * 100) / 100, potencia: Math.round(pw * 100) / 100 };
-    next.grid = (s.grid ?? BASE_TEAMS).map((t) => (t.id === s.playerTeam ? mineNext : out.base.find((b) => b.id === t.id)!));
+    const rawGrid = (s.grid ?? BASE_TEAMS).map((t) => (t.id === s.playerTeam ? myNextCar : out.base.find((b) => b.id === t.id)!));
+    next.grid = normalizeGridScale(rawGrid, meanAgarre, meanPotencia);
   }
   return next;
 }
@@ -259,6 +289,49 @@ export function offSeasonScreen(s: SeasonState, onDone: (next: SeasonState) => v
   // «crear equipo»: el equipo técnico para el año que viene (jefe, director técnico y motor)
   const staff: StaffChoice | null = s.equipo ? { jefe: s.equipo.jefe, tecnico: s.equipo.tecnico, motor: s.equipo.motor } : null;
   const teamName = (id: string | null) => (id ? BASE_TEAMS.find((t) => t.id === id)?.nombre ?? id : "");
+  // desarrollo de invierno (entre la última carrera de este año y el test de pretemporada del siguiente)
+  const { fin } = rosters(s);
+  const myId = s.equipo ? PLAYER_TEAM_ID : s.playerTeam;
+  const myFin = fin.find((t) => t.id === myId)!;
+  const races = calendarOf(s).length;
+  const lastPer = aeroPeriodOf(Math.max(0, races - 1), races);
+  const initSp = s.dev?.aero ? splitAt(s.dev.aero, lastPer) : DEFAULT_WINTER.aeroSplit;
+  const winter: WinterPlan = {
+    aeroSplit: [initSp[0], initSp[1], initSp[2], initSp[3]],
+    factoryFocus: [...DEFAULT_WINTER.factoryFocus],
+  };
+  const topPot = Math.max(...fin.map((t) => t.potencia));
+  const aduoK = aduoMult(myFin.potencia, topPot, isWorks(myFin));
+  const myAtrW = atrAt(atrPlan(s), myId, lastAeroPeriodRound(races));
+  const pctW = (x: number) => `${Math.round(x * 100)} %`;
+  const FACT_AREAS = [
+    { name: "Chasis y ritmo de carrera", what: "carga aerodinámica de base y ritmo en tandas largas" },
+    { name: "Unidad de potencia", what: `potencia y eficiencia${aduoK > 1.01 ? ` (concesiones ADUO ×${aduoK.toFixed(2).replace(".", ",")})` : ""}` },
+    { name: "Fiabilidad", what: `reducir averías (actual ×${myFin.fiabilidad.toFixed(2).replace(".", ",")})` },
+  ];
+  const winterPanel = () => {
+    const cv = myFin.curvas ?? [0, 0, 0];
+    const fmtC = (x: number) => `${x >= 0 ? "+" : "−"}${Math.abs(x).toFixed(2).replace(".", ",")}`;
+    return `<div class="panel"><div class="hd"><span class="t">Desarrollo de invierno (${y} → ${y + 1})</span><span class="small">ATR ${myAtrW} %</span></div><div class="bd">
+      <div class="small dim" style="margin-bottom:6px">Todo lo ganado este año se conserva. Reparte el trabajo de fábrica entre la última carrera de ${y} y los test de pretemporada de ${y + 1} en Barcelona. Carácter actual: lenta ${fmtC(cv[0])} · media ${fmtC(cv[1])} · rápida ${fmtC(cv[2])} · resistencia ${fmtC(myFin.resistencia)}.</div>
+      <div class="small" style="font-weight:700;margin:6px 0 4px">Túnel de viento invernal</div>
+      ${AERO_BANDS.map((b, i) => `<div class="tunrow"><div><b>${b.name}</b> <span class="mono">${pctW(winter.aeroSplit[i])}</span><br><span class="small dim">${b.what}</span></div>
+        <div class="seg"><button data-wa="${i}" data-d="-1"${winter.aeroSplit[i] > 0.001 ? "" : " disabled"}>−</button><button data-wa="${i}" data-d="1"${winter.aeroSplit[i] < 0.999 ? "" : " disabled"}>+</button></div></div>`).join("")}
+      <div class="small" style="font-weight:700;margin:8px 0 4px;padding-top:6px;border-top:1px solid rgba(255,255,255,.08)">Enfoque de fábrica en invierno</div>
+      ${FACT_AREAS.map((f, i) => `<div class="tunrow"><div><b>${f.name}</b> <span class="mono">${pctW(winter.factoryFocus[i])}</span><br><span class="small dim">${f.what}</span></div>
+        <div class="seg"><button data-wf="${i}" data-d="-1"${winter.factoryFocus[i] > 0.051 ? "" : " disabled"}>−</button><button data-wf="${i}" data-d="1"${winter.factoryFocus[i] < 0.899 ? "" : " disabled"}>+</button></div></div>`).join("")}
+    </div></div>`;
+  };
+  const shiftVec = (arr: number[], i: number, delta: number, minV = 0) => {
+    const take = Math.max(minV - arr[i], Math.min(delta, 1 - minV * (arr.length - 1) - arr[i]));
+    if (Math.abs(take) < 1e-6) return;
+    arr[i] += take;
+    const others = arr.map((x, k) => (k === i ? 0 : Math.max(0, x - minV)));
+    const sum = others.reduce((x, y) => x + y, 0);
+    for (let k = 0; k < arr.length; k++) if (k !== i) arr[k] = sum > 1e-9 ? Math.max(minV, arr[k] - (take * others[k]) / sum) : (1 - arr[i]) / (arr.length - 1);
+    const tot = arr.reduce((x, y) => x + y, 0);
+    for (let k = 0; k < arr.length; k++) arr[k] = Math.round((arr[k] / tot) * 1000) / 1000;
+  };
   const staffPanel = () => {
     if (!staff) return "";
     const opt = (sel: string, val: string, label: string) => `<option value="${esc(val)}"${sel === val ? " selected" : ""}>${esc(label)}</option>`;
@@ -286,6 +359,7 @@ export function offSeasonScreen(s: SeasonState, onDone: (next: SeasonState) => v
         <div class="small dim" style="padding:6px 10px">Se puede fichar a cualquiera: a los libres y los de la F2, o a uno de otro equipo pagando su cláusula (la mitad de lo que le queda por cobrar); romper el contrato de uno tuyo también se paga. Las cláusulas salen del presupuesto de desarrollo. Con los años, los jóvenes ganan ritmo y oficio y los mayores pierden algo de ritmo; alguno se retira. Los demás equipos renuevan o fichan por su cuenta, y suben novatos de la F2.</div>
       </div></div>
       ${staffPanel()}
+      ${winterPanel()}
       <div class="sticky-cta"><button class="red big-cta" id="go">Empezar la temporada ${y + 1}</button></div>
     </div>`;
     setBack(onBack);
@@ -299,7 +373,9 @@ export function offSeasonScreen(s: SeasonState, onDone: (next: SeasonState) => v
     }));
     document.querySelectorAll<HTMLSelectElement>("[data-sign]").forEach((el) => (el.onchange = () => { choices[Number(el.dataset.sign)].sign = el.value; render(); }));
     document.querySelectorAll<HTMLSelectElement>("[data-staff]").forEach((el) => (el.onchange = () => { if (staff) { staff[el.dataset.staff as keyof StaffChoice] = el.value; render(); } }));
-    $("#go").onclick = () => onDone(buildNextSeason(s, choices, staff ? { staff } : {}));
+    document.querySelectorAll<HTMLButtonElement>("[data-wa]").forEach((b) => (b.onclick = () => { shiftVec(winter.aeroSplit, Number(b.dataset.wa), Number(b.dataset.d) * 0.1, 0); render(); }));
+    document.querySelectorAll<HTMLButtonElement>("[data-wf]").forEach((b) => (b.onclick = () => { shiftVec(winter.factoryFocus, Number(b.dataset.wf), Number(b.dataset.d) * 0.1, 0.05); render(); }));
+    $("#go").onclick = () => onDone(buildNextSeason(s, choices, { ...(staff ? { staff } : {}), winter }));
     window.scrollTo(0, 0);
   };
   render();

@@ -28,7 +28,7 @@ import market from "../../data/mercado-2026.json";
 import { buildTrack, Track } from "../sim/track";
 import type { TeamDef, DriverDef } from "../sim/session";
 import { buildGrid, GridChange, Market, PLAYER_TEAM_ID, costOf, trueTech } from "../sim/market";
-import { applyDev, applyGridDev, AtrPlan, atrAt, atrCarOrder, atrMidRound, atrOrderByPoints, aeroPkgCount, aeroPkgRound, aeroPeriodLen, makeAeroPkg } from "../sim/development";
+import { applyDev, applyGridDev, AtrPlan, atrAt, atrCarOrder, atrMidRound, atrOrderByPoints, aeroPkgCount, aeroPkgRound, aeroPeriodLen, makeAeroPkg, carLevel, catchUpMult, aduoMult, isWorks } from "../sim/development";
 import { type SeasonState, type SeatSwap, personId, teamStandings } from "../sim/season";
 
 /** Los 11 equipos reales (modo clásico y base del modo «crear equipo»). */
@@ -91,7 +91,14 @@ export function useGrid(teams: TeamDef[]) {
 export function gridOf(s: SeasonState | null, round = s?.round ?? 0): { teams: TeamDef[]; changes: GridChange[] } {
   if (!s) return { teams: BASE_TEAMS, changes: [] };
   const g = gridBase(s, round);
-  return s.swaps?.length ? { ...g, teams: applySwaps(g.teams, s.swaps, round) } : g;
+  let teams = s.swaps?.length ? applySwaps(g.teams, s.swaps, round) : g.teams;
+  // bonus de fiabilidad por rodaje en el test de pretemporada de Barcelona
+  const fb = s.preseason?.fiabBonus;
+  if (fb && fb > 0) {
+    const myId = myTeamId(s);
+    teams = teams.map((t) => (t.id === myId ? { ...t, fiabilidad: Math.round(t.fiabilidad * (1 - fb) * 1000) / 1000 } : t));
+  }
+  return { ...g, teams };
 }
 
 /** Cambios de piloto a mitad de temporada hasta esa ronda: el asiento (id del coche) pasa a llevarlo otro. */
@@ -128,7 +135,8 @@ function gridBase(s: SeasonState, round: number): { teams: TeamDef[]; changes: G
     return { teams: applyGridDev(base, s.seed, r, calLen, s.playerTeam, s.dev, atrPlan(s)), changes: [] };
   }
   const g = buildGrid(base, MARKET, s.equipo, s.trueSeed ?? s.seed, s.dev ? r : devRounds(s, r), !!s.dev, s.grid ? { agarre: s.carry ?? 0, extra: s.misPilotos } : undefined, s.dev ? calLen : undefined, s.dev ? atrPlan(s) : undefined);
-  if (s.dev) g.teams = g.teams.map((t) => (t.id === PLAYER_TEAM_ID ? applyDev(t, s.dev, r) : t));
+  const topPot = Math.max(...g.teams.map((t) => t.potencia));
+  if (s.dev) g.teams = g.teams.map((t) => (t.id === PLAYER_TEAM_ID ? applyDev(t, s.dev, r, topPot) : t));
   return g;
 }
 
@@ -171,6 +179,20 @@ export function devContext(s: SeasonState): { left: number | null; pubK: number;
   }
   return { left: MARKET.techo - spent, pubK: pub / 0.06, realK: real / 0.06 };
 }
+/** Referencias de desarrollo del jugador: rendimientos decrecientes del reglamento (`catchUpK`) y concesiones ADUO (`motorK`). */
+export function devBonuses(s: SeasonState): { catchUpK: number; topPotencia: number; motorK: number } {
+  const base = s.grid ?? BASE_TEAMS;
+  const topLevel = Math.max(...base.map(carLevel));
+  const topPotencia = Math.max(...base.map((t) => t.potencia));
+  const mine = s.equipo ? gridOf(s, 0).teams.find((t) => t.id === PLAYER_TEAM_ID) : base.find((t) => t.id === s.playerTeam);
+  if (!mine) return { catchUpK: 1, topPotencia, motorK: 1 };
+  return {
+    catchUpK: catchUpMult(carLevel(mine), topLevel),
+    topPotencia,
+    motorK: aduoMult(mine.potencia, topPotencia, isWorks(mine)),
+  };
+}
+
 /**
  * Túnel de viento: hace los paquetes de los periodos ya terminados (al llegar a la ronda en que se estrenan). Devuelve
  * true si ha hecho alguno (hay que guardar la temporada). Lo que se mide en libres y la decisión de montarlo van aparte.
@@ -179,11 +201,12 @@ export function ensureAeroPkgs(s: SeasonState): boolean {
   const a = s.dev?.aero;
   if (!a) return false;
   const cal = calendarOf(s).length, ctx = devContext(s);
+  const { catchUpK } = devBonuses(s);
   let made = false;
   for (let p = 0; p < aeroPkgCount(cal); p++) {
     const ready = aeroPkgRound(p, cal);
     if (ready === null || ready > s.round || a.pkgs.some((x) => x.period === p)) continue;
-    const pk = makeAeroPkg(a, p, cal, s.equipo ? (s.trueSeed ?? s.seed) : s.seed, myAtr(s, p * aeroPeriodLen(cal)), ctx.pubK, ctx.realK);
+    const pk = makeAeroPkg(a, p, cal, s.equipo ? (s.trueSeed ?? s.seed) : s.seed, myAtr(s, p * aeroPeriodLen(cal)), ctx.pubK, ctx.realK, catchUpK);
     if (pk) { a.pkgs.push(pk); made = true; }
   }
   return made;

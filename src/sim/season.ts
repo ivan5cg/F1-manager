@@ -1,5 +1,5 @@
 // Minitemporada: calendario, puntos y clasificaciones de pilotos y constructores.
-import type { TeamDef, ResultRow, DriverDef } from "./session";
+import type { TeamDef, ResultRow, DriverDef, LongRun } from "./session";
 import type { SeasonRecord } from "./career";
 import type { WeekendState } from "./weekend";
 import type { Compound } from "./tyres";
@@ -98,6 +98,16 @@ export interface SeasonState {
   atrOrder?: string[];
   /** Modo gran premio: un solo fin de semana (calendario de un circuito), con el tiempo que se eligió. */
   gp?: { tiempo: GpWeather };
+  /** Test de pretemporada de 8 horas en Barcelona (marzo), antes de la Ronda 1 de cada temporada. */
+  preseason?: {
+    done: boolean;
+    skipped?: boolean;
+    results?: ResultRow[];
+    longRuns?: LongRun[];
+    myLaps?: number;
+    /** Reducción de tasa de averías por rodaje en test (hasta 0,05 = −5 % al completar ≥ 160 vueltas). */
+    fiabBonus?: number;
+  };
 }
 
 /** Tiempo de un gran premio suelto: el del clima del circuito, o forzado. */

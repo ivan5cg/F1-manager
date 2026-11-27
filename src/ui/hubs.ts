@@ -1,12 +1,12 @@
 import type { SessionSnapshot } from "../sim/snapshot";
-import { TEAMS, BASE_TEAMS, MARKET, CIRCUITS, ROUNDS, DRIVERS, GRID_CHANGES, getTrack, calendarOf, devContext, atrPlan, myAtr, gridOf, ensureAeroPkgs, CALENDARS, circuitOf, devRounds, person, whoAt, useSeason } from "./data";
+import { TEAMS, BASE_TEAMS, MARKET, CIRCUITS, ROUNDS, DRIVERS, GRID_CHANGES, getTrack, calendarOf, devContext, devBonuses, atrPlan, myAtr, gridOf, ensureAeroPkgs, CALENDARS, circuitOf, devRounds, person, whoAt, useSeason } from "./data";
 import { rivalTechMult } from "../sim/market";
 import { objectivesFor, objectiveStatus } from "../sim/objectives";
-import { DEV_AREAS, DEV_SIZES, MOTOR_CAP, DevArea, DevSize, devLeft, devExpect, orderPart, newDev, isWorks, devGains, rivalDevAt, atrMult, atrMidRound } from "../sim/development";
+import { DEV_AREAS, DEV_SIZES, MOTOR_CAP, motorCapFor, DevArea, DevSize, devLeft, devExpect, orderPart, newDev, isWorks, devGains, rivalDevAt, atrMult, atrMidRound } from "../sim/development";
 import { myTeamPanel, puSummary, puPanel, wirePu, PLAYER_TEAM_ID } from "./teamBuilder";
 import { $, esc, fmtLap, fmtRace, tyreHtml, fmtDate, sheet, setLabel, groupSets, flagHtml, setBack } from "./common";
 import { SeasonState, RoundResult, RaceSummary, driverStandings, teamStandings, RACE_POINTS, SPRINT_POINTS } from "../sim/season";
-import { Weekend, WeekendState, newWeekend, preparePu, DAY_NAMES } from "../sim/weekend";
+import { Weekend, WeekendState, newWeekend, preparePu, DAY_NAMES, sprintLapsOf } from "../sim/weekend";
 import { puPenalty, quotaFor } from "../sim/powerunit";
 import { yearOf, offSeasonScreen, historyPanel, newsPanel, swapsPanel, swapSheet } from "./nextSeason";
 import { startAttract } from "./attract";
@@ -44,6 +44,8 @@ export interface Nav {
   simulate(kind: SessionKind): void;
   /** Empieza la temporada siguiente en la misma partida. */
   nextSeason(next: SeasonState): void;
+  /** Test de pretemporada de 8 h en Barcelona (marzo) antes de la Ronda 1. */
+  preseason(simulate?: boolean): void;
   /** Modo escenario: momentos reales de 2010 en adelante (no toca las partidas). */
   scenarios(): void;
   /** Modo gran premio: elegir equipo, circuito y tiempo para un fin de semana suelto. */
@@ -278,6 +280,7 @@ export function seasonScreen(nav: Nav, s: SeasonState) {
       ${s.rounds.length ? `<div class="small" style="margin-top:8px">${esc(myTeam.nombre)}: <b>${ord(myPos)}</b> de constructores con ${ts[myPos - 1].points} pts · ${mine.map(({ x, i }) => `${esc(DRIVERS[x.id].d.abrev)} ${ord(i + 1)} (${x.points})`).join(" · ")}</div>` : ""}
     </div></div>
     ${s.equipo ? myTeamPanel(s, TEAMS) : ""}
+    ${preseasonPanel(s)}
     ${s.equipo && s.pu ? `<div class="panel"><div class="hd"><span class="t">Unidades de potencia</span></div><div class="bd">${puSummary(s.pu, DRIVERS.filter((d) => d.team.id === PLAYER_TEAM_ID).map((d) => d.id), DRIVERS.filter((d) => d.team.id === PLAYER_TEAM_ID).map((d) => d.d.abrev))}<div class="small dim" style="margin-top:4px">Porcentaje de vida gastada de cada unidad (en amarillo, la montada; tachadas, las rotas).</div></div></div>` : ""}
     ${exportDue(getActiveSlot(), s.rounds.length) ? `<div class="notice" id="expnote"><div class="grow small">Llevas ${s.rounds.length} carreras sin copia de seguridad. Como el juego no está instalado, el navegador podría borrar la partida: expórtala a un archivo.</div><button id="expnow">Exportar</button><button id="expx" title="No volver a recordarlo" aria-label="No volver a recordarlo">✕</button></div>` : ""}
     ${newsPanel(s)}
@@ -360,12 +363,63 @@ export function seasonScreen(nav: Nav, s: SeasonState) {
   }
   wireDev(s, () => { const y = window.scrollY; seasonScreen(nav, s); window.scrollTo(0, y); });
   wireTunnel(s, () => { const y = window.scrollY; seasonScreen(nav, s); window.scrollTo(0, y); });
+  wirePreseason(nav, s, () => { const y = window.scrollY; seasonScreen(nav, s); window.scrollTo(0, y); });
   const sb = document.getElementById("swapbtn");
   if (sb) sb.onclick = () => swapSheet(s, () => { saveSeason(s); useSeason(s); seasonScreen(nav, s); });
   const en = document.getElementById("expnow");
   if (en) en.onclick = () => { exportToFile(getActiveSlot()); document.getElementById("expnote")?.remove(); };
   const ex = document.getElementById("expx");
   if (ex) ex.onclick = () => { if (!confirm("¿No volver a recordar que exportes las partidas?")) return; const p = loadPrefs(); p.sinRecordatorio = true; savePrefs(p); document.getElementById("expnote")?.remove(); };
+}
+
+// --------------------------------------------------------------- test de pretemporada (Barcelona, 8 h, marzo)
+function preseasonPanel(s: SeasonState): string {
+  if (s.gp) return "";
+  const pre = s.preseason;
+  if (s.round === 0 && !s.rounds.length && !pre?.done) {
+    const paused = !!s.weekend?.preseason && hasSession(getActiveSlot());
+    return `<div class="panel"><div class="hd"><span class="t">${flagHtml("🇪🇸")} Test de Pretemporada ${yearOf(s)} · Barcelona</span><span class="small">8 h · marzo</span></div><div class="bd">
+      <div class="small" style="margin-bottom:8px">Jornada completa de 8 horas (09:00–17:00) en Barcelona-Catalunya con el tiempo típico de marzo (~8–16 °C, mañanas frescas y riesgo de chubasco). Sirve para rodar a fondo el coche de ${yearOf(s)}, medir las tandas largas de la parrilla y pulir fiabilidad (hasta <b>−5 % averías</b> al completar ≥ 160 vueltas).</div>
+      <div class="btnrow" style="padding:0">
+        <button class="red" id="preplay">${paused ? "Reanudar test (8 h)" : "Entrar al test (8 h)"}</button>
+        ${paused ? "" : `<button id="presim">Simular test (8 h)</button>`}
+        <button id="preskip">Saltar al GP 1</button>
+      </div>
+    </div></div>`;
+  }
+  if (pre?.done && !pre.skipped && pre.results?.length && s.round === 0) {
+    const top = pre.results[0];
+    const topD = DRIVERS[top.id];
+    const fb = pre.fiabBonus ?? 0;
+    return `<div class="panel"><div class="hd"><span class="t">${flagHtml("🇪🇸")} Test de Barcelona ${yearOf(s)}</span><button id="preview">Ver datos</button></div><div class="bd small">
+      Mejor tiempo: <b>${topD ? esc(topD.d.nombre) : ""}</b> (${fmtLap(top.best)}) · Tus pilotos: <b>${pre.myLaps ?? 0} vueltas</b>${fb > 0 ? ` · <span class="green">fiabilidad −${(fb * 100).toFixed(1).replace(".", ",")} %</span>` : ""}.
+    </div></div>`;
+  }
+  return "";
+}
+function wirePreseason(nav: Nav, s: SeasonState, redraw: () => void) {
+  const play = document.getElementById("preplay");
+  if (play) play.onclick = () => nav.preseason(false);
+  const sim = document.getElementById("presim");
+  if (sim) sim.onclick = () => {
+    if (confirm(`¿Simular la jornada completa de 8 horas de test en Barcelona? El equipo completará el programa de correlación, tandas largas y vueltas rápidas.`)) nav.preseason(true);
+  };
+  const skip = document.getElementById("preskip");
+  if (skip) skip.onclick = () => {
+    s.preseason = { done: true, skipped: true };
+    if (s.weekend?.preseason) s.weekend = null;
+    saveSeason(s);
+    redraw();
+  };
+  const view = document.getElementById("preview");
+  if (view && s.preseason?.results) view.onclick = () => {
+    const pre = s.preseason!;
+    const lr = pre.longRuns?.length ? longRunsPanel(pre.longRuns.map((r) => ({ kind: "TEST" as SessionKind, r })), s.playerTeam) : "";
+    sheet(`<div class="row"><h1 class="grow" style="font-size:18px">${flagHtml("🇪🇸")} Test de Pretemporada ${yearOf(s)} · Barcelona</h1><button data-close>Cerrar</button></div>
+      ${resultsTable("TEST", pre.results!, s.playerTeam)}
+      ${lr}
+      <button data-close style="width:100%;margin-top:10px">Cerrar</button>`);
+  };
 }
 
 // --------------------------------------------------------------- objetivos
@@ -396,17 +450,19 @@ function devPanel(s: SeasonState, team: TeamDef, cal: string[], done: boolean): 
   const d = s.dev;
   if (!d) return "";
   const ctx = devContext(s), left = devLeft(d);
+  const { topPotencia, motorK } = devBonuses(s);
   const gp = (r: number) => (r < cal.length ? esc(CIRCUITS[cal[r]].gp.replace("Gran Premio de ", "GP de ").replace(/ \(.*\)$/, "")) : "después de la última carrera");
   const atrNow = myAtr(s, s.round), aeroK = atrMult(atrNow);
   const midR = atrMidRound(cal.length);
   const atrNext = midR !== null && s.round < midR ? null : atrNow;
   const atrText = `Tu cuota ATR de túnel de viento y CFD: <b>${atrNow} %</b> (las piezas aerodinámicas rinden ×${aeroK.toFixed(2).replace(".", ",")}). ${
     midR === null ? "" : atrNext === null ? `Se revisa con la clasificación de constructores tras el ${gp(midR - 1)}: cuanto peor vayas, más túnel.` : "Revisada a mitad de año con la clasificación de constructores."}`;
-  const now = devGains(d, s.round, isWorks(team));
-  const cap = isWorks(team) ? MOTOR_CAP.works : MOTOR_CAP.client;
-  const order = done ? "" : `<div class="devorder">${(Object.keys(DEV_AREAS) as DevArea[]).filter((a) => !(d.aero && a === "aero")).map((a) => `<div class="devrow"><div><b>${DEV_AREAS[a].name}</b><br><span class="small dim">${DEV_AREAS[a].what}${a === "motor" ? ` (tope de la temporada: ${devGainText("motor", cap)}${isWorks(team) ? "" : ", eres cliente"})` : ""}</span></div><div class="seg">${([1, 2, 3] as DevSize[]).map((z) => {
+  const cap = motorCapFor(team, topPotencia);
+  const now = devGains(d, s.round, isWorks(team), cap);
+  const aduoNote = motorK > 1.01 ? ` · <span class="green">ADUO ×${motorK.toFixed(2).replace(".", ",")}</span>` : "";
+  const order = done ? "" : `<div class="devorder">${(Object.keys(DEV_AREAS) as DevArea[]).filter((a) => !(d.aero && a === "aero")).map((a) => `<div class="devrow"><div><b>${DEV_AREAS[a].name}</b><br><span class="small dim">${DEV_AREAS[a].what}${a === "motor" ? ` (tope de la temporada: ${devGainText("motor", cap)}${isWorks(team) ? "" : ", eres cliente"}${aduoNote})` : ""}</span></div><div class="seg">${([1, 2, 3] as DevSize[]).map((z) => {
       const sz = DEV_SIZES[z], ready = s.round + sz.delay, ok = left >= sz.cost && ready < cal.length;
-      return `<button data-dev="${a}" data-size="${z}"${ok ? "" : " disabled"} title="${sz.name}: ${sz.cost} M, llega para el ${gp(ready)}">${sz.name}<br><span class="small">${sz.cost} M · ${devGainText(a, devExpect(a, z, ctx.pubK, aeroK))}</span></button>`;
+      return `<button data-dev="${a}" data-size="${z}"${ok ? "" : " disabled"} title="${sz.name}: ${sz.cost} M, llega para el ${gp(ready)}">${sz.name}<br><span class="small">${sz.cost} M · ${devGainText(a, devExpect(a, z, ctx.pubK, aeroK, motorK))}</span></button>`;
     }).join("")}</div></div>`).join("")}</div>`;
   const parts = d.parts.slice().sort((a, b) => b.id - a.id);
   let rivalHtml = "";
@@ -446,10 +502,11 @@ function devPanel(s: SeasonState, team: TeamDef, cal: string[], done: boolean): 
 function wireDev(s: SeasonState, redraw: () => void) {
   if (!s.dev) return;
   const ctx = devContext(s);
+  const { motorK } = devBonuses(s);
   document.querySelectorAll<HTMLButtonElement>("[data-dev]").forEach((b) => (b.onclick = () => {
     const a = b.dataset.dev as DevArea, z = Number(b.dataset.size) as DevSize, sz = DEV_SIZES[z];
     if (!confirm(`¿Pedir una pieza ${sz.name.toLowerCase()} de ${DEV_AREAS[a].name.toLowerCase()} por ${sz.cost} M? Llega en ${sz.delay} rondas.`)) return;
-    if (orderPart(s.dev!, a, z, s.round, s.seed, ctx.pubK, ctx.realK, atrMult(myAtr(s, s.round)))) { saveSeason(s); redraw(); }
+    if (orderPart(s.dev!, a, z, s.round, s.seed, ctx.pubK, ctx.realK, atrMult(myAtr(s, s.round)), motorK)) { saveSeason(s); redraw(); }
   }));
 }
 
@@ -641,12 +698,12 @@ export function weekendScreen(nav: Nav, s: SeasonState, pending: SessionSnapshot
     <div class="panel"><div class="hd"><span class="t">${s.gp ? "Gran premio" : `Ronda ${st.round}`} · ${flagHtml(def.bandera)} ${esc(def.pais)}</span><button id="back">${s.gp ? "Inicio" : "Temporada"}</button></div><div class="bd gphero${lightAt(heroClock) === "noche" ? " night" : ""}" style="background:${skyGradient(heroClock, heroGloom)}">
       <canvas id="mini"></canvas>
       <div class="gpt"><h1>${esc(def.gp)}</h1>
-      <div>${esc(def.nombre)} · ${(track.length / 1000).toFixed(3)} km · ${def.vueltas} vueltas${st.sprint ? ` · <span class="yellow">sprint (${def.vueltasSprint} v)</span>` : ""} · ${fmtDate(def.fecha)}</div></div>
+      <div>${esc(def.nombre)} · ${(track.length / 1000).toFixed(3)} km · ${def.vueltas} vueltas${st.sprint ? ` · <span class="yellow">sprint (${sprintLapsOf(def, track.length)} v)</span>` : ""} · ${fmtDate(def.fecha)}</div></div>
       ${next ? `<div class="gpnext">${forecastIcon(outlook.find((o) => o.kind === next)?.rain ?? 0, heroClock)}<span><b>${wk.dayName(wk.when(next).day)} ${String(Math.floor(heroClock / 60)).padStart(2, "0")}:${String(heroClock % 60).padStart(2, "0")}</b> · ${SESSION_NAMES[next]}</span></div>` : ""}
       <div class="tline">${sessions.map((k, i) => {
         const res = st.results[k];
         const best = res ? res.map((r, j) => ({ r, j })).filter(({ r }) => DRIVERS[r.id].team.id === s.playerTeam).map(({ j }) => j + 1).sort((a, b) => a - b)[0] : undefined;
-        const SHORT: Record<SessionKind, string> = { FP1: "L1", FP2: "L2", FP3: "L3", SQ: "QS", SPRINT: "S", Q: "Q", RACE: "C" };
+        const SHORT: Record<SessionKind, string> = { TEST: "T", FP1: "L1", FP2: "L2", FP3: "L3", SQ: "QS", SPRINT: "S", Q: "Q", RACE: "C" };
         return `<div class="tn${res ? " done" : i === st.next ? " now" : ""}"><i></i><b>${SHORT[k]}</b><span>${wk.dayName(wk.when(k).day).slice(0, 3)}</span>${best ? `<em>P${best}</em>` : ""}</div>`;
       }).join("")}</div>
     </div></div>

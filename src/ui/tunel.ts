@@ -1,11 +1,11 @@
 // Túnel de viento y CFD (pantalla de temporada) y el paquete aerodinámico del fin de semana (programa de libres y
 // decisión de montarlo antes de la primera clasificación). El modelo está en src/sim/development.ts.
 import {
-  AERO_BANDS, TEST_PROGRAMS, TestProgram, AeroPkg, aeroPeriodLen, aeroPeriodOf, aeroPkgRound, aeroExpect, splitAt, measurePkg, atrMult, atrMidRound,
+  AERO_BANDS, TEST_PROGRAMS, TestProgram, AeroPkg, aeroPeriodLen, aeroPeriodOf, aeroPkgRound, aeroExpect, splitAt, measurePkg, aeroPosterior, atrMult, atrMidRound, carLevel, catchUpMult,
 } from "../sim/development";
 import type { SeasonState } from "../sim/season";
 import type { Weekend } from "../sim/weekend";
-import { CIRCUITS, calendarOf, devContext, myAtr, useSeason } from "./data";
+import { BASE_TEAMS, CIRCUITS, calendarOf, devBonuses, devContext, myAtr, myTeamId, useSeason } from "./data";
 import { esc } from "./common";
 import { saveSeason } from "./store";
 
@@ -39,8 +39,8 @@ export function settlePkg(s: SeasonState, wk: Weekend): boolean {
   p.programa ??= wk.st.pkgTest ?? "equilibrado";
   p.laps = wk.st.pkgLaps?.test ?? 0;
   p.otherLaps = wk.st.pkgLaps?.other ?? 0;
-  measurePkg(p, seedOf(s));
-  p.montar = p.medido! > 0;
+  measurePkg(p, seedOf(s), wk.st.sprint);
+  p.montar = aeroPosterior(p).mean > 0;
   useSeason(s);
   return true;
 }
@@ -61,7 +61,13 @@ export function pkgWeekendHtml(s: SeasonState, wk: Weekend, pending: boolean): s
   } else {
     const can = st.next <= q && !wk.setupLocked() && !pending;
     const lo = p.medido - 1.6 * p.sigma!, hi = p.medido + 1.6 * p.sigma!;
-    body = `<div class="small" style="margin-bottom:6px">Medido en libres (${p.laps} vueltas de prueba de piezas): <b>${fmtS(p.medido)}/vuelta</b>, entre ${fmtS(hi)} y ${fmtS(lo)}.${p.medido < 0 ? ` <span class="redt">Parece que va peor que la pieza vieja.</span>` : ""}</div>
+    const post = aeroPosterior(p);
+    const note = post.mean <= 0
+      ? ` <span class="redt">Parece que va peor que la pieza vieja (prob. positivo ${Math.round(post.probPos * 100)} %).</span>`
+      : p.medido < 0
+        ? ` <span class="yellow">Dato dudoso por el ruido de los libres, pero lo más probable es que siga dando ganancia (${Math.round(post.probPos * 100)} %).</span>`
+        : "";
+    body = `<div class="small" style="margin-bottom:6px">Medido en libres (${p.laps} vueltas de prueba de piezas): <b>${fmtS(p.medido)}/vuelta</b>, entre ${fmtS(hi)} y ${fmtS(lo)}.${note}</div>
       <div class="seg" style="margin-bottom:6px"><button data-pkgmount="1" class="${p.montar !== false ? "on" : ""}"${can ? "" : " disabled"}>Montarlo</button><button data-pkgmount="0" class="${p.montar === false ? "on" : ""}"${can ? "" : " disabled"}>Dejar la pieza vieja</button></div>
       <div class="small dim">${can ? "Se decide antes de la clasificación: desde ahí, parque cerrado. Si lo dejas, el paquete se descarta y las horas de túnel se pierden." : p.montar === false ? "Descartado: corres con la pieza vieja." : "Montado: va en el coche el resto del año."}</div>`;
   }
@@ -93,7 +99,8 @@ export function tunnelHtml(s: SeasonState, done: boolean): string {
   const nextR = aeroPkgRound(per, cal);
   const split = splitAt(a, per);
   const ctx = devContext(s);
-  const exp = aeroExpect(cal, atr, ctx.pubK);
+  const { catchUpK } = devBonuses(s);
+  const exp = aeroExpect(cal, atr, ctx.pubK, catchUpK);
   const midR = atrMidRound(cal);
   const can = !done && nextR !== null;
   const rows = AERO_BANDS.map((b, i) => `<div class="tunrow"><div><b>${b.name}</b> <span class="mono">${pct(split[i])}</span><br><span class="small dim">${b.what}</span></div>
