@@ -82,7 +82,7 @@ const LAP_NOISE = 0.0065;
  * lo que separa a dos pilotos con el mismo coche no es azar de esa vuelta sino su forma del fin de semana (FORM en
  * weekend.ts), que sigue el domingo. Con las dos cosas, los compañeros quedan a ~0,3 s en clasificación, como en 2026.
  */
-const QUALI_NOISE = 0.85;
+const QUALI_NOISE = 0.45;
 /**
  * Modo de clasificación del motor y la batería. Solo en las vueltas lanzadas de clasificación se despliega toda la
  * energía; en el resto (carrera, tandas largas, vueltas de salida) se gestiona y la vuelta sale más lenta. La pista
@@ -1374,10 +1374,6 @@ export class Session {
     const ord = this.lapOrder[this.leaderLap];
     const pos = ord ? ord.indexOf(c.id) : -1;
     if (this.laps - this.lapsDone(c) <= 8 && pos >= 0 && pos < 10) return "defend";
-    // el líder cierra la puerta toda la carrera (menos la primera vuelta): es la posición que más vale y en 2026 la
-    // pole ganó el 71 % de las carreras. Antes solo en las ocho últimas vueltas, y a la pole la pasaban en pista
-    // estando en cabeza en el 41 % de las carreras
-    if (pos === 0 && this.lapsDone(c) > 0) return "defend";
     return "normal";
   }
 
