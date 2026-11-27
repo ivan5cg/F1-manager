@@ -682,7 +682,7 @@ volumen general, de motores, de ambiente y de radio, y las voces de la radio y d
 ## Tests
 
 ```bash
-npm test             # tipos (tsc) y todos los tests: ~1,5 min con 4 núcleos
+npm test             # tipos (tsc) y todos los tests: ~3 min con 4 núcleos
 npm run test:rapido  # solo los rápidos (~1 s)
 ```
 
