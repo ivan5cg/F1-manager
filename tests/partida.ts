@@ -531,11 +531,12 @@ function checkRound(s: SeasonState, r: number, race: ResultRow[], sprint: Result
     if (rows.length !== n) fail(where, `${name}: ${rows.length} filas para ${n} coches`);
     const ids = rows.map((x) => x.id).sort((a, b) => a - b);
     if (ids.some((x, i) => x !== i)) fail(where, `${name}: ids que no cuadran (${ids.join(",")})`);
-    // los que acaban, antes que los que no; y por tiempo
-    let seenOut = false;
+    // los que acaban, antes que los que no (salvo que el que no acaba haya dado más vueltas: se ordena por vueltas,
+    // como en el reglamento: uno que se retira en la última vuelta va delante de uno doblado)
+    let seenOut: ResultRow | null = null;
     for (const x of rows) {
-      if (x.status !== "fin") seenOut = true;
-      else if (seenOut) {
+      if (x.status !== "fin") seenOut ??= x;
+      else if (seenOut && seenOut.laps < x.laps) {
         const tab = name === "sprint" ? ri0()?.sprintTable : ri0()?.raceTable;
         fail(where, `${name}: un coche que acaba detrás de uno que no (${rows.map((y, i) => `${i + 1}:${y.id}${y.status === "fin" ? "" : `[${y.status} ${y.reason ?? ""} ${y.laps}v]`}`).join(" ")}${tab ? `; acortada, puntos ${tab.join("-")}` : ""})`);
         break;
