@@ -553,8 +553,15 @@ unos 13 °C corta. No se cambia el clima con datos tan dispares.
 - **El duro, casi siempre** (94 % de los coches; el blando, 20 %). La raíz sigue siendo la misma: el modelo de
   temperatura mide la energía de cada curva relativa a la vuelta y no ve lo que exige cada circuito, así que el tren
   delantero va frío en casi todas partes y un solo coeficiente (`COLD_LOSS`) decide el duro en todo el calendario.
-- **Silverstone:** +2,6 s de error de pole.
-- **Mónaco:** 3,3 adelantamientos por carrera; habría que recalibrar su umbral.
+- ~~**Silverstone:** +2,6 s de error de pole.~~ **No era un fallo:** una de sus cuatro clasificaciones tuvo lluvia en
+  la Q3 (pole de 99,1 s, con hasta 0,79 mm de agua) aun con el día «Estable», y la columna por circuito de
+  `analiza.js` hacía la media de todas. En seco, −0,15 s. Ahora esa columna solo cuenta las clasificaciones secas.
+- ~~**Mónaco:** 3,3 adelantamientos por carrera.~~ **Hecho:** umbral recalibrado de 2,2 a 1,04 con `calibra.ts monaco
+  --clasif --carreras=10` contra su objetivo (8,8 reales × 2,4): 22,3 sin la primera vuelta. En el lote de auditoría,
+  12 por carrera. Sigue siendo el más difícil: con 1-1,5 s/vuelta de ventaja se pasa un 10 % de las vueltas (en
+  Silverstone, un 52 %), y hacen falta más de 2 s para tener opciones. Ya en la calibración original se quedaba en
+  el 0,43 del objetivo.
+- **Hungaroring**, algo bajo en el mismo banco (44,5 frente a 57,6 de objetivo).
 - **Suzuka:** confirmar la temperatura del asfalto con una fuente fiable antes de tocar su clima.
 
 ## Fuentes
