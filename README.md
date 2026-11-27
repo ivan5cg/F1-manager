@@ -73,9 +73,14 @@ En la realidad, en 2026 el GP de Baréin no se corrió en Sakhir: se trasladó a
     rondas en el calendario corto, 4 en el completo) y en cada uno tienes las horas que te da tu **cuota ATR**: del
     70 % del primero de constructores del año anterior al 120 % del último, revisada a mitad de año. Las repartes entre
     curva lenta, media y rápida y eficiencia en recta; al acabar el periodo sale un paquete que llega a la carrera
-    siguiente (el del último periodo va al coche del año que viene). Concentrar da más donde concentras: un paquete
+    siguiente. Concentrar da más donde concentras: un paquete
     de curva lenta vale mucho en Mónaco y poco en Monza. Lo que se espera de cada uno sube con el ATR (×0,84 a ×1,18)
     y con tu director técnico. La fabricación se lleva el 40 % del presupuesto.
+  - **El último periodo trabaja para el año siguiente** (y el de todos los equipos): el coche nuevo de cada uno sale
+    con lo que da un paquete con la cuota ATR de ese periodo, frente a la media de la parrilla. Como el que acaba
+    peor tiene más horas, empieza el año algo más cerca (con un ATR del 120 %, unas centésimas por vuelta frente al
+    del 70 %). Las noticias del mercado lo cuentan. Lo que ganan tus paquetes durante el año pasa al coche nuevo
+    como el resto del desarrollo (el 65 %).
   - **Se prueba en los libres.** Uno de cada ocho paquetes sale mal: da poco o hace el coche más lento. Antes de los
     libres 1 eliges el programa: **validar** (las tandas largas del viernes pasan a ser pruebas de piezas: ±0,035 s
     de error, pero llegas al domingo sabiendo peor cuánto gasta cada neumático), **equilibrado** (una tanda larga para

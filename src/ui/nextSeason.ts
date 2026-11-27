@@ -1,10 +1,10 @@
 // Fin de temporada y paso a la siguiente: lo que ha pasado, los objetivos, tus pilotos (renovar o cambiar) y el
 // mercado de los demás (career.ts).
-import { BASE_TEAMS, MARKET, DRIVERS, TEAMS, CALENDARS, calendarOf, gridOf, who } from "./data";
+import { BASE_TEAMS, MARKET, DRIVERS, TEAMS, CALENDARS, calendarOf, gridOf, who, atrPlan, devContext } from "./data";
 import { $, esc, setBack, sheet } from "./common";
 import type { SeasonState, SeatSwap } from "../sim/season";
 import { driverStandings, teamStandings, pointsFor, RACE_POINTS, SPRINT_POINTS } from "../sim/season";
-import { devLeft } from "../sim/development";
+import { devLeft, aeroGains, atrAt, nextYearAero, lastAeroPeriodRound } from "../sim/development";
 import { objectiveStatus } from "../sim/objectives";
 import { MORAL0, moralOf, moralLabel, wantsRenew } from "../sim/morale";
 import { recordExtras } from "../sim/hitos";
@@ -131,15 +131,31 @@ export function buildNextSeason(s: SeasonState, choices: { keep: boolean; sign?:
   });
   // tu coche: lo mismo que los demás, desde como acabó el tuyo
   const endMean = fin.reduce((a, t) => a + t.agarre, 0) / fin.length;
-  const myFin = fin.find((t) => t.id === (s.equipo ? PLAYER_TEAM_ID : s.playerTeam))!;
-  const myAgarre = meanAgarre + CAR_CARRY * (myFin.agarre - endMean);
+  const myId = s.equipo ? PLAYER_TEAM_ID : s.playerTeam;
+  const myFin = fin.find((t) => t.id === myId)!;
+  // los paquetes del túnel van en las curvas y la resistencia: para el coche nuevo cuentan como agarre (circuito medio)
+  const races = calendarOf(s).length;
+  const myAero = aeroGains(s.dev?.aero, races - 1).total;
+  let myAgarre = meanAgarre + CAR_CARRY * (myFin.agarre + myAero - endMean);
+  // túnel de viento: las horas del último periodo van al coche nuevo de cada uno (frente a la media de la parrilla)
+  let nextAero: { mine: number; news: string } | null = null;
+  if (s.dev?.aero) {
+    const plan = atrPlan(s), r0 = lastAeroPeriodRound(races), realK = devContext(s).realK;
+    const bonus = new Map(fin.map((t) => [t.id, nextYearAero(races, atrAt(plan, t.id, r0), t.id === myId ? realK : 1)]));
+    const mean = [...bonus.values()].reduce((a, b) => a + b, 0) / Math.max(1, bonus.size);
+    out.base = out.base.map((t) => ({ ...t, agarre: Math.round((t.agarre + (bonus.get(t.id) ?? mean) - mean) * 100) / 100 }));
+    const mineB = (bonus.get(myId) ?? mean) - mean;
+    myAgarre += mineB;
+    const sec = (x: number) => `${x >= 0 ? "−" : "+"}${Math.abs(x * 0.98).toFixed(2).replace(".", ",")} s`;
+    nextAero = { mine: mineB, news: `🌬️ Las horas de túnel del final de ${yearOf(s)} (ATR ${atrAt(plan, myId, r0)} %) dejan tu coche de ${y} en ${sec(mineB)}/vuelta frente a lo que traen los demás.` };
+  }
   const rec = seasonRecord(s);
   const done = rec.objetivos.filter((o) => o.done).length;
   const seed = (s.seed * 7 + 13) % 1_000_000;
   const next: SeasonState = {
     v: 1, playerTeam: s.playerTeam, seed, round: 0, weekend: null, rounds: [],
     calendar: s.calendar ? [...s.calendar] : [...CALENDARS.corta.ids], ...(s.formatos ? { formatos: { ...s.formatos } } : {}),
-    year: y, trueSeed: s.trueSeed ?? s.seed, pool: out.pool, contracts: out.contracts, salaries: out.salaries, news: out.news,
+    year: y, trueSeed: s.trueSeed ?? s.seed, pool: out.pool, contracts: out.contracts, salaries: out.salaries, news: nextAero ? [nextAero.news, ...out.news] : out.news,
     history: [...(s.history ?? []), rec],
     // el reparto ATR del año que viene sale de la clasificación de constructores de este
     atrOrder: teamStandings(s, fin).map((x) => x.team.id),

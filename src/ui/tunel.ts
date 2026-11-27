@@ -110,7 +110,7 @@ export function tunnelHtml(s: SeasonState, done: boolean): string {
   }).join("");
   return `<div class="devtun">
     <div class="small" style="margin-bottom:6px">Tu cuota ATR: <b>${atr} %</b> de las horas de túnel de viento y CFD (el primero del año anterior tiene el 70 %; el último, el 120 %)${midR !== null && s.round < midR ? `, que se revisa tras el ${gpName(s, midR - 1)}` : ""}. La aerodinámica no se compra: reparte las horas de este periodo (rondas ${per * L + 1}–${Math.min(cal, (per + 1) * L)}) y al acabar sale un paquete. Concentrar da más donde concentras.</div>
-    ${nextR === null ? `<div class="small dim" style="margin-bottom:6px">Las horas de este último periodo ya van al coche del año que viene.</div>` : `<div class="small" style="margin-bottom:6px">Paquete del periodo ${per + 1}: llega al <b>${gpName(s, nextR)}</b>, unos <b>${fmtS(exp)}/vuelta</b> en un circuito medio (×${atrMult(atr).toFixed(2).replace(".", ",")} por tu ATR). Uno de cada ocho sale mal: en los libres se mide y decides si se monta.</div>`}
+    ${nextR === null ? `<div class="small" style="margin-bottom:6px">Las horas de este último periodo van al <b>coche del año que viene</b>: unos <b>${fmtS(exp)}/vuelta</b> con tu ATR. Todos hacen lo mismo, así que lo que cuenta es la diferencia: el que acaba peor trabaja más horas y empieza el año más cerca.</div>` : `<div class="small" style="margin-bottom:6px">Paquete del periodo ${per + 1}: llega al <b>${gpName(s, nextR)}</b>, unos <b>${fmtS(exp)}/vuelta</b> en un circuito medio (×${atrMult(atr).toFixed(2).replace(".", ",")} por tu ATR). Uno de cada ocho sale mal: en los libres se mide y decides si se monta.</div>`}
     ${nextR === null ? "" : rows}
     ${pkgs ? `<div class="devparts">${pkgs}</div>` : ""}
   </div>`;

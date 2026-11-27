@@ -131,6 +131,18 @@ export function measurePkg(p: AeroPkg, seed: number): void {
   p.sigma = sigma;
   p.medido = p.real + r.gauss(0, sigma);
 }
+/**
+ * Las horas del último periodo (que ya no dan paquete en la temporada) van al coche del año siguiente: lo que se
+ * espera de un paquete con la cuota ATR de ese periodo y el ritmo del director técnico (agarre en un circuito medio).
+ * Vale para todos los equipos; al pasar de año se compara con la media, así que lo que cuenta es la diferencia de
+ * ATR (el que acabó peor trabaja más horas para el coche nuevo).
+ */
+export function nextYearAero(cal: number, atr: number, devK = 1): number {
+  return aeroExpect(cal, atr, devK);
+}
+/** Ronda (índice) con la que empieza el último periodo de túnel (el que trabaja para el año siguiente). */
+export const lastAeroPeriodRound = (cal: number) => (Math.ceil(cal / aeroPeriodLen(cal)) - 1) * aeroPeriodLen(cal);
+
 /** Lo que aportan los paquetes montados hasta una ronda: agarre por tipo de curva y resistencia (negativa: menos). */
 export function aeroGains(a: AeroPlan | undefined, round: number): { curvas: [number, number, number]; drag: number; total: number } {
   const curvas: [number, number, number] = [0, 0, 0];
