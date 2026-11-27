@@ -700,7 +700,10 @@ npm run test:rapido  # solo los rápidos (~1 s)
   no debería pasar (pilotos o dorsales repetidos, libres que también corren, contratos vencidos, puntos que no
   cuadran, valores sin sentido), años seguidos, misma semilla = misma partida, presupuesto según los objetivos,
   aviso y despido de la directiva, tu equipo y tu equipo técnico entre temporadas, edades, pilotos nuevos, hueco
-  entre coches, objetivos según el coche, moral, sprints sorteados desde 2027 y renovaciones.
+  entre coches, objetivos según el coche, moral, sprints sorteados desde 2027 y renovaciones. Y los fallos
+  arreglados en noviembre de 2026 (ver [docs/PRUEBAS-TEMPORADA.md](docs/PRUEBAS-TEMPORADA.md)): un lesionado al
+  acabar el año recupera su asiento, tu piloto lesionado en «crea tu equipo» no corre con su equipo de antes y los
+  jóvenes de la F2 no repiten dorsal.
 - `tests/temporada-real-*.test.ts` (en paralelo): lo mismo con la simulación entera (libres, clasificación, sprint y
   carrera) en dos temporadas de dos carreras, con equipo real y con equipo propio.
 - El jugador automático de esos tests es `tests/partida.ts`: lleva la partida como la interfaz (presupuesto, túnel

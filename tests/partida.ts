@@ -241,6 +241,17 @@ export function runCareer(o: CareerOptions): CareerResult {
       if (ensureAeroPkgs(s)) useSeason(s);
       if (o.develop !== false) develop(s);
       const where = `${Y} R${r + 1} ${calIds[r]}`;
+      // nadie corre en dos coches (también con cambios a mitad de temporada)
+      useSeason(s);
+      const abs = DRIVERS.map((d) => d.d.abrev), twice = abs.filter((a, i) => abs.indexOf(a) !== i);
+      // un lesionado no corre hasta que vuelve
+      const sw = s.swaps ?? [];
+      for (const [i, x] of sw.entries()) {
+        if (!/^lesión/.test(x.why) || x.round > r || sw.slice(i + 1).some((y) => y.seat === x.seat && y.in.abrev === x.out.abrev && y.round <= r)) continue;
+        const d = DRIVERS.find((z) => z.d.abrev === x.out.abrev);
+        if (d) fail(where, `${x.out.nombre} está lesionado y corre con ${d.team.nombre}`);
+      }
+      if (twice.length) fail(where, `en dos coches a la vez: ${twice.map((a) => `${a} (${DRIVERS.filter((d) => d.d.abrev === a).map((d) => d.team.nombre).join(" y ")})`).join(", ")}`);
       const swapsBefore = s.swaps?.length ?? 0;
       const pensIn = s.gridPens?.length ?? 0;
       let race: ResultRow[], sprint: ResultRow[] | undefined, q: ResultRow[] | undefined;
@@ -507,6 +518,9 @@ function checkSeasonStart(s: SeasonState, Y: number, custom: boolean, fail: (w: 
     }
   }
   if (s.pool) {
+    // dorsales: tampoco se repiten con los libres (pueden volver a la parrilla con el suyo)
+    const all = [...nums, ...s.pool.map((d) => d.numero)], dupAll = [...new Set(all.filter((a, i) => all.indexOf(a) !== i))];
+    if (dupAll.length && !dupNum.length) fail(w, `dorsales repetidos entre la parrilla y los libres: ${dupAll.map((n) => `${n} (${[...DRIVERS.filter((d) => d.d.numero === n).map((d) => `${d.d.nombre}, ${d.team.nombre}`), ...s.pool!.filter((d) => d.numero === n).map((d) => `${d.nombre}, libre${d.serie ? ` (${d.serie})` : ""}${d.debut === undefined ? "" : `, debut ${d.debut}`}`)].join(" / ")})`).join("; ")}`);
     const onGrid = new Set(ab);
     const inPool = s.pool.filter((d) => onGrid.has(d.abrev)).map((d) => d.abrev);
     if (inPool.length) fail(w, `en la parrilla y también libres: ${inPool.join(", ")}`);

@@ -53,17 +53,36 @@ function driverNow(s: SeasonState, abrev: string): DriverDef {
   return m ?? publicDriver(MARKET, BASE_TEAMS, abrev);
 }
 
-/** Los pilotos de la temporada que acaba: los de la IA (por equipo) y los tuyos, con sus valores de ese año. */
+/**
+ * Lesionados que siguen de baja al acabar la temporada (la baja iba más allá de la última carrera, así que no hay
+ * «vuelve»): se curan en invierno y recuperan su asiento. Por asiento, el lesionado y quien le sustituía.
+ */
+export function healedOverWinter(s: SeasonState): Map<number, { out: DriverDef; sub: DriverDef }> {
+  const sw = s.swaps ?? [];
+  const m = new Map<number, { out: DriverDef; sub: DriverDef }>();
+  sw.forEach((x, i) => {
+    // solo si el último cambio de ese asiento es la lesión (el sustituto sigue en él)
+    if (/^lesión/.test(x.why) && !sw.slice(i + 1).some((y) => y.seat === x.seat)) m.set(x.seat, { out: x.out, sub: x.in });
+  });
+  return m;
+}
+
+/** Los pilotos de la temporada que acaba: los de la IA (por equipo) y los tuyos, con sus valores de ese año (los
+ *  lesionados que no habían vuelto, otra vez en su asiento). */
 function rosters(s: SeasonState): { ai: TeamDef[]; mine: DriverDef[]; fin: TeamDef[] } {
   const races = calendarOf(s).length;
-  const fin = gridOf(s, races).teams;
+  const healed = healedOverWinter(s);
+  let seat = 0;
+  const fin = gridOf(s, races).teams.map((t) => ({ ...t, pilotos: t.pilotos.map((d) => healed.get(seat++)?.out ?? d) }));
   const custom = !!s.equipo;
   const base = s.grid ?? BASE_TEAMS;
   const ai = fin.filter((t) => t.id !== (custom ? PLAYER_TEAM_ID : s.playerTeam)).map((t) => {
     const b = base.find((x) => x.id === t.id) ?? t;
     return { ...b, pilotos: t.pilotos.map((d) => driverNow(s, d.abrev)) };
   });
-  const mine = custom ? s.equipo!.pilotos.map((a) => driverNow(s, a)) : (fin.find((t) => t.id === s.playerTeam)?.pilotos ?? []).map((d) => driverNow(s, d.abrev));
+  // «crear equipo»: tus pilotos están en s.equipo, que ya tiene al sustituto (syncMine)
+  const back = new Map([...healed.values()].map((x) => [x.sub.abrev, x.out.abrev]));
+  const mine = custom ? s.equipo!.pilotos.map((a) => driverNow(s, back.get(a) ?? a)) : (fin.find((t) => t.id === s.playerTeam)?.pilotos ?? []).map((d) => driverNow(s, d.abrev));
   return { ai, mine, fin };
 }
 
@@ -140,7 +159,8 @@ export function buildNextSeason(s: SeasonState, choices: { keep: boolean; sign?:
   const salaries = salariesOf(s, allTeams.flatMap((t) => t.pilotos));
   const meanAgarre = BASE_TEAMS.reduce((a, t) => a + t.agarre, 0) / BASE_TEAMS.length;
   const meanPotencia = BASE_TEAMS.reduce((a, t) => a + t.potencia, 0) / BASE_TEAMS.length;
-  const departed = (s.swaps ?? []).map((x) => x.out).filter((d, i, a) => !taken.has(d.abrev) && a.findIndex((z) => z.abrev === d.abrev) === i);
+  // los que han salido de un asiento este año (y los sustitutos de los lesionados que vuelven) quedan libres
+  const departed = (s.swaps ?? []).flatMap((x) => [x.out, x.in]).filter((d, i, a) => !taken.has(d.abrev) && a.findIndex((z) => z.abrev === d.abrev) === i);
   const basePool = poolOf(s, taken);
   const pool0 = [...basePool, ...departed.filter((d) => !basePool.some((p) => p.abrev === d.abrev))];
   const races = calendarOf(s).length;
@@ -445,7 +465,13 @@ export function applyMidSeason(s: SeasonState): string[] {
 /** «Crear equipo»: tus pilotos de ahora en el equipo que fichaste (para la temporada siguiente). */
 function syncMine(s: SeasonState) {
   if (!s.equipo) return;
-  const mine = seatsAt(s, s.round).filter((x) => x.player).map((x) => x.d);
+  // el sustituto de un lesionado no es un fichaje: el lesionado sigue siendo tuyo (si no, su equipo de antes lo
+  // recuperaría en la parrilla mientras está de baja, y su reserva desaparecería)
+  const sw = s.swaps ?? [];
+  const mine = seatsAt(s, s.round).filter((x) => x.player).map((x) => {
+    const last = sw.filter((y) => y.seat === x.seat && y.round <= s.round).pop();
+    return last && /^lesión/.test(last.why) && last.in.abrev === x.d.abrev ? last.out : x.d;
+  });
   s.equipo = { ...s.equipo, pilotos: mine.map((d) => d.abrev) };
   if (s.misPilotos) s.misPilotos = mine.map((d) => s.misPilotos!.find((m) => m.abrev === d.abrev) ?? d);
 }

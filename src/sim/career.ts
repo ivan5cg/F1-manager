@@ -198,7 +198,8 @@ export function offSeason(inp: OffSeasonInput): OffSeasonOutput {
   let cost = 0;
   const sign = (d: DriverDef) => { contracts[d.abrev] = y + contractYears(d, y, rng) - 1; salaries[d.abrev] = salaryFor(d); };
   const used = new Set<string>([...inp.base.flatMap((t) => t.pilotos.map((d) => d.abrev)), ...inp.pool.map((d) => d.abrev), ...inp.mine.map((m) => m.d.abrev)]);
-  const numbers = new Set<number>([...inp.base.flatMap((t) => t.pilotos.map((d) => d.numero)), ...inp.mine.map((m) => m.d.numero)]);
+  // dorsales ocupados: los de la parrilla y también los de los libres (pueden volver a la parrilla con el suyo)
+  const numbers = new Set<number>([...inp.base.flatMap((t) => t.pilotos.map((d) => d.numero)), ...inp.mine.map((m) => m.d.numero), ...inp.pool.map((d) => d.numero)]);
   const age = (d: DriverDef) => ageDriver(d, y, rng);
 
   // 1. un año más para todos

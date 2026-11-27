@@ -25,7 +25,9 @@ Por el camino comprueba lo que no debería pasar nunca:
 - sesiones del fin de semana que faltan;
 - tus dos coches en cada carrera;
 - objetivos sin resolver al acabar;
-- un lesionado al acabar el año que pierde su asiento.
+- un lesionado al acabar el año que pierde su asiento;
+- pilotos en dos coches a la vez o lesionados que corren, antes de cada carrera;
+- dorsales repetidos entre la parrilla y los libres.
 
 ## Qué se ha corrido
 
@@ -39,18 +41,20 @@ Las partidas de «crea tu equipo» con semillas 1 a 5 salieron todas con motor F
 jugador automático (ya corregido). Por eso se añadieron 4 más (semillas 6, 8, 9 y 10) con Mercedes, Red Bull Ford,
 Audi y Honda.
 
-## Fallos encontrados
+## Fallos encontrados (arreglados)
 
-### 1. Un piloto lesionado en las últimas carreras pierde su asiento para siempre
+Los tres se arreglaron después de las pruebas. Las 14 partidas guardadas en `scripts/partidas/base-2026-11` son de
+antes de los arreglos.
 
-**Dónde.** Si un piloto se lesiona y su baja dura más allá de la última carrera, no se crea el cambio de «vuelve».
-En invierno, `rosters()` (en `src/ui/nextSeason.ts`) toma la parrilla tal como acabó, con el sustituto. En «crea tu
-equipo», además, `syncMine()` ya ha puesto al sustituto en `s.equipo.pilotos`.
+### 1. Un piloto lesionado en las últimas carreras perdía su asiento para siempre
 
-**Qué pasa.** El sustituto se queda con el asiento la temporada siguiente y el lesionado:
+**Qué pasaba.** Si un piloto se lesionaba y su baja iba más allá de la última carrera, `midSeason` (en
+`src/sim/career.ts`) no creaba el cambio de «vuelve». En invierno, `rosters()` (en `src/ui/nextSeason.ts`) tomaba la
+parrilla tal como acabó, con el sustituto. Así, el sustituto se quedaba con el asiento la temporada siguiente y el
+lesionado:
 
-- pasa al mercado y lo ficha otro equipo; o
-- si era tuyo en «crea tu equipo», deja tu equipo sin que hayas decidido nada.
+- pasaba al mercado y lo fichaba otro equipo; o
+- si era tuyo en «crea tu equipo», dejaba tu equipo sin que hubieras decidido nada.
 
 **Ejemplos con la simulación entera:**
 
@@ -61,19 +65,49 @@ equipo», además, `syncMine()` ya ha puesto al sustituto en `s.equipo.pilotos`.
 
 **Ejemplos en modo rápido:** Verstappen acaba en Ferrari y Red Bull se queda con Câmara; Norris acaba en Williams.
 
-**Cuánto.** 11 casos en 40 temporadas con la simulación entera y 98 en las 120 partidas rápidas. El test 1 de
-`tests/temporada.test.ts` lo detecta y está en rojo por esto.
+**Cuánto.** 11 casos en 40 temporadas con la simulación entera y 98 en las 120 partidas rápidas.
 
-### 2. Dorsales repetidos con los jóvenes inventados de la F2
+**Arreglo.** `healedOverWinter()` busca a los lesionados cuyo asiento sigue ocupado por el sustituto al acabar el
+año. `rosters()` los devuelve a su asiento, porque la baja se cura en invierno, y el sustituto vuelve a los libres
+(antes también se perdía). Vale también para las partidas guardadas antes del arreglo.
 
-**Dónde.** En `offSeason` (`src/sim/career.ts`), los dorsales de los jóvenes nuevos de la F2 se eligen para no
-repetir ninguno de la parrilla (`numbers`), pero no se miran los de los pilotos libres del mercado (`inp.pool`).
+### 2. En «crea tu equipo», tu piloto lesionado volvía a correr con su equipo de antes
 
-**Qué pasa.** Uno nuevo puede llevar el mismo número que un libre, y luego coincidir los dos en la parrilla. En
-«crea tu equipo» con la semilla 5 (modo rápido), Pablo Vidal (inventado) y Pourchaire llevan los dos el 19, en
-Aston Martin, en 2029.
+**Qué pasaba.** Al lesionarse uno de tus pilotos, `syncMine()` metía al sustituto en tus fichajes
+(`s.equipo.pilotos`). Como `buildGrid` deja en su equipo de origen a quien no has fichado, ese equipo recuperaba al
+lesionado mientras estaba de baja, y su reserva desaparecía. Ejemplo: Russell, lesionado en tu equipo, corre la R9
+con Mercedes y Vesti desaparece. Al acabar el año, además, Russell volvía a Mercedes gratis.
 
-**Cuánto.** 1 caso en las 120 partidas rápidas.
+**Cuánto.** 1 caso en las 120 partidas rápidas, porque solo pasa con pilotos tuyos fichados de un equipo real que se
+lesionan.
+
+**Arreglo.** `syncMine()` ya no cuenta como fichaje al sustituto de un lesionado: tu piloto sigue siendo tuyo y el
+sustituto solo ocupa el asiento.
+
+### 3. Dorsales repetidos con los jóvenes inventados de la F2
+
+**Qué pasaba.** En `offSeason` (`src/sim/career.ts`), los dorsales de los jóvenes nuevos de la F2 se elegían para no
+repetir ninguno de la parrilla, pero no se miraban los de los libres del mercado. Uno nuevo podía llevar el número de
+un libre, y luego coincidir los dos en la parrilla. En «crea tu equipo» con la semilla 5 (modo rápido), Pablo Vidal
+(inventado) y Pourchaire llevan los dos el 19, en Aston Martin, en 2029. Entre parrilla y libres se repetía algún
+dorsal en casi todas las partidas.
+
+**Cuánto.** 1 caso en la parrilla en 120 partidas rápidas.
+
+**Arreglo.** Los dorsales ocupados incluyen también los de los libres.
+
+### Tests
+
+- El jugador automático comprueba ahora que no haya pilotos en dos coches, ni un lesionado corriendo, ni dorsales
+  repetidos entre la parrilla y los libres.
+- `tests/temporada.test.ts` tiene un test por cada fallo (17 a 20), con casos construidos a mano.
+- Con el código de antes fallan esos cuatro tests y el 1; con el de ahora pasan los 20.
+- Las 120 partidas rápidas salen sin ningún problema (antes había 99).
+
+### Fallo que ya estaba: banco de Las Vegas
+
+`tests/banco-4.test.ts` falla en Las Vegas: 0,58 paradas por coche, con un mínimo de 0,9. También falla en el commit
+de partida `b4681aa`, el de la física de carrera; no tiene que ver con el modo temporada.
 
 ## Comportamientos que conviene revisar (no son fallos de programación)
 

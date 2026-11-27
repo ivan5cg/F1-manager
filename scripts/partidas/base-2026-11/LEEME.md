@@ -35,9 +35,10 @@ El `.log` de cada una es lo que fue contando (una línea por carrera).
 
 ## Con qué código
 
-- **El juego (`src/`)** es el del commit `b4681aa`, sin cambios durante las pruebas. Por tanto, tiene los dos fallos
-  que se arreglaron después:
+- **El juego (`src/`)** es el del commit `b4681aa`, sin cambios durante las pruebas. Por tanto, tiene los tres fallos
+  que se arreglaron después (ver [docs/PRUEBAS-TEMPORADA.md](../../../docs/PRUEBAS-TEMPORADA.md)):
   - un lesionado al acabar el año pierde su asiento;
+  - en «crea tu equipo», tu lesionado vuelve a correr con su equipo de antes;
   - los jóvenes de la F2 inventados pueden repetir dorsal.
 - **El jugador automático** tuvo algunos retoques de las comprobaciones entre unas partidas y otras, sin efecto en
   cómo se juega. Por eso los `problems` no son comparables entre ficheros:

@@ -4,9 +4,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { runCareer, randomSpec, type CareerResult } from "./partida";
-import { MARKET, BASE_TEAMS, CALENDARS, useSeason, TEAMS, DRIVERS } from "../src/ui/data";
+import { MARKET, BASE_TEAMS, CALENDARS, useSeason, TEAMS, DRIVERS, gridOf } from "../src/ui/data";
 import { buildNextSeason, firedNow, randomSprintsFor, yearOf } from "../src/ui/nextSeason";
-import { costOf } from "../src/sim/market";
+import { costOf, publicDriver } from "../src/sim/market";
 import { objectivesBonus, OBJ_BONUS, OBJ_MALUS } from "../src/sim/career";
 import type { SeasonState } from "../src/sim/season";
 
@@ -194,4 +194,58 @@ test("randomSpec: equipos propios distintos y dentro del techo", () => {
   assert.ok(new Set(specs.map((x) => x.pilotos.join())).size > 1);
   assert.equal(new Set(specs.map((x) => x.motor)).size, MARKET.motores.length, "los cinco motores");
   void BASE_TEAMS;
+});
+
+// ------------------------------------------------------------------ fallos arreglados (noviembre de 2026)
+/** Una temporada de equipo real ya terminada, con un lesionado en la última carrera (asiento `seat`). */
+function endedWithInjury(team: string, seat: () => number, equipo?: SeasonState["equipo"]): { s: SeasonState; out: string; sub: string } {
+  const s: SeasonState = { v: 1, playerTeam: team, seed: 21, round: 9, weekend: null, rounds: [], calendar: [...CALENDARS.corta.ids], ...(equipo ? { equipo } : {}) };
+  useSeason(s);
+  const k = seat();
+  const out = DRIVERS[k].d;
+  const sub = publicDriver(MARKET, BASE_TEAMS, "DUN"); // joven: no se retira del grupo de libres en invierno
+  s.swaps = [{ round: 8, seat: k, in: sub, out, why: `lesión de ${out.nombre}` }];
+  useSeason(s);
+  return { s, out: out.abrev, sub: sub.abrev };
+}
+
+test("un lesionado en la última carrera recupera su asiento al año siguiente (equipo de la IA)", () => {
+  // Bearman, de Haas: antes del arreglo quedaba libre y lo fichaba otro (o volvía de rebote si su equipo lo elegía)
+  const { s, out, sub } = endedWithInjury("williams", () => DRIVERS.find((d) => d.d.abrev === "BEA")!.id);
+  const next = buildNextSeason(s, [{ keep: true }, { keep: true }]);
+  assert.ok(next.grid!.find((t) => t.id === "haas")!.pilotos.some((d) => d.abrev === out), `vuelve a Haas: ${next.grid!.find((t) => t.id === "haas")!.pilotos.map((d) => d.abrev)}`);
+  assert.ok(!next.grid!.some((t) => t.pilotos.some((d) => d.abrev === sub)) || next.news!.some((n) => n.includes("Dunne")), "el sustituto no se queda con el asiento");
+  assert.ok(next.pool!.some((d) => d.abrev === sub) || next.grid!.some((t) => t.pilotos.some((d) => d.abrev === sub)), "el sustituto no desaparece: vuelve a los libres");
+});
+
+test("un lesionado en la última carrera recupera su asiento al año siguiente (tu piloto, equipo real)", () => {
+  const { s, out } = endedWithInjury("williams", () => DRIVERS.find((d) => d.team.id === "williams")!.id);
+  const next = buildNextSeason(s, [{ keep: true }, { keep: true }]);
+  assert.ok(next.grid!.find((t) => t.id === "williams")!.pilotos.some((d) => d.abrev === out));
+});
+
+test("crea tu equipo: tu piloto lesionado sigue siendo tuyo (su equipo de antes no lo recupera) y vuelve al año siguiente", () => {
+  const spec = { nombre: "Prueba", color: "#fff", pilotos: ["VIL", "RUS"], jefe: MARKET.jefes[12].nombre, tecnico: MARKET.tecnicos[12].nombre, motor: "mercedes" };
+  const { s, out } = endedWithInjury("propio", () => DRIVERS.find((d) => d.d.abrev === "RUS" && d.team.id === "propio")!.id, spec);
+  assert.equal(out, "RUS");
+  // durante la baja: Russell no corre (tampoco con Mercedes) y Mercedes sigue con su reserva
+  for (const r of [8, 9]) {
+    const ab = gridOf(s, r).teams.flatMap((t) => t.pilotos.map((d) => d.abrev));
+    assert.ok(!ab.includes("RUS"), `ronda ${r}: ${ab.join(",")}`);
+    assert.equal(new Set(ab).size, ab.length);
+  }
+  const next = buildNextSeason(s, [{ keep: true }, { keep: true }]);
+  assert.deepEqual([...next.equipo!.pilotos].sort(), ["RUS", "VIL"]);
+  assert.ok(!next.grid!.some((t) => t.pilotos.some((d) => d.abrev === "RUS")), "Russell no está también en Mercedes");
+  // partidas guardadas antes del arreglo: el sustituto ya estaba en tu equipo
+  const old = endedWithInjury("propio", () => DRIVERS.find((d) => d.d.abrev === "RUS" && d.team.id === "propio")!.id, spec).s;
+  old.equipo = { ...old.equipo!, pilotos: ["VIL", "DUN"] };
+  assert.deepEqual([...buildNextSeason(old, [{ keep: true }, { keep: true }]).equipo!.pilotos].sort(), ["RUS", "VIL"]);
+});
+
+test("los jóvenes de la F2 inventados no repiten el dorsal de nadie (ni de la parrilla ni de los libres)", () => {
+  for (const sd of [1, 2, 3, 4, 5, 6, 7, 8]) {
+    const r = runCareer({ team: sd % 2 ? "propio" : "haas", seed: 300 + sd, seasons: 4, mode: "rapida" });
+    assert.deepEqual(r.problems.filter((p) => /dorsal/.test(p)), []);
+  }
 });
