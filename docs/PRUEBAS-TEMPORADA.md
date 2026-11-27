@@ -104,10 +104,19 @@ dorsal en casi todas las partidas.
 - Con el código de antes fallan esos cuatro tests y el 1; con el de ahora pasan los 20.
 - Las 120 partidas rápidas salen sin ningún problema (antes había 99).
 
-### Fallo que ya estaba: banco de Las Vegas
+### Banco de Las Vegas (arreglado)
 
-`tests/banco-4.test.ts` falla en Las Vegas: 0,58 paradas por coche, con un mínimo de 0,9. También falla en el commit
-de partida `b4681aa`, el de la física de carrera; no tiene que ver con el modo temporada.
+`tests/banco-4.test.ts` fallaba en Las Vegas: 0,58 paradas por coche, con un mínimo de 0,9. Ya fallaba en el commit
+de partida `b4681aa`, el de la física de carrera, y no era un fallo de estrategia sino del test:
+
+- la física nueva cambió la carrera de la semilla 2, que pasó a tener dos banderas rojas (vueltas 16 y 30) y a
+  acabar por el tiempo máximo en la vuelta 48 de 50;
+- bajo bandera roja se pueden cambiar neumáticos sin parar, así que 15 de los 18 que acabaron cumplieron la regla de
+  los dos compuestos sin entrar a boxes (0,17 paradas por coche);
+- con solo dos carreras por circuito, esa carrera arrastraba la media.
+
+Ahora el banco cuenta los cambios de neumáticos (paradas y cambios con bandera roja): Las Vegas da 1,11 de media y el
+resto de circuitos no cambia. `npm test` pasa entero (84 de 84).
 
 ## Comportamientos que conviene revisar (no son fallos de programación)
 

@@ -697,9 +697,10 @@ npm run test:rapido  # solo los rápidos (~1 s)
   medida), el programa de libres con paquete y el orden de los coches de 2026.
 - `tests/banco-*.test.ts` (en paralelo): dos carreras en seco por circuito en Mónaco, Monza, Hungaroring,
   Silverstone, Spa, Suzuka, Las Vegas y Baréin (parrilla por ritmo, como `scripts/auditoria/rapida.ts`). Los
-  adelantamientos de cada uno, ±35 % de su calibración; nadie descalificado; entre 0,9 y 2 paradas por coche; como
-  mucho 12 doblados; al menos 12 coches en meta. Con el umbral viejo de Mónaco (2,2) el test falla: 5 adelantamientos
-  por carrera.
+  adelantamientos de cada uno, ±35 % de su calibración; nadie descalificado; entre 0,9 y 2 cambios de neumáticos
+  por coche (las paradas y los cambios con bandera roja, que no son parada: con dos rojas, en Las Vegas casi nadie
+  para); como mucho 12 doblados; al menos 12 coches en meta. Con el umbral viejo de Mónaco (2,2) el test falla: 5
+  adelantamientos por carrera.
 - Si un cambio mueve los adelantamientos a propósito, se recalibra el circuito y se actualiza su referencia en el
   fichero del banco (`pass`, de `rapida.ts 1-2 <circuito>`).
 - `tests/temporada.test.ts`: el modo temporada a lo largo de 4 temporadas, con equipo real (8 equipos × 5 semillas)

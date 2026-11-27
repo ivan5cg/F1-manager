@@ -23,7 +23,9 @@ export function benchCircuits(refs: CircuitRef[]) {
         assert.ok(st.pass >= lo && st.pass <= hi, `${st.pass.toFixed(1)} adelantamientos por carrera; se esperaban entre ${lo.toFixed(1)} y ${hi.toFixed(1)}`);
       });
       await t.test("nadie descalificado (regla de los dos compuestos)", () => assert.equal(st.dsq, 0));
-      await t.test("paradas por coche entre 0,9 y 2", () => assert.ok(st.stops >= 0.9 && st.stops <= 2, `${st.stops.toFixed(2)} paradas`));
+      // cuenta también los cambios con bandera roja: con una o dos rojas muchos cumplen la regla de los dos compuestos
+      // sin parar (Las Vegas, semilla 2: dos rojas y 0,17 paradas por coche, pero 1,22 cambios)
+      await t.test("cambios de neumáticos por coche (paradas y con bandera roja) entre 0,9 y 2", () => assert.ok(st.changes >= 0.9 && st.changes <= 2, `${st.changes.toFixed(2)} cambios (${st.stops.toFixed(2)} paradas)`));
       await t.test("doblados por carrera entre 0 y 14", () => assert.ok(st.lapped >= 0 && st.lapped <= 14, `${st.lapped} doblados`));
       await t.test("acaban al menos 12 coches", () => assert.ok(st.finished >= 12, `acaban ${st.finished}`));
     });

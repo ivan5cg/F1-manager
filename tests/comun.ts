@@ -6,6 +6,8 @@ import { benchRace } from "../scripts/banco";
 export interface RaceStats {
   pass: number; // adelantamientos sin la primera vuelta
   stops: number; // paradas por coche que acaba
+  /** Cambios de neumáticos por coche que acaba: las paradas y los cambios con bandera roja (que no son parada). */
+  changes: number;
   lapped: number; // doblados entre los que acaban
   usedH: number; // fracción de los que acaban que usan el duro
   usedS: number;
@@ -24,6 +26,7 @@ export function runRace(id: string, seed: number): RaceStats {
   return {
     pass: s.passCount - s.passLap1,
     stops: fin.reduce((a, r) => a + r.stops, 0) / Math.max(1, fin.length),
+    changes: fin.reduce((a, r) => a + s.carById(r.id).stintLog.length - 1, 0) / Math.max(1, fin.length),
     lapped: fin.filter((r) => r.laps < lead).length,
     usedH: used("H"),
     usedS: used("S"),
@@ -42,6 +45,7 @@ export function circuitStats(id: string, seeds: number[]) {
     races: r,
     pass: mean(r.map((x) => x.pass)),
     stops: mean(r.map((x) => x.stops)),
+    changes: mean(r.map((x) => x.changes)),
     lapped: mean(r.map((x) => x.lapped)),
     usedH: mean(r.map((x) => x.usedH)),
     dsq: r.reduce((a, x) => a + x.dsq, 0),
