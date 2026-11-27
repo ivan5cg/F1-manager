@@ -695,6 +695,26 @@ npm run test:rapido  # solo los rápidos (~1 s)
   por carrera.
 - Si un cambio mueve los adelantamientos a propósito, se recalibra el circuito y se actualiza su referencia en el
   fichero del banco (`pass`, de `rapida.ts 1-2 <circuito>`).
+- `tests/temporada.test.ts`: el modo temporada a lo largo de 4 temporadas, con equipo real (8 equipos × 5 semillas)
+  y con «crea tu equipo» (5 equipos al azar dentro del techo), con las carreras por ritmo (unos segundos): nada que
+  no debería pasar (pilotos o dorsales repetidos, libres que también corren, contratos vencidos, puntos que no
+  cuadran, valores sin sentido), años seguidos, misma semilla = misma partida, presupuesto según los objetivos,
+  aviso y despido de la directiva, tu equipo y tu equipo técnico entre temporadas, edades, pilotos nuevos, hueco
+  entre coches, objetivos según el coche, moral, sprints sorteados desde 2027 y renovaciones.
+- `tests/temporada-real-*.test.ts` (en paralelo): lo mismo con la simulación entera (libres, clasificación, sprint y
+  carrera) en dos temporadas de dos carreras, con equipo real y con equipo propio.
+- El jugador automático de esos tests es `tests/partida.ts`: lleva la partida como la interfaz (presupuesto, túnel
+  de viento, test de pretemporada, fines de semana simulados, unidades de potencia, sanciones, moral, directiva,
+  cambios a mitad de temporada e invierno). Para partidas largas con la simulación entera, una por proceso:
+
+```bash
+npm run partidas -- williams 3 4 --salida=partidas/williams-3.json   # equipo, semilla, temporadas (~25 min)
+npm run partidas -- propio 1 4 --sin-test --salida=partidas/propio-1.json
+npm run partidas:informe -- partidas informe.md                       # resumen de todas en Markdown
+```
+
+  Opciones: `--rapida` (carreras por ritmo), `--sin-test` (salta el test de pretemporada), `--sin-desarrollo` (no
+  pide piezas), `--completo` (calendario de 24) y `--rondas=N` (solo las N primeras carreras).
 
 ## Simular sin interfaz
 
