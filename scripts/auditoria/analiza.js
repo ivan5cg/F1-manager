@@ -188,9 +188,11 @@ if (fpq.length) console.log(`mejor de libres − pole: L1 ${f(med(fpq.map((x) =>
 reportQ(A.SQ, "CLASIFICACIÓN SPRINT"); reportQ(A.Q, "CLASIFICACIÓN");
 reportRace(A.SPRINT, "SPRINT"); reportRace(A.RACE, "CARRERA");
 if (byTrack) {
-  console.log("\nPor circuito (carrera): FL/pole · verde/pole · paradas · usa H % · adelant. · SC% · margen · pole err");
+  console.log("\nPor circuito (carrera): FL/pole · verde/pole · paradas · usa H % · adelant. · SC% · margen · pole err (seco)");
   for (const [id, k] of Object.entries(per)) {
-    const r = k.RACE || []; const qq = k.Q || [];
+    // la pole solo en las clasificaciones secas (una mojada, aunque sea en un día «Estable», la dispara: Silverstone
+    // salía a +2,6 s por una Q3 con lluvia de cuatro)
+    const r = k.RACE || []; const qq = (k.Q || []).filter((x) => !x.wet);
     console.log(`  ${id.padEnd(12)} ${f(mean(r.map((x) => x.flRatio)), 4)} ${f(med(r.map((x) => x.lapVsPole)), 4)} ${f(mean(r.flatMap((x) => x.stops)), 2)} ${f(100 * mean(r.map((x) => x.usedH)), 0).padStart(4)} ${f(mean(r.map((x) => x.passes + x.passLap1)), 1).padStart(5)} ${f(pct(r.map((x) => x.sc > 0)), 0).padStart(4)} ${f(mean(r.map((x) => x.margin)), 1).padStart(5)} ${f(mean(qq.map((x) => x.poleErr)), 3)} · deg S ${f(med(r.flatMap((x) => x.degs.S)), 3)} M ${f(med(r.flatMap((x) => x.degs.M)), 3)} H ${f(med(r.flatMap((x) => x.degs.H)), 3)} · boxes ${f(med(r.flatMap((x) => x.pitLossM)), 1)}`);
   }
 }
