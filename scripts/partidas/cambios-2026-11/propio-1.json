@@ -1,0 +1,2837 @@
+{
+ "opts": {
+  "team": "propio",
+  "seed": 1,
+  "seasons": 4,
+  "mode": "real",
+  "preseason": true,
+  "develop": true,
+  "calendar": "corta",
+  "spec": {
+   "nombre": "Propio 1",
+   "color": "#ff8800",
+   "pilotos": [
+    "CRA",
+    "POU"
+   ],
+   "jefe": "Andrea Stella",
+   "tecnico": "James Allison",
+   "motor": "mercedes"
+  }
+ },
+ "seasons": [
+  {
+   "year": 2026,
+   "playerTeam": "propio",
+   "teamName": "Propio 1",
+   "calendar": [
+    "suzuka",
+    "bahrein",
+    "monaco",
+    "silverstone",
+    "spa",
+    "monza",
+    "sepang",
+    "singapur",
+    "interlagos"
+   ],
+   "sprints": [
+    "singapur",
+    "interlagos"
+   ],
+   "budget": 44,
+   "devBonus": 0,
+   "devLeftStart": 26,
+   "levels0": {
+    "mercedes": 2.064,
+    "ferrari": 1.597,
+    "redbull": 1.859,
+    "mclaren": 1.782,
+    "racingbulls": 1.121,
+    "alpine": 1.016,
+    "haas": 0.589,
+    "audi": 1.008,
+    "williams": -0.648,
+    "astonmartin": -1.842,
+    "cadillac": -1.496,
+    "propio": 1.456
+   },
+   "carRank0": 5,
+   "spread0": 3.906,
+   "races": [
+    {
+     "round": 1,
+     "circuitId": "suzuka",
+     "sprint": false,
+     "winner": "Charles Leclerc",
+     "winnerTeam": "Ferrari",
+     "pole": "George Russell",
+     "mine": [
+      {
+       "nombre": "Théo Pourchaire",
+       "grid": 13,
+       "pos": 12,
+       "status": "fin",
+       "points": 0
+      },
+      {
+       "nombre": "Jak Crawford",
+       "grid": 23,
+       "pos": 23,
+       "status": "out",
+       "reason": "avería (caja de cambios), se retira en boxes",
+       "points": 0
+      }
+     ],
+     "dnfs": 2,
+     "dnfReasons": {
+      "avería": 1,
+      "accidente": 1
+     },
+     "dsq": 0,
+     "finished": 22,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 40.619,
+     "passes": 106,
+     "safety": 1,
+     "vsc": 0,
+     "red": false
+    },
+    {
+     "round": 2,
+     "circuitId": "bahrein",
+     "sprint": false,
+     "winner": "Max Verstappen",
+     "winnerTeam": "Red Bull Racing",
+     "pole": "Max Verstappen",
+     "mine": [
+      {
+       "nombre": "Jak Crawford",
+       "grid": 17,
+       "pos": 8,
+       "status": "fin",
+       "points": 4
+      },
+      {
+       "nombre": "Théo Pourchaire",
+       "grid": 11,
+       "pos": 24,
+       "status": "out",
+       "reason": "avería (hidráulica), se retira en boxes",
+       "points": 0
+      }
+     ],
+     "dnfs": 1,
+     "dnfReasons": {
+      "avería": 1
+     },
+     "dsq": 0,
+     "finished": 23,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 28.939,
+     "passes": 72,
+     "safety": 0,
+     "vsc": 0,
+     "red": false
+    },
+    {
+     "round": 3,
+     "circuitId": "monaco",
+     "sprint": false,
+     "winner": "George Russell",
+     "winnerTeam": "Mercedes",
+     "pole": "Max Verstappen",
+     "mine": [
+      {
+       "nombre": "Yuki Tsunoda",
+       "grid": 17,
+       "pos": 18,
+       "status": "out",
+       "reason": "accidente",
+       "points": 0
+      },
+      {
+       "nombre": "Théo Pourchaire",
+       "grid": 16,
+       "pos": 20,
+       "status": "out",
+       "reason": "accidente",
+       "points": 0
+      }
+     ],
+     "dnfs": 7,
+     "dnfReasons": {
+      "accidente": 3,
+      "avería": 4
+     },
+     "dsq": 0,
+     "finished": 17,
+     "shortened": false,
+     "wet": true,
+     "gridPens": 0,
+     "swaps": [
+      "🚑 Jak Crawford (Propio 1) se ha lesionado en el accidente: se pierde las 2 próximas carreras. Le sustituye Yuki Tsunoda.",
+      "🚑 Charles Leclerc (Ferrari) se ha lesionado en el accidente: se pierde la próxima carrera. Le sustituye Antonio Giovinazzi."
+     ],
+     "secs": 31.127,
+     "wetRace": true,
+     "passes": 58,
+     "safety": 1,
+     "vsc": 0,
+     "red": true
+    },
+    {
+     "round": 4,
+     "circuitId": "silverstone",
+     "sprint": false,
+     "winner": "George Russell",
+     "winnerTeam": "Mercedes",
+     "pole": "Kimi Antonelli",
+     "mine": [
+      {
+       "nombre": "Théo Pourchaire",
+       "grid": 14,
+       "pos": 6,
+       "status": "fin",
+       "points": 8
+      },
+      {
+       "nombre": "Yuki Tsunoda",
+       "grid": 6,
+       "pos": 9,
+       "status": "fin",
+       "points": 2
+      }
+     ],
+     "dnfs": 5,
+     "dnfReasons": {
+      "avería": 4,
+      "accidente con COL": 1
+     },
+     "dsq": 0,
+     "finished": 19,
+     "shortened": false,
+     "wet": true,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 35.071,
+     "passes": 60,
+     "safety": 0,
+     "vsc": 3,
+     "red": true
+    },
+    {
+     "round": 5,
+     "circuitId": "spa",
+     "sprint": false,
+     "winner": "Isack Hadjar",
+     "winnerTeam": "Red Bull Racing",
+     "pole": "George Russell",
+     "mine": [
+      {
+       "nombre": "Yuki Tsunoda",
+       "grid": 14,
+       "pos": 7,
+       "status": "fin",
+       "points": 6
+      },
+      {
+       "nombre": "Théo Pourchaire",
+       "grid": 12,
+       "pos": 8,
+       "status": "fin",
+       "points": 4
+      }
+     ],
+     "dnfs": 3,
+     "dnfReasons": {
+      "avería": 2,
+      "accidente": 1
+     },
+     "dsq": 0,
+     "finished": 21,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 30.86,
+     "passes": 76,
+     "safety": 1,
+     "vsc": 0,
+     "red": false
+    },
+    {
+     "round": 6,
+     "circuitId": "monza",
+     "sprint": false,
+     "winner": "Max Verstappen",
+     "winnerTeam": "Red Bull Racing",
+     "pole": "Charles Leclerc",
+     "mine": [
+      {
+       "nombre": "Jak Crawford",
+       "grid": 7,
+       "pos": 7,
+       "status": "fin",
+       "points": 6
+      },
+      {
+       "nombre": "Théo Pourchaire",
+       "grid": 24,
+       "pos": 10,
+       "status": "fin",
+       "points": 1
+      }
+     ],
+     "dnfs": 2,
+     "dnfReasons": {
+      "avería": 1,
+      "accidente": 1
+     },
+     "dsq": 0,
+     "finished": 22,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 27.677,
+     "passes": 82,
+     "safety": 0,
+     "vsc": 0,
+     "red": true
+    },
+    {
+     "round": 7,
+     "circuitId": "sepang",
+     "sprint": false,
+     "winner": "Théo Pourchaire",
+     "winnerTeam": "Propio 1",
+     "pole": "George Russell",
+     "mine": [
+      {
+       "nombre": "Théo Pourchaire",
+       "grid": 12,
+       "pos": 1,
+       "status": "fin",
+       "points": 25
+      },
+      {
+       "nombre": "Jak Crawford",
+       "grid": 19,
+       "pos": 2,
+       "status": "fin",
+       "points": 18
+      }
+     ],
+     "dnfs": 5,
+     "dnfReasons": {
+      "accidente": 2,
+      "avería": 3
+     },
+     "dsq": 0,
+     "finished": 19,
+     "shortened": false,
+     "wet": true,
+     "gridPens": 0,
+     "swaps": [
+      "🚑 Kimi Antonelli (Mercedes) se ha lesionado en el accidente: se pierde la próxima carrera. Le sustituye Frederik Vesti.",
+      "🚑 Pierre Gasly (Alpine) se ha lesionado en el accidente: se pierde las 3 próximas carreras. Le sustituye Paul Aron."
+     ],
+     "secs": 35.253,
+     "passes": 136,
+     "safety": 1,
+     "vsc": 1,
+     "red": true
+    },
+    {
+     "round": 8,
+     "circuitId": "singapur",
+     "sprint": true,
+     "winner": "Lando Norris",
+     "winnerTeam": "McLaren",
+     "pole": "George Russell",
+     "mine": [
+      {
+       "nombre": "Jak Crawford",
+       "grid": 17,
+       "pos": 8,
+       "status": "fin",
+       "points": 4
+      },
+      {
+       "nombre": "Théo Pourchaire",
+       "grid": 23,
+       "pos": 24,
+       "status": "out",
+       "reason": "accidente",
+       "points": 0
+      }
+     ],
+     "dnfs": 5,
+     "dnfReasons": {
+      "avería": 4,
+      "accidente": 1
+     },
+     "dsq": 0,
+     "finished": 19,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 32.677,
+     "passes": 52,
+     "safety": 3,
+     "vsc": 2,
+     "red": false
+    },
+    {
+     "round": 9,
+     "circuitId": "interlagos",
+     "sprint": true,
+     "winner": "Max Verstappen",
+     "winnerTeam": "Red Bull Racing",
+     "pole": "George Russell",
+     "mine": [
+      {
+       "nombre": "Jak Crawford",
+       "grid": 15,
+       "pos": 5,
+       "status": "fin",
+       "points": 13
+      },
+      {
+       "nombre": "Théo Pourchaire",
+       "grid": 10,
+       "pos": 7,
+       "status": "fin",
+       "points": 6
+      }
+     ],
+     "dnfs": 6,
+     "dnfReasons": {
+      "avería": 5,
+      "accidente": 1
+     },
+     "dsq": 0,
+     "finished": 18,
+     "shortened": false,
+     "wet": true,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 28.662,
+     "passes": 131,
+     "safety": 1,
+     "vsc": 1,
+     "red": false
+    }
+   ],
+   "news": [],
+   "expectedPos": 8,
+   "custom": {
+    "spentCap": 61.3,
+    "leftCap": 38.7,
+    "jefe": "Andrea Stella",
+    "tecnico": "James Allison",
+    "motor": "mercedes"
+   },
+   "preseason": {
+    "laps": 162,
+    "fiabBonus": 0.05,
+    "secs": 32.852
+   },
+   "devLeftEnd": 2,
+   "levelsEnd": {
+    "mercedes": 1.773,
+    "ferrari": 1.314,
+    "redbull": 1.696,
+    "mclaren": 1.606,
+    "racingbulls": 1.088,
+    "alpine": 0.881,
+    "haas": 0.543,
+    "audi": 0.753,
+    "williams": -0.86,
+    "astonmartin": -1.545,
+    "cadillac": -1.29,
+    "propio": 1.732
+   },
+   "carRankEnd": 2,
+   "spreadEnd": 3.318,
+   "parts": [
+    {
+     "area": "motor",
+     "size": 2,
+     "ordered": 0,
+     "ready": 2,
+     "expect": 0.187,
+     "real": 0.178
+    },
+    {
+     "area": "fiab",
+     "size": 1,
+     "ordered": 1,
+     "ready": 3,
+     "expect": 0.037,
+     "real": 0.038
+    },
+    {
+     "area": "motor",
+     "size": 2,
+     "ordered": 2,
+     "ready": 4,
+     "expect": 0.187,
+     "real": 0.183
+    },
+    {
+     "area": "fiab",
+     "size": 1,
+     "ordered": 3,
+     "ready": 5,
+     "expect": 0.037,
+     "real": 0.038
+    }
+   ],
+   "aeroPkgs": [
+    {
+     "period": 0,
+     "ready": 3,
+     "expect": 0.302,
+     "real": 0.326,
+     "medido": 0.43,
+     "montar": true
+    },
+    {
+     "period": 1,
+     "ready": 6,
+     "expect": 0.302,
+     "real": 0.274,
+     "medido": 0.128,
+     "montar": true
+    }
+   ],
+   "champion": {
+    "nombre": "Max Verstappen",
+    "equipo": "Red Bull Racing",
+    "puntos": 138
+   },
+   "constructors": [
+    {
+     "equipo": "Ferrari",
+     "puntos": 237
+    },
+    {
+     "equipo": "Red Bull Racing",
+     "puntos": 201
+    },
+    {
+     "equipo": "McLaren",
+     "puntos": 186
+    },
+    {
+     "equipo": "Mercedes",
+     "puntos": 177
+    },
+    {
+     "equipo": "Propio 1",
+     "puntos": 97
+    },
+    {
+     "equipo": "Haas",
+     "puntos": 32
+    },
+    {
+     "equipo": "Audi",
+     "puntos": 30
+    },
+    {
+     "equipo": "Racing Bulls",
+     "puntos": 13
+    },
+    {
+     "equipo": "Alpine",
+     "puntos": 4
+    },
+    {
+     "equipo": "Williams",
+     "puntos": 2
+    },
+    {
+     "equipo": "Aston Martin",
+     "puntos": 2
+    },
+    {
+     "equipo": "Cadillac",
+     "puntos": 0
+    }
+   ],
+   "myPos": 5,
+   "myPoints": 97,
+   "myDrivers": [
+    {
+     "nombre": "Jak Crawford",
+     "abrev": "CRA",
+     "pos": 9,
+     "puntos": 45,
+     "edad": 21,
+     "rating": 79.8,
+     "moral": 80.8
+    },
+    {
+     "nombre": "Théo Pourchaire",
+     "abrev": "POU",
+     "pos": 10,
+     "puntos": 44,
+     "edad": 23,
+     "rating": 81.1,
+     "moral": 70.5
+    }
+   ],
+   "wins": {
+    "Charles Leclerc": 1,
+    "Max Verstappen": 3,
+    "George Russell": 2,
+    "Isack Hadjar": 1,
+    "Théo Pourchaire": 1,
+    "Lando Norris": 1
+   },
+   "winnersDistinct": 6,
+   "teamsWinning": 5,
+   "poleToWin": 1,
+   "dnfRate": 0.167,
+   "swaps": [
+    "R4 Jak Crawford → Yuki Tsunoda (lesión de Jak Crawford)",
+    "R6 Yuki Tsunoda → Jak Crawford (vuelve Jak Crawford)",
+    "R4 Charles Leclerc → Antonio Giovinazzi (lesión de Charles Leclerc)",
+    "R5 Antonio Giovinazzi → Charles Leclerc (vuelve Charles Leclerc)",
+    "R8 Kimi Antonelli → Frederik Vesti (lesión de Kimi Antonelli)",
+    "R9 Frederik Vesti → Kimi Antonelli (vuelve Kimi Antonelli)",
+    "R8 Pierre Gasly → Paul Aron (lesión de Pierre Gasly)"
+   ],
+   "pu": {
+    "CRA": {
+     "units": 3,
+     "broken": 0,
+     "penalties": 1
+    },
+    "POU": {
+     "units": 3,
+     "broken": 0,
+     "penalties": 1
+    }
+   },
+   "hitos": 4,
+   "rivals": 7,
+   "grid": [
+    {
+     "equipo": "Mercedes",
+     "pilotos": [
+      "RUS28",
+      "ANT20"
+     ]
+    },
+    {
+     "equipo": "Ferrari",
+     "pilotos": [
+      "LEC29",
+      "HAM41"
+     ]
+    },
+    {
+     "equipo": "Red Bull Racing",
+     "pilotos": [
+      "VER29",
+      "HAD22"
+     ]
+    },
+    {
+     "equipo": "McLaren",
+     "pilotos": [
+      "NOR27",
+      "PIA25"
+     ]
+    },
+    {
+     "equipo": "Racing Bulls",
+     "pilotos": [
+      "LAW24",
+      "LIN19"
+     ]
+    },
+    {
+     "equipo": "Alpine",
+     "pilotos": [
+      "ARO22",
+      "COL23"
+     ]
+    },
+    {
+     "equipo": "Haas",
+     "pilotos": [
+      "OCO30",
+      "BEA21"
+     ]
+    },
+    {
+     "equipo": "Audi",
+     "pilotos": [
+      "HUL39",
+      "BOR22"
+     ]
+    },
+    {
+     "equipo": "Williams",
+     "pilotos": [
+      "SAI32",
+      "ALB30"
+     ]
+    },
+    {
+     "equipo": "Aston Martin",
+     "pilotos": [
+      "ALO45",
+      "STR28"
+     ]
+    },
+    {
+     "equipo": "Cadillac",
+     "pilotos": [
+      "PER36",
+      "BOT37"
+     ]
+    },
+    {
+     "equipo": "Propio 1",
+     "pilotos": [
+      "CRA21",
+      "POU23"
+     ]
+    }
+   ],
+   "ages": {
+    "mean": 28,
+    "min": 19,
+    "max": 45
+   },
+   "ratings": {
+    "mean": 86.3,
+    "min": 79.8,
+    "max": 94.5
+   },
+   "poolSize": 36
+  },
+  {
+   "year": 2027,
+   "playerTeam": "propio",
+   "teamName": "Propio 1",
+   "calendar": [
+    "suzuka",
+    "bahrein",
+    "monaco",
+    "silverstone",
+    "spa",
+    "monza",
+    "sepang",
+    "singapur",
+    "interlagos"
+   ],
+   "sprints": [
+    "monaco",
+    "spa",
+    "monza",
+    "sepang"
+   ],
+   "budget": 50,
+   "devBonus": 0,
+   "devLeftStart": 30,
+   "levels0": {
+    "mercedes": 2.281,
+    "ferrari": 1.083,
+    "redbull": 2.31,
+    "mclaren": 2.252,
+    "racingbulls": 1.911,
+    "alpine": 0.768,
+    "haas": 1.492,
+    "audi": 1.377,
+    "williams": -1.317,
+    "astonmartin": -0.349,
+    "cadillac": 0.089,
+    "propio": 1.876
+   },
+   "carRank0": 5,
+   "spread0": 3.627,
+   "races": [
+    {
+     "round": 1,
+     "circuitId": "suzuka",
+     "sprint": false,
+     "winner": "Oscar Piastri",
+     "winnerTeam": "McLaren",
+     "pole": "Max Verstappen",
+     "mine": [
+      {
+       "nombre": "Jak Crawford",
+       "grid": 11,
+       "pos": 13,
+       "status": "fin",
+       "points": 0
+      },
+      {
+       "nombre": "Théo Pourchaire",
+       "grid": 6,
+       "pos": 16,
+       "status": "fin",
+       "points": 0
+      }
+     ],
+     "dnfs": 2,
+     "dnfReasons": {
+      "avería": 2
+     },
+     "dsq": 0,
+     "finished": 22,
+     "shortened": false,
+     "wet": true,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 35.266,
+     "passes": 84,
+     "safety": 0,
+     "vsc": 1,
+     "red": false
+    },
+    {
+     "round": 2,
+     "circuitId": "bahrein",
+     "sprint": false,
+     "winner": "George Russell",
+     "winnerTeam": "Mercedes",
+     "pole": "George Russell",
+     "mine": [
+      {
+       "nombre": "Théo Pourchaire",
+       "grid": 12,
+       "pos": 10,
+       "status": "fin",
+       "points": 1
+      },
+      {
+       "nombre": "Jak Crawford",
+       "grid": 13,
+       "pos": 15,
+       "status": "fin",
+       "points": 0
+      }
+     ],
+     "dnfs": 0,
+     "dnfReasons": {},
+     "dsq": 0,
+     "finished": 24,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 31.159,
+     "passes": 128,
+     "safety": 0,
+     "vsc": 0,
+     "red": false
+    },
+    {
+     "round": 3,
+     "circuitId": "monaco",
+     "sprint": true,
+     "winner": "George Russell",
+     "winnerTeam": "Mercedes",
+     "pole": "Kimi Antonelli",
+     "mine": [
+      {
+       "nombre": "Jak Crawford",
+       "grid": 5,
+       "pos": 4,
+       "status": "fin",
+       "points": 12
+      },
+      {
+       "nombre": "Théo Pourchaire",
+       "grid": 9,
+       "pos": 6,
+       "status": "fin",
+       "points": 8
+      }
+     ],
+     "dnfs": 3,
+     "dnfReasons": {
+      "avería": 3
+     },
+     "dsq": 0,
+     "finished": 21,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 29.903,
+     "passes": 13,
+     "safety": 1,
+     "vsc": 2,
+     "red": false
+    },
+    {
+     "round": 4,
+     "circuitId": "silverstone",
+     "sprint": false,
+     "winner": "Lando Norris",
+     "winnerTeam": "McLaren",
+     "pole": "Oscar Piastri",
+     "mine": [
+      {
+       "nombre": "Théo Pourchaire",
+       "grid": 10,
+       "pos": 6,
+       "status": "fin",
+       "points": 8
+      },
+      {
+       "nombre": "Jak Crawford",
+       "grid": 5,
+       "pos": 8,
+       "status": "fin",
+       "points": 4
+      }
+     ],
+     "dnfs": 2,
+     "dnfReasons": {
+      "avería": 2
+     },
+     "dsq": 0,
+     "finished": 22,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 1,
+     "swaps": [],
+     "secs": 28.853,
+     "passes": 126,
+     "safety": 0,
+     "vsc": 1,
+     "red": false
+    },
+    {
+     "round": 5,
+     "circuitId": "spa",
+     "sprint": true,
+     "winner": "Max Verstappen",
+     "winnerTeam": "Red Bull Racing",
+     "pole": "Oscar Piastri",
+     "mine": [
+      {
+       "nombre": "Théo Pourchaire",
+       "grid": 10,
+       "pos": 8,
+       "status": "fin",
+       "points": 7
+      },
+      {
+       "nombre": "Jak Crawford",
+       "grid": 7,
+       "pos": 9,
+       "status": "fin",
+       "points": 2
+      }
+     ],
+     "dnfs": 1,
+     "dnfReasons": {
+      "avería": 1
+     },
+     "dsq": 0,
+     "finished": 23,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 26.107,
+     "passes": 172,
+     "safety": 0,
+     "vsc": 0,
+     "red": false
+    },
+    {
+     "round": 6,
+     "circuitId": "monza",
+     "sprint": true,
+     "winner": "Kimi Antonelli",
+     "winnerTeam": "Mercedes",
+     "pole": "George Russell",
+     "mine": [
+      {
+       "nombre": "Théo Pourchaire",
+       "grid": 10,
+       "pos": 6,
+       "status": "fin",
+       "points": 11
+      },
+      {
+       "nombre": "Jak Crawford",
+       "grid": 5,
+       "pos": 8,
+       "status": "fin",
+       "points": 4
+      }
+     ],
+     "dnfs": 0,
+     "dnfReasons": {},
+     "dsq": 0,
+     "finished": 24,
+     "shortened": false,
+     "wet": true,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 27.428,
+     "wetRace": true,
+     "passes": 88,
+     "safety": 0,
+     "vsc": 0,
+     "red": false
+    },
+    {
+     "round": 7,
+     "circuitId": "sepang",
+     "sprint": true,
+     "winner": "Max Verstappen",
+     "winnerTeam": "Red Bull Racing",
+     "pole": "Max Verstappen",
+     "mine": [
+      {
+       "nombre": "Théo Pourchaire",
+       "grid": 7,
+       "pos": 13,
+       "status": "fin",
+       "points": 2
+      },
+      {
+       "nombre": "Jak Crawford",
+       "grid": 8,
+       "pos": 15,
+       "status": "fin",
+       "points": 7
+      }
+     ],
+     "dnfs": 1,
+     "dnfReasons": {
+      "avería": 1
+     },
+     "dsq": 0,
+     "finished": 23,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 28.508,
+     "passes": 97,
+     "safety": 0,
+     "vsc": 1,
+     "red": false
+    },
+    {
+     "round": 8,
+     "circuitId": "singapur",
+     "sprint": false,
+     "winner": "Max Verstappen",
+     "winnerTeam": "Red Bull Racing",
+     "pole": "Max Verstappen",
+     "mine": [
+      {
+       "nombre": "Théo Pourchaire",
+       "grid": 7,
+       "pos": 9,
+       "status": "fin",
+       "points": 2
+      },
+      {
+       "nombre": "Jak Crawford",
+       "grid": 10,
+       "pos": 11,
+       "status": "fin",
+       "points": 0
+      }
+     ],
+     "dnfs": 1,
+     "dnfReasons": {
+      "avería": 1
+     },
+     "dsq": 0,
+     "finished": 23,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 35.975,
+     "passes": 75,
+     "safety": 0,
+     "vsc": 0,
+     "red": false
+    },
+    {
+     "round": 9,
+     "circuitId": "interlagos",
+     "sprint": false,
+     "winner": "Max Verstappen",
+     "winnerTeam": "Red Bull Racing",
+     "pole": "Max Verstappen",
+     "mine": [
+      {
+       "nombre": "Théo Pourchaire",
+       "grid": 14,
+       "pos": 8,
+       "status": "fin",
+       "points": 4
+      },
+      {
+       "nombre": "Jak Crawford",
+       "grid": 10,
+       "pos": 15,
+       "status": "fin",
+       "points": 0
+      }
+     ],
+     "dnfs": 1,
+     "dnfReasons": {
+      "avería": 1
+     },
+     "dsq": 0,
+     "finished": 23,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 27.116,
+     "passes": 96,
+     "safety": 1,
+     "vsc": 0,
+     "red": false
+    }
+   ],
+   "news": [
+    "🏭 Desarrollo de invierno 2027 (ATR 93 %): túnel −0,60 s/vuelta, motor −0,02 s/vuelta, eficiencia ERS +4 %, estela −3 %.",
+    "📅 Sprints 2027 (4 al azar): Mónaco, Bélgica, Italia, Malasia.",
+    "🏁 Fernando Alonso se retira a los 46 años (Aston Martin).",
+    "✍️ Aston Martin ficha a Nikola Tsolov.",
+    "📈 Haas acierta de lleno con el coche nuevo.",
+    "📉 El coche nuevo de Williams no funciona: va algo peor que el del año pasado.",
+    "📈 Cadillac acierta de lleno con el coche nuevo."
+   ],
+   "expectedPos": 8,
+   "custom": {
+    "spentCap": 48.6,
+    "leftCap": 51.4,
+    "carry": 0.42,
+    "jefe": "Andrea Stella",
+    "tecnico": "James Allison",
+    "motor": "mercedes"
+   },
+   "preseason": {
+    "laps": 156,
+    "fiabBonus": 0.049,
+    "secs": 15.576
+   },
+   "devLeftEnd": 2,
+   "levelsEnd": {
+    "mercedes": 2.002,
+    "ferrari": 0.811,
+    "redbull": 2.132,
+    "mclaren": 2.056,
+    "racingbulls": 1.871,
+    "alpine": 0.665,
+    "haas": 1.389,
+    "audi": 1.122,
+    "williams": -1.504,
+    "astonmartin": -0.107,
+    "cadillac": 0.214,
+    "propio": 2.031
+   },
+   "carRankEnd": 3,
+   "spreadEnd": 3.636,
+   "parts": [
+    {
+     "area": "motor",
+     "size": 2,
+     "ordered": 0,
+     "ready": 2,
+     "expect": 0.187,
+     "real": 0.181
+    },
+    {
+     "area": "fiab",
+     "size": 1,
+     "ordered": 1,
+     "ready": 3,
+     "expect": 0.037,
+     "real": 0.029
+    },
+    {
+     "area": "motor",
+     "size": 2,
+     "ordered": 2,
+     "ready": 4,
+     "expect": 0.187,
+     "real": 0.152
+    },
+    {
+     "area": "fiab",
+     "size": 1,
+     "ordered": 3,
+     "ready": 5,
+     "expect": 0.037,
+     "real": 0.007
+    },
+    {
+     "area": "motor",
+     "size": 1,
+     "ordered": 4,
+     "ready": 6,
+     "expect": 0.093,
+     "real": 0.04
+    }
+   ],
+   "aeroPkgs": [
+    {
+     "period": 0,
+     "ready": 3,
+     "expect": 0.238,
+     "real": 0.257,
+     "medido": 0.361,
+     "montar": true
+    },
+    {
+     "period": 1,
+     "ready": 6,
+     "expect": 0.238,
+     "real": 0.216,
+     "medido": 0.155,
+     "montar": true
+    }
+   ],
+   "champion": {
+    "nombre": "Max Verstappen",
+    "equipo": "Red Bull Racing",
+    "puntos": 176
+   },
+   "constructors": [
+    {
+     "equipo": "Mercedes",
+     "puntos": 295
+    },
+    {
+     "equipo": "Red Bull Racing",
+     "puntos": 263
+    },
+    {
+     "equipo": "McLaren",
+     "puntos": 223
+    },
+    {
+     "equipo": "Ferrari",
+     "puntos": 80
+    },
+    {
+     "equipo": "Propio 1",
+     "puntos": 72
+    },
+    {
+     "equipo": "Racing Bulls",
+     "puntos": 59
+    },
+    {
+     "equipo": "Haas",
+     "puntos": 50
+    },
+    {
+     "equipo": "Audi",
+     "puntos": 10
+    },
+    {
+     "equipo": "Aston Martin",
+     "puntos": 1
+    },
+    {
+     "equipo": "Alpine",
+     "puntos": 0
+    },
+    {
+     "equipo": "Williams",
+     "puntos": 0
+    },
+    {
+     "equipo": "Cadillac",
+     "puntos": 0
+    }
+   ],
+   "myPos": 5,
+   "myPoints": 72,
+   "myDrivers": [
+    {
+     "nombre": "Jak Crawford",
+     "abrev": "CRA",
+     "pos": 10,
+     "puntos": 29,
+     "edad": 22,
+     "rating": 82,
+     "moral": 53.5
+    },
+    {
+     "nombre": "Théo Pourchaire",
+     "abrev": "POU",
+     "pos": 8,
+     "puntos": 43,
+     "edad": 24,
+     "rating": 82.8,
+     "moral": 83.8
+    }
+   ],
+   "wins": {
+    "Oscar Piastri": 1,
+    "George Russell": 2,
+    "Lando Norris": 1,
+    "Max Verstappen": 4,
+    "Kimi Antonelli": 1
+   },
+   "winnersDistinct": 5,
+   "teamsWinning": 3,
+   "poleToWin": 4,
+   "dnfRate": 0.051,
+   "swaps": [],
+   "pu": {
+    "CRA": {
+     "units": 3,
+     "broken": 0,
+     "penalties": 1
+    },
+    "POU": {
+     "units": 3,
+     "broken": 0,
+     "penalties": 1
+    }
+   },
+   "hitos": 0,
+   "rivals": 3,
+   "grid": [
+    {
+     "equipo": "Mercedes",
+     "pilotos": [
+      "RUS29",
+      "ANT21"
+     ]
+    },
+    {
+     "equipo": "Ferrari",
+     "pilotos": [
+      "LEC30",
+      "HAM42"
+     ]
+    },
+    {
+     "equipo": "Red Bull Racing",
+     "pilotos": [
+      "VER30",
+      "HAD23"
+     ]
+    },
+    {
+     "equipo": "McLaren",
+     "pilotos": [
+      "NOR28",
+      "PIA26"
+     ]
+    },
+    {
+     "equipo": "Racing Bulls",
+     "pilotos": [
+      "LAW25",
+      "LIN20"
+     ]
+    },
+    {
+     "equipo": "Alpine",
+     "pilotos": [
+      "GAS31",
+      "COL24"
+     ]
+    },
+    {
+     "equipo": "Haas",
+     "pilotos": [
+      "OCO31",
+      "BEA22"
+     ]
+    },
+    {
+     "equipo": "Audi",
+     "pilotos": [
+      "HUL40",
+      "BOR23"
+     ]
+    },
+    {
+     "equipo": "Williams",
+     "pilotos": [
+      "SAI33",
+      "ALB31"
+     ]
+    },
+    {
+     "equipo": "Aston Martin",
+     "pilotos": [
+      "TSO21",
+      "STR29"
+     ]
+    },
+    {
+     "equipo": "Cadillac",
+     "pilotos": [
+      "PER37",
+      "BOT38"
+     ]
+    },
+    {
+     "equipo": "Propio 1",
+     "pilotos": [
+      "CRA22",
+      "POU24"
+     ]
+    }
+   ],
+   "ages": {
+    "mean": 28.3,
+    "min": 20,
+    "max": 42
+   },
+   "ratings": {
+    "mean": 86.8,
+    "min": 81.3,
+    "max": 94.7
+   },
+   "poolSize": 40
+  },
+  {
+   "year": 2028,
+   "playerTeam": "propio",
+   "teamName": "Propio 1",
+   "calendar": [
+    "suzuka",
+    "bahrein",
+    "monaco",
+    "silverstone",
+    "spa",
+    "monza",
+    "sepang",
+    "singapur",
+    "interlagos"
+   ],
+   "sprints": [
+    "bahrein",
+    "monza",
+    "sepang",
+    "interlagos"
+   ],
+   "budget": 48,
+   "devBonus": 0,
+   "devLeftStart": 29,
+   "levels0": {
+    "mercedes": 1.544,
+    "ferrari": 1.258,
+    "redbull": 2.179,
+    "mclaren": 2.157,
+    "racingbulls": 2.027,
+    "alpine": 1.269,
+    "haas": 1.679,
+    "audi": 1.539,
+    "williams": -1.552,
+    "astonmartin": 0.43,
+    "cadillac": -0.107,
+    "propio": 2.476
+   },
+   "carRank0": 1,
+   "spread0": 4.028,
+   "races": [
+    {
+     "round": 1,
+     "circuitId": "suzuka",
+     "sprint": false,
+     "winner": "Max Verstappen",
+     "winnerTeam": "Red Bull Racing",
+     "pole": "Max Verstappen",
+     "mine": [
+      {
+       "nombre": "Jak Crawford",
+       "grid": 2,
+       "pos": 2,
+       "status": "fin",
+       "points": 18
+      },
+      {
+       "nombre": "Théo Pourchaire",
+       "grid": 5,
+       "pos": 5,
+       "status": "fin",
+       "points": 10
+      }
+     ],
+     "dnfs": 3,
+     "dnfReasons": {
+      "avería": 1,
+      "accidente": 1,
+      "daños tras el toque": 1
+     },
+     "dsq": 0,
+     "finished": 21,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 28.869,
+     "passes": 66,
+     "safety": 1,
+     "vsc": 0,
+     "red": false
+    },
+    {
+     "round": 2,
+     "circuitId": "bahrein",
+     "sprint": true,
+     "winner": "Max Verstappen",
+     "winnerTeam": "Red Bull Racing",
+     "pole": "Esteban Ocon",
+     "mine": [
+      {
+       "nombre": "Théo Pourchaire",
+       "grid": 4,
+       "pos": 19,
+       "status": "fin",
+       "points": 2
+      },
+      {
+       "nombre": "Jak Crawford",
+       "grid": 6,
+       "pos": 20,
+       "status": "fin",
+       "points": 7
+      }
+     ],
+     "dnfs": 2,
+     "dnfReasons": {
+      "accidente": 1,
+      "accidente con CAM": 1
+     },
+     "dsq": 0,
+     "finished": 22,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 26.767,
+     "passes": 92,
+     "safety": 1,
+     "vsc": 0,
+     "red": true
+    },
+    {
+     "round": 3,
+     "circuitId": "monaco",
+     "sprint": false,
+     "winner": "Max Verstappen",
+     "winnerTeam": "Red Bull Racing",
+     "pole": "Jak Crawford",
+     "mine": [
+      {
+       "nombre": "Théo Pourchaire",
+       "grid": 9,
+       "pos": 17,
+       "status": "fin",
+       "points": 0
+      },
+      {
+       "nombre": "Jak Crawford",
+       "grid": 1,
+       "pos": 21,
+       "status": "out",
+       "reason": "avería (motor), se retira en boxes",
+       "points": 0
+      }
+     ],
+     "dnfs": 5,
+     "dnfReasons": {
+      "accidente": 2,
+      "avería": 3
+     },
+     "dsq": 0,
+     "finished": 19,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 28.571,
+     "passes": 34,
+     "safety": 0,
+     "vsc": 0,
+     "red": true
+    },
+    {
+     "round": 4,
+     "circuitId": "silverstone",
+     "sprint": false,
+     "winner": "George Russell",
+     "winnerTeam": "Mercedes",
+     "pole": "George Russell",
+     "mine": [
+      {
+       "nombre": "Jak Crawford",
+       "grid": 13,
+       "pos": 6,
+       "status": "fin",
+       "points": 8
+      },
+      {
+       "nombre": "Yuki Tsunoda",
+       "grid": 14,
+       "pos": 24,
+       "status": "out",
+       "reason": "accidente",
+       "points": 0
+      }
+     ],
+     "dnfs": 5,
+     "dnfReasons": {
+      "avería": 3,
+      "accidente": 2
+     },
+     "dsq": 0,
+     "finished": 19,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [
+      "🚑 Théo Pourchaire (Propio 1) se ha lesionado en el accidente: se pierde las 2 próximas carreras. Le sustituye Yuki Tsunoda."
+     ],
+     "secs": 27.316,
+     "passes": 90,
+     "safety": 2,
+     "vsc": 0,
+     "red": false
+    },
+    {
+     "round": 5,
+     "circuitId": "spa",
+     "sprint": false,
+     "winner": "Max Verstappen",
+     "winnerTeam": "Red Bull Racing",
+     "pole": "Lando Norris",
+     "mine": [
+      {
+       "nombre": "Jak Crawford",
+       "grid": 9,
+       "pos": 7,
+       "status": "fin",
+       "points": 6
+      },
+      {
+       "nombre": "Yuki Tsunoda",
+       "grid": 6,
+       "pos": 10,
+       "status": "fin",
+       "points": 1
+      }
+     ],
+     "dnfs": 4,
+     "dnfReasons": {
+      "avería": 2,
+      "accidente": 1,
+      "accidente con PER": 1
+     },
+     "dsq": 0,
+     "finished": 20,
+     "shortened": false,
+     "wet": true,
+     "gridPens": 0,
+     "swaps": [
+      "🚑 Arvid Lindblad (Racing Bulls) se ha lesionado en el accidente: se pierde la próxima carrera. Le sustituye Ayumu Iwasa.",
+      "🚑 Franco Colapinto (Alpine) se ha lesionado en el accidente: se pierde las 2 próximas carreras. Le sustituye Paul Aron."
+     ],
+     "secs": 33.21,
+     "passes": 167,
+     "safety": 1,
+     "vsc": 1,
+     "red": true
+    },
+    {
+     "round": 6,
+     "circuitId": "monza",
+     "sprint": true,
+     "winner": "Yuki Tsunoda",
+     "winnerTeam": "Propio 1",
+     "pole": "Yuki Tsunoda",
+     "mine": [
+      {
+       "nombre": "Yuki Tsunoda",
+       "grid": 1,
+       "pos": 1,
+       "status": "fin",
+       "points": 27
+      },
+      {
+       "nombre": "Jak Crawford",
+       "grid": 3,
+       "pos": 3,
+       "status": "fin",
+       "points": 20
+      }
+     ],
+     "dnfs": 0,
+     "dnfReasons": {},
+     "dsq": 0,
+     "finished": 24,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 23.507,
+     "passes": 90,
+     "safety": 0,
+     "vsc": 0,
+     "red": false
+    },
+    {
+     "round": 7,
+     "circuitId": "sepang",
+     "sprint": true,
+     "winner": "Jak Crawford",
+     "winnerTeam": "Propio 1",
+     "pole": "Lando Norris",
+     "mine": [
+      {
+       "nombre": "Jak Crawford",
+       "grid": 11,
+       "pos": 1,
+       "status": "fin",
+       "points": 32
+      },
+      {
+       "nombre": "Théo Pourchaire",
+       "grid": 7,
+       "pos": 21,
+       "status": "out",
+       "reason": "accidente",
+       "points": 8
+      }
+     ],
+     "dnfs": 4,
+     "dnfReasons": {
+      "accidente": 2,
+      "avería": 2
+     },
+     "dsq": 0,
+     "finished": 20,
+     "shortened": false,
+     "wet": true,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 26.691,
+     "passes": 155,
+     "safety": 3,
+     "vsc": 1,
+     "red": false
+    },
+    {
+     "round": 8,
+     "circuitId": "singapur",
+     "sprint": false,
+     "winner": "Lando Norris",
+     "winnerTeam": "McLaren",
+     "pole": "Lando Norris",
+     "mine": [
+      {
+       "nombre": "Théo Pourchaire",
+       "grid": 5,
+       "pos": 4,
+       "status": "fin",
+       "points": 12
+      },
+      {
+       "nombre": "Jak Crawford",
+       "grid": 2,
+       "pos": 9,
+       "status": "fin",
+       "points": 2
+      }
+     ],
+     "dnfs": 1,
+     "dnfReasons": {
+      "avería": 1
+     },
+     "dsq": 0,
+     "finished": 23,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 32.342,
+     "passes": 32,
+     "safety": 0,
+     "vsc": 1,
+     "red": false
+    },
+    {
+     "round": 9,
+     "circuitId": "interlagos",
+     "sprint": true,
+     "winner": "Max Verstappen",
+     "winnerTeam": "Red Bull Racing",
+     "pole": "Max Verstappen",
+     "mine": [
+      {
+       "nombre": "Théo Pourchaire",
+       "grid": 15,
+       "pos": 9,
+       "status": "fin",
+       "points": 2
+      },
+      {
+       "nombre": "Jak Crawford",
+       "grid": 11,
+       "pos": 22,
+       "status": "out",
+       "reason": "avería (hidráulica), se retira en boxes",
+       "points": 0
+      }
+     ],
+     "dnfs": 3,
+     "dnfReasons": {
+      "avería": 1,
+      "accidente": 2
+     },
+     "dsq": 0,
+     "finished": 21,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 29.295,
+     "passes": 109,
+     "safety": 2,
+     "vsc": 0,
+     "red": false
+    }
+   ],
+   "news": [
+    "🏭 Desarrollo de invierno 2028 (ATR 88 %): túnel −1,11 s/vuelta, motor −0,03 s/vuelta, eficiencia ERS +4 %, estela −4 %.",
+    "🚀 El coche nuevo es un acierto: un paso enorme sobre el del año pasado.",
+    "📅 Sprints 2028 (4 al azar): Baréin, Italia, Malasia, São Paulo.",
+    "🏁 Nico Hülkenberg se retira a los 41 años (Audi).",
+    "🏁 Valtteri Bottas se retira a los 39 años (Cadillac).",
+    "🔁 Lewis Hamilton deja Ferrari y se va a Audi.",
+    "✍️ Ferrari ficha a Rafael Câmara.",
+    "✍️ Cadillac ficha a Felipe Drugovich.",
+    "📉 El coche nuevo de Mercedes no funciona: va algo peor que el del año pasado."
+   ],
+   "expectedPos": 1,
+   "custom": {
+    "spentCap": 53.2,
+    "leftCap": 46.8,
+    "carry": 1.02,
+    "jefe": "Andrea Stella",
+    "tecnico": "James Allison",
+    "motor": "mercedes"
+   },
+   "preseason": {
+    "laps": 137,
+    "fiabBonus": 0.043,
+    "secs": 13.97
+   },
+   "devLeftEnd": 1,
+   "levelsEnd": {
+    "mercedes": 1.275,
+    "ferrari": 0.996,
+    "redbull": 1.993,
+    "mclaren": 1.959,
+    "racingbulls": 1.944,
+    "alpine": 1.135,
+    "haas": 1.567,
+    "audi": 1.282,
+    "williams": -1.584,
+    "astonmartin": 0.565,
+    "cadillac": 0.025,
+    "propio": 2.597
+   },
+   "carRankEnd": 1,
+   "spreadEnd": 4.181,
+   "parts": [
+    {
+     "area": "motor",
+     "size": 2,
+     "ordered": 0,
+     "ready": 2,
+     "expect": 0.187,
+     "real": 0.193
+    },
+    {
+     "area": "fiab",
+     "size": 1,
+     "ordered": 1,
+     "ready": 3,
+     "expect": 0.037,
+     "real": 0.036
+    },
+    {
+     "area": "motor",
+     "size": 2,
+     "ordered": 2,
+     "ready": 4,
+     "expect": 0.187,
+     "real": 0.139
+    },
+    {
+     "area": "fiab",
+     "size": 1,
+     "ordered": 3,
+     "ready": 5,
+     "expect": 0.037,
+     "real": 0.029
+    },
+    {
+     "area": "motor",
+     "size": 1,
+     "ordered": 4,
+     "ready": 6,
+     "expect": 0.093,
+     "real": 0.073
+    }
+   ],
+   "aeroPkgs": [
+    {
+     "period": 0,
+     "ready": 3,
+     "expect": 0.221,
+     "real": 0.239,
+     "medido": 0.342,
+     "montar": true
+    },
+    {
+     "period": 1,
+     "ready": 6,
+     "expect": 0.221,
+     "real": 0.2,
+     "medido": 0.144,
+     "montar": true
+    }
+   ],
+   "champion": {
+    "nombre": "Max Verstappen",
+    "equipo": "Red Bull Racing",
+    "puntos": 179
+   },
+   "constructors": [
+    {
+     "equipo": "Red Bull Racing",
+     "puntos": 272
+    },
+    {
+     "equipo": "McLaren",
+     "puntos": 203
+    },
+    {
+     "equipo": "Propio 1",
+     "puntos": 155
+    },
+    {
+     "equipo": "Mercedes",
+     "puntos": 128
+    },
+    {
+     "equipo": "Haas",
+     "puntos": 104
+    },
+    {
+     "equipo": "Racing Bulls",
+     "puntos": 94
+    },
+    {
+     "equipo": "Ferrari",
+     "puntos": 68
+    },
+    {
+     "equipo": "Audi",
+     "puntos": 16
+    },
+    {
+     "equipo": "Alpine",
+     "puntos": 9
+    },
+    {
+     "equipo": "Aston Martin",
+     "puntos": 4
+    },
+    {
+     "equipo": "Williams",
+     "puntos": 0
+    },
+    {
+     "equipo": "Cadillac",
+     "puntos": 0
+    }
+   ],
+   "myPos": 3,
+   "myPoints": 155,
+   "myDrivers": [
+    {
+     "nombre": "Jak Crawford",
+     "abrev": "CRA",
+     "pos": 3,
+     "puntos": 93,
+     "edad": 23,
+     "rating": 83.6,
+     "moral": 65.3
+    },
+    {
+     "nombre": "Théo Pourchaire",
+     "abrev": "POU",
+     "pos": 12,
+     "puntos": 34,
+     "edad": 25,
+     "rating": 82.8,
+     "moral": 62.3
+    }
+   ],
+   "wins": {
+    "Max Verstappen": 5,
+    "George Russell": 1,
+    "Yuki Tsunoda": 1,
+    "Jak Crawford": 1,
+    "Lando Norris": 1
+   },
+   "winnersDistinct": 5,
+   "teamsWinning": 4,
+   "poleToWin": 5,
+   "dnfRate": 0.125,
+   "swaps": [
+    "R5 Théo Pourchaire → Yuki Tsunoda (lesión de Théo Pourchaire)",
+    "R7 Yuki Tsunoda → Théo Pourchaire (vuelve Théo Pourchaire)",
+    "R6 Arvid Lindblad → Ayumu Iwasa (lesión de Arvid Lindblad)",
+    "R7 Ayumu Iwasa → Arvid Lindblad (vuelve Arvid Lindblad)",
+    "R6 Franco Colapinto → Paul Aron (lesión de Franco Colapinto)",
+    "R8 Paul Aron → Franco Colapinto (vuelve Franco Colapinto)"
+   ],
+   "pu": {
+    "CRA": {
+     "units": 3,
+     "broken": 1,
+     "penalties": 1
+    },
+    "POU": {
+     "units": 3,
+     "broken": 0,
+     "penalties": 1
+    }
+   },
+   "hitos": 6,
+   "rivals": 6,
+   "grid": [
+    {
+     "equipo": "Mercedes",
+     "pilotos": [
+      "RUS30",
+      "ANT22"
+     ]
+    },
+    {
+     "equipo": "Ferrari",
+     "pilotos": [
+      "LEC31",
+      "CAM23"
+     ]
+    },
+    {
+     "equipo": "Red Bull Racing",
+     "pilotos": [
+      "VER31",
+      "HAD24"
+     ]
+    },
+    {
+     "equipo": "McLaren",
+     "pilotos": [
+      "NOR29",
+      "PIA27"
+     ]
+    },
+    {
+     "equipo": "Racing Bulls",
+     "pilotos": [
+      "LAW26",
+      "LIN21"
+     ]
+    },
+    {
+     "equipo": "Alpine",
+     "pilotos": [
+      "GAS32",
+      "COL25"
+     ]
+    },
+    {
+     "equipo": "Haas",
+     "pilotos": [
+      "OCO32",
+      "BEA23"
+     ]
+    },
+    {
+     "equipo": "Audi",
+     "pilotos": [
+      "HAM43",
+      "BOR24"
+     ]
+    },
+    {
+     "equipo": "Williams",
+     "pilotos": [
+      "SAI34",
+      "ALB32"
+     ]
+    },
+    {
+     "equipo": "Aston Martin",
+     "pilotos": [
+      "TSO22",
+      "STR30"
+     ]
+    },
+    {
+     "equipo": "Cadillac",
+     "pilotos": [
+      "PER38",
+      "DRU28"
+     ]
+    },
+    {
+     "equipo": "Propio 1",
+     "pilotos": [
+      "CRA23",
+      "POU25"
+     ]
+    }
+   ],
+   "ages": {
+    "mean": 28.1,
+    "min": 21,
+    "max": 43
+   },
+   "ratings": {
+    "mean": 87.1,
+    "min": 80.2,
+    "max": 94.7
+   },
+   "poolSize": 37
+  },
+  {
+   "year": 2029,
+   "playerTeam": "propio",
+   "teamName": "Propio 1",
+   "calendar": [
+    "suzuka",
+    "bahrein",
+    "monaco",
+    "silverstone",
+    "spa",
+    "monza",
+    "sepang",
+    "singapur",
+    "interlagos"
+   ],
+   "sprints": [
+    "bahrein",
+    "monaco",
+    "silverstone",
+    "monza"
+   ],
+   "budget": 48,
+   "devBonus": 0,
+   "devLeftStart": 29,
+   "levels0": {
+    "mercedes": 1.041,
+    "ferrari": 1.24,
+    "redbull": 2.143,
+    "mclaren": 2.017,
+    "racingbulls": 1.979,
+    "alpine": 1.519,
+    "haas": 1.634,
+    "audi": 1.865,
+    "williams": -0.653,
+    "astonmartin": 0.504,
+    "cadillac": 0.158,
+    "propio": 2.426
+   },
+   "carRank0": 1,
+   "spread0": 3.079,
+   "races": [
+    {
+     "round": 1,
+     "circuitId": "suzuka",
+     "sprint": false,
+     "winner": "Théo Pourchaire",
+     "winnerTeam": "Propio 1",
+     "pole": "Lando Norris",
+     "mine": [
+      {
+       "nombre": "Théo Pourchaire",
+       "grid": 3,
+       "pos": 1,
+       "status": "fin",
+       "points": 25
+      },
+      {
+       "nombre": "Jak Crawford",
+       "grid": 7,
+       "pos": 2,
+       "status": "fin",
+       "points": 18
+      }
+     ],
+     "dnfs": 1,
+     "dnfReasons": {
+      "avería": 1
+     },
+     "dsq": 0,
+     "finished": 23,
+     "shortened": false,
+     "wet": true,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 31.831,
+     "passes": 141,
+     "safety": 1,
+     "vsc": 1,
+     "red": false
+    },
+    {
+     "round": 2,
+     "circuitId": "bahrein",
+     "sprint": true,
+     "winner": "Isack Hadjar",
+     "winnerTeam": "Red Bull Racing",
+     "pole": "Max Verstappen",
+     "mine": [
+      {
+       "nombre": "Théo Pourchaire",
+       "grid": 12,
+       "pos": 9,
+       "status": "fin",
+       "points": 2
+      },
+      {
+       "nombre": "Jak Crawford",
+       "grid": 8,
+       "pos": 10,
+       "status": "fin",
+       "points": 1
+      }
+     ],
+     "dnfs": 3,
+     "dnfReasons": {
+      "accidente": 1,
+      "avería": 2
+     },
+     "dsq": 0,
+     "finished": 21,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 26.448,
+     "passes": 109,
+     "safety": 2,
+     "vsc": 0,
+     "red": false
+    },
+    {
+     "round": 3,
+     "circuitId": "monaco",
+     "sprint": true,
+     "winner": "Théo Pourchaire",
+     "winnerTeam": "Propio 1",
+     "pole": "Max Verstappen",
+     "mine": [
+      {
+       "nombre": "Théo Pourchaire",
+       "grid": 2,
+       "pos": 1,
+       "status": "fin",
+       "points": 30
+      },
+      {
+       "nombre": "Jak Crawford",
+       "grid": 5,
+       "pos": 24,
+       "status": "out",
+       "reason": "accidente",
+       "points": 8
+      }
+     ],
+     "dnfs": 5,
+     "dnfReasons": {
+      "avería": 4,
+      "accidente": 1
+     },
+     "dsq": 0,
+     "finished": 19,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 25.54,
+     "passes": 80,
+     "safety": 0,
+     "vsc": 1,
+     "red": true
+    },
+    {
+     "round": 4,
+     "circuitId": "silverstone",
+     "sprint": true,
+     "winner": "Max Verstappen",
+     "winnerTeam": "Red Bull Racing",
+     "pole": "Max Verstappen",
+     "mine": [
+      {
+       "nombre": "Théo Pourchaire",
+       "grid": 3,
+       "pos": 2,
+       "status": "fin",
+       "points": 24
+      },
+      {
+       "nombre": "Jak Crawford",
+       "grid": 2,
+       "pos": 4,
+       "status": "fin",
+       "points": 12
+      }
+     ],
+     "dnfs": 3,
+     "dnfReasons": {
+      "avería": 1,
+      "accidente": 1,
+      "accidente con ALB": 1
+     },
+     "dsq": 0,
+     "finished": 21,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 25.301,
+     "passes": 66,
+     "safety": 1,
+     "vsc": 1,
+     "red": false
+    },
+    {
+     "round": 5,
+     "circuitId": "spa",
+     "sprint": false,
+     "winner": "Théo Pourchaire",
+     "winnerTeam": "Propio 1",
+     "pole": "Max Verstappen",
+     "mine": [
+      {
+       "nombre": "Théo Pourchaire",
+       "grid": 2,
+       "pos": 1,
+       "status": "fin",
+       "points": 25
+      },
+      {
+       "nombre": "Jak Crawford",
+       "grid": 4,
+       "pos": 14,
+       "status": "fin",
+       "points": 0
+      }
+     ],
+     "dnfs": 1,
+     "dnfReasons": {
+      "avería": 1
+     },
+     "dsq": 0,
+     "finished": 23,
+     "shortened": false,
+     "wet": true,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 30.649,
+     "passes": 189,
+     "safety": 0,
+     "vsc": 0,
+     "red": false
+    },
+    {
+     "round": 6,
+     "circuitId": "monza",
+     "sprint": true,
+     "winner": "Théo Pourchaire",
+     "winnerTeam": "Propio 1",
+     "pole": "Lando Norris",
+     "mine": [
+      {
+       "nombre": "Théo Pourchaire",
+       "grid": 3,
+       "pos": 1,
+       "status": "fin",
+       "points": 30
+      },
+      {
+       "nombre": "Jak Crawford",
+       "grid": 2,
+       "pos": 21,
+       "status": "fin",
+       "points": 0
+      }
+     ],
+     "dnfs": 3,
+     "dnfReasons": {
+      "avería": 3
+     },
+     "dsq": 0,
+     "finished": 21,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 23.134,
+     "passes": 99,
+     "safety": 1,
+     "vsc": 1,
+     "red": false
+    },
+    {
+     "round": 7,
+     "circuitId": "sepang",
+     "sprint": false,
+     "winner": "Théo Pourchaire",
+     "winnerTeam": "Propio 1",
+     "pole": "Théo Pourchaire",
+     "mine": [
+      {
+       "nombre": "Théo Pourchaire",
+       "grid": 1,
+       "pos": 1,
+       "status": "fin",
+       "points": 25
+      },
+      {
+       "nombre": "Jak Crawford",
+       "grid": 4,
+       "pos": 23,
+       "status": "out",
+       "reason": "avería (motor)",
+       "points": 0
+      }
+     ],
+     "dnfs": 3,
+     "dnfReasons": {
+      "avería": 3
+     },
+     "dsq": 0,
+     "finished": 21,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 31.054,
+     "passes": 90,
+     "safety": 1,
+     "vsc": 1,
+     "red": false
+    },
+    {
+     "round": 8,
+     "circuitId": "singapur",
+     "sprint": false,
+     "winner": "Théo Pourchaire",
+     "winnerTeam": "Propio 1",
+     "pole": "Jak Crawford",
+     "mine": [
+      {
+       "nombre": "Théo Pourchaire",
+       "grid": 1,
+       "pos": 1,
+       "status": "fin",
+       "points": 25
+      },
+      {
+       "nombre": "Jak Crawford",
+       "grid": 6,
+       "pos": 4,
+       "status": "fin",
+       "points": 12
+      }
+     ],
+     "dnfs": 1,
+     "dnfReasons": {
+      "avería": 1
+     },
+     "dsq": 0,
+     "finished": 23,
+     "shortened": false,
+     "wet": false,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 30.369,
+     "passes": 19,
+     "safety": 0,
+     "vsc": 0,
+     "red": false
+    },
+    {
+     "round": 9,
+     "circuitId": "interlagos",
+     "sprint": false,
+     "winner": "Isack Hadjar",
+     "winnerTeam": "Red Bull Racing",
+     "pole": "Isack Hadjar",
+     "mine": [
+      {
+       "nombre": "Jak Crawford",
+       "grid": 5,
+       "pos": 6,
+       "status": "fin",
+       "points": 8
+      },
+      {
+       "nombre": "Théo Pourchaire",
+       "grid": 8,
+       "pos": 22,
+       "status": "fin",
+       "points": 0
+      }
+     ],
+     "dnfs": 2,
+     "dnfReasons": {
+      "avería": 2
+     },
+     "dsq": 0,
+     "finished": 22,
+     "shortened": false,
+     "wet": true,
+     "gridPens": 0,
+     "swaps": [],
+     "secs": 27.392,
+     "passes": 73,
+     "safety": 0,
+     "vsc": 0,
+     "red": false
+    }
+   ],
+   "news": [
+    "🏭 Desarrollo de invierno 2029 (ATR 88 %): túnel −0,76 s/vuelta, motor −0,02 s/vuelta, eficiencia ERS +4 %, estela −4 %.",
+    "📅 Sprints 2029 (4 al azar): Baréin, Mónaco, Gran Bretaña, Italia.",
+    "🏁 Lewis Hamilton se retira a los 44 años (Audi).",
+    "✍️ Audi ficha a Zhou Guanyu.",
+    "📈 Ferrari acierta de lleno con el coche nuevo.",
+    "📈 Audi acierta de lleno con el coche nuevo."
+   ],
+   "expectedPos": 1,
+   "custom": {
+    "spentCap": 53.2,
+    "leftCap": 46.8,
+    "carry": 0.97,
+    "jefe": "Andrea Stella",
+    "tecnico": "James Allison",
+    "motor": "mercedes"
+   },
+   "preseason": {
+    "laps": 138,
+    "fiabBonus": 0.043,
+    "secs": 14.537
+   },
+   "devLeftEnd": 1,
+   "levelsEnd": {
+    "mercedes": 0.809,
+    "ferrari": 0.993,
+    "redbull": 1.951,
+    "mclaren": 1.817,
+    "racingbulls": 1.9,
+    "alpine": 1.374,
+    "haas": 1.506,
+    "audi": 1.596,
+    "williams": -0.852,
+    "astonmartin": 0.637,
+    "cadillac": 0.259,
+    "propio": 2.521
+   },
+   "carRankEnd": 1,
+   "spreadEnd": 3.373,
+   "parts": [
+    {
+     "area": "motor",
+     "size": 2,
+     "ordered": 0,
+     "ready": 2,
+     "expect": 0.187,
+     "real": 0.093
+    },
+    {
+     "area": "fiab",
+     "size": 1,
+     "ordered": 1,
+     "ready": 3,
+     "expect": 0.037,
+     "real": 0.042
+    },
+    {
+     "area": "motor",
+     "size": 2,
+     "ordered": 2,
+     "ready": 4,
+     "expect": 0.187,
+     "real": 0.148
+    },
+    {
+     "area": "fiab",
+     "size": 1,
+     "ordered": 3,
+     "ready": 5,
+     "expect": 0.037,
+     "real": 0.043
+    },
+    {
+     "area": "motor",
+     "size": 1,
+     "ordered": 4,
+     "ready": 6,
+     "expect": 0.093,
+     "real": 0.074
+    }
+   ],
+   "aeroPkgs": [
+    {
+     "period": 0,
+     "ready": 3,
+     "expect": 0.207,
+     "real": 0.223,
+     "medido": 0.31,
+     "montar": true
+    },
+    {
+     "period": 1,
+     "ready": 6,
+     "expect": 0.207,
+     "real": 0.187,
+     "medido": 0.119,
+     "montar": true
+    }
+   ],
+   "champion": {
+    "nombre": "Théo Pourchaire",
+    "equipo": "Propio 1",
+    "puntos": 186
+   },
+   "constructors": [
+    {
+     "equipo": "Propio 1",
+     "puntos": 245
+    },
+    {
+     "equipo": "Red Bull Racing",
+     "puntos": 232
+    },
+    {
+     "equipo": "McLaren",
+     "puntos": 169
+    },
+    {
+     "equipo": "Racing Bulls",
+     "puntos": 93
+    },
+    {
+     "equipo": "Haas",
+     "puntos": 86
+    },
+    {
+     "equipo": "Audi",
+     "puntos": 85
+    },
+    {
+     "equipo": "Ferrari",
+     "puntos": 56
+    },
+    {
+     "equipo": "Mercedes",
+     "puntos": 54
+    },
+    {
+     "equipo": "Alpine",
+     "puntos": 19
+    },
+    {
+     "equipo": "Aston Martin",
+     "puntos": 12
+    },
+    {
+     "equipo": "Cadillac",
+     "puntos": 2
+    },
+    {
+     "equipo": "Williams",
+     "puntos": 0
+    }
+   ],
+   "myPos": 1,
+   "myPoints": 245,
+   "myDrivers": [
+    {
+     "nombre": "Jak Crawford",
+     "abrev": "CRA",
+     "pos": 6,
+     "puntos": 59,
+     "edad": 24,
+     "rating": 84.6,
+     "moral": 49
+    },
+    {
+     "nombre": "Théo Pourchaire",
+     "abrev": "POU",
+     "pos": 1,
+     "puntos": 186,
+     "edad": 26,
+     "rating": 84.5,
+     "moral": 91.8
+    }
+   ],
+   "wins": {
+    "Théo Pourchaire": 6,
+    "Isack Hadjar": 2,
+    "Max Verstappen": 1
+   },
+   "winnersDistinct": 3,
+   "teamsWinning": 2,
+   "poleToWin": 3,
+   "dnfRate": 0.102,
+   "swaps": [],
+   "pu": {
+    "CRA": {
+     "units": 3,
+     "broken": 1,
+     "penalties": 1
+    },
+    "POU": {
+     "units": 3,
+     "broken": 0,
+     "penalties": 1
+    }
+   },
+   "hitos": 5,
+   "rivals": 8,
+   "grid": [
+    {
+     "equipo": "Mercedes",
+     "pilotos": [
+      "RUS31",
+      "ANT23"
+     ]
+    },
+    {
+     "equipo": "Ferrari",
+     "pilotos": [
+      "LEC32",
+      "CAM24"
+     ]
+    },
+    {
+     "equipo": "Red Bull Racing",
+     "pilotos": [
+      "VER32",
+      "HAD25"
+     ]
+    },
+    {
+     "equipo": "McLaren",
+     "pilotos": [
+      "NOR30",
+      "PIA28"
+     ]
+    },
+    {
+     "equipo": "Racing Bulls",
+     "pilotos": [
+      "LAW27",
+      "LIN22"
+     ]
+    },
+    {
+     "equipo": "Alpine",
+     "pilotos": [
+      "GAS33",
+      "COL26"
+     ]
+    },
+    {
+     "equipo": "Haas",
+     "pilotos": [
+      "OCO33",
+      "BEA24"
+     ]
+    },
+    {
+     "equipo": "Audi",
+     "pilotos": [
+      "ZHO30",
+      "BOR25"
+     ]
+    },
+    {
+     "equipo": "Williams",
+     "pilotos": [
+      "SAI35",
+      "ALB33"
+     ]
+    },
+    {
+     "equipo": "Aston Martin",
+     "pilotos": [
+      "TSO23",
+      "STR31"
+     ]
+    },
+    {
+     "equipo": "Cadillac",
+     "pilotos": [
+      "PER39",
+      "DRU29"
+     ]
+    },
+    {
+     "equipo": "Propio 1",
+     "pilotos": [
+      "CRA24",
+      "POU26"
+     ]
+    }
+   ],
+   "ages": {
+    "mean": 28.5,
+    "min": 22,
+    "max": 39
+   },
+   "ratings": {
+    "mean": 87.6,
+    "min": 79.7,
+    "max": 95.4
+   },
+   "poolSize": 40
+  }
+ ],
+ "problems": [],
+ "secs": 1146.489
+}
