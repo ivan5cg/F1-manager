@@ -27,13 +27,10 @@ export interface GpPick { team: string; circuit: string; sprint: boolean; tiempo
 /** Circuitos ordenados por su fecha del calendario. */
 const circuitIds = () => Object.keys(CIRCUITS).sort((a, b) => String(CIRCUITS[a].fecha).localeCompare(String(CIRCUITS[b].fecha)));
 
-/** ¿Se puede correr este circuito en el otro formato? (hace falta su horario del otro formato) */
-const canSwitch = (id: string) => !!CIRCUITS[id].horarioOtro;
-
 /** Temporada de un solo gran premio, lista para empezar. */
 export function gpSeason(p: GpPick): SeasonState {
   const def = CIRCUITS[p.circuit];
-  const sprint = canSwitch(p.circuit) ? p.sprint : def.formato === "sprint";
+  const sprint = p.sprint;
   const s: SeasonState = { v: 1, playerTeam: p.team, seed: Math.floor(Math.random() * 1e6), round: 0, weekend: null, rounds: [], calendar: [p.circuit], gp: { tiempo: p.tiempo } };
   if (sprint !== (def.formato === "sprint")) s.formatos = { [p.circuit]: sprint ? "sprint" : "normal" };
   return s;
@@ -63,13 +60,13 @@ export function gpSetupScreen(nav: Nav, onStart: (p: GpPick) => void, prev?: Par
   let team: string | null = prev?.team ?? null;
   let circuit: string | null = prev?.circuit ?? null;
   let sprint = circuit ? CIRCUITS[circuit].formato === "sprint" : false;
-  if (prev?.sprint !== undefined && circuit && canSwitch(circuit)) sprint = prev.sprint;
+  if (prev?.sprint !== undefined && circuit) sprint = prev.sprint;
   let tiempo: GpWeather = prev?.tiempo ?? "clima";
   const render = () => {
     const y = window.scrollY;
     const t = BASE_TEAMS.find((x) => x.id === team);
     const c = circuit ? CIRCUITS[circuit] : null;
-    const isSprint = c ? (canSwitch(circuit!) ? sprint : c.formato === "sprint") : false;
+    const isSprint = c ? sprint : false;
     app().innerHTML = `<div style="padding-bottom:8px">
       <div class="panel"><div class="hd"><span class="t">Gran premio</span><button id="back">Volver</button></div><div class="bd small">
         Un fin de semana suelto: eliges equipo, circuito y tiempo, y lo disputas entero, de los libres a la carrera. No toca tus partidas.
@@ -94,9 +91,10 @@ export function gpSetupScreen(nav: Nav, onStart: (p: GpPick) => void, prev?: Par
       </div></div>
       <div class="panel"><div class="hd"><span class="t">3 · Fin de semana</span></div><div class="bd">
         <div class="small dim">Formato</div>
-        ${c && canSwitch(circuit!)
-          ? `<div class="seg">${[false, true].map((v) => `<button data-fmt="${v ? 1 : 0}" class="${isSprint === v ? "on" : ""}">${v ? "Sprint" : "Normal"}</button>`).join("")}</div>`
-          : `<div class="small" style="margin:3px 0 8px">${c ? (isSprint ? "Sprint: libres 1, clasificación sprint, sprint, clasificación y carrera." : "Normal: tres libres, clasificación y carrera.") : "Elige un circuito."}</div>`}
+        ${c
+          ? `<div class="seg">${[false, true].map((v) => `<button data-fmt="${v ? 1 : 0}" class="${isSprint === v ? "on" : ""}">${v ? "Sprint" : "Normal"}</button>`).join("")}</div>
+             <div class="small dim" style="margin:-2px 0 8px">${isSprint ? "Sprint: libres 1, clasificación sprint, sprint, clasificación y carrera." : "Normal: tres libres, clasificación y carrera."}${(c.formato === "sprint") !== isSprint ? ` En 2026 aquí es ${c.formato === "sprint" ? "sprint" : "normal"}.` : ""}</div>`
+          : `<div class="small" style="margin:3px 0 8px">Elige un circuito.</div>`}
         <div class="small dim">Tiempo</div>
         <div class="seg">${(Object.keys(GP_WEATHER) as GpWeather[]).map((k) => `<button data-wx="${k}" class="${tiempo === k ? "on" : ""}">${GP_WEATHER[k].name}</button>`).join("")}</div>
         <div class="small dim">${esc(GP_WEATHER[tiempo].what)}${tiempo === "clima" && c ? ` (${esc(c.nombre)}, ${fmtDate(c.fecha)})` : ""}.</div>
