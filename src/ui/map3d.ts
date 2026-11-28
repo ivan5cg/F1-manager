@@ -4445,6 +4445,17 @@ function followCar() {
   if (s && visible(s)) return s;
   return opt.mine().find(visible) || sess.cars.find(visible) || null;
 }
+/**
+ * El fov de three es vertical: en una pantalla en vertical (móvil) el a bordo se quedaba con ~40° de horizontal, un
+ * teleobjetivo en el que el coche lo llena todo y la pista parece estrechísima. Se abre el vertical hasta recuperar el
+ * horizontal que tendría en una pantalla 16:10 (con tope, para no deformar demasiado arriba y abajo).
+ */
+function onboardFov(v) {
+  const a = camera.aspect, R = Math.PI / 180;
+  if (!(a > 0) || a >= 1.6) return v;
+  const h = 2 * Math.atan(Math.tan(v * R / 2) * 1.6);
+  return clamp(2 * Math.atan(Math.tan(h / 2) / a) / R, v, 106);
+}
 /** Escala del coche: muy agrandado de lejos, casi real de cerca. */
 function carK(W) { const t = clamp((W - W_REAL) / Math.max(1, T.Wov - W_REAL), 0, 1); return W / (5.6 - 3.3 * t); }
 
@@ -5055,7 +5066,7 @@ function updateCamera(dt, now) {
   } else if ((mode === "tele" || mode === "grua" || mode === "boxes") && !cut && !camSnap) {
     cur.pos.copy(want.pos); cur.look.lerp(want.look, 1 - Math.exp(-dt / 0.08)); cur.fov += (want.fov - cur.fov) * (1 - Math.exp(-dt / 0.3));
   } else { cur.pos.copy(want.pos); cur.look.copy(want.look); cur.fov = want.fov; }
-  camera.position.copy(cur.pos); camera.fov = cur.fov;
+  camera.position.copy(cur.pos); camera.fov = onboard ? onboardFov(cur.fov) : cur.fov;
   if (onboard && p && Math.abs(p.bank || 0) > 0.005 && !opt.debug?.view) {
     const camTilt = p.bank * 0.55;
     camera.up.set(-p.sx * Math.sin(camTilt), Math.cos(camTilt), -p.sz * Math.sin(camTilt));
