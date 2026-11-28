@@ -889,7 +889,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       const myCars = mine(), sel = selCar();
       const tgt = (sel?.player ? sel : myCars.find((c) => c.loc === "track") ?? myCars[0]) ?? null;
       if (!tgt || tgt.loc !== "track") return;
-      if (sess.flag === "red") redSheet(tgt); else boxSheet(tgt);
+      if (sess.flag === "red") { if (sess.redHeld(tgt)) redSheet(tgt); else showToast(`${tgt.d.abrev} va hacia el pit-lane: allí se podrá cambiar.`, 2500, "Bandera roja"); } else boxSheet(tgt);
     }
   });
   $("#bigb").onclick = (e) => {
@@ -995,7 +995,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   const ghosts = new Map<number, Ghost>();
   function updateGhosts() {
     ghosts.clear();
-    if (!race || !started || sess.flag === "red" || sess.chequered) return;
+    if (!race || !started || sess.flag === "red" || sess.gridForm || sess.chequered) return;
     const rows = sess.intervals().filter((r) => r.car.loc !== "out" && r.car.loc !== "fin");
     for (const c of mine()) {
       if (c.loc !== "track" || !c.tyres) continue;
@@ -1323,7 +1323,11 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     g.clearRect(0, 0, W, H);
     const rows = sess.intervals().filter((r) => r.car.loc !== "out" && r.car.loc !== "fin");
     const lead = rows[0]?.car;
-    const lap = (lead && lead.lapTimes.length ? lead.lapTimes[lead.lapTimes.length - 1] : 0) || sess.lapRefRace || 90;
+    // la vuelta de referencia: la última normal del líder (tras una bandera roja, la que acaba nada más salir de la
+    // parrilla dura unos segundos y repartía a toda la parrilla, que va junta, por toda la franja)
+    const ref = sess.lapRefRace || 90;
+    let lap = ref;
+    if (lead) for (let i = lead.lapTimes.length - 1; i >= 0; i--) { const t = lead.lapTimes[i]; if (t > 0.85 * ref && t < 1.6 * ref) { lap = t; break; } }
     const pad = 6, y0 = 11, y1 = 23;
     const X = (t: number) => pad + ((((t % lap) + lap) % lap) / lap) * (W - 2 * pad);
     g.fillStyle = "#15171b"; g.fillRect(0, y0 - 2, W, y1 - y0 + 4);
@@ -1783,7 +1787,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       if (pl) { const h = planLine(c); if (pl.innerHTML !== h) pl.innerHTML = h; }
       card.querySelector(".stats")!.innerHTML = statsHtml(c);
       let btns = "";
-      if (redRace) btns = `<button class="yellow" data-a="red" data-i="${i}" ${c.loc !== "track" ? "disabled" : ""}>Cambiar neumáticos</button>`;
+      if (redRace) btns = c.loc !== "track" ? `<button disabled>Bandera roja</button>` : sess.redHeld(c) ? `<button class="yellow" data-a="red" data-i="${i}">Neumáticos${c.wing > 0 ? " y morro" : ""}</button>` : `<button disabled>Hacia el pit-lane…</button>`;
       else if (race) btns = `<button data-a="minus" data-i="${i}" class="sq">−</button><span class="mode">${c.loc === "track" ? PUSH_NAMES[c.push] : phaseName(c)}</span><button data-a="plus" data-i="${i}" class="sq">+</button><button class="${c.pitRequest ? "yellow" : ""}" data-a="box" data-i="${i}" ${c.loc !== "track" ? "disabled" : ""}>${c.pitRequest ? "BOX ✓" : "BOX"}</button>`;
       else {
         // en libres se puede dejar programada la siguiente tanda con el coche en pista
@@ -1865,17 +1869,41 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       el.querySelectorAll<HTMLButtonElement>("[data-pm]").forEach((b) => (b.onclick = () => { c.pitMode = Number(b.dataset.pm); el.querySelectorAll<HTMLElement>("[data-pm]").forEach((x) => x.classList.toggle("on", x === b)); }));
     });
   }
+  // bandera roja: con el coche parado en la fila del pit-lane, neumáticos y morro sin perder nada
   function redSheet(c: Car) {
+    if (!sess.redHeld(c)) return;
+    redOffered.add(c.id);
     const sw = sess.sectorWater();
-    open(`<div class="row"><span class="tab">Bandera roja</span><b class="up grow">${esc(c.d.nombre)}</b></div>
-      <div class="small dim" style="margin-top:4px">Con la carrera parada se pueden cambiar los neumáticos sin perder tiempo. Agua S1·S2·S3: ${sw.map((x) => x.toFixed(2)).join(" · ")} mm. Lisos hasta ~0,15 mm, intermedios hasta ~1 mm.</div>
+    const left = sess.laps - sess.lapsDone(c);
+    const nose = c.wing > 0
+      ? `<div class="row" style="margin:8px 0;gap:8px"><span class="grow small">Alerón dañado: <b class="yellow">−${sess.wingLoss(c).toFixed(1)} s</b> por vuelta</span><button class="yellow" id="nose">Cambiar morro</button></div>`
+      : `<div class="small dim" style="margin:6px 0">Morro en buen estado.</div>`;
+    open(`<div class="row"><span class="tab">Bandera roja</span><b class="up grow">${esc(c.d.nombre)}</b><span class="dim small">quedan ${left} v</span></div>
+      <div class="small dim" style="margin-top:4px">Parado en la fila del pit-lane. Se pueden cambiar neumáticos y el morro sin perder tiempo; al reanudarse sale detrás del coche de seguridad y, tras una vuelta, salida parada desde la parrilla. Agua S1·S2·S3: ${sw.map((x) => x.toFixed(2)).join(" · ")} mm. Lisos hasta ~0,15 mm, intermedios hasta ~1 mm.</div>
+      ${nose}
       ${setButtons(c, (s) => !s.punctured, c.tyres?.id)}
-      <button data-close style="width:100%">Cerrar</button>`, (el, close) => {
+      <button data-close style="width:100%">${c.wing > 0 ? "Seguir sin cambiar el morro" : "Mantener neumáticos"}</button>`, (el, close) => {
+      const nb = el.querySelector<HTMLButtonElement>("#nose");
+      if (nb) nb.onclick = () => {
+        if (sess.redFlagNose(c)) { buzz(HAPTIC.pit); showToast(`${c.d.abrev}: morro nuevo.`, 2500, "Boxes"); }
+        close();
+        // y si quiere, también las gomas
+        setTimeout(() => { if (sess.redHeld(c)) redSheet(c); }, 50);
+      };
       el.querySelectorAll<HTMLButtonElement>("[data-set]").forEach((b) => (b.onclick = () => {
-        if (sess.redFlagChange(c, b.dataset.set!)) { buzz(HAPTIC.pit); showToast(`${c.d.abrev}: neumáticos cambiados.`, 2500, "Boxes"); }
+        if (b.dataset.set !== c.tyres?.id && sess.redFlagChange(c, b.dataset.set!)) { buzz(HAPTIC.pit); showToast(`${c.d.abrev}: neumáticos cambiados.`, 2500, "Boxes"); }
         close();
       }));
-    });
+    }, () => setTimeout(offerRed, 300));
+  }
+  /** Al llegar cada uno de tus coches a la fila del pit-lane, se abre su menú (una vez por bandera roja). */
+  const redOffered = new Set<number>();
+  function offerRed() {
+    if (!race) return;
+    if (sess.flag !== "red") { redOffered.clear(); return; }
+    if (sheetOpen || skipping) return;
+    const c = mine().find((x) => sess.redHeld(x) && !redOffered.has(x.id));
+    if (c) redSheet(c);
   }
   function qualiSheet(c: Car) {
     const part = sess.parts[sess.part];
@@ -2792,6 +2820,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
         tvTick(now);
         if (!sheetOpen) renderDrivers();
         else if (sheetTick && now - lastSheet > 1000) { lastSheet = now; sheetTick(); }
+        offerRed();
       }
       if (!paused && !skipping && !ended && document.visibilityState === "visible") {
         const hl = sess.startLights();

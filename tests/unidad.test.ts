@@ -155,3 +155,42 @@ test("test de pretemporada de 8 horas en Barcelona (clima de marzo)", () => {
   const totalLaps = sess.results().reduce((a, r) => a + r.laps, 0);
   assert.ok(totalLaps > 100, `deben completarse vueltas en el test: ${totalLaps}`);
 });
+
+test("bandera roja: al pit-lane en fila, vuelta tras el coche de seguridad y salida parada desde la parrilla", () => {
+  const s = benchRace("bahrein", 3);
+  const L = s.L, laneEnd = L + s.track.pit.exit;
+  while (s.leaderLap < 12 && !s.finished) s.step();
+  s.redFlag("prueba");
+  const ord0 = s.order().filter((c) => c.loc === "track").map((c) => c.id);
+  // todos acaban parados en la fila del fast lane, en el orden de carrera y dentro del pit-lane
+  let n = 0;
+  while (s.cars.some((c) => c.loc === "track" && !c.redQ?.held) && n++ < 20000) s.step();
+  const q = s.order().filter((c) => c.loc === "track");
+  assert.deepEqual(q.map((c) => c.id), ord0);
+  for (const c of q) {
+    assert.equal(c.v, 0);
+    const pos = ((c.s % L) + L) % L;
+    assert.ok(pos >= s.track.pit.entry || pos + L < laneEnd, `${c.d.abrev} fuera del pit-lane (${pos.toFixed(0)} m)`);
+  }
+  // ahí se puede cambiar el morro (y las gomas) sin perder nada
+  const me = q[0];
+  me.wing = 0.01;
+  assert.ok(s.redFlagNose(me));
+  assert.equal(me.wing, 0);
+  // se reanuda: coche de seguridad, a la parrilla y semáforos
+  const saw = { sc: false, grid: false };
+  n = 0;
+  while (!(s as unknown as { restartHold: boolean }).restartHold && n++ < 40000) {
+    s.step();
+    if (s.flag === "sc") saw.sc = true;
+    if (s.gridForm) saw.grid = true;
+  }
+  assert.ok(saw.sc && saw.grid, "sale detrás del coche de seguridad y forma la parrilla");
+  const grid = s.order().filter((c) => c.loc === "track");
+  assert.deepEqual(grid.map((c) => c.id), ord0, "la parrilla, en el orden de carrera");
+  const line = Math.round((grid[0].s + 12) / L) * L;
+  grid.forEach((c, i) => assert.ok(Math.abs(c.s - (line - 12 - i * 8)) < 0.6, `${c.d.abrev} en su casilla`));
+  assert.ok(grid.every((c) => !c.redQ && c.v === 0));
+  while (!s.finished) s.step();
+  assert.ok(s.cars.some((c) => c.loc === "fin"));
+});
