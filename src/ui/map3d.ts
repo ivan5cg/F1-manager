@@ -394,8 +394,10 @@ _dummyTex.needsUpdate = true;
 const envHdriU = { uHdriA: { value: _dummyTex }, uHdriB: { value: _dummyTex }, uHdriMix: { value: 1 }, uHdriHas: { value: 0 } };
 const skyMat = (env) => new THREE.ShaderMaterial({
   uniforms: { ...skyU, ...envHdriU, uEnv: { value: env } }, side: THREE.BackSide, fog: false, depthWrite: false, depthTest: env > 0.5,
-  vertexShader: `varying vec3 vDir; void main(){ vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-  fragmentShader: `uniform vec3 uZen, uHor, uSun, uSunCol, uCloudCol, uGround; uniform float uEnv, uNight, uWxR, uCity, uFlash, uVol, uHdriMix, uHdriHas; uniform vec2 uCam, uWind; uniform sampler2D uWx, uHdriA, uHdriB; varying vec3 vDir;` + GLSL_NOISE + `
+  // La dirección se toma desde la cámara (no desde el centro de la esfera) y en precisión alta: en algunos móviles la
+  // interpolada de los vértices salía a trozos y el cielo se veía con una cuadrícula de triángulos.
+  vertexShader: `varying highp vec3 vDir; void main(){ vec4 wp = modelMatrix * vec4(position, 1.0); vDir = (wp.xyz - cameraPosition) / length(modelMatrix[0].xyz); gl_Position = projectionMatrix * viewMatrix * wp; }`,
+  fragmentShader: `uniform vec3 uZen, uHor, uSun, uSunCol, uCloudCol, uGround; uniform float uEnv, uNight, uWxR, uCity, uFlash, uVol, uHdriMix, uHdriHas; uniform vec2 uCam, uWind; uniform sampler2D uWx, uHdriA, uHdriB; varying highp vec3 vDir;` + GLSL_NOISE + `
     // ruido de gradiente con transición suave (no deja ver la rejilla) y octavas giradas
     vec2 g2(vec2 p){ float a = h21(p) * 6.2831853; return vec2(cos(a), sin(a)); }
     float gn(vec2 p){ vec2 i = floor(p), f = fract(p), u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
@@ -487,7 +489,7 @@ const skyMat = (env) => new THREE.ShaderMaterial({
       #include <colorspace_fragment>
     }`,
 });
-const sky = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 16), skyMat(0));
+const sky = new THREE.Mesh(new THREE.SphereGeometry(1, 64, 32), skyMat(0));
 sky.scale.setScalar(8000); sky.renderOrder = -10; sky.frustumCulled = false; scene.add(sky);
 // entorno: el cielo vivo de este momento mezclado con el HDRI en un cubemap ligero (64×64) y filtrado por rugosidad (PMREM).
 // Así los reflejos en carrocería y charcos siempre coinciden con el cielo actual y los cambios de HDRI se funden sin cortes.
@@ -2802,7 +2804,9 @@ function buildWorld() {
     const idx = [];
     for (let k = 0; k <= M; k++) {
       const pw = pushW[k] * T.PS;
-      const cols = [[pw - 0.55, -pw * W_REAL, 0.04, -1], [pw + 0.55, -pw * W_REAL, 0.04, 1]];
+      // a ras de pista: con 4 cm de más, al incorporarse (donde el carril pisa la pista) tapaba la pista solo cerca de la
+      // cámara y se iba «dibujando» al pasar; así decide siempre el orden de capas (la pista por encima del carril)
+      const cols = [[pw - 0.55, -pw * W_REAL, 0, -1], [pw + 0.55, -pw * W_REAL, 0, 1]];
       const k0 = Math.max(0, k - 1), k1 = Math.min(M, k + 1);
       const dyP = py[k1] - py[k0], dsP = Math.max(0.5, ps[k1] - ps[k0]), tyP = dyP / Math.hypot(dsP, dyP);
       const pnx = -prz[k] * tyP, pny = Math.sqrt(Math.max(0.01, 1 - tyP * tyP)), pnz = prx[k] * tyP;
