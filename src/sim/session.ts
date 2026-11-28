@@ -423,6 +423,10 @@ export interface Car {
   redQ?: { entry: number; at: number; held: boolean };
   /** Casilla de la parrilla (s absoluta) a la que va detrás del coche de seguridad para la salida parada. */
   gridAt?: number;
+  /** Doblado con la bandera roja: al reanudarse sale el primero del pit-lane y da la vuelta para ponerse a la cola. */
+  redLapped?: boolean;
+  /** Dónde empezó a desdoblarse (s absoluta). */
+  unlapFrom?: number;
   wing: number;
   floor: number;
   delay: number;
@@ -751,6 +755,9 @@ export class Session {
   /** Tras la bandera roja: el coche de seguridad lleva a todos a la parrilla y se paran en su casilla. */
   gridForm = false;
   gridFormT = 0;
+  /** Reanudación tras la roja: la fila espera en el pit-lane mientras los doblados dan la vuelta. */
+  trainHold = false;
+  trainHoldT = 0;
   redGap = RED_Q_GAP;
   /** Ventaja (s/vuelta) con la que se adelanta una de cada dos veces en la mejor frenada del circuito. */
   get passT(): number { return passTOverride ?? this.track.def.adelantamientos?.umbral ?? PASS_T0; }
@@ -1223,6 +1230,7 @@ export class Session {
     this.interactions();
     this.lateral(dt);
     if (!isRaceKind(this.kind)) this.sessionTick();
+    if (this.trainHold && this.flag === "sc") this.trainCheck();
     if (this.gridForm && this.flag === "sc") this.gridCheck();
 
     if (isRaceKind(this.kind) && this.cars.every((c) => c.loc === "fin" || c.loc === "out")) {
@@ -1543,10 +1551,16 @@ export class Session {
     // la fila del fast lane, en el orden de carrera: el líder delante, junto a la salida del pit-lane
     const tr = this.track, L = this.L;
     const laneDist = L - tr.pit.entry + tr.pit.exit;
-    const ord = this.order().filter((c) => c.loc === "track" || c.loc === "pit");
+    const ord0 = this.order().filter((c) => c.loc === "track" || c.loc === "pit");
+    // los doblados se ponen delante de la fila (junto a la salida): al reanudarse salen los primeros para desdoblarse
+    const leadS = ord0[0]?.s ?? 0;
+    for (const c of ord0) c.redLapped = leadS - c.s > L;
+    const ord = [...ord0.filter((c) => c.redLapped), ...ord0.filter((c) => !c.redLapped)];
     const gap = (this.redGap = Math.max(7.5, Math.min(RED_Q_GAP, (laneDist - RED_Q_HEAD - 20) / Math.max(1, ord.length))));
+    this.trainHold = false;
     ord.forEach((c, i) => {
       c.scGoT = undefined;
+      c.unlapFrom = undefined;
       c.unlap = undefined;
       c.gridAt = undefined;
       if (c.loc === "pit" && c.pit) {
@@ -1681,15 +1695,19 @@ export class Session {
     const ord = this.order().filter((c) => c.loc === "track");
     if (!ord.length) return;
     const head = ord[0].redQ?.at ?? ord[0].s;
-    const gap = this.redGap;
-    ord.forEach((c, i) => {
-      // el doblado se pone en la vuelta del líder (lo que le faltaba se da por recorrido)
-      const want = head - i * gap;
+    // la fila, en la misma vuelta que el líder (el que pasó la entrada justo antes de la roja ha dado una vuelta más
+    // para llegar a ella; los demás no son por eso doblados); los doblados, una por detrás
+    for (const c of ord) {
+      const lo = head - (c.redLapped ? 1.5 : 0.5) * this.L;
+      let want = c.s;
+      while (want <= lo) want += this.L;
       if (want > c.s + 1) this.jumpTo(c, want);
       c.v = 0;
       c.delay = 0;
-      if (c.redQ) c.redQ.held = true;
-    });
+    }
+    // (durante la roja el líder ha ido cruzando la meta por el pit-lane sin cerrar vueltas: se pone al día)
+    const lapNow = this.lapsDone(ord[0]);
+    if (lapNow > this.leaderLap) { this.leaderLap = lapNow; this.lapOrder[lapNow] = ord.map((c) => c.id); }
     // la línea de la parrilla: la siguiente que se cruza por pista (la fila puede quedar a un lado u otro de la meta)
     const lap = Math.ceil((head + this.L / 2) / this.L);
     const left = this.laps - lap;
@@ -1697,13 +1715,52 @@ export class Session {
     this.scWet = rain;
     this.scLapsLeft = rain ? 2 : 1;
     this.standAfterSc = left > 2;
-    this.unlapCalled = true; // ya están desdoblados
+    this.unlapCalled = true; // (los doblados se desdoblan ahora, saliendo los primeros)
     this.unlapWait = 0;
     this.drsEnabledFromLap = lap + (rain ? 4 : 3);
-    this.log({ kind: "control", text: this.standAfterSc
-      ? `🟨 Se reanuda la carrera: salen del pit-lane detrás del coche de seguridad${rain ? "" : ", una vuelta,"} y después salida parada desde la parrilla.`
-      : "🟨 Se reanuda la carrera detrás del coche de seguridad.", important: true, pause: true, code: "sc" });
+    // reglamento: los doblados salen los primeros del pit-lane, dan la vuelta (adelantando al coche de seguridad) y se
+    // ponen a la cola; la fila sale detrás del coche de seguridad a tiempo para que lleguen justo detrás
+    const lapped = ord.filter((c) => c.redLapped);
+    for (const c of ord) c.redLapped = undefined;
+    if (lapped.length) {
+      this.trainHold = true;
+      this.trainHoldT = this.t;
+      for (const c of lapped) { c.unlap = true; c.unlapFrom = c.s; }
+      this.log({ kind: "control", text: `🟨 Se reanuda la carrera: los doblados (${lapped.map((c) => c.d.abrev).join(", ")}) salen primero del pit-lane para desdoblarse y ponerse a la cola; después, el resto detrás del coche de seguridad.`, important: true, pause: true, code: "desdoblar" });
+      return;
+    }
+    this.releaseTrain(true);
+  }
+
+  /** Sale la fila del pit-lane detrás del coche de seguridad (y, si toca ya, se prepara la parrilla). */
+  private releaseTrain(first: boolean) {
+    this.trainHold = false;
+    const ord = this.order().filter((c) => c.loc === "track");
+    if (!ord.length) return;
+    const head = ord[0].redQ?.at ?? ord[0].s;
+    const lap = Math.ceil((head + this.L / 2) / this.L);
+    const rain = this.scWet;
+    const txt = `del pit-lane detrás del coche de seguridad${this.standAfterSc ? `${rain ? "" : ", una vuelta,"} y después salida parada desde la parrilla` : ""}.`;
+    this.log({ kind: "control", text: first ? `🟨 Se reanuda la carrera: salen ${txt}` : `🟨 El resto sale ${txt}`, important: true, pause: first, code: "sc" });
     if (this.standAfterSc && this.scLapsLeft === 1) this.formGrid(lap * this.L);
+  }
+
+  /** La fila espera en el pit-lane hasta que los doblados, dando la vuelta, vayan a llegar justo detrás de su cola. */
+  private trainCheck() {
+    const L = this.L, tr = this.track;
+    const held = this.cars.filter((c) => c.loc === "track" && c.redQ && !c.unlap);
+    const runners = this.cars.filter((c) => c.loc === "track" && c.unlap && c.unlapFrom !== undefined);
+    if (!held.length || !runners.length || this.t - this.trainHoldT > 1.6 * this.lapRefRace + 30) return this.releaseTrain(false);
+    // lo que tarda en salir el último de la fila (al límite del pit-lane) …
+    const tail = Math.min(...held.map((c) => c.s));
+    const laneEnd = held[0].redQ!.entry + L - tr.pit.entry + tr.pit.exit;
+    const tailOut = (laneEnd - tail) / tr.pit.limit + 4;
+    // … y lo que le falta al primero de los doblados para pasar por la salida del pit-lane
+    const first = runners.reduce((a, b) => (b.s - b.unlapFrom! > a.s - a.unlapFrom! ? b : a));
+    if (first.s - first.unlapFrom! < L * 0.4) return;
+    const pos = ((first.s % L) + L) % L;
+    const rem = (((tr.pit.exit - pos) % L) + L) % L;
+    if (rem / Math.max(30, first.v) <= tailOut) this.releaseTrain(false);
   }
 
   /** Casillas de la parrilla en la línea `line` (s absoluta), en el orden de carrera. */
@@ -2013,6 +2070,8 @@ export class Session {
     if (c.redQ) {
       if (c.s < c.redQ.entry + L - this.track.pit.entry + this.track.pit.exit) v = Math.min(v, this.track.pit.limit);
       else c.redQ = undefined;
+      // la fila espera mientras los doblados salen a desdoblarse
+      if (c.redQ && this.trainHold && !c.unlap) v = 0;
     }
     if (c.gridAt !== undefined && this.gridForm) {
       const left = c.gridAt - c.s;

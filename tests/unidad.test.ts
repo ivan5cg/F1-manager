@@ -194,3 +194,26 @@ test("bandera roja: al pit-lane en fila, vuelta tras el coche de seguridad y sal
   while (!s.finished) s.step();
   assert.ok(s.cars.some((c) => c.loc === "fin"));
 });
+
+test("bandera roja: los doblados salen primero del pit-lane, se desdoblan y se ponen a la cola", () => {
+  const s = benchRace("silverstone", 3);
+  const L = s.L;
+  while (s.leaderLap < 40 && !s.finished) s.step();
+  const lead = s.order()[0];
+  const lapped = s.order().filter((c) => c.loc === "track" && lead.s - c.s > L).map((c) => c.id);
+  assert.ok(lapped.length > 0, "hay doblados");
+  s.redFlag("prueba");
+  const ord0 = s.order().filter((c) => c.loc === "track").map((c) => c.id);
+  let n = 0, sawOut = false;
+  while (!(s as unknown as { restartHold: boolean }).restartHold && n++ < 60000) {
+    s.step();
+    // mientras la fila espera, los doblados ya han salido del pit-lane
+    if (s.trainHold && lapped.every((id) => !s.carById(id).redQ)) sawOut = true;
+  }
+  assert.ok(sawOut, "los doblados salen antes que la fila");
+  const grid = s.order().filter((c) => c.loc === "track");
+  assert.deepEqual(grid.map((c) => c.id), ord0, "a la cola, en el orden de carrera");
+  const laps = new Set(grid.map((c) => Math.round((c.s + 12) / L)));
+  assert.equal(laps.size, 1, "todos en la misma vuelta: desdoblados");
+  assert.ok(s.t - (s as unknown as { gridFormT: number }).gridFormT < 2.5 * s.lapRefRace + 60, "llegan a la parrilla sin forzarlos");
+});
