@@ -2339,6 +2339,8 @@ export class Session {
       if (run.phase === "push" && run.kind === "quali" && c.auto && !qualiCanImprove(this, c, 0, this.retryWorthIt(c))) run.phase = "in";
     } else if (run.phase === "cool") run.phase = this.remaining() > 0 ? "push" : "in";
     else if (run.phase === "long" && (run.done >= run.pushLaps || this.remaining() <= 0)) run.phase = "in";
+    // en libres y test el equipo no apura un juego pasado el precipicio: no hay nada que ganar y sí un pinchazo
+    if (run.phase !== "in" && c.auto && isPracticeKind(this.kind) && c.tyres && DRY.includes(c.tyres.c) && setWear(c.tyres) > COMPOUNDS[c.tyres.c].cliff + 0.08) run.phase = "in";
     // con slicks y pista mojada (o con neumáticos de lluvia en seco) no tiene sentido seguir
     if (run.phase !== "in" && wrongTyresForWater(this, c)) {
       if (c.auto) {

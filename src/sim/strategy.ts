@@ -887,9 +887,15 @@ export function makeRun(sess: Session, car: Car, kind: Run["kind"], c: Compound,
 export function practiceProgram(sess: Session, car: Car): Run[] {
   const r = sess.rng;
   const runs: Run[] = [];
+  // El programa entero se monta antes de salir, con todos los juegos aún sin usar: en el test (con 10-12 juegos por
+  // compuesto) cada tanda se lleva uno nuevo distinto; antes todas cogían el mismo M1 y S1, que acababan reventados.
+  const taken = new Set<string>();
+  const testSet = (c: Compound) => sess.kind === "TEST"
+    ? car.e.sets.find((s) => s.c === c && s.laps === 0 && !s.returned && !s.punctured && !taken.has(s.id))?.id
+    : undefined;
   const add = (kind: Run["kind"], c: Compound, laps: number, atMin: number) => {
-    const run = makeRun(sess, car, kind, c, laps, atMin * 60);
-    if (run) runs.push(run);
+    const run = makeRun(sess, car, kind, c, laps, atMin * 60, testSet(c));
+    if (run) { runs.push(run); taken.add(run.setId); }
   };
   // Lo de un equipo de verdad en una hora: vueltas de instalación, salidas cortas con medio para los reglajes, tandas
   // de clasificación con blando y tandas largas con el depósito lleno; cada uno con su orden y su número de salidas.
