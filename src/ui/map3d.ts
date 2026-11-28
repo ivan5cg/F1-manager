@@ -4650,6 +4650,10 @@ function updatePoses(dtReal) {
         p.s = track.pit.entry + laneLen * gaC * f; boxT = sstep(0.84, 0.95, f); p.gar = sstep(0.95, 1, f);
         if (world?.realPit) { const uG = world.realPit.uOfS(track.pit.entry + laneLen * gaC); p.pitU = uG * f; }
       }
+    } else if (c.loc === "track" && c.redQ && p.s >= c.redQ.entry && p.s < c.redQ.entry + laneLen) {
+      // bandera roja: por el pit-lane hasta la fila del fast lane (sin pararse en el garaje) y, al reanudarse, a la pista
+      p.lane2 = true;
+      if (world?.realPit) p.pitU = world.realPit.uOfS(track.pit.entry + (p.s - c.redQ.entry));
     }
     // percances (trompo, salida, bloqueo, accidente): solo dibujo, con el reloj de la sesión
     const fx = c.fx, tau = fx ? tNow - fx.t : -1;
@@ -5302,12 +5306,13 @@ function drawFlags(now, W, k) {
     flags.setMatrixAt(nf, m4); flags.setColorAt(nf++, _col.set(red ? 0xe0201a : 0xffd200));
   }
   flags.count = nf; flags.instanceMatrix.needsUpdate = true; if (flags.instanceColor) flags.instanceColor.needsUpdate = true;
-  // coche de seguridad, delante del líder; con «entra en esta vuelta» se mete por el pit-lane
+  // coche de seguridad, delante del líder; con «entra en esta vuelta» (o llevando a la parrilla tras la roja) se mete
+  // por el pit-lane
   const { scCar, scBar } = world;
   let show = false;
   const lp = (fl === "sc" || fl === "sc_in") && pose.get(sess.leaderId);
   if (lp && lp.c.loc === "track") {
-    const ss = lp.s + 40 + 7 * k, pm = mod(ss, L), inLane = fl === "sc_in" && pm >= track.pit.entry, r = inLane ? pitRamp(ss) : 0;
+    const ss = lp.s + 40 + 7 * k, pm = mod(ss, L), inLane = (fl === "sc_in" || sess.gridForm) && pm >= track.pit.entry, r = inLane ? pitRamp(ss) : 0;
     show = !(inLane && r > 0.97);
     if (show) {
       const latOf = (s2) => (arrAt(T.line, s2) * 0.5 * (1 - r) + T.PS * r * PIT_OFF) * W * arrAt(T.wr, s2);

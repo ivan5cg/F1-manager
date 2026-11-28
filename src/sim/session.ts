@@ -60,6 +60,11 @@ const RACE_MAX = 2 * 3600;
 const WET_SC_START = 1.35;
 const WET_SC_END = 1.15;
 const RACE_WINDOW = 3 * 3600;
+// bandera roja: ritmo hasta el pit-lane (fracción de la referencia y tope, m/s) y la fila del fast lane (m)
+const RED_PACE = 0.55;
+const RED_VMAX = 40;
+const RED_Q_HEAD = 25; // del primero de la fila a la salida del pit-lane
+const RED_Q_GAP = 9; // entre coches de la fila
 /** Sprint suspendida y no reanudada por debajo del 75 %: mitad de puntos. */
 const SPRINT_HALF = [4, 3.5, 3, 2.5, 2, 1.5, 1, 0.5];
 /** Fracción del agua de la trazada que aparta cada coche al pasar (a ritmo de carrera). */
@@ -411,6 +416,17 @@ export interface Car {
   pitRequest: string | null; // id del juego a montar
   pit?: { noseChange: boolean; t: number; total: number; entryS: number; dist: number; stationary: number; setId: string; changed: boolean; pen?: number };
   lane?: { t: number; total: number }; // calle de boxes en libres/clasificación
+  /**
+   * Bandera roja en carrera: dónde entra al pit-lane (`entry`, s absoluta), su sitio en la fila del fast lane (`at`) y
+   * si ya ha llegado y está parado (`held`). Se borra al salir del pit-lane detrás del coche de seguridad.
+   */
+  redQ?: { entry: number; at: number; held: boolean };
+  /** Casilla de la parrilla (s absoluta) a la que va detrás del coche de seguridad para la salida parada. */
+  gridAt?: number;
+  /** Doblado con la bandera roja: al reanudarse sale el primero del pit-lane y da la vuelta para ponerse a la cola. */
+  redLapped?: boolean;
+  /** Dónde empezó a desdoblarse (s absoluta). */
+  unlapFrom?: number;
   wing: number;
   floor: number;
   delay: number;
@@ -736,6 +752,13 @@ export class Session {
   moveS = 1;
   /** Tras una bandera roja por lluvia: cuando se retire el coche de seguridad, salida parada (si la pista lo permite). */
   standAfterSc = false;
+  /** Tras la bandera roja: el coche de seguridad lleva a todos a la parrilla y se paran en su casilla. */
+  gridForm = false;
+  gridFormT = 0;
+  /** Reanudación tras la roja: la fila espera en el pit-lane mientras los doblados dan la vuelta. */
+  trainHold = false;
+  trainHoldT = 0;
+  redGap = RED_Q_GAP;
   /** Ventaja (s/vuelta) con la que se adelanta una de cada dos veces en la mejor frenada del circuito. */
   get passT(): number { return passTOverride ?? this.track.def.adelantamientos?.umbral ?? PASS_T0; }
   /** Lo difícil que es adelantar aquí: la ventaja (s/vuelta) que hace falta en la mejor frenada que tenga el circuito. */
@@ -1163,8 +1186,10 @@ export class Session {
     }
     if (this.flag === "red") {
       const race = isRaceKind(this.kind);
-      if (race) this.suspended += dt;
+      if (race) { this.suspended += dt; this.redDrive(dt); }
       this.flagTimer -= dt;
+      // no se reanuda hasta que estén todos parados en la fila del pit-lane
+      if (this.flagTimer <= 0 && race && this.cars.some((c) => c.loc === "track" && c.redQ && !c.redQ.held)) this.flagTimer = 5;
       if (this.flagTimer <= 0) {
         // con lluvia, no se reanuda hasta que la pista lo permita
         const tooWet = this.redReason === "rain" && (this.avgWater() > 1.5 || Math.max(...this.sectorWater()) > 1.7 || this.maxRainOnTrack() > 8);
@@ -1205,6 +1230,8 @@ export class Session {
     this.interactions();
     this.lateral(dt);
     if (!isRaceKind(this.kind)) this.sessionTick();
+    if (this.trainHold && this.flag === "sc") this.trainCheck();
+    if (this.gridForm && this.flag === "sc") this.gridCheck();
 
     if (isRaceKind(this.kind) && this.cars.every((c) => c.loc === "fin" || c.loc === "out")) {
       this.finished = true;
@@ -1485,24 +1512,6 @@ export class Session {
     this.log({ kind: "control", text: `⚠️ Bandera amarilla${double ? " doble" : ""} en el sector ${this.track.ms[ms].sector + 1}: ${why}`, code: "banderaAmarilla" });
   }
 
-  /**
-   * Salida parada tras una bandera roja: todos a la parrilla en el orden de carrera (los doblados, desdoblados), con
-   * semáforos. Lo que falta de la vuelta se hace por el pit-lane y la vuelta de formación cuenta como vuelta de carrera.
-   */
-  private standingRestart() {
-    const ord = this.order().filter((c) => c.loc === "track");
-    if (!ord.length) return;
-    const line = (Math.floor((ord[0].s + 30) / this.L) + 1) * this.L;
-    ord.forEach((c, i) => this.jumpTo(c, line - 12 - i * 8));
-    const lap = Math.round(line / this.L);
-    if (this.laps - lap > 3) this.laps--;
-    this.drsEnabledFromLap = lap + 3;
-    this.restartHold = true;
-    this.startHold = 0;
-    ord.forEach((c, i) => { c.gridS = c.s; c.v = 0; c.delay = 0; this.rollLaunch(c); this.formationLap(c); this.gridSlot(c, i); });
-    this.log({ kind: "control", text: `🚦 La carrera se reanuda con salida parada, en el orden de carrera. Quedan ${this.laps - lap} vueltas.`, important: true, pause: true, code: "salidaParada" });
-  }
-
   /** Lleva un coche hacia delante sin recorrer la pista (pit-lane y vuelta de formación tras una bandera roja). */
   private jumpTo(c: Car, sNew: number) {
     if (sNew > c.s) {
@@ -1534,34 +1543,106 @@ export class Session {
       return;
     }
     this.flagTimer = rain ? this.rng.range(600, 900) : this.rng.range(900, 1800);
-    this.log({ kind: "control", text: `🟥 BANDERA ROJA — ${why}. Carrera suspendida: todos al pit-lane. Se pueden cambiar neumáticos.`, pause: true, important: true, code: "roja" });
-    for (const c of this.cars) {
+    this.log({ kind: "control", text: `🟥 BANDERA ROJA — ${why}. Carrera suspendida: todos despacio al pit-lane, en fila en el fast lane. Se pueden cambiar neumáticos y el morro.`, pause: true, important: true, code: "roja" });
+    // un coche de seguridad o una salida en marcha que hubiera quedan anulados
+    this.scGo = null;
+    this.gridForm = false;
+    this.restartHold = false;
+    // la fila del fast lane, en el orden de carrera: el líder delante, junto a la salida del pit-lane
+    const tr = this.track, L = this.L;
+    const laneDist = L - tr.pit.entry + tr.pit.exit;
+    const ord0 = this.order().filter((c) => c.loc === "track" || c.loc === "pit");
+    // los doblados se ponen delante de la fila (junto a la salida): al reanudarse salen los primeros para desdoblarse
+    const leadS = ord0[0]?.s ?? 0;
+    for (const c of ord0) c.redLapped = leadS - c.s > L;
+    const ord = [...ord0.filter((c) => c.redLapped), ...ord0.filter((c) => !c.redLapped)];
+    const gap = (this.redGap = Math.max(7.5, Math.min(RED_Q_GAP, (laneDist - RED_Q_HEAD - 20) / Math.max(1, ord.length))));
+    this.trainHold = false;
+    ord.forEach((c, i) => {
+      c.scGoT = undefined;
+      c.unlapFrom = undefined;
+      c.unlap = undefined;
+      c.gridAt = undefined;
       if (c.loc === "pit" && c.pit) {
-        // la parada en curso se completa
+        // la parada en curso se completa y el coche se queda en el pit-lane
         const set = c.e.sets.find((x) => x.id === c.pit!.setId);
-        if (set && !c.pit.changed) { this.mount(c, set); c.stops++; c.lastPitLap = this.lapsDone(c); }
-        c.s = c.pit.entryS + c.pit.dist;
+        if (set && !c.pit.changed) { this.mount(c, set); c.stops++; c.lastPitLap = this.lapsDone(c); if (c.pit.noseChange) c.wing = 0; }
+        const entry = c.pit.entryS;
         c.pit = undefined;
         c.loc = "track";
+        c.redQ = { entry, at: Math.max(c.s, entry + laneDist - RED_Q_HEAD - i * gap), held: false };
+      } else {
+        // la próxima entrada al pit-lane (si ya ha pasado la de esta vuelta, la de la siguiente)
+        let entry = Math.floor(c.s / L) * L + tr.pit.entry;
+        if (entry < c.s) entry += L;
+        c.redQ = { entry, at: entry + laneDist - RED_Q_HEAD - i * gap, held: false };
       }
-      if (c.loc !== "track") continue;
       c.pitRequest = null;
       c.slowPuncture = false;
       if (c.tyres) c.tyres.punctured = false;
-      c.v = 0;
-      if (!c.player) aiRedFlagTyres(this, c);
+      c.maneuver = undefined;
+      c.delay = 0;
+    });
+  }
+
+  /**
+   * Bandera roja: cada coche va despacio hasta la entrada del pit-lane y por él, al límite de velocidad, hasta su sitio
+   * en la fila del fast lane (no se para en su garaje). Allí se queda parado hasta que se reanude.
+   */
+  private redDrive(dt: number) {
+    const tr = this.track;
+    for (const c of this.cars) {
+      const q = c.redQ;
+      if (c.loc !== "track" || !q || q.held) continue;
+      const pos = ((c.s % this.L) + this.L) % this.L;
+      const pi = Math.min(tr.vref.length - 1, Math.floor(pos / tr.ds));
+      let v = c.s >= q.entry ? tr.pit.limit : Math.min(tr.vref[pi] * RED_PACE, RED_VMAX, Math.sqrt(tr.pit.limit ** 2 + 2 * 6 * (q.entry - c.s)));
+      v = Math.min(v, Math.sqrt(2 * 5 * Math.max(0, q.at - c.s)) + 0.3);
+      let sNew = c.s + v * dt;
+      if (sNew >= q.at - 0.3) {
+        sNew = q.at;
+        v = 0;
+        q.held = true;
+      }
+      c.v = v;
+      this.jumpTo(c, sNew);
+      if (q.held) this.redArrive(c);
     }
+  }
+
+  /** Llega a su sitio en el pit-lane: la IA decide neumáticos y morro; al jugador se le ofrece el menú. */
+  private redArrive(c: Car) {
+    if (!c.player || this.autoPlayers) {
+      aiRedFlagTyres(this, c);
+      if (c.wing > 0 && this.wingLoss(c) * (this.laps - this.lapsDone(c)) > 1) this.redFlagNose(c);
+      return;
+    }
+    const ord = this.order().filter((o) => o.loc === "track");
+    this.log({ kind: "radio", carId: c.id, text: `📻 Ingeniero: ${c.d.abrev}, en el pit-lane, P${ord.indexOf(c) + 1} en la fila. Podemos cambiar neumáticos${c.wing > 0 ? " y el morro" : ""} sin perder nada.`, important: true });
   }
 
   /** Cambio de neumáticos durante la bandera roja (no cuenta como parada). */
   redFlagChange(c: Car, setId: string) {
-    if (this.flag !== "red" || !isRaceKind(this.kind) || c.loc !== "track") return false;
+    if (!this.redHeld(c)) return false;
     const set = c.e.sets.find((x) => x.id === setId && !x.returned);
     if (!set || set === c.tyres) return false;
     this.mount(c, set);
-    c.wing = 0;
     c.plan = { stints: [...c.plan.stints.slice(0, c.stops), ...planStrategy(this, c, c.e.knowledge, this.lapsDone(c), set.c, 0, null).stints] };
     this.log({ kind: "pit", carId: c.id, text: `🔧 ${c.d.abrev} cambia a ${COMPOUNDS[set.c].name.toLowerCase()} durante la bandera roja`, important: c.player });
+    return true;
+  }
+
+  /** ¿Está parado en la fila del pit-lane con la bandera roja (se le puede tocar el coche)? */
+  redHeld(c: Car): boolean {
+    return this.flag === "red" && isRaceKind(this.kind) && c.loc === "track" && !!c.redQ?.held;
+  }
+
+  /** Cambio de morro durante la bandera roja (gratis: la carrera está parada). */
+  redFlagNose(c: Car) {
+    if (!this.redHeld(c) || c.wing <= 0) return false;
+    c.wing = 0;
+    c.nose = undefined;
+    this.log({ kind: "pit", carId: c.id, text: `🔧 ${c.d.abrev} cambia el morro durante la bandera roja`, important: c.player });
     return true;
   }
 
@@ -1609,15 +1690,113 @@ export class Session {
       this.log({ kind: "control", text: "🟢 Se reanuda la sesión. Pit-lane abierto.", important: true, pause: true });
       return;
     }
-    // con lluvia se reanuda detrás del coche de seguridad y, cuando se retira (si la pista lo permite), salida parada
-    // desde la parrilla, como en el reglamento; si no, salida parada directamente
-    if (!rain) return this.standingRestart();
+    // reglamento: salen del pit-lane en fila detrás del coche de seguridad (los doblados, desdoblados), dan una vuelta
+    // (más si sigue muy mojado) y se colocan en la parrilla para una salida parada. Esa vuelta cuenta.
+    const ord = this.order().filter((c) => c.loc === "track");
+    if (!ord.length) return;
+    const head = ord[0].redQ?.at ?? ord[0].s;
+    // la fila, en la misma vuelta que el líder (el que pasó la entrada justo antes de la roja ha dado una vuelta más
+    // para llegar a ella; los demás no son por eso doblados); los doblados, una por detrás
+    for (const c of ord) {
+      const lo = head - (c.redLapped ? 1.5 : 0.5) * this.L;
+      let want = c.s;
+      while (want <= lo) want += this.L;
+      if (want > c.s + 1) this.jumpTo(c, want);
+      c.v = 0;
+      c.delay = 0;
+    }
+    // (durante la roja el líder ha ido cruzando la meta por el pit-lane sin cerrar vueltas: se pone al día)
+    const lapNow = this.lapsDone(ord[0]);
+    if (lapNow > this.leaderLap) { this.leaderLap = lapNow; this.lapOrder[lapNow] = ord.map((c) => c.id); }
+    // la línea de la parrilla: la siguiente que se cruza por pista (la fila puede quedar a un lado u otro de la meta)
+    const lap = Math.ceil((head + this.L / 2) / this.L);
+    const left = this.laps - lap;
     this.flag = "sc";
-    this.scLapsLeft = 2;
-    this.scWet = true;
-    this.standAfterSc = true;
-    this.drsEnabledFromLap = this.leaderLap + 4;
-    this.log({ kind: "control", text: "🟨 Se reanuda la carrera detrás del coche de seguridad; después, salida parada", important: true, pause: true });
+    this.scWet = rain;
+    this.scLapsLeft = rain ? 2 : 1;
+    this.standAfterSc = left > 2;
+    this.unlapCalled = true; // (los doblados se desdoblan ahora, saliendo los primeros)
+    this.unlapWait = 0;
+    this.drsEnabledFromLap = lap + (rain ? 4 : 3);
+    // reglamento: los doblados salen los primeros del pit-lane, dan la vuelta (adelantando al coche de seguridad) y se
+    // ponen a la cola; la fila sale detrás del coche de seguridad a tiempo para que lleguen justo detrás
+    const lapped = ord.filter((c) => c.redLapped);
+    for (const c of ord) c.redLapped = undefined;
+    if (lapped.length) {
+      this.trainHold = true;
+      this.trainHoldT = this.t;
+      for (const c of lapped) { c.unlap = true; c.unlapFrom = c.s; }
+      this.log({ kind: "control", text: `🟨 Se reanuda la carrera: los doblados (${lapped.map((c) => c.d.abrev).join(", ")}) salen primero del pit-lane para desdoblarse y ponerse a la cola; después, el resto detrás del coche de seguridad.`, important: true, pause: true, code: "desdoblar" });
+      return;
+    }
+    this.releaseTrain(true);
+  }
+
+  /** Sale la fila del pit-lane detrás del coche de seguridad (y, si toca ya, se prepara la parrilla). */
+  private releaseTrain(first: boolean) {
+    this.trainHold = false;
+    const ord = this.order().filter((c) => c.loc === "track");
+    if (!ord.length) return;
+    const head = ord[0].redQ?.at ?? ord[0].s;
+    const lap = Math.ceil((head + this.L / 2) / this.L);
+    const rain = this.scWet;
+    const txt = `del pit-lane detrás del coche de seguridad${this.standAfterSc ? `${rain ? "" : ", una vuelta,"} y después salida parada desde la parrilla` : ""}.`;
+    this.log({ kind: "control", text: first ? `🟨 Se reanuda la carrera: salen ${txt}` : `🟨 El resto sale ${txt}`, important: true, pause: first, code: "sc" });
+    if (this.standAfterSc && this.scLapsLeft === 1) this.formGrid(lap * this.L);
+  }
+
+  /** La fila espera en el pit-lane hasta que los doblados, dando la vuelta, vayan a llegar justo detrás de su cola. */
+  private trainCheck() {
+    const L = this.L, tr = this.track;
+    const held = this.cars.filter((c) => c.loc === "track" && c.redQ && !c.unlap);
+    const runners = this.cars.filter((c) => c.loc === "track" && c.unlap && c.unlapFrom !== undefined);
+    if (!held.length || !runners.length || this.t - this.trainHoldT > 1.6 * this.lapRefRace + 30) return this.releaseTrain(false);
+    // lo que tarda en salir el último de la fila (al límite del pit-lane) …
+    const tail = Math.min(...held.map((c) => c.s));
+    const laneEnd = held[0].redQ!.entry + L - tr.pit.entry + tr.pit.exit;
+    const tailOut = (laneEnd - tail) / tr.pit.limit + 4;
+    // … y lo que le falta al primero de los doblados para pasar por la salida del pit-lane
+    const first = runners.reduce((a, b) => (b.s - b.unlapFrom! > a.s - a.unlapFrom! ? b : a));
+    if (first.s - first.unlapFrom! < L * 0.4) return;
+    const pos = ((first.s % L) + L) % L;
+    const rem = (((tr.pit.exit - pos) % L) + L) % L;
+    if (rem / Math.max(30, first.v) <= tailOut) this.releaseTrain(false);
+  }
+
+  /** Casillas de la parrilla en la línea `line` (s absoluta), en el orden de carrera. */
+  private formGrid(line: number) {
+    const ord = this.order().filter((c) => c.loc === "track");
+    this.gridForm = true;
+    this.gridFormT = this.t;
+    ord.forEach((c, i) => { c.gridAt = line - 12 - i * 8; });
+    this.log({ kind: "control", text: "🟨 El coche de seguridad lleva a los coches a la parrilla: salida parada al final de esta vuelta", important: false });
+  }
+
+  /** ¿Están todos en su casilla? Entonces, semáforos. */
+  private gridCheck() {
+    const on = this.cars.filter((c) => c.loc === "track");
+    if (!on.length) return;
+    // (por si alguno se queda atascado: pasado el tiempo de una vuelta larga, se le coloca)
+    const late = this.t - this.gridFormT > 2.5 * this.lapRefRace + 60;
+    for (const c of on) if (c.gridAt === undefined) c.gridAt = Math.min(...on.map((o) => o.gridAt ?? Infinity)) - 8;
+    if (!late && on.some((c) => c.s < c.gridAt! - 0.5)) return;
+    for (const c of on) if (c.s < c.gridAt!) this.jumpTo(c, c.gridAt!);
+    this.gridForm = false;
+    this.flag = "green";
+    this.scWet = false;
+    this.standAfterSc = false;
+    this.scLapsLeft = 0;
+    this.scGo = null;
+    this.unlapCalled = false;
+    this.unlapWait = 0;
+    const ord = this.order().filter((c) => c.loc === "track");
+    const line = (ord[0].gridAt ?? ord[0].s) + 12;
+    const lap = Math.round(line / this.L);
+    this.drsEnabledFromLap = lap + 3;
+    this.restartHold = true;
+    this.startHold = 0;
+    ord.forEach((c, i) => { c.s = c.gridAt!; c.gridAt = undefined; c.gridS = c.s; c.v = 0; c.delay = 0; c.scGoT = undefined; c.unlap = undefined; this.rollLaunch(c); this.formationLap(c); this.gridSlot(c, i); });
+    this.log({ kind: "control", text: `🚦 Todos en la parrilla: salida parada, en el orden de carrera. Quedan ${this.laps - lap} vueltas.`, important: true, pause: true, code: "salidaParada" });
   }
 
   /** Lluvia torrencial: bandera roja. */
@@ -1887,6 +2066,18 @@ export class Session {
       v = Math.min(v, this.track.vref[pi] * (this.yellowAt(m.i)!.double ? 0.82 : 0.93));
     }
     if (c.slowPuncture || c.tyres!.punctured) v = Math.min(v, 28);
+    // tras la bandera roja: por el pit-lane, a su límite; y yendo a la parrilla, frena hasta pararse en su casilla
+    if (c.redQ) {
+      if (c.s < c.redQ.entry + L - this.track.pit.entry + this.track.pit.exit) v = Math.min(v, this.track.pit.limit);
+      else c.redQ = undefined;
+      // la fila espera mientras los doblados salen a desdoblarse
+      if (c.redQ && this.trainHold && !c.unlap) v = 0;
+    }
+    if (c.gridAt !== undefined && this.gridForm) {
+      const left = c.gridAt - c.s;
+      v = left <= 0.3 ? 0 : Math.min(v, Math.sqrt(2 * 7 * left) + 0.5);
+      if (v * dt > left) v = Math.max(0, left) / dt;
+    }
     let move = v * dt;
     if (c.delay > 0) {
       // al que le están adelantando en una maniobra, el tiempo que pierde se le reparte más (van un rato en paralelo)
@@ -1964,7 +2155,7 @@ export class Session {
     else if (c.pitCallT === undefined) c.pitCallT = this.t;
     if (passedEntry && oldS > 0) {
       if (isRaceKind(this.kind)) {
-        if (c.pitRequest && !this.chequered) {
+        if (c.pitRequest && !this.chequered && !this.gridForm) {
           // la parada pedida justo antes de la entrada no llega: el piloto ya no puede meterse
           if (c.player && !this.autoPlayers && this.t - c.pitCallT! < PIT_REACT) {
             c.pitCallT = this.t - PIT_REACT;
@@ -2043,7 +2234,7 @@ export class Session {
 
     if (isRaceKind(this.kind)) {
       // al simular hasta el final, el equipo también lleva a tus pilotos (con la estrategia elegida)
-      if (ms === this.N - 3 && (!c.player || this.autoPlayers)) { aiDecide(this, c); aiModes(this, c, this.laps - this.lapsDone(c) - 1); }
+      if (ms === this.N - 3 && !this.gridForm && (!c.player || this.autoPlayers)) { aiDecide(this, c); aiModes(this, c, this.laps - this.lapsDone(c) - 1); }
       if (ms === this.N - 3 && c.player && !this.autoPlayers) this.playerAdvice(c);
       if (c.player && !this.autoPlayers) this.playerFight(c);
     }
@@ -2131,9 +2322,12 @@ export class Session {
     if (this.flag === "sc" && this.scWet && this.avgWater() > WET_SC_END) {
       // sigue demasiado mojado: el coche de seguridad no se retira
       if (lap % 2 === 0) this.log({ kind: "control", text: `🟨 Sigue el coche de seguridad: agua ${this.avgWater().toFixed(1)} mm`, important: false });
+    } else if (this.flag === "sc" && this.gridForm) {
+      // (yendo a la parrilla: la vuelta se cierra con la salida parada)
     } else if (this.flag === "sc") {
       this.scLapsLeft--;
-      if (this.scLapsLeft <= 0) {
+      if (this.scLapsLeft === 1 && this.standAfterSc && this.laps - lap > 2) this.formGrid((lap + 1) * this.L);
+      else if (this.scLapsLeft <= 0) {
         // antes de retirarse, los doblados pueden desdoblarse: una vuelta más (dos si tardan en llegar a la cola)
         const lapped = this.lappedCars();
         if (!this.unlapCalled && lapped.length && this.laps - lap > 3) {
@@ -2144,15 +2338,6 @@ export class Session {
         } else if (this.cars.some((c) => c.unlap) && this.unlapWait < 1) {
           this.unlapWait++;
           this.scLapsLeft = 1;
-        } else if (this.standAfterSc && this.laps - lap > 3) {
-          // tras la bandera roja por lluvia: en vez de lanzada, todos a la parrilla y salida parada
-          this.standAfterSc = false;
-          for (const c of this.cars) c.unlap = undefined;
-          this.flag = "green";
-          this.scWet = false;
-          this.unlapCalled = false;
-          this.unlapWait = 0;
-          this.standingRestart();
         } else {
           this.standAfterSc = false;
           for (const c of this.cars) c.unlap = undefined;

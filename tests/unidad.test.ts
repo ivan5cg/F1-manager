@@ -155,3 +155,65 @@ test("test de pretemporada de 8 horas en Barcelona (clima de marzo)", () => {
   const totalLaps = sess.results().reduce((a, r) => a + r.laps, 0);
   assert.ok(totalLaps > 100, `deben completarse vueltas en el test: ${totalLaps}`);
 });
+
+test("bandera roja: al pit-lane en fila, vuelta tras el coche de seguridad y salida parada desde la parrilla", () => {
+  const s = benchRace("bahrein", 3);
+  const L = s.L, laneEnd = L + s.track.pit.exit;
+  while (s.leaderLap < 12 && !s.finished) s.step();
+  s.redFlag("prueba");
+  const ord0 = s.order().filter((c) => c.loc === "track").map((c) => c.id);
+  // todos acaban parados en la fila del fast lane, en el orden de carrera y dentro del pit-lane
+  let n = 0;
+  while (s.cars.some((c) => c.loc === "track" && !c.redQ?.held) && n++ < 20000) s.step();
+  const q = s.order().filter((c) => c.loc === "track");
+  assert.deepEqual(q.map((c) => c.id), ord0);
+  for (const c of q) {
+    assert.equal(c.v, 0);
+    const pos = ((c.s % L) + L) % L;
+    assert.ok(pos >= s.track.pit.entry || pos + L < laneEnd, `${c.d.abrev} fuera del pit-lane (${pos.toFixed(0)} m)`);
+  }
+  // ahí se puede cambiar el morro (y las gomas) sin perder nada
+  const me = q[0];
+  me.wing = 0.01;
+  assert.ok(s.redFlagNose(me));
+  assert.equal(me.wing, 0);
+  // se reanuda: coche de seguridad, a la parrilla y semáforos
+  const saw = { sc: false, grid: false };
+  n = 0;
+  while (!(s as unknown as { restartHold: boolean }).restartHold && n++ < 40000) {
+    s.step();
+    if (s.flag === "sc") saw.sc = true;
+    if (s.gridForm) saw.grid = true;
+  }
+  assert.ok(saw.sc && saw.grid, "sale detrás del coche de seguridad y forma la parrilla");
+  const grid = s.order().filter((c) => c.loc === "track");
+  assert.deepEqual(grid.map((c) => c.id), ord0, "la parrilla, en el orden de carrera");
+  const line = Math.round((grid[0].s + 12) / L) * L;
+  grid.forEach((c, i) => assert.ok(Math.abs(c.s - (line - 12 - i * 8)) < 0.6, `${c.d.abrev} en su casilla`));
+  assert.ok(grid.every((c) => !c.redQ && c.v === 0));
+  while (!s.finished) s.step();
+  assert.ok(s.cars.some((c) => c.loc === "fin"));
+});
+
+test("bandera roja: los doblados salen primero del pit-lane, se desdoblan y se ponen a la cola", () => {
+  const s = benchRace("silverstone", 3);
+  const L = s.L;
+  while (s.leaderLap < 40 && !s.finished) s.step();
+  const lead = s.order()[0];
+  const lapped = s.order().filter((c) => c.loc === "track" && lead.s - c.s > L).map((c) => c.id);
+  assert.ok(lapped.length > 0, "hay doblados");
+  s.redFlag("prueba");
+  const ord0 = s.order().filter((c) => c.loc === "track").map((c) => c.id);
+  let n = 0, sawOut = false;
+  while (!(s as unknown as { restartHold: boolean }).restartHold && n++ < 60000) {
+    s.step();
+    // mientras la fila espera, los doblados ya han salido del pit-lane
+    if (s.trainHold && lapped.every((id) => !s.carById(id).redQ)) sawOut = true;
+  }
+  assert.ok(sawOut, "los doblados salen antes que la fila");
+  const grid = s.order().filter((c) => c.loc === "track");
+  assert.deepEqual(grid.map((c) => c.id), ord0, "a la cola, en el orden de carrera");
+  const laps = new Set(grid.map((c) => Math.round((c.s + 12) / L)));
+  assert.equal(laps.size, 1, "todos en la misma vuelta: desdoblados");
+  assert.ok(s.t - (s as unknown as { gridFormT: number }).gridFormT < 2.5 * s.lapRefRace + 60, "llegan a la parrilla sin forzarlos");
+});
