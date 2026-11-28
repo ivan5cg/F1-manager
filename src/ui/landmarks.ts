@@ -34,6 +34,8 @@ export interface LandmarkSpec {
   dist: number;
   /** Si es true, busca el claro central del infield cerca del centroide del circuito en lugar de pegarse a sFrac. */
   infield?: boolean;
+  /** Si es true, permite colocar el hito más próximo al trazado real para que domine la visual desde cámara a bordo. */
+  closeTrack?: boolean;
   /** Coordenadas exactas [gx, gy] del juego (extraídas de OSM) para clavar hitos reales en su sitio exacto. */
   gameXY?: [number, number];
   /** Giro adicional en radianes respecto a la tangente del tramo. */
@@ -56,27 +58,27 @@ export const LANDMARKS: Record<string, readonly LandmarkSpec[]> = {
     { id: "pabellon_lago", nombre: "Club náutico Albert Park", sFrac: 0.36, side: 1, dist: 72, height: 15, shape: "canopy", color: 0xe8ecef, accent: 0x1a7f46, prompt: "Stylized low-poly lakeside rowing club pavilion with white tensile canopy and timber deck" },
   ],
   shanghai: [
-    { id: "puente_shanghai", nombre: "Pabellón puente de Shanghái", sFrac: 0.04, side: -1, dist: 92, height: 32, shape: "arch_hotel", color: 0xe6e9ee, accent: 0xc82026, glow: 0xff5a5a, prompt: "Stylized low-poly Shanghai International Circuit futuristic white and red arched paddock bridge pavilion" },
-    { id: "loto_shanghai", nombre: "Pabellón del Loto", sFrac: 0.21, side: 1, dist: 112, height: 24, shape: "canopy", color: 0xebeef2, accent: 0xb82226, prompt: "Stylized low-poly lotus petal sculpted white race circuit grandstand canopy" },
+    { id: "puente_shanghai", nombre: "Pabellón puente de Shanghái", sFrac: 0.04, side: -1, dist: 58, closeTrack: true, height: 34, shape: "arch_hotel", color: 0xe6e9ee, accent: 0xc82026, glow: 0xff5a5a, prompt: "Stylized low-poly Shanghai International Circuit futuristic white and red arched paddock bridge pavilion" },
+    { id: "loto_shanghai", nombre: "Pabellón del Loto", sFrac: 0.21, side: 1, dist: 96, height: 24, shape: "canopy", color: 0xebeef2, accent: 0xb82226, prompt: "Stylized low-poly lotus petal sculpted white race circuit grandstand canopy" },
   ],
   suzuka: [
-    { id: "noria", nombre: "Noria de Suzuka", sFrac: 0.78, side: 1, dist: 120, height: 56, shape: "ferris", color: 0xedf0f4, accent: 0xd42228, glow: 0xffd978, prompt: "Stylized low-poly white and red Suzuka Circuit Ferris wheel with A-frame support and gondolas" },
-    { id: "torre_suzuka", nombre: "Torre de Suzuka", sFrac: 0.02, side: 1, dist: 102, height: 28, shape: "tower", color: 0xebebee, accent: 0xc81e24, prompt: "Stylized low-poly Japanese motorsport timing tower, white and red stripes, glass top cabin" },
+    { id: "noria", nombre: "Noria de Suzuka", sFrac: 0.78, side: 1, dist: 62, closeTrack: true, height: 64, shape: "ferris", color: 0xedf0f4, accent: 0xd42228, glow: 0xffd978, prompt: "Stylized low-poly white and red Suzuka Circuit Ferris wheel with A-frame support and gondolas" },
+    { id: "torre_suzuka", nombre: "Torre de Suzuka", sFrac: 0.02, side: 1, dist: 68, closeTrack: true, height: 30, shape: "tower", color: 0xebebee, accent: 0xc81e24, prompt: "Stylized low-poly Japanese motorsport timing tower, white and red stripes, glass top cabin" },
   ],
   bahrein: [
-    { id: "torre_sakhir", nombre: "Torre VIP de Sakhir", sFrac: 0.03, side: 1, dist: 98, height: 45, shape: "sail_tower", color: 0xf0eee8, accent: 0xc81d25, glow: 0xffe2a8, prompt: "Stylized low-poly Bahrain Sakhir VIP curved sail tower in white and crimson red, desert motorsport architecture" },
-    { id: "carpas_oasis", nombre: "Carpas del Oasis", sFrac: 0.50, side: 1, dist: 88, rot: 1.57, height: 18, shape: "canopy", color: 0xf2ede2, accent: 0xc89a4b, prompt: "Stylized low-poly white Bedouin desert tensile peak pavilions, clean architectural forms" },
+    { id: "torre_sakhir", nombre: "Torre VIP de Sakhir", sFrac: 0.03, side: 1, dist: 64, closeTrack: true, height: 48, shape: "sail_tower", color: 0xf0eee8, accent: 0xc81d25, glow: 0xffe2a8, prompt: "Stylized low-poly Bahrain Sakhir VIP curved sail tower in white and crimson red, desert motorsport architecture" },
+    { id: "carpas_oasis", nombre: "Carpas del Oasis", sFrac: 0.50, side: 1, dist: 76, rot: 1.57, height: 18, shape: "canopy", color: 0xf2ede2, accent: 0xc89a4b, prompt: "Stylized low-poly white Bedouin desert tensile peak pavilions, clean architectural forms" },
   ],
   miami: [
-    { id: "hard_rock_stadium", nombre: "Hard Rock Stadium", sFrac: 0.42, side: 1, dist: 135, height: 44, shape: "stadium", color: 0xeef2f5, accent: 0x1ea3c8, glow: 0x4de6ff, prompt: "Stylized low-poly Hard Rock Stadium Miami with open white roof canopy and four corner white cable-stayed spires" },
-    { id: "pabellon_miami", nombre: "Pabellón Marina Miami", sFrac: 0.66, side: -1, dist: 82, height: 19, shape: "canopy", color: 0xf2f5f7, accent: 0x1ea3c8, prompt: "Stylized low-poly Miami turquoise and white modern palm marina hospitality pavilion" },
+    { id: "hard_rock_stadium", nombre: "Hard Rock Stadium", sFrac: 0.42, side: 1, dist: 92, closeTrack: true, height: 48, shape: "stadium", color: 0xeef2f5, accent: 0x1ea3c8, glow: 0x4de6ff, prompt: "Stylized low-poly Hard Rock Stadium Miami with open white roof canopy and four corner white cable-stayed spires" },
+    { id: "pabellon_miami", nombre: "Pabellón Marina Miami", sFrac: 0.66, side: -1, dist: 68, closeTrack: true, height: 19, shape: "canopy", color: 0xf2f5f7, accent: 0x1ea3c8, prompt: "Stylized low-poly Miami turquoise and white modern palm marina hospitality pavilion" },
   ],
   montreal: [
-    { id: "biosfera", nombre: "Biosphère de Montreal", sFrac: 0.26, side: -1, dist: 82, height: 62, shape: "sphere", color: 0xbac4ce, accent: 0x627384, glow: 0x99d6ff, prompt: "Stylized low-poly Montreal Biosphere geodesic dome steel lattice sphere on concrete base" },
-    { id: "pabellon_olimpico", nombre: "Pabellón del Bassin Olympique", sFrac: 0.75, side: 1, dist: 82, height: 20, shape: "wing_pavilion", color: 0xe6eaee, accent: 0xc42026, prompt: "Stylized low-poly modern white concrete rowing basin grandstand pavilion" },
+    { id: "biosfera", nombre: "Biosphère de Montreal", sFrac: 0.26, side: -1, dist: 64, closeTrack: true, height: 64, shape: "sphere", color: 0xbac4ce, accent: 0x627384, glow: 0x99d6ff, prompt: "Stylized low-poly Montreal Biosphere geodesic dome steel lattice sphere on concrete base" },
+    { id: "pabellon_olimpico", nombre: "Pabellón del Bassin Olympique", sFrac: 0.75, side: 1, dist: 72, height: 20, shape: "wing_pavilion", color: 0xe6eaee, accent: 0xc42026, prompt: "Stylized low-poly modern white concrete rowing basin grandstand pavilion" },
   ],
   monaco: [
-    { id: "casino_montecarlo", nombre: "Casino de Montecarlo", sFrac: 0.26, side: -1, dist: 68, height: 26, shape: "palace", color: 0xeadcc2, accent: 0x4c8a72, glow: 0xffd996, prompt: "Stylized low-poly Monte Carlo Casino Belle Epoque cream limestone palace with green copper domes and ornate facade" },
+    { id: "casino_montecarlo", nombre: "Casino de Montecarlo", sFrac: 0.255, side: -1, dist: 46, closeTrack: true, height: 30, shape: "palace", color: 0xeadcc2, accent: 0x4c8a72, glow: 0xffd996, prompt: "Stylized low-poly Monte Carlo Casino Belle Epoque cream limestone palace with green copper domes and ornate facade" },
     { id: "palacio_roca", nombre: "Palacio del Príncipe", sFrac: 0.88, side: 1, dist: 118, height: 34, shape: "castle_tower", color: 0xe2d2b5, accent: 0xb25c3c, prompt: "Stylized low-poly Prince Palace of Monaco Mediterranean stone castle fortress with battlements" },
   ],
   barcelona: [
@@ -88,60 +90,60 @@ export const LANDMARKS: Record<string, readonly LandmarkSpec[]> = {
     { id: "voestalpine_wing", nombre: "Voestalpine Wing", sFrac: 0.052, side: 1, dist: 56, gameXY: [-238.0, -4.0], height: 26, rot: 0.27, shape: "wing_pavilion", color: 0xdce2e8, accent: 0xc81e24, prompt: "Stylized low-poly Red Bull Ring Voestalpine Wing futuristic sweeping cantilevered silver-white roof building" },
   ],
   silverstone: [
-    { id: "the_wing", nombre: "The Wing Silverstone", sFrac: 0.01, side: 1, dist: 108, height: 24, shape: "wing_pavilion", color: 0xd0d6de, accent: 0x262a32, prompt: "Stylized low-poly Silverstone Wing pit complex with sharp angular silver metallic sawtooth roof" },
-    { id: "torre_brdc", nombre: "Clubhouse BRDC", sFrac: 0.58, side: -1, dist: 84, height: 26, shape: "tower", color: 0xdce0e5, accent: 0x22262e, prompt: "Stylized low-poly British motorsport clubhouse tower in dark slate and white glass" },
+    { id: "the_wing", nombre: "The Wing Silverstone", sFrac: 0.01, side: 1, dist: 64, closeTrack: true, height: 26, shape: "wing_pavilion", color: 0xd0d6de, accent: 0x262a32, prompt: "Stylized low-poly Silverstone Wing pit complex with sharp angular silver metallic sawtooth roof" },
+    { id: "torre_brdc", nombre: "Clubhouse BRDC", sFrac: 0.58, side: -1, dist: 72, height: 26, shape: "tower", color: 0xdce0e5, accent: 0x22262e, prompt: "Stylized low-poly British motorsport clubhouse tower in dark slate and white glass" },
   ],
   spa: [
-    { id: "torre_eau_rouge", nombre: "Torre de Eau Rouge", sFrac: 0.14, side: -1, dist: 68, height: 32, shape: "tower", color: 0xe6e8ec, accent: 0xc81e24, prompt: "Stylized low-poly Spa-Francorchamps endurance race tower in white, red and yellow overlooking Eau Rouge" },
-    { id: "pabellon_raidillon", nombre: "Pabellón del Raidillon", sFrac: 0.18, side: 1, dist: 78, height: 22, shape: "grand_hall", color: 0x5c646e, accent: 0xd8b21c, prompt: "Stylized low-poly Spa-Francorchamps Raidillon hillside grandstand hall with dark slate roof and glass facade" },
+    { id: "torre_eau_rouge", nombre: "Torre de Eau Rouge", sFrac: 0.145, side: -1, dist: 46, closeTrack: true, height: 38, shape: "tower", color: 0xe8eaee, accent: 0xc81e24, glow: 0xffd24c, prompt: "Stylized low-poly Spa-Francorchamps endurance race tower in white, red and yellow overlooking Eau Rouge" },
+    { id: "pabellon_raidillon", nombre: "Pabellón del Raidillon", sFrac: 0.175, side: 1, dist: 48, closeTrack: true, height: 28, shape: "grand_hall", color: 0x5c646e, accent: 0xd8b21c, prompt: "Stylized low-poly Spa-Francorchamps Raidillon hillside grandstand hall with dark slate roof and glass facade" },
   ],
   hungaroring: [
     { id: "torre_hungaroring", nombre: "Torre de Hungaroring", sFrac: 0.03, side: 1, dist: 98, rot: 1.57, height: 26, shape: "tower", color: 0xebe9e4, accent: 0x1e7d3c, prompt: "Stylized low-poly Hungaroring timing tower with red white and green Hungarian accents" },
     { id: "pabellon_mogyorod", nombre: "Pabellón de la Colina", sFrac: 0.62, side: 1, dist: 86, height: 18, shape: "canopy", color: 0xebe7de, accent: 0xc42226, prompt: "Stylized low-poly amphitheatre hillside motorsport pavilion with curved white roof" },
   ],
   zandvoort: [
-    { id: "faro_zandvoort", nombre: "Torre de las Dunas", sFrac: 0.16, side: -1, dist: 88, height: 34, shape: "sail_tower", color: 0xebe8e0, accent: 0xe66b1c, prompt: "Stylized low-poly Dutch coastal dunes lookout tower in white, orange and royal blue" },
-    { id: "club_playa", nombre: "Pabellón Tarzan", sFrac: 0.72, side: 1, dist: 88, height: 16, shape: "canopy", color: 0xf0ece2, accent: 0x1c5db8, prompt: "Stylized low-poly Dutch beach circuit hospitality pavilion in white, orange and blue" },
+    { id: "faro_zandvoort", nombre: "Torre de las Dunas", sFrac: 0.16, side: -1, dist: 58, closeTrack: true, height: 36, shape: "sail_tower", color: 0xebe8e0, accent: 0xe66b1c, prompt: "Stylized low-poly Dutch coastal dunes lookout tower in white, orange and royal blue" },
+    { id: "club_playa", nombre: "Pabellón Tarzan", sFrac: 0.72, side: 1, dist: 76, height: 16, shape: "canopy", color: 0xf0ece2, accent: 0x1c5db8, prompt: "Stylized low-poly Dutch beach circuit hospitality pavilion in white, orange and blue" },
   ],
   monza: [
-    { id: "podio_monza", nombre: "Podio suspendido de Monza", sFrac: 0.015, side: 1, dist: 92, height: 20, shape: "wing_pavilion", color: 0xeceae4, accent: 0xc81e24, prompt: "Stylized low-poly Autodromo di Monza iconic cantilevered red and white podium structure" },
-    { id: "villa_parco", nombre: "Villa del Parco di Monza", sFrac: 0.48, side: 1, dist: 112, height: 24, shape: "palace", color: 0xe8d7b8, accent: 0x1c7d3c, prompt: "Stylized low-poly classic Italian neoclassical villa in warm ochre and terracotta roof" },
+    { id: "podio_monza", nombre: "Podio suspendido de Monza", sFrac: 0.015, side: 1, dist: 56, closeTrack: true, height: 22, shape: "wing_pavilion", color: 0xeceae4, accent: 0xc81e24, prompt: "Stylized low-poly Autodromo di Monza iconic cantilevered red and white podium structure" },
+    { id: "villa_parco", nombre: "Villa del Parco di Monza", sFrac: 0.48, side: 1, dist: 92, height: 24, shape: "palace", color: 0xe8d7b8, accent: 0x1c7d3c, prompt: "Stylized low-poly classic Italian neoclassical villa in warm ochre and terracotta roof" },
   ],
   madrid: [
-    { id: "pabellon_ifema", nombre: "Pabellones IFEMA", sFrac: 0.06, side: 1, dist: 96, height: 24, shape: "grand_hall", color: 0xdce2e8, accent: 0xc21e26, prompt: "Stylized low-poly IFEMA Madrid modern glass and crimson steel exhibition hall" },
-    { id: "torre_monumental", nombre: "Torre de La Monumental", sFrac: 0.46, side: -1, dist: 88, height: 44, shape: "spire", color: 0xe6e9ee, accent: 0xc21e26, glow: 0xffc864, prompt: "Stylized low-poly modern Madrid motorsport landmark glass spire with crimson accents" },
+    { id: "pabellon_ifema", nombre: "Pabellones IFEMA", sFrac: 0.06, side: 1, dist: 68, closeTrack: true, height: 26, shape: "grand_hall", color: 0xdce2e8, accent: 0xc21e26, prompt: "Stylized low-poly IFEMA Madrid modern glass and crimson steel exhibition hall" },
+    { id: "torre_monumental", nombre: "Torre de La Monumental", sFrac: 0.46, side: -1, dist: 60, closeTrack: true, height: 48, shape: "spire", color: 0xe6e9ee, accent: 0xc21e26, glow: 0xffc864, prompt: "Stylized low-poly modern Madrid motorsport landmark glass spire with crimson accents" },
   ],
   baku: [
-    { id: "flame_towers", nombre: "Flame Towers", sFrac: 0.56, side: -1, dist: 215, height: 140, shape: "flames", color: 0x3b5875, accent: 0xff8c2b, glow: 0xff7824, prompt: "Stylized low-poly Baku Flame Towers trio of three curved flame-shaped glass skyscrapers glowing orange and blue" },
-    { id: "torre_doncella", nombre: "Torre de la Doncella", sFrac: 0.38, side: 1, dist: 68, height: 29, shape: "castle_tower", color: 0xdcc6a0, accent: 0xb89c72, prompt: "Stylized low-poly Maiden Tower Baku ancient cylindrical warm sandstone medieval fortress tower" },
+    { id: "flame_towers", nombre: "Flame Towers", sFrac: 0.56, side: -1, dist: 195, height: 145, shape: "flames", color: 0x3b5875, accent: 0xff8c2b, glow: 0xff7824, prompt: "Stylized low-poly Baku Flame Towers trio of three curved flame-shaped glass skyscrapers glowing orange and blue" },
+    { id: "torre_doncella", nombre: "Torre de la Doncella", sFrac: 0.44, side: 1, dist: 46, closeTrack: true, height: 32, shape: "castle_tower", color: 0xdcc6a0, accent: 0xb89c72, prompt: "Stylized low-poly Maiden Tower Baku ancient cylindrical warm sandstone medieval fortress tower" },
   ],
   singapur: [
-    { id: "marina_sands", nombre: "Marina Bay Sands", sFrac: 0.62, side: -1, dist: 185, height: 145, shape: "sands", color: 0x6f8ca2, accent: 0xdbe3ea, glow: 0xffe4a8, prompt: "Stylized low-poly Marina Bay Sands Singapore three curved skyscrapers topped by the cantilevered boat-shaped SkyPark deck" },
-    { id: "singapore_flyer", nombre: "Singapore Flyer", sFrac: 0.14, side: 1, dist: 155, rot: 1.57, height: 120, shape: "ferris", color: 0xdce4ec, accent: 0x3eb8e6, glow: 0x5ce1ff, prompt: "Stylized low-poly Singapore Flyer giant waterfront observation Ferris wheel illuminated at night" },
+    { id: "marina_sands", nombre: "Marina Bay Sands", sFrac: 0.62, side: -1, dist: 175, height: 145, shape: "sands", color: 0x6f8ca2, accent: 0xdbe3ea, glow: 0xffe4a8, prompt: "Stylized low-poly Marina Bay Sands Singapore three curved skyscrapers topped by the cantilevered boat-shaped SkyPark deck" },
+    { id: "singapore_flyer", nombre: "Singapore Flyer", sFrac: 0.14, side: 1, dist: 115, closeTrack: true, rot: 1.57, height: 125, shape: "ferris", color: 0xdce4ec, accent: 0x3eb8e6, glow: 0x5ce1ff, prompt: "Stylized low-poly Singapore Flyer giant waterfront observation Ferris wheel illuminated at night" },
   ],
   austin: [
-    { id: "torre_cota", nombre: "Torre COTA", sFrac: 0.62, side: 1, dist: 76, height: 77, shape: "cota_tower", color: 0xebedf0, accent: 0xc81e24, glow: 0xff4048, prompt: "Stylized low-poly Circuit of the Americas COTA observation tower with sweeping red tubular steel veil and white top deck" },
-    { id: "anfiteatro_cota", nombre: "Anfiteatro COTA", sFrac: 0.45, side: -1, dist: 96, height: 22, shape: "canopy", color: 0xedf0f4, accent: 0x1b4ca0, prompt: "Stylized low-poly COTA Austin white tensile amphitheatre pavilion with blue accents" },
+    { id: "torre_cota", nombre: "Torre COTA", sFrac: 0.62, side: 1, dist: 56, closeTrack: true, height: 82, shape: "cota_tower", color: 0xebedf0, accent: 0xc81e24, glow: 0xff4048, prompt: "Stylized low-poly Circuit of the Americas COTA observation tower with sweeping red tubular steel veil and white top deck" },
+    { id: "anfiteatro_cota", nombre: "Anfiteatro COTA", sFrac: 0.45, side: -1, dist: 82, height: 22, shape: "canopy", color: 0xedf0f4, accent: 0x1b4ca0, prompt: "Stylized low-poly COTA Austin white tensile amphitheatre pavilion with blue accents" },
   ],
   mexico: [
-    { id: "foro_sol", nombre: "Estadio Foro Sol", sFrac: 0.85, side: 1, dist: 78, height: 28, shape: "stadium", color: 0xdcd8d0, accent: 0x197d3a, glow: 0xffd26a, prompt: "Stylized low-poly Mexico City Foro Sol stadium bowl with concrete tiers and green red banners" },
-    { id: "pabellon_mexico", nombre: "Pabellón Tricolor", sFrac: 0.35, side: -1, dist: 86, height: 20, shape: "canopy", color: 0xefede8, accent: 0xc21f24, prompt: "Stylized low-poly Mexican race circuit modern pavilion with green white and red canopy" },
+    { id: "foro_sol", nombre: "Estadio Foro Sol", sFrac: 0.85, side: 1, dist: 54, closeTrack: true, height: 32, shape: "stadium", color: 0xdcd8d0, accent: 0x197d3a, glow: 0xffd26a, prompt: "Stylized low-poly Mexico City Foro Sol stadium bowl with concrete tiers and green red banners" },
+    { id: "pabellon_mexico", nombre: "Pabellón Tricolor", sFrac: 0.35, side: -1, dist: 74, height: 20, shape: "canopy", color: 0xefede8, accent: 0xc21f24, prompt: "Stylized low-poly Mexican race circuit modern pavilion with green white and red canopy" },
   ],
   interlagos: [
-    { id: "torre_interlagos", nombre: "Torre S de Senna", sFrac: 0.08, side: -1, dist: 72, height: 30, shape: "tower", color: 0xebe9e4, accent: 0x198038, prompt: "Stylized low-poly Interlagos Sao Paulo motorsport control tower in white, green and yellow" },
-    { id: "pabellon_interlagos", nombre: "Pabellón Curva do Lago", sFrac: 0.56, side: 1, dist: 86, rot: 1.57, height: 18, shape: "canopy", color: 0xe8ece8, accent: 0xe0ba1c, prompt: "Stylized low-poly Brazilian race circuit cantilevered pavilion roof in white, green and yellow" },
+    { id: "torre_interlagos", nombre: "Torre S de Senna", sFrac: 0.08, side: -1, dist: 54, closeTrack: true, height: 32, shape: "tower", color: 0xebe9e4, accent: 0x198038, prompt: "Stylized low-poly Interlagos Sao Paulo motorsport control tower in white, green and yellow" },
+    { id: "pabellon_interlagos", nombre: "Pabellón Curva do Lago", sFrac: 0.56, side: 1, dist: 72, rot: 1.57, height: 18, shape: "canopy", color: 0xe8ece8, accent: 0xe0ba1c, prompt: "Stylized low-poly Brazilian race circuit cantilevered pavilion roof in white, green and yellow" },
   ],
   lasvegas: [
-    { id: "esfera", nombre: "The Sphere", sFrac: 0.34, side: 1, dist: 148, height: 92, shape: "sphere", color: 0x22d8ff, accent: 0xff2ea8, glow: 0xffd028, prompt: "Stylized low-poly Las Vegas MSG Sphere giant glowing LED exosphere arena with vibrant cyan and magenta patterns" },
-    { id: "torre_paris", nombre: "Torre París Strip", sFrac: 0.68, side: -1, dist: 132, height: 118, shape: "lattice_tower", color: 0xd4a44a, accent: 0xffd24c, glow: 0xffc438, prompt: "Stylized low-poly Paris Las Vegas illuminated golden Eiffel lattice tower replica at night" },
+    { id: "esfera", nombre: "The Sphere", sFrac: 0.34, side: 1, dist: 118, closeTrack: true, height: 96, shape: "sphere", color: 0x22d8ff, accent: 0xff2ea8, glow: 0xffd028, prompt: "Stylized low-poly Las Vegas MSG Sphere giant glowing LED exosphere arena with vibrant cyan and magenta patterns" },
+    { id: "torre_paris", nombre: "Torre París Strip", sFrac: 0.68, side: -1, dist: 118, height: 118, shape: "lattice_tower", color: 0xd4a44a, accent: 0xffd24c, glow: 0xffc438, prompt: "Stylized low-poly Paris Las Vegas illuminated golden Eiffel lattice tower replica at night" },
   ],
   lusail: [
-    { id: "arco_lusail", nombre: "Arco de Lusail", sFrac: 0.04, side: 1, dist: 105, height: 34, shape: "arch_hotel", color: 0xeeeae4, accent: 0x7d1636, glow: 0xff5a82, prompt: "Stylized low-poly Lusail Qatar sleek curved architectural arch in white and Qatari maroon illuminated at night" },
-    { id: "torre_lusail", nombre: "Torre del Desierto", sFrac: 0.52, side: 1, dist: 96, height: 56, shape: "spire", color: 0xe8e2d8, accent: 0x7d1636, glow: 0xffcf78, prompt: "Stylized low-poly modern Qatari desert glass spire tower with maroon geometric accent lighting" },
+    { id: "arco_lusail", nombre: "Arco de Lusail", sFrac: 0.04, side: 1, dist: 72, closeTrack: true, height: 36, shape: "arch_hotel", color: 0xeeeae4, accent: 0x7d1636, glow: 0xff5a82, prompt: "Stylized low-poly Lusail Qatar sleek curved architectural arch in white and Qatari maroon illuminated at night" },
+    { id: "torre_lusail", nombre: "Torre del Desierto", sFrac: 0.52, side: 1, dist: 84, height: 56, shape: "spire", color: 0xe8e2d8, accent: 0x7d1636, glow: 0xffcf78, prompt: "Stylized low-poly modern Qatari desert glass spire tower with maroon geometric accent lighting" },
   ],
   yasmarina: [
-    { id: "hotel_w", nombre: "Hotel W Abu Dhabi", sFrac: 0.72, side: 1, dist: 64, height: 36, shape: "arch_hotel", color: 0xdce4ee, accent: 0x1884be, glow: 0x6a5aff, prompt: "Stylized low-poly W Abu Dhabi Yas Marina hotel curved gridshell glass canopy glowing blue and violet at night" },
-    { id: "torre_sol", nombre: "Torre Shams", sFrac: 0.28, side: -1, dist: 86, height: 60, shape: "spire", color: 0xe8eef4, accent: 0x1284cf, glow: 0x3ec8ff, prompt: "Stylized low-poly Yas Marina sleek white and blue illuminated glass observation spire" },
+    { id: "hotel_w", nombre: "Hotel W Abu Dhabi", sFrac: 0.72, side: 1, dist: 48, closeTrack: true, height: 38, shape: "arch_hotel", color: 0xdce4ee, accent: 0x1884be, glow: 0x6a5aff, prompt: "Stylized low-poly W Abu Dhabi Yas Marina hotel curved gridshell glass canopy glowing blue and violet at night" },
+    { id: "torre_sol", nombre: "Torre Shams", sFrac: 0.28, side: -1, dist: 72, height: 60, shape: "spire", color: 0xe8eef4, accent: 0x1284cf, glow: 0x3ec8ff, prompt: "Stylized low-poly Yas Marina sleek white and blue illuminated glass observation spire" },
   ],
   sepang: [
     { id: "cubierta_sepang", nombre: "Cubierta Hibisco de Sepang", sFrac: 0.02, side: -1, dist: 98, height: 28, shape: "canopy", color: 0xf0f2f4, accent: 0xc21f24, prompt: "Stylized low-poly Sepang International Circuit iconic giant white undulating twin hibiscus-petal grandstand roof" },

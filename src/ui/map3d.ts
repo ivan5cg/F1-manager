@@ -308,8 +308,8 @@ function cloneTemplateTex(srcTex, maxAniso, disposeBag) {
 
 // las cuatro del botón (se van rotando) y las de «Más cámaras» (manteniendo pulsado el botón)
 const CAMS = ["circuito", "seguir", "tele", "abordo"];
-const MORE_CAMS = ["heli", "boxes", "trasera", "grua"];
-const CAM_NAME = { circuito: "Circuito", seguir: "Seguir", tele: "Tele", abordo: "A bordo", heli: "Helicóptero", boxes: "Pit-lane", trasera: "Alerón trasero", grua: "Grúa de meta" };
+const MORE_CAMS = ["piloto", "heli", "boxes", "trasera", "grua"];
+const CAM_NAME = { circuito: "Circuito", seguir: "Seguir", tele: "Tele", abordo: "A bordo", piloto: "Piloto / Halo", heli: "Helicóptero", boxes: "Pit-lane", trasera: "Alerón trasero", grua: "Grúa de meta" };
 const COMPOUND = { S: "#e8452c", M: "#f2d23c", H: "#f2f2f2", I: "#3cc35a", W: "#3a7be8" };
 const PIT_OFF = 2.15;
 const mod = (a, n) => ((a % n) + n) % n;
@@ -628,6 +628,7 @@ const U = {
   uKerbA: { value: new THREE.Color(0xc21f24) }, uKerbB: { value: new THREE.Color(0xdeddd8) }, uKerbC: { value: new THREE.Color(0xc21f24) }, uKerbN: { value: 2 },
   uBarA: { value: new THREE.Color(0xc21f24) }, uBarB: { value: new THREE.Color(0xdeddd8) },
   uRunAcc: { value: new THREE.Color(0x125a8c) }, uRunPat: { value: 0 },
+  uOnboard: { value: 0 }, uHeadYaw: { value: 0 }, uHelmPivot: { value: new THREE.Vector3(0.5, 0.79, 0) },
 };
 // Biomas del terreno y arbolado (seleccionados por circuito desde trackVisuals.ts)
 const BIOMES = {
@@ -648,39 +649,111 @@ const WN = 72, WX_R = 40000, wxData = new Uint8Array(WN * WN * 4);
 const wxTex = new THREE.DataTexture(wxData, WN, WN, THREE.RGBAFormat);
 wxTex.magFilter = wxTex.minFilter = THREE.LinearFilter; wxTex.needsUpdate = true;
 skyU.uWx.value = wxTex; skyU.uWxR.value = WX_R;
-// Marcas inventadas: las de la publicidad de pista, los puentes, las fachadas y los patrocinadores de los coches.
+// Marcas reales típicas de Fórmula 1 para las vallas publicitarias de pista, puentes y frentes de tribunas.
+// Formato: [texto, fondo, textoColor, acento, estilo]
+const F1_TRACK_ADS = [
+  ["ARAMCO", "#003c71", "#ffffff", "#00a651", "bar"],
+  ["PIRELLI", "#ffd200", "#d61f26", "#d61f26", "pirelli"],
+  ["ROLEX", "#006039", "#ffffff", "#e5c158", "gold"],
+  ["DHL", "#ffcc00", "#d40511", "#d40511", "italic"],
+  ["HEINEKEN 0.0", "#0073b8", "#ffffff", "#e11b22", "bar"],
+  ["QATAR AIRWAYS", "#5c0632", "#ffffff", "#d9b8c8", "clean"],
+  ["AWS", "#161e2d", "#ffffff", "#ff9900", "smile"],
+  ["TAG HEUER", "#12151a", "#ffffff", "#00853f", "shield"],
+  ["LENOVO", "#e2231a", "#ffffff", "#ffffff", "clean"],
+  ["MSC CRUISES", "#0b2447", "#ffffff", "#3bb4e5", "bar"],
+  ["CRYPTO.COM", "#0a1931", "#ffffff", "#2896ff", "bar"],
+  ["SALESFORCE", "#00a1e0", "#ffffff", "#ffffff", "clean"],
+  ["LVMH", "#101216", "#e6d2a2", "#e6d2a2", "gold"],
+  ["SANTANDER", "#ec0000", "#ffffff", "#ffffff", "clean"],
+  ["P ZERO", "#121418", "#ffd200", "#d61f26", "pirelli"],
+  ["FORMULA 1", "#15151e", "#ffffff", "#e10600", "italic"],
+];
+function drawF1AdPanel(g, x, y, w, h, spec) {
+  const [txt, bg, fg, acc, sty] = spec;
+  g.fillStyle = bg;
+  g.fillRect(x, y, w, h);
+  // marco metálico superior e inferior de valla FIA
+  g.fillStyle = "rgba(10,12,16,0.45)";
+  g.fillRect(x, y, w, 5);
+  g.fillRect(x, y + h - 5, w, 5);
+  if (sty === "pirelli") {
+    g.fillStyle = acc;
+    g.fillRect(x + 12, y + 10, w - 24, 10);
+    g.fillRect(x + 12, y + h - 20, w - 24, 10);
+  } else if (sty === "gold") {
+    g.fillStyle = acc;
+    g.fillRect(x + 16, y + 12, w - 32, 4);
+    g.fillRect(x + 16, y + h - 16, w - 32, 4);
+  } else if (sty === "smile") {
+    g.strokeStyle = acc;
+    g.lineWidth = Math.max(5, h * 0.055);
+    g.beginPath();
+    g.moveTo(x + w * 0.28, y + h * 0.78);
+    g.quadraticCurveTo(x + w * 0.5, y + h * 0.90, x + w * 0.72, y + h * 0.76);
+    g.stroke();
+  } else if (sty === "shield") {
+    g.fillStyle = "#00853f";
+    g.fillRect(x + 12, y + 12, 18, h * 0.36);
+    g.fillStyle = "#e31837";
+    g.fillRect(x + 12, y + 12 + h * 0.36, 18, h * 0.36);
+    g.fillStyle = "#e31837";
+    g.fillRect(x + 12, y + h - 16, w - 24, 6);
+  } else if (sty === "bar") {
+    g.fillStyle = acc;
+    g.fillRect(x + 12, y + h - 18, w - 24, 8);
+  }
+  g.fillStyle = fg;
+  g.textAlign = "center";
+  g.textBaseline = "middle";
+  const fontSize = Math.round(h * (txt.length > 10 ? 0.36 : txt.length > 7 ? 0.44 : 0.54));
+  const italic = sty === "italic" || sty === "pirelli" ? "italic " : "";
+  g.font = `${italic}900 ${fontSize}px ${FONT}`;
+  g.fillText(txt, x + w * 0.5 + (sty === "shield" ? 8 : 0), y + h * (sty === "smile" ? 0.46 : 0.51), w - (sty === "shield" ? 46 : 26));
+}
 // equipos en el orden de los garajes (el mismo que usa la simulación)
 const TEAMS = [...new Map(sess.cars.map((c) => [c.team.id, c.team])).values()];
-// publicidad de pista: ocho marcas en una tira
-const adsCanvas = document.createElement("canvas"); adsCanvas.width = 2048; adsCanvas.height = 128;
-{ const g = adsCanvas.getContext("2d");
-  g.textAlign = "center"; g.textBaseline = "middle"; g.font = `900 78px ${FONT}`;
-  BRANDS.slice(0, 8).forEach(([t, bg, fg], k) => { g.fillStyle = bg; g.fillRect(k * 256, 0, 256, 128); g.fillStyle = fg; g.fillText(t, k * 256 + 128, 68, 220); }); }
-const adsTex = new THREE.CanvasTexture(adsCanvas); adsTex.colorSpace = THREE.SRGBColorSpace;
-// rótulos grandes (puentes, fachadas, gradas): 4 × 8 casillas de 512 × 128; las 16 primeras son marcas y las siguientes,
+// publicidad de pista: 16 marcas reales de F1 en atlas 8 × 2 (256 × 128 cada panel), reordenables por GP
+const adsCanvas = document.createElement("canvas"); adsCanvas.width = 2048; adsCanvas.height = 256;
+const adsTex = new THREE.CanvasTexture(adsCanvas);
+adsTex.colorSpace = THREE.SRGBColorSpace;
+adsTex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+// rótulos grandes (puentes, fachadas, gradas): 4 × 8 casillas de 512 × 128; las 16 primeras son marcas reales de F1 y las siguientes,
 // el cartel de cada equipo sobre su garaje
 const SIGN_TEAM0 = 16;
 const signCanvas = document.createElement("canvas"); signCanvas.width = 2048; signCanvas.height = 1024;
-{ const g = signCanvas.getContext("2d");
-  g.textAlign = "center"; g.textBaseline = "middle";
+const signTex = new THREE.CanvasTexture(signCanvas);
+signTex.colorSpace = THREE.SRGBColorSpace;
+signTex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+function paintTrackAds(adBrands) {
+  const order = Array.isArray(adBrands) && adBrands.length
+    ? Array.from({ length: 16 }, (_, k) => adBrands[k % adBrands.length] % F1_TRACK_ADS.length)
+    : Array.from({ length: 16 }, (_, k) => k);
+  const ga = adsCanvas.getContext("2d");
+  order.forEach((bi, k) => {
+    const colI = k % 8, rowI = Math.floor(k / 8);
+    drawF1AdPanel(ga, colI * 256, rowI * 128, 256, 128, F1_TRACK_ADS[bi]);
+  });
+  adsTex.needsUpdate = true;
+  const gs = signCanvas.getContext("2d");
+  gs.textAlign = "center"; gs.textBaseline = "middle";
   const cellAt = (k) => [(k % 4) * 512, Math.floor(k / 4) * 128];
-  BRANDS.forEach(([t, bg, fg], k) => {
+  order.forEach((bi, k) => {
     const [x, y] = cellAt(k);
-    g.fillStyle = bg; g.fillRect(x, y, 512, 128);
-    g.fillStyle = fg; g.fillRect(x + 14, y + 104, 484, 6);
-    g.font = `${k % 3 ? "900" : "italic 900"} 92px ${FONT}`; g.fillText(t, x + 256, y + 60, 470);
+    drawF1AdPanel(gs, x, y, 512, 128, F1_TRACK_ADS[bi]);
   });
   TEAMS.slice(0, 16).forEach((tm, k) => {
     const [x, y] = cellAt(SIGN_TEAM0 + k), c = new THREE.Color(tm.color), lum = 0.3 * c.r + 0.59 * c.g + 0.11 * c.b;
-    g.fillStyle = "#15171b"; g.fillRect(x, y, 512, 128);
-    g.fillStyle = tm.color; g.fillRect(x + 6, y + 6, 500, 116);
-    g.fillStyle = lum > 0.62 ? "#111317" : "#ffffff";
-    g.font = `900 64px ${FONT}`; g.fillText(String(tm.nombre || tm.id).toUpperCase(), x + 256, y + 68, 480);
+    gs.fillStyle = "#15171b"; gs.fillRect(x, y, 512, 128);
+    gs.fillStyle = tm.color; gs.fillRect(x + 6, y + 6, 500, 116);
+    gs.fillStyle = lum > 0.62 ? "#111317" : "#ffffff";
+    gs.font = `900 64px ${FONT}`; gs.fillText(String(tm.nombre || tm.id).toUpperCase(), x + 256, y + 68, 480);
   });
+  signTex.needsUpdate = true;
 }
+paintTrackAds(null);
 if (opt.debug) opt.debug.signCanvas = signCanvas;
 const DBG = opt.debug || {}; DBG.scene = scene;
-const signTex = new THREE.CanvasTexture(signCanvas); signTex.colorSpace = THREE.SRGBColorSpace;
 U.uAds = { value: adsTex };
 
 // ------------------------------------------------------------------ material de las cintas (asfalto, hierba, grava, muros)
@@ -726,16 +799,38 @@ float cloudS = texture2D(uCloud, vXZ / (2.0 * uTexR) + 0.5).g;
   dn = (d1.gb - 0.5) * (1.15 * detFade) + (d2.gb - 0.5) * (0.35 * (0.35 + 0.65 * detFade));
   rough = 0.85 + (mix(0.5, d1.a, detFade) - 0.5) * 0.18;
   #if RMODE == 1
-    // la trazada: goma depositada, más oscura y más lisa; más intensa en zonas de frenada fuerte
+    // variación sutil de tono por tramos reasfaltados y junta transversal de alquitrán a ras de suelo
+    float patchCoord = vV / 115.0 + 0.35 * sin(vV * 0.009);
+    float patchT = h21(vec2(floor(patchCoord), 19.3));
+    float patchSeam = (1.0 - smoothstep(0.0, 0.016, abs(fract(patchCoord) - 0.5) * 2.0)) * detFade * uDetail;
+    col *= (0.94 + 0.12 * patchT) * mix(vec3(1.0), vec3(0.96, 0.98, 1.03), step(0.55, patchT) * 0.45);
+    col *= 1.0 - 0.18 * patchSeam;
+    rough += (patchT - 0.5) * 0.05;
+    // la trazada: goma depositada, más oscura y más lisa; doble huella de frenada reforzada en brkZone
     float dl = (vU - vLine) / 0.30;
     float rub = exp(-dl * dl) * (0.35 + 0.65 * uDetail) * (0.8 + 0.4 * vn(vec2(vV * 0.15, vU * 4.0)));
     float brkZone = clamp((vKerb - step(0.5, vKerb)) / 0.45, 0.0, 1.0) * uDetail;
-    float t1 = (vU - vLine - 0.12) / 0.075, t2 = (vU - vLine + 0.12) / 0.075;
+    float t1 = (vU - vLine - 0.115) / 0.068, t2 = (vU - vLine + 0.115) / 0.068;
+    float t3 = (vU - vLine - 0.20) / 0.055, t4 = (vU - vLine + 0.20) / 0.055;
     float tyreTracks = max(exp(-t1 * t1), exp(-t2 * t2));
-    float brkMark = brkZone * tyreTracks * (0.45 + 0.55 * vn(vec2(vV * 0.09, vU * 14.0)));
-    col *= (1.0 - 0.42 * rub) * (1.0 - 0.24 * brkMark);
-    rough -= 0.2 * rub + 0.08 * brkMark;
-    dn *= 1.0 - 0.5 * clamp(rub + 0.4 * brkMark, 0.0, 1.0);
+    float lockStreaks = max(exp(-t3 * t3), exp(-t4 * t4)) * smoothstep(0.42, 0.85, vn(vec2(vV * 0.055, vU * 8.0)));
+    float brkTex = 0.50 + 0.50 * vn(vec2(vV * 0.14, vU * 22.0));
+    float brkMark = clamp(brkZone * (tyreTracks * 1.15 + lockStreaks * 0.65) * brkTex, 0.0, 1.0);
+    col *= (1.0 - 0.42 * rub) * (1.0 - 0.38 * brkMark);
+    rough -= 0.2 * rub + 0.14 * brkMark;
+    dn *= 1.0 - 0.5 * clamp(rub + 0.45 * brkMark, 0.0, 1.0);
+    // marbles de goma moteados fuera de la trazada ideal (especialmente en frenadas y curvas)
+    float offLine = smoothstep(0.32, 0.58, abs(vU - vLine)) * (1.0 - smoothstep(0.84, 0.90, a)) * detFade * uDetail;
+    if (offLine > 0.01) {
+      vec2 mc = floor(vXZ * 7.5), mf = fract(vXZ * 7.5) - 0.5;
+      float mh = h21(mc + 4.2);
+      float marbleSpot = step(0.66, mh) * (1.0 - smoothstep(0.09, 0.23, length(mf - (vec2(h21(mc + 1.3), h21(mc + 8.1)) - 0.5) * 0.45)));
+      float clagBand = smoothstep(0.36, 0.78, vn(vXZ * 1.8 + 2.7)) * 0.35 + marbleSpot * 0.65;
+      float marbles = clamp(offLine * clagBand * (0.58 + 0.42 * brkZone + 0.35 * step(0.5, vKerb)), 0.0, 1.0);
+      col *= 1.0 - 0.36 * marbles;
+      rough = clamp(rough + 0.10 * marbles, 0.04, 1.0);
+      dn += (vec2(h21(mc + 2.1), h21(mc + 5.7)) - 0.5) * 0.45 * marbleSpot * offLine;
+    }
     col *= 0.9 + 0.1 * smoothstep(0.0, 0.7, a);
     // Agua. Las dos rodadas (y algo menos el carril entre ellas) llevan el agua de la trazada; el resto, la de fuera.
     float lineK = max(tyreTracks, 0.6 * exp(-dl * dl * 0.6));
@@ -827,11 +922,15 @@ float cloudS = texture2D(uCloud, vXZ / (2.0 * uTexR) + 0.5).g;
     float kRib = sin(fract(vV / 0.42) * 6.28318) * (1.0 - smoothstep(0.06, 0.22, px));
     float kScuff = smoothstep(0.96, 0.90, a) * (0.4 + 0.6 * vn(vec2(vV * 0.35, a * 12.0)));
     vec3 kerb = kBase * (0.8 + 0.35 * d2.r) * (0.76 + 0.24 * kJoint) * (1.0 - 0.26 * kScuff);
-    // borde sucio de asfalto y virutas por fuera de la línea blanca en rectas (sin piano)
-    float outerDust = smoothstep(0.92, 0.995, a) * (1.0 - k) * uDetail;
-    col = mix(col, mix(col * 0.84, uSlopeCol * 0.65, 0.25), outerDust);
-    float wm = whiteLine * dash * (1.0 - kMask * 0.85);
-    col = mix(col, SR(vEdge) * (0.86 + 0.14 * d1.r), wm);
+    // borde sucio de asfalto, polvo y virutas por fuera de la línea blanca y en la junta exterior del piano
+    float outerDust = smoothstep(0.915, 0.995, a) * (1.0 - k) * uDetail;
+    float vergeNoise = 0.65 + 0.7 * vn(vec2(vV * 0.85, a * 26.0));
+    col = mix(col, mix(col * 0.78, uSlopeCol * 0.68, 0.34), clamp(outerDust * vergeNoise, 0.0, 1.0));
+    float lineWear = (0.12 + 0.28 * rub + 0.22 * k) * smoothstep(0.32, 0.86, vn(vec2(vV * 0.55, a * 18.0))) * detFade * uDetail;
+    float wm = whiteLine * dash * (1.0 - kMask * 0.85) * (1.0 - lineWear * 0.48);
+    col = mix(col, SR(vEdge) * (0.84 + 0.16 * d1.r) * (1.0 - 0.18 * lineWear), wm);
+    float kerbSeam = smoothstep(0.955, 0.998, a) * kMask * detFade;
+    kerb = mix(kerb, mix(kerb * 0.52, uSlopeCol * 0.55, 0.45), kerbSeam * (0.45 + 0.55 * vn(vec2(vV * 1.1, a * 22.0))));
     col = mix(col, kerb, kMask);
     float em = max(wm, kMask);
     float sl = step(vV, uW * 0.45) * step(a, 0.8);
@@ -940,16 +1039,22 @@ float cloudS = texture2D(uCloud, vXZ / (2.0 * uTexR) + 0.5).g;
   dn = vTan * ((pf < 0.5 ? pf : pf - 1.0) * 4.5 / max(postW, 0.01)) * 0.7 * post;
   rough = mix(0.48, 0.38, post); metal = 0.65;
 #elif RMODE == 7
-  // paneles de publicidad: cada 7 m, una marca al azar; por detrás, trasera metálica con montantes (evita texto en espejo en Tele)
-  float pi = floor(vV / 7.0), f = fract(vV / 7.0);
-  if (!gl_FrontFacing) {
+  // paneles de publicidad F1 reales: bloques de 3 paneles (21 m) de la misma marca con junta cada 7 m; trasera metálica
+  float f = fract(vV / 7.0);
+  bool faceIn = vDash > 0.5 ? gl_FrontFacing : !gl_FrontFacing;
+  if (!faceIn) {
     float strut = 1.0 - smoothstep(0.03, 0.07, abs(fract(vV / 1.75) - 0.5));
     col = mix(SR(vec3(0.18, 0.20, 0.23)), SR(vec3(0.32, 0.35, 0.39)), strut * 0.7);
     rough = 0.65; metal = 0.45;
   } else {
-    col = texture2D(uAds, vec2((floor(h21(vec2(pi, 3.7)) * 8.0) + (vDash > 0.5 ? 1.0 - f : f)) / 8.0, vU)).rgb;
-    col *= 1.0 - 0.5 * step(f, 0.012);
-    rough = 0.45; glow = 0.08; // los paneles se leen también a contraluz
+    float blk = floor(vV / 21.0);
+    float idx = floor(h21(vec2(blk, 3.7 + vDash * 5.0)) * 16.0);
+    float colI = mod(idx, 8.0), rowI = floor(idx / 8.0);
+    float fSafe = clamp(vDash > 0.5 ? 1.0 - f : f, 0.014, 0.986);
+    float vSafe = clamp(vU, 0.035, 0.965);
+    col = texture2D(uAds, vec2((colI + fSafe) / 8.0, (1.0 - rowI + vSafe) / 2.0)).rgb;
+    col *= 1.0 - 0.52 * step(f, 0.015);
+    rough = 0.44; glow = 0.10; // los paneles se leen con nitidez incluso a contraluz
   }
 #elif RMODE == 8
   // hormigón de la zona de trabajo y del paddock: losas de 5 m con su tono, juntas de dilatación, manchas de aceite y
@@ -999,6 +1104,9 @@ float cloudS = texture2D(uCloud, vXZ / (2.0 * uTexR) + 0.5).g;
   float innerW = smoothstep(0.15, 0.35, distM) * (1.0 - smoothstep(0.65, 0.95, distM)) * aa;
   pcol = mix(pcol, SR(vec3(0.88, 0.89, 0.90)), innerW * 0.58);
   float detFadeR = 1.0 - smoothstep(0.03, 0.28, px);
+  // suciedad, goma y polvo en los primeros 2 m de transición tras el piano/línea
+  float edgeWear = (1.0 - smoothstep(0.0, 2.3, distM)) * (0.45 + 0.55 * vn(vec2(vV * 0.45, distM * 2.4))) * detFadeR;
+  pcol = mix(pcol, pcol * 0.74, edgeWear * 0.55);
   col = pcol * wear;
   dn = (d1.gb - 0.5) * (0.85 * detFadeR) + (d2.gb - 0.5) * (0.22 * (0.35 + 0.65 * detFadeR));
   rough = clamp(0.82 + (mix(0.5, d1.a, detFadeR) - 0.5) * 0.14, 0.42, 0.96);
@@ -1077,49 +1185,203 @@ STEER_MAT.onBeforeCompile = (sh) => {
     .replace("#include <metalnessmap_fragment>", "float isSuitM = step(0.5, vPart) * (1.0 - step(1.5, vPart)); float isMetM = step(1.5, vPart) * (1.0 - step(2.5, vPart)); float metalnessFactor = mix(mix(metalness, 0.0, isSuitM), 0.88, isMetM);");
 };
 const srgb = (t) => { t.colorSpace = THREE.SRGBColorSpace; return t; };
-const dashCv = document.createElement("canvas"); dashCv.width = 256; dashCv.height = 144;
+const dashCv = document.createElement("canvas"); dashCv.width = 384; dashCv.height = 216;
 const dashCtx = dashCv.getContext("2d"), dashTex = srgb(new THREE.CanvasTexture(dashCv));
+dashTex.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
 const dashMesh = new THREE.Mesh(
   new THREE.PlaneGeometry(0.118, 0.068).rotateY(-Math.PI / 2).translate(-0.022, 0.014, 0),
   new THREE.MeshBasicMaterial({ map: dashTex, toneMapped: false })
 );
 dashMesh.matrixAutoUpdate = false; dashMesh.visible = false; dashMesh.renderOrder = 11;
 scene.add(dashMesh);
-let dashT = -1e9, dashGear = 1, extCarGeo = null, extWheelGeo = null, steerPos = [0.92, 0.76, 0], camPos = [-0.10, 1.44];
+// retrovisores dinámicos del coche seguido a bordo (cielo + silueta/destello de rival a menos de 18 m)
+const mirCv = document.createElement("canvas"); mirCv.width = 256; mirCv.height = 64;
+const mirCtx = mirCv.getContext("2d"), mirTex = srgb(new THREE.CanvasTexture(mirCv));
+const makeMirrorMesh = (isRight) => {
+  const g = new THREE.PlaneGeometry(0.135, 0.048);
+  // mitad izquierda de la textura para el espejo izquierdo, mitad derecha para el derecho
+  const uv = g.attributes.uv;
+  const u0 = isRight ? 0.52 : 0.02, u1 = isRight ? 0.98 : 0.48;
+  for (let k = 0; k < uv.count; k++) uv.setX(k, uv.getX(k) < 0.5 ? u0 : u1);
+  g.rotateY(-Math.PI / 2 + (isRight ? -0.16 : 0.16));
+  const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ map: mirTex, toneMapped: false }));
+  m.matrixAutoUpdate = false; m.visible = false; m.renderOrder = 11;
+  scene.add(m);
+  return m;
+};
+const mirrorL = makeMirrorMesh(false), mirrorR = makeMirrorMesh(true);
+let mirT = -1e9, mirrorPos = [0.91, 0.74, 0.65];
+const mMirL = new THREE.Matrix4(), mMirR = new THREE.Matrix4();
+const _mirSkyA = new THREE.Color(), _mirSkyB = new THREE.Color();
+function drawMirrors(p, list) {
+  const g = mirCtx, W = 256, H = 64;
+  _mirSkyA.copy(skyU.uZen.value).convertLinearToSRGB();
+  _mirSkyB.copy(skyU.uHor.value).convertLinearToSRGB();
+  const skyTop = "#" + _mirSkyA.getHexString(), skyHor = "#" + _mirSkyB.getHexString();
+  // buscar el rival más cercano a menos de 18 m por detrás en pista
+  let closeCar = null, closeD = 18.5, closeLat = 0;
+  if (p.c.loc === "track") {
+    for (const o of list) {
+      if (o === p || o.c.loc !== "track") continue;
+      const db = mod(p.s - o.s, T.L);
+      if (db > 0.6 && db < closeD) {
+        closeD = db;
+        closeCar = o.c;
+        closeLat = (o.l0 - p.l0) / Math.max(1.5, curW);
+      }
+    }
+  }
+  for (const side of [0, 1]) {
+    const ox = side * 128, isR = side === 1;
+    // fondo: cielo arriba + asfalto abajo
+    const gr = g.createLinearGradient(0, 4, 0, H * 0.56);
+    gr.addColorStop(0, skyTop); gr.addColorStop(1, skyHor);
+    g.fillStyle = gr; g.fillRect(ox + 2, 2, 124, H * 0.54);
+    g.fillStyle = "#2b3038"; g.fillRect(ox + 2, H * 0.56, 124, H * 0.42);
+    g.fillStyle = "rgba(255,255,255,0.22)"; g.fillRect(ox + 2, H * 0.55, 124, 1.5);
+    // silueta del coche perseguidor si está en el cono del retrovisor (< 18 m)
+    if (closeCar) {
+      const sideMatch = isR ? closeLat > -0.35 : closeLat < 0.35;
+      if (sideMatch) {
+        const prox = clamp(1 - closeD / 18, 0.08, 1);
+        const rel = clamp((isR ? closeLat - 0.15 : closeLat + 0.15) * 0.85, -0.45, 0.45);
+        const cx = ox + 64 + rel * 72, cy = H * (0.64 - 0.04 * prox);
+        const bw = 14 + 34 * prox, bh = 5 + 13 * prox;
+        // alerón delantero y morro del rival con su color de escudería
+        g.fillStyle = "#14161a";
+        g.fillRect(cx - bw * 0.56, cy + bh * 0.15, bw * 1.12, Math.max(2, bh * 0.28));
+        g.fillStyle = closeCar.team?.color || "#e02020";
+        g.beginPath();
+        g.moveTo(cx - bw * 0.34, cy + bh * 0.2);
+        g.lineTo(cx - bw * 0.16, cy - bh * 0.55);
+        g.lineTo(cx + bw * 0.16, cy - bh * 0.55);
+        g.lineTo(cx + bw * 0.34, cy + bh * 0.2);
+        g.closePath();
+        g.fill();
+        // neumáticos delanteros
+        g.fillStyle = "#0e1014";
+        g.fillRect(cx - bw * 0.48, cy - bh * 0.25, Math.max(3, bw * 0.16), bh * 0.6);
+        g.fillRect(cx + bw * 0.32, cy - bh * 0.25, Math.max(3, bw * 0.16), bh * 0.6);
+        // destello rojo/alerta cuando rueda muy pegado (< 10 m)
+        if (closeD < 10) {
+          const glowA = clamp((10 - closeD) / 8, 0.25, 0.85);
+          const rg = g.createRadialGradient(cx, cy - bh * 0.15, 1, cx, cy - bh * 0.15, bw * 0.55);
+          rg.addColorStop(0, `rgba(255,48,36,${glowA.toFixed(2)})`);
+          rg.addColorStop(1, "rgba(255,48,36,0)");
+          g.fillStyle = rg;
+          g.fillRect(ox + 2, 2, 124, H - 4);
+        }
+      }
+    }
+    // brillo sutil de cristal y marco oscuro del retrovisor
+    g.fillStyle = "rgba(255,255,255,0.10)";
+    g.beginPath(); g.moveTo(ox + 6, 4); g.lineTo(ox + 44, 4); g.lineTo(ox + 18, H - 4); g.lineTo(ox + 6, H - 4); g.closePath(); g.fill();
+    g.strokeStyle = "#0c0e12"; g.lineWidth = 4; g.strokeRect(ox + 2, 2, 124, H - 4);
+  }
+  mirTex.needsUpdate = true;
+}
+let dashT = -1e9, dashGear = 1, extCarGeo = null, extWheelGeo = null, steerPos = [0.92, 0.76, 0], camPos = [-0.36, 1.34];
 // malla ligera en uso (la integrada o la del .glb) y la del .glb, para liberarla al cerrar
 let carLoCur = CAR_LO, extCarLoGeo = null;
 // a bordo, el volante del coche seguido algo más grande que el real: en móvil la pantalla se lee mejor
 const DASH_K = 1.25;
 const mTilt = new THREE.Matrix4().makeRotationZ(-0.24);
-function drawDash(c) {
-  const g = dashCtx, W = 256, H = 144;
+function drawDash(c, nowMs) {
+  const g = dashCtx, W = 384, H = 216;
   dashGear = c.v < 1 ? 1 : gearFor(c.v, dashGear);
   const rpm = c.v < 1 ? 4200 : rpmFor(c.v, dashGear);
-  const leds = Math.round(clamp((rpm - 7600) / 4600, 0, 1) * 15);
-  g.fillStyle = "#090b0f"; g.fillRect(0, 0, W, H);
+  const rpmFrac = clamp((rpm - 7400) / 4800, 0, 1);
+  const leds = Math.round(rpmFrac * 15);
+  const shiftBlink = rpmFrac > 0.94 && (Math.floor(nowMs / 90) % 2 === 0);
+  g.fillStyle = "#080a0f"; g.fillRect(0, 0, W, H);
+  // marco fino LCD + líneas separadoras de telemetría
+  g.strokeStyle = "#1d2430"; g.lineWidth = 2; g.strokeRect(3, 3, W - 6, H - 6);
+  g.fillStyle = "#18202c"; g.fillRect(28, 134, W - 56, 2);
+  // arco de 15 LEDs de RPM en la parte superior
   for (let j = 0; j < 15; j++) {
-    g.fillStyle = j < leds ? (j < 5 ? "#33e05f" : j < 10 ? "#ff3b30" : "#56a0ff") : "#1b2029";
-    g.fillRect(10 + j * 16, 8, 12, 14);
+    const t = (j - 7) / 7;
+    const lx = 34 + j * 22.2;
+    const ly = 16 + t * t * 9;
+    const lit = j < leds;
+    const ledCol = shiftBlink ? "#6cc4ff" : j < 5 ? "#2ce862" : j < 10 ? "#ff3b30" : "#5aa8ff";
+    if (lit) {
+      g.fillStyle = ledCol;
+      g.globalAlpha = 0.28;
+      g.beginPath(); g.arc(lx + 6, ly + 7, 10, 0, Math.PI * 2); g.fill();
+      g.globalAlpha = 1;
+    }
+    g.fillStyle = lit ? ledCol : "#19202b";
+    g.beginPath(); g.roundRect(lx, ly, 13, 14, 4); g.fill();
   }
-  g.fillStyle = "#ffffff"; g.font = `900 72px ${FONT}`; g.textAlign = "center"; g.textBaseline = "middle";
-  g.fillText(c.v < 1 ? "N" : String(dashGear), W * 0.5, 68);
-  g.textAlign = "left"; g.font = `700 20px ${FONT}`; g.fillStyle = "#9da3ad";
-  g.fillText("KM/H", 14, 101);
-  g.fillStyle = "#ffffff"; g.font = `900 34px ${FONT}`;
-  g.fillText(String(Math.round((c.v || 0) * 3.6)), 12, 126);
+  // 3 LEDs laterales a izquierda y derecha (banderas activas o despliegue/DRS)
+  const fl = sess.flag;
+  const sideYel = fl === "sc" || fl === "sc_in" || fl === "vsc" || U.uYel.value.z > 0.5;
+  const sideRed = fl === "red";
+  const sideDrs = !!(sess.era?.activeAero ? c.xMode : c.drs);
+  const sideBlink = Math.floor(nowMs / 240) % 2 === 0;
+  const sideCol = sideRed ? (sideBlink ? "#ff2a22" : "#5a1212")
+    : sideYel ? (sideBlink ? "#ffd426" : "#5a480a")
+    : sideDrs ? "#2ce862" : "#181e28";
+  for (const sx of [10, W - 21]) {
+    for (let k = 0; k < 3; k++) {
+      g.fillStyle = sideCol;
+      g.beginPath(); g.roundRect(sx, 48 + k * 24, 11, 16, 3); g.fill();
+    }
+  }
+  // esquina superior izquierda: vuelta o delta frente a la mejor vuelta propia
+  const lapN = sess.lap || 1;
+  g.textAlign = "left"; g.textBaseline = "middle";
+  if (c.lastLap > 0 && c.bestLap > 0 && Math.abs(c.lastLap - c.bestLap) < 9.9) {
+    const dlt = c.lastLap - c.bestLap;
+    const sign = dlt <= 0.005 ? "-" : "+";
+    g.fillStyle = dlt <= 0.005 ? "#2ce862" : dlt < 0.4 ? "#ffd84a" : "#ff5a4f";
+    g.font = `900 22px ${FONT}`;
+    g.fillText(`${sign}${Math.abs(dlt).toFixed(2)}`, 30, 56);
+    g.fillStyle = "#8a94a6"; g.font = `700 15px ${FONT}`;
+    g.fillText(`V${lapN}`, 30, 79);
+  } else {
+    g.fillStyle = "#b8c2d2"; g.font = `900 22px ${FONT}`;
+    g.fillText(`V${lapN}`, 30, 60);
+    g.fillStyle = "#6e788a"; g.font = `700 15px ${FONT}`;
+    g.fillText(String(c.d?.abrev || ""), 30, 82);
+  }
+  // marcha central grande y nítida
+  g.fillStyle = "#ffffff"; g.font = `900 96px ${FONT}`; g.textAlign = "center";
+  g.fillText(c.v < 1 ? "N" : String(dashGear), W * 0.5, 86);
+  // velocidad abajo izquierda
+  g.textAlign = "left"; g.font = `700 17px ${FONT}`; g.fillStyle = "#8a94a6";
+  g.fillText("KM/H", 30, 154);
+  g.fillStyle = "#ffffff"; g.font = `900 44px ${FONT}`;
+  g.fillText(String(Math.round((c.v || 0) * 3.6)), 28, 186);
+  // ERS y barra de despliegue abajo derecha
   const soc = Math.round(clamp((c.soc ?? 0) / 4, 0, 1) * 100);
-  g.textAlign = "right"; g.font = `900 26px ${FONT}`; g.fillStyle = "#33e05f";
-  g.fillText(`${soc}%`, W - 14, 106);
-  g.fillStyle = "#1c232e"; g.fillRect(W - 92, 124, 78, 10);
-  g.fillStyle = soc < 20 ? "#ffd84a" : "#33e05f"; g.fillRect(W - 92, 124, Math.round((78 * soc) / 100), 10);
-  const badge = sess.flag === "red" ? ["ROJA", "#e3261c", "#fff"]
-    : sess.flag === "sc" || sess.flag === "sc_in" || sess.flag === "vsc" ? ["SC", "#ffd84a", "#000"]
+  const ersM = c.ers ?? 1;
+  const ersCol = ersM === 0 ? "#ffd426" : ersM >= 2 ? "#35d4ff" : soc < 20 ? "#ffd84a" : "#2ce862";
+  const ersLbl = ersM === 0 ? "CARGA" : ersM >= 3 ? "ATAQ" : ersM === 2 ? "DESP" : "ERS";
+  g.textAlign = "right"; g.font = `700 16px ${FONT}`; g.fillStyle = ersCol;
+  g.fillText(ersLbl, W - 110, 154);
+  g.font = `900 32px ${FONT}`; g.fillStyle = ersCol;
+  g.fillText(`${soc}%`, W - 28, 156);
+  // barra segmentada de 10 celdas de batería ERS
+  const bx0 = W - 154, bw = 126, segs = 10, filled = Math.round((soc / 100) * segs);
+  for (let s = 0; s < segs; s++) {
+    g.fillStyle = s < filled ? ersCol : "#1b2330";
+    g.fillRect(bx0 + s * (bw / segs), 178, bw / segs - 3, 18);
+  }
+  // badge superior derecho: bandera, boxes o modo aero (MO / X / Z / DRS)
+  const aeroBadge = sess.era?.activeAero
+    ? (c.drs ? ["MO", "#2ce862", "#000"] : c.xMode ? ["X", "#35d4ff", "#000"] : ["Z", "#263142", "#c8d2e0"])
+    : (c.drs ? [sess.aidShort || "DRS", "#2ce862", "#000"] : null);
+  const badge = sideRed ? ["ROJA", "#e3261c", "#fff"]
+    : fl === "sc" || fl === "sc_in" ? ["SC", "#ffd84a", "#000"]
+    : fl === "vsc" ? ["VSC", "#ffd84a", "#000"]
     : c.loc === "pit" || c.loc === "lane_in" || c.loc === "lane_out" ? ["PIT", "#eef0f2", "#000"]
-    : c.drs ? [sess.aidShort || "MO", "#33e05f", "#000"] : null;
+    : aeroBadge;
   if (badge) {
-    g.fillStyle = badge[1]; g.fillRect(W - 68, 34, 54, 24);
-    g.fillStyle = badge[2]; g.font = `900 16px ${FONT}`; g.textAlign = "center";
-    g.fillText(badge[0], W - 41, 47);
+    g.fillStyle = badge[1];
+    g.beginPath(); g.roundRect(W - 94, 44, 66, 34, 5); g.fill();
+    g.fillStyle = badge[2]; g.font = `900 22px ${FONT}`; g.textAlign = "center";
+    g.fillText(badge[0], W - 61, 62);
   }
   dashTex.needsUpdate = true;
 }
@@ -1553,7 +1815,7 @@ function buildTrackData(tr, id, envData) {
   const vis0 = getTrackVisual(id);
   const rel = tr.def.relieve?.m, lerpLap = (a, f) => { const x = f * a.length, i0 = Math.floor(x); return a[i0 % a.length] + (a[(i0 + 1) % a.length] - a[i0 % a.length]) * (x - i0); };
   if (rel) for (let i = 0; i < n; i++) H[i] = lerpLap(rel, i / n);
-  H = blur(H, Math.round(25 / ds), n);
+  H = blur(H, Math.round(11 / ds), n);
   // cruce en «8» (Suzuka): separación vertical real entre el tablero superior y el paso inferior
   const ovp = vis0.overpass;
   const dCirc = (a, b) => Math.min(mod(a - b, L), mod(b - a, L));
@@ -2399,6 +2661,7 @@ function buildWorld() {
     return add(mesh);
   }
   const vis = getTrackVisual(track.id);
+  paintTrackAds(vis.adBrands);
   const bio = BIOMES[vis.biome] || BIOMES.bosque;
   U.uSlopeCol.value.setHex(bio.slope);
   U.uDry.value = bio.dry;
@@ -2631,11 +2894,18 @@ function buildWorld() {
     ribbon(pitI0, pitN, (i, s) => { const o = ramp(s) * PIT_OFF, r = ramp(s); return [[o + 0.55, 0, 0, 0], [o + 0.55 + r * 0.8, 0, 0, 0]]; }, ribbonMat(0x9a9fa6, 8, -2), 3);
     ribbon(pitI0, pitN, (i, s) => { const o = ramp(s) * PIT_OFF, r = ramp(s); return [[o + 1.35 * r + 0.55 * (1 - r), 0, 0, 0], [o + (1.35 + 2.6) * r + 0.55 * (1 - r), 10 * r, 0, 0]]; }, ribbonMat(0x8a9097, 8, -1), 2);
   }
-  const road = ribbon(0, n, () => [[-1, 0, 0, -1], [1, 0, 0, 1]], ribbonMat(0x5a606a, 1, -3), 4, true);
-  // barrera a cada lado: neumáticos por fuera de las curvas con escapatoria, guardarraíl en el resto
+  const road = ribbon(0, n, () => [[-1, 0, 0, -1], [1, 0, 0, 1]], ribbonMat(vis.asphaltColor ?? 0x5a606a, 1, -3), 4, true);
+  // barrera a cada lado: neumáticos/Tecpro bicolores en escapatorias y curvas urbanas clave, guardarraíl en el resto
   const wallMat = ribbonMat(0xcfd4db, 5, 0), wl = SH - 0.08;
   const kAbs = blur(Float32Array.from(track.curv, Math.abs), Math.round(45 / T.ds), n);
   const sideOf = (c) => (Math.sign(c[0]) * T.PS > 0 ? 1 : 0);
+  const inTecpro = (i, s) => {
+    if (!street) return false;
+    const sm = mod(s, T.L);
+    if (vis.tunnel && sm >= vis.tunnel.s0 - 8 && sm <= vis.tunnel.s1 + 8) return false;
+    if (vis.tecproZones?.some(([a, b]) => sm >= a && sm <= b)) return true;
+    return Math.abs(track.curv[i]) > 0.013;
+  };
   const pitGap = (s) => {
     if (!realPit) return ramp(s) > 0.02;
     const sm = mod(s, T.L);
@@ -2647,8 +2917,8 @@ function buildWorld() {
     const inExitCorridor = exitSpan < 700 && fromApron <= exitSpan + 35;
     return !!realPit.pitNear[idx] || inEntry || inExitCorridor || pitApronRamp(s) > 0.05;
   };
-  ribbon(0, n, (i) => [[-wl, -T.rO[i], 0, 0], [-wl, -T.rO[i], 1.05, 1]], wallMat, 5, false, (i, s, c) => [T.rO[i] > 3 ? 1 : 0, sideOf(c)]);
-  ribbon(0, n, (i, s) => { const h = pitGap(s) ? 0 : 1.05; return [[wl, T.rP[i], 0, 0], [wl, T.rP[i], h, 1]]; }, wallMat, 5, false, (i, s, c) => [T.rP[i] > 3 ? 1 : 0, sideOf(c)]);
+  ribbon(0, n, (i) => [[-wl, -T.rO[i], 0, 0], [-wl, -T.rO[i], 1.05, 1]], wallMat, 5, false, (i, s, c) => [T.rO[i] > 3 || inTecpro(i, s) ? 1 : 0, sideOf(c)]);
+  ribbon(0, n, (i, s) => { const h = pitGap(s) ? 0 : 1.05; return [[wl, T.rP[i], 0, 0], [wl, T.rP[i], h, 1]]; }, wallMat, 5, false, (i, s, c) => [T.rP[i] > 3 || inTecpro(i, s) ? 1 : 0, sideOf(c)]);
   // muro del pit-lane, entre la pista y los boxes
   ribbon(pitI0, pitN, (i, s) => { const r = hasRealPit ? pitApronRamp(s) : ramp(s), o = 1.0 + (PIT_OFF - 0.55 - 1.0) * 0.5, h = r > 0.92 ? 0.9 : 0; return [[o, 0, 0, 0], [o, 0, h, 1]]; }, ribbonMat(0xcfd4db, 0, 0), 5);
   // valla alta translúcida (tras los coches para mezclarse bien sobre ellos si quedan detrás) y paneles de publicidad
@@ -2656,12 +2926,18 @@ function buildWorld() {
   const pitSide = (s) => pitGap(s);
   ribbon(0, n, (i) => [[-wl, -T.rO[i] - 1.6, 0, 0], [-wl, -T.rO[i] - 1.6, 3.4, 1]], fenceMat, 11);
   ribbon(0, n, (i, s) => { const h = pitSide(s) ? 0 : 3.4; return [[wl, T.rP[i] + 1.6, 0, 0], [wl, T.rP[i] + 1.6, h, 1]]; }, fenceMat, 11);
-  const adH = (i) => (kAbs[i] < 0.0022 ? 1 : 0);
-  ribbon(0, n, (i) => { const h = adH(i); return [[-wl, -T.rO[i] - 0.5, 1.1 * h, 0], [-wl, -T.rO[i] - 0.5, 2.15 * h, 1]]; }, adMat, 5, false, (i, s, c) => [0, sideOf(c)]);
-  ribbon(0, n, (i, s) => { const h = pitSide(s) ? 0 : adH(i); return [[wl, T.rP[i] + 0.5, 1.1 * h, 0], [wl, T.rP[i] + 0.5, 2.15 * h, 1]]; }, adMat, 5, false, (i, s, c) => [0, sideOf(c)]);
+  // Publicidad continua también en curvas (clave para leer el radio en cámara a bordo); solo se abre en túnel, puente y boxes
+  const adH = (i, s) => {
+    const sm = mod(s, T.L);
+    if (vis.tunnel && sm >= vis.tunnel.s0 - 12 && sm <= vis.tunnel.s1 + 12) return 0;
+    if (ovp && dCirc(sm, ovp.sOver) < (ovp.halfSpan ?? 52) + 10) return 0;
+    return 1;
+  };
+  ribbon(0, n, (i, s) => { const h = adH(i, s); return [[-wl, -T.rO[i] - 0.5, 1.08 * h, 0], [-wl, -T.rO[i] - 0.5, 2.12 * h, 1]]; }, adMat, 5, false, (i, s, c) => [0, sideOf(c)]);
+  ribbon(0, n, (i, s) => { const h = pitSide(s) ? 0 : adH(i, s); return [[wl, T.rP[i] + 0.5, 1.08 * h, 0], [wl, T.rP[i] + 0.5, 2.12 * h, 1]]; }, adMat, 5, false, (i, s, c) => [0, sideOf(c)]);
 
-  // ---- terreno: sigue la altura de la pista cerca de ella y se vuelve colinas suaves lejos
-  const step = Math.max(1, Math.round(40 / T.ds)), sx = [], sz = [], sh = [];
+  // ---- terreno: sigue la altura de la pista cerca de ella (abrazando compresiones y rampas) y se vuelve colinas lejos
+  const step = Math.max(1, Math.round(24 / T.ds)), sx = [], sz = [], sh = [];
   for (let i = 0; i < n; i += step) { sx.push(T.X[i]); sz.push(T.Z[i]); sh.push(T.H[i]); }
   const terr = (x, z, rc) => {
     let wsum = 0, hsum = 0, dmin = 1e12, cap = 1e9;
@@ -2670,7 +2946,7 @@ function buildWorld() {
       const d2 = (x - sx[k]) ** 2 + (z - sz[k]) ** 2;
       if (d2 < dmin) dmin = d2;
       if (d2 < rc2 && sh[k] < cap) cap = sh[k];
-      const w = 1 / (d2 + 450) ** 1.75;
+      const w = 1 / (d2 + 260) ** 1.75;
       wsum += w; hsum += w * sh[k];
     }
     const d = Math.sqrt(dmin), near = hsum / wsum;
@@ -2836,12 +3112,13 @@ function buildWorld() {
           if (td > bestD) { bestD = td; lx = gx; lz = gz; }
         }
       } else {
-        let d = Math.max(spec.dist, safeTrack + 6), sg = spec.side;
+        const safeLoc = spec.closeTrack ? T.SH * W_REAL + 16 : safeTrack;
+        let d = Math.max(spec.dist, safeLoc + 4), sg = spec.side;
         for (let attempt = 0; attempt < 6; attempt++) {
           lx = lmTmp.x + lmTmp.rx * sg * d;
           lz = lmTmp.z + lmTmp.rz * sg * d;
-          if (trackDist(lx, lz) >= safeTrack) break;
-          if (attempt === 2) { sg = -sg; d = Math.max(spec.dist, safeTrack + 8); } else d += 30;
+          if (trackDist(lx, lz) >= safeLoc) break;
+          if (attempt === 2) { sg = -sg; d = Math.max(spec.dist, safeLoc + 6); } else d += 26;
         }
       }
       const gy = terr(lx, lz, 0).h;
@@ -2884,46 +3161,12 @@ function buildWorld() {
     if (lmClear.some(([lx, lz, lr]) => (x - lx) ** 2 + (z - lz) ** 2 < (lr + 12) ** 2)) continue;
     if (gradaClear.some(([gx, gz, gr]) => (x - gx) ** 2 + (z - gz) ** 2 < gr * gr)) continue;
     const sz = street || bio.arid ? (0.75 + rnd() * 0.7) : (0.95 + rnd() * 0.95);
-    trees.push([x, t.h - 1.2, z, sz, rnd(), rnd() * Math.PI * 2, rnd()]);
+    // [x, y, z, escala, mezclaTinte, rotY, especieRnd, visibleEnAerea]
+    trees.push([x, t.h - 1.2, z, sz, rnd(), rnd() * Math.PI * 2, rnd(), 1]);
   }
-  let tgc = collect();
-  // dos especies mezcladas en la misma malla: frondosa (copa de varios volúmenes) y conífera (tres pisos)
-  const blob = (r, x, y, z, shade) => {
-    // copa de pocas caras (20) con la normal de una esfera: se ve redonda y pesa poco (hay cientos de árboles, y cuentan
-    // dos veces: también en la sombra)
-    const g = new THREE.IcosahedronGeometry(r, 0), p = g.attributes.position, nrm = g.attributes.normal, cl = new Float32Array(p.count * 3);
-    for (let i = 0; i < p.count; i++) {
-      const l = Math.hypot(p.getX(i), p.getY(i), p.getZ(i)) || 1;
-      nrm.setXYZ(i, p.getX(i) / l, p.getY(i) / l, p.getZ(i) / l);
-      const k = 0.86 + 0.28 * hash2(Math.round(p.getX(i) * 400) * 0.0225 + x, Math.round(p.getY(i) * 400) * 0.0175 + z);
-      p.setXYZ(i, p.getX(i) * k, p.getY(i) * k * 0.9, p.getZ(i) * k);
-      // sombra propia de la copa: oscura abajo y hacia el tronco, clara arriba y por fuera
-      const wy = y + p.getY(i), out = Math.hypot(x + p.getX(i), z + p.getZ(i));
-      const sh = shade * (0.55 + 0.45 * sstep(0.45, 1.15, wy)) * (0.8 + 0.2 * sstep(0.05, 0.45, out));
-      cl[i * 3] = cl[i * 3 + 1] = cl[i * 3 + 2] = sh;
-    }
-    g.setAttribute("color", new THREE.BufferAttribute(cl, 3));
-    tgc.raw(g.translate(x, y, z));
-  };
-  blob(0.36, 0, 0.82, 0, 1); blob(0.27, 0.22, 0.66, 0.1, 0.9); blob(0.26, -0.2, 0.7, -0.12, 1.08); blob(0.22, 0.02, 1.08, 0.06, 1.14); blob(0.2, -0.05, 0.62, 0.22, 0.95);
-  tgc.add(new THREE.CylinderGeometry(0.05, 0.07, 0.55, 6).translate(0, 0.27, 0), [0.5, 0.36, 0.26]);
-  const treeGeo = tgc.done();
-  // de muy lejos (vista general), una sola copa algo mayor y un tronco de tres caras: 26 triángulos en vez de 124
-  tgc = collect();
-  blob(0.47, 0, 0.8, 0, 1);
-  tgc.add(new THREE.CylinderGeometry(0.05, 0.07, 0.45, 3, 1, true).translate(0, 0.22, 0), [0.5, 0.36, 0.26]);
-  const treeFar = tgc.done();
-  const treeMesh = add(new THREE.InstancedMesh(treeGeo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, metalness: 0 }), trees.length));
   const m4 = new THREE.Matrix4(), col = new THREE.Color(), c2 = new THREE.Color(bio.treeB);
   const tPos = new THREE.Vector3(), tQuat = new THREE.Quaternion(), tScl = new THREE.Vector3(), yUp = new THREE.Vector3(0, 1, 0);
-  trees.forEach((t, i) => {
-    const s = T.Wov * 1.05 * t[3];
-    m4.compose(tPos.set(t[0], t[1], t[2]), tQuat.setFromAxisAngle(yUp, t[5]), tScl.set(s, s, s));
-    treeMesh.setMatrixAt(i, m4);
-    treeMesh.setColorAt(i, col.setHex(bio.treeA).lerp(c2, t[4]));
-  });
-  treeMesh.frustumCulled = false; treeMesh.castShadow = true; treeMesh.receiveShadow = true; treeMesh.name = "arboles";
-  treeMesh.userData = { near: treeGeo, far: treeFar };
+  let treeMesh = null;
 
   // ---- focos (solo de noche)
   const nP = Math.floor(T.L / 130), lampPos = [];
@@ -2954,7 +3197,6 @@ function buildWorld() {
       else if (v < vr[imin]) imin = j;
       else if (v > vr[imin] + 4) { if (i >= n ? !brakes.includes(imin) && brakes.length > 0 : true) { if (!brakes.includes(imin)) brakes.push(imin); } falling = false; vmax = v; if (i >= n) break; }
     } }
-  const sideAt = (i) => -T.PS * (SH * W_REAL + T.rO[i] + 2.6); // por fuera de la valla, en el lado contrario a boxes
   const place = (s, lat, y, sx, sy, sz) => {
     sample(s, tmp);
     m4.set(tmp.tx * sx, 0, tmp.rx * sz, tmp.x + tmp.rx * lat,
@@ -2964,18 +3206,39 @@ function buildWorld() {
     return m4;
   };
   const numTex = (txt) => {
-    const cv = document.createElement("canvas"); cv.width = 160; cv.height = 112; const g = cv.getContext("2d");
-    g.fillStyle = "#f4f5f7"; g.fillRect(0, 0, 160, 112);
-    g.fillStyle = "#16191f"; g.fillRect(0, 0, 160, 16);
-    g.fillStyle = "#c81e24"; g.fillRect(0, 96, 160, 16);
-    g.fillStyle = "#111317"; g.font = "900 66px 'Titillium Web', sans-serif"; g.textAlign = "center"; g.textBaseline = "middle";
-    g.fillText(txt, 80, 58);
-    return srgb(new THREE.CanvasTexture(cv));
+    const cv = document.createElement("canvas"); cv.width = 256; cv.height = 176; const g = cv.getContext("2d");
+    g.fillStyle = "#f7f8fa"; g.fillRect(0, 0, 256, 176);
+    g.fillStyle = "#111419"; g.fillRect(0, 0, 256, 22);
+    g.fillStyle = "#d41b22"; g.fillRect(0, 152, 256, 24);
+    g.strokeStyle = "#111419"; g.lineWidth = 10; g.strokeRect(5, 5, 246, 166);
+    g.fillStyle = "#0e1014"; g.font = "900 104px 'Titillium Web', sans-serif"; g.textAlign = "center"; g.textBaseline = "middle";
+    g.fillText(txt, 128, 90);
+    const tex = srgb(new THREE.CanvasTexture(cv));
+    tex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+    return tex;
   };
+  // Carteles 150 / 100 / 50 pegados al borde exterior de la frenada (muy legibles desde T-Cam)
+  const brakeBoards = [];
+  const brakeGeo = new THREE.BoxGeometry(0.14, 1, 1).translate(0, 0.5, 0);
+  envResDispose.push(brakeGeo);
   [150, 100, 50].forEach((d) => {
-    const bm = add(new THREE.InstancedMesh(new THREE.BoxGeometry(0.12, 1, 1).translate(0, 0.5, 0), new THREE.MeshStandardMaterial({ map: numTex(String(d)), roughness: 0.6 }), brakes.length));
-    brakes.forEach((bi, k) => { const s = bi * T.ds - d - 35, i2 = Math.floor(mod(s, T.L) / T.ds); bm.setMatrixAt(k, place(s, sideAt(i2) + T.PS * 1.6, 1.0, 1, 1.0, 1.45)); });
+    const tex = numTex(String(d));
+    const mat = new THREE.MeshStandardMaterial({ map: tex, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.14, roughness: 0.48 });
+    const bm = add(new THREE.InstancedMesh(brakeGeo, mat, brakes.length));
+    bm.userData.sharedGeo = true;
+    brakes.forEach((bi, k) => {
+      const s = mod(bi * T.ds - d - 28, T.L), i2 = Math.min(n - 1, Math.floor(s / T.ds));
+      // Lado exterior a la curva siguiente (salvo si coincide con pit-lane, donde pasa al lado opuesto)
+      let sg = track.curv[bi] > 0 ? 1 : -1;
+      if (sg === T.PS && pitGap(s)) sg = -T.PS;
+      const wLoc = W_REAL * T.wr[i2];
+      const runLoc = sg === T.PS ? T.rP[i2] : T.rO[i2];
+      const lat = sg * Math.min(wLoc + 2.35, Math.max(wLoc * 1.05, (SH - 0.14) * wLoc + runLoc));
+      bm.setMatrixAt(k, place(s, lat, 0.24, 1, 1.12, 1.56));
+    });
     bm.frustumCulled = false;
+    bm.castShadow = true;
+    brakeBoards.push(bm);
   });
   // pórtico de salida con el semáforo
   { const gg = collect(), half = SH * W_REAL + 1.2;
@@ -3002,43 +3265,63 @@ function buildWorld() {
     return true;
   };
   const busy = [[], []]; // tramos ya ocupados: [0] lado de boxes, [1] el otro
-  // ---- Estructuras especiales del trazado (Bloque 5.3): túnel de Mónaco y puente en «8» de Suzuka
+  // ---- Estructuras especiales del trazado: túnel de Mónaco (bocas arquitectónicas, pilares al mar y luz cálida) y puente en «8» de Suzuka
   if (vis.tunnel) {
     const tun = vis.tunnel, hT = tun.height ?? 6.4, openS = tun.openSide ?? -1;
     busy[0].push([tun.s0 - 18, tun.s1 + 18]);
     busy[1].push([tun.s0 - 18, tun.s1 + 18]);
-    const nSeg = Math.max(8, Math.round((tun.s1 - tun.s0) / 14)), segL = (tun.s1 - tun.s0) / nSeg;
-    const lwWall = T.SH - 0.02, lwRoof = T.SH + 0.06;
+    const nSeg = Math.max(12, Math.round((tun.s1 - tun.s0) / 10)), segL = (tun.s1 - tun.s0) / nSeg;
+    const lwWall = T.SH - 0.02, lwRoof = T.SH + 0.08;
     const Q = (x, y, z, lw, u, v) => [x, y, z, lw, 0, u, v];
     for (let k = 0; k < nSeg; k++) {
       const sc = tun.s0 + (k + 0.5) * segL, x0 = -segL / 2 - 0.35, x1 = segL / 2 + 0.35, uo = k * segL;
       B.at(sc, 1);
-      // pared sólida del lado de la ladera (o ambos lados si openSide === 0)
       for (const sg of [-1, 1]) {
         if (sg === openS) {
-          // galería abierta hacia el mar con murete inferior, dintel superior y pilares cada tramo
-          B.box(x0, x1, -1.5, 1.45, -0.55, 0.55, lwWall * sg, 0, 0xcfd4db, { front: [9, 0], top: [9, 0] }, uo);
-          B.box(x0, x1, hT - 1.15, hT + 1.15, -0.65, 0.65, lwWall * sg, 0, 0xd8d2c6, { front: [9, 0], top: [9, 0] }, uo);
-          B.box(-1.05, 1.05, 1.3, hT - 1.0, -0.62, 0.62, lwWall * sg, 0, 0xd8d2c6, { front: [9, 0], top: [9, 0] }, uo);
+          // galería abierta hacia el mar con murete escalonado, pilares de piedra caliza bien definidos y cornisa superior
+          B.box(x0, x1, -1.5, 1.38, -0.58, 0.58, lwWall * sg, 0, 0xd4d0c6, { front: [9, 0], top: [9, 0] }, uo);
+          B.box(x0, x1, 1.38, 1.56, -0.64, 0.64, lwWall * sg, 0, 0xe4dccb, { front: [9, 0], top: [9, 0] }, uo);
+          B.box(x0, x1, hT - 1.12, hT + 1.18, -0.72, 0.72, lwWall * sg, 0, 0xe0d6c4, { front: [9, 0], top: [9, 0] }, uo);
+          B.box(-0.92, 0.92, 1.45, hT - 1.0, -0.74, 0.74, lwWall * sg, 0, 0xe5dcc9, { front: [9, 0], top: [9, 0] }, uo);
+          B.near(() => B.box(-1.08, 1.08, hT - 1.45, hT - 1.0, -0.82, 0.82, lwWall * sg, 0, 0xd8ceb9, { front: [9, 0] }, uo));
         } else {
-          B.box(x0, x1, -1.5, hT + 1.15, -0.55, 0.75, lwWall * sg, 0, 0x5c6169, { front: [9, 0], top: [9, 0] }, uo);
-          B.near(() => B.box(-0.55, 0.55, 0, hT, -0.95, -0.45, lwWall * sg, 0, 0x707680, { front: [9, 0] }, uo));
+          // pared interior de la ladera: hormigón oscuro arriba + zócalo claro reflectante abajo + costillas cada tramo
+          B.box(x0, x1, -1.5, 1.8, -0.55, 0.75, lwWall * sg, 0, 0x86837c, { front: [9, 0], top: [9, 0] }, uo);
+          B.box(x0, x1, 1.8, hT + 1.18, -0.55, 0.75, lwWall * sg, 0, 0x454950, { front: [9, 0], top: [9, 0] }, uo);
+          B.near(() => {
+            B.box(-0.48, 0.48, 0, hT, -0.92, -0.45, lwWall * sg, 0, 0x5d626a, { front: [9, 0] }, uo);
+            // franja reflectante cálida a media altura para guiar la trazada en el interior
+            B.quad(Q(x0, 1.68, -0.62 * sg, lwWall * sg, 0, 0), Q(x1, 1.68, -0.62 * sg, lwWall * sg, 1, 0), Q(x1, 1.92, -0.62 * sg, lwWall * sg, 1, 1), Q(x0, 1.92, -0.62 * sg, lwWall * sg, 0, 1), 0xffd28a, 10, 0);
+          });
         }
       }
-      // techo del túnel + paseo superior (se ensancha automáticamente con uW en la vista general)
-      B.quad(Q(x0, hT, 0, -lwRoof, uo, 0), Q(x1, hT, 0, -lwRoof, uo + segL, 0), Q(x1, hT, 0, lwRoof, uo + segL, 12), Q(x0, hT, 0, lwRoof, uo, 12), 0x2c3037, 9, 0);
-      B.quad(Q(x0, hT + 1.15, 0, -lwRoof, uo, 0), Q(x1, hT + 1.15, 0, -lwRoof, uo + segL, 0), Q(x1, hT + 1.15, 0, lwRoof, uo + segL, 12), Q(x0, hT + 1.15, 0, lwRoof, uo, 12), 0xd8ccb6, 9, 0);
+      // techo oscuro del túnel + paseo mediterráneo superior
+      B.quad(Q(x0, hT, 0, -lwRoof, uo, 0), Q(x1, hT, 0, -lwRoof, uo + segL, 0), Q(x1, hT, 0, lwRoof, uo + segL, 12), Q(x0, hT, 0, lwRoof, uo, 12), 0x1d2026, 9, 0);
+      B.quad(Q(x0, hT + 1.18, 0, -lwRoof, uo, 0), Q(x1, hT + 1.18, 0, -lwRoof, uo + segL, 0), Q(x1, hT + 1.18, 0, lwRoof, uo + segL, 12), Q(x0, hT + 1.18, 0, lwRoof, uo, 12), 0xdfd3bc, 9, 0);
       // pretiles del paseo superior
-      B.box(x0, x1, hT + 1.15, hT + 2.05, -0.35, 0.35, -lwRoof, 0, 0xe2d8c5, { front: [9, 0], top: [9, 0] }, uo);
-      B.box(x0, x1, hT + 1.15, hT + 2.05, -0.35, 0.35, lwRoof, 0, 0xe2d8c5, { front: [9, 0], top: [9, 0] }, uo);
-      // doble fila de luces interiores encendidas en el techo del túnel
-      for (const lx of [-0.46, 0.46]) {
-        B.quad(Q(x0 + 1.2, hT - 0.08, -0.32, lx, 0, 0), Q(x1 - 1.2, hT - 0.08, -0.32, lx, 1, 0), Q(x1 - 1.2, hT - 0.08, 0.32, lx, 1, 1), Q(x0 + 1.2, hT - 0.08, 0.32, lx, 0, 1), 0xffffff, 10, 0);
+      B.box(x0, x1, hT + 1.18, hT + 2.15, -0.38, 0.38, -lwRoof, 0, 0xe8dec9, { front: [9, 0], top: [9, 0] }, uo);
+      B.box(x0, x1, hT + 1.18, hT + 2.15, -0.38, 0.38, lwRoof, 0, 0xe8dec9, { front: [9, 0], top: [9, 0] }, uo);
+      // doble fila continua de luminarias cálidas de sodio/ámbar en el techo del túnel
+      for (const lx of [-0.48, 0.48]) {
+        B.quad(Q(x0 + 0.7, hT - 0.08, -0.36, lx, 0, 0), Q(x1 - 0.7, hT - 0.08, -0.36, lx, 1, 0), Q(x1 - 0.7, hT - 0.08, 0.36, lx, 1, 1), Q(x0 + 0.7, hT - 0.08, 0.36, lx, 0, 1), 0xffd394, 10, 0);
       }
-      // embocaduras arquitectónicas en la entrada y la salida
+      // bocas arquitectónicas monumentales en la entrada y la salida con cartel F1 y pilastras de piedra
       if (k === 0 || k === nSeg - 1) {
-        const xe = k === 0 ? x0 : x1;
-        B.quad(Q(xe, hT - 0.1, 0, -lwRoof, 0, 0), Q(xe, hT - 0.1, 0, lwRoof, 14, 0), Q(xe, hT + 2.05, 0, lwRoof, 14, 2.2), Q(xe, hT + 2.05, 0, -lwRoof, 0, 2.2), 0xe4dac8, 9, 0);
+        const xe = k === 0 ? x0 : x1, sgnX = k === 0 ? -1 : 1;
+        B.quad(Q(xe, hT - 0.15, 0, -lwRoof, 0, 0), Q(xe, hT - 0.15, 0, lwRoof, 14, 0), Q(xe, hT + 2.35, 0, lwRoof, 14, 2.5), Q(xe, hT + 2.35, 0, -lwRoof, 0, 2.5), 0xeae0cc, 9, 0);
+        // pilastras laterales remarcando la embocadura
+        for (const sg of [-1, 1]) {
+          B.box(xe - 0.9, xe + 0.9, -1.5, hT + 2.45, -1.05, 1.05, lwRoof * sg, 0, 0xe5dac6, { front: [9, 0], top: [9, 0] }, uo);
+        }
+        // faldón oscuro bajo el dintel + cartel publicitario F1 sobre la boca del túnel
+        B.quad(Q(xe + sgnX * 0.12, hT - 0.55, 0, -lwWall, 0, 0), Q(xe + sgnX * 0.12, hT - 0.55, 0, lwWall, 12, 0), Q(xe + sgnX * 0.12, hT + 0.05, 0, lwWall, 12, 1), Q(xe + sgnX * 0.12, hT + 0.05, 0, -lwWall, 0, 1), 0x161920, 0, 0);
+        const C = (x, y, lw, u, v) => [x, y, 0, lw, 0, u, v];
+        const cell = k === 0 ? 0 : 1;
+        if (k === 0) {
+          B.quad(C(xe - 0.16, hT + 0.18, -lwWall, 0, 0), C(xe - 0.16, hT + 0.18, lwWall, 2, 0), C(xe - 0.16, hT + 1.85, lwWall, 2, 1), C(xe - 0.16, hT + 1.85, -lwWall, 0, 1), 0xffffff, 4, cell);
+        } else {
+          B.quad(C(xe + 0.16, hT + 0.18, lwWall, 0, 0), C(xe + 0.16, hT + 0.18, -lwWall, 2, 0), C(xe + 0.16, hT + 1.85, -lwWall, 2, 1), C(xe + 0.16, hT + 1.85, lwWall, 0, 1), 0xffffff, 4, cell);
+        }
       }
     }
   }
@@ -3075,6 +3358,60 @@ function buildWorld() {
       }
       // viga cabezal uniendo los dos pilares de cada lado
       B.box(-8.0, 8.0, pierH - 1.35, pierH + 0.15, 0.2, 3.0, T.SH + 0.14, 1.4, 0xc9ced6, { front: [9, 0], top: [9, 0] });
+    }
+  }
+  // arco/bóveda arquitectónica cruzando sobre la pista (p. ej. cubierta luminosa del Hotel W en Yas Marina)
+  if (vis.overArch) {
+    const oa = vis.overArch, lenA = Math.max(30, oa.s1 - oa.s0), hA = oa.height ?? 12.2;
+    const colA = oa.color ?? 0x2084cc, glowA = oa.glow ?? 0x6c5cff;
+    busy[0].push([oa.s0 - 16, oa.s1 + 16]); busy[1].push([oa.s0 - 16, oa.s1 + 16]);
+    const nSeg = Math.max(5, Math.round(lenA / 16)), segL = lenA / nSeg;
+    const lwA = T.SH + 0.16;
+    const Q = (x, y, z, lw, lm, u, v) => [x, y, z, lw, lm, u, v];
+    for (let k = 0; k < nSeg; k++) {
+      const sc = oa.s0 + (k + 0.5) * segL, i = iOf(sc), x0 = -segL / 2 - 0.18, x1 = segL / 2 + 0.18, uo = k * segL;
+      const lmL = run(-1, i) + 2.4, lmR = run(1, i) + 2.4;
+      B.at(sc, 1);
+      // pórticos laterales de cristal y pilares del hotel a ambos lados de la pista
+      for (const [sg, lm] of [[-1, lmL], [1, lmR]]) {
+        B.box(x0, x1, -1.5, hA * 0.86, 0.2, 5.2, lwA * sg, lm * sg, 0xdce4ee, { front: [6, k % 8], top: [8, 0] }, uo);
+        B.box(-0.55, 0.55, -1.5, hA + 0.9, -0.4, 0.5, lwA * sg, lm * sg, 0xe8eef4, { front: [9, 0], top: [9, 0] }, uo);
+      }
+      // cubierta arqueada gridshell sobre la pista + costillas luminosas azules/violetas visibles desde a bordo
+      B.quad(Q(x0, hA + 0.35, 0, -lwA, -lmL, uo, 0), Q(x1, hA + 0.35, 0, -lwA, -lmL, uo + segL, 0), Q(x1, hA + 1.45, 0, 0, 0, uo + segL, 12), Q(x0, hA + 1.45, 0, 0, 0, uo, 12), colA, 6, k % 6);
+      B.quad(Q(x0, hA + 1.45, 0, 0, 0, uo, 0), Q(x1, hA + 1.45, 0, 0, 0, uo + segL, 0), Q(x1, hA + 0.35, 0, lwA, lmR, uo + segL, 12), Q(x0, hA + 0.35, 0, lwA, lmR, uo, 12), colA, 6, k % 6);
+      // cara inferior con costilla brillante cada tramo
+      B.quad(Q(x0, hA, 0, -lwA, -lmL, 0, 0), Q(x1, hA, 0, -lwA, -lmL, 1, 0), Q(x1, hA, 0, lwA, lmR, 1, 1), Q(x0, hA, 0, lwA, lmR, 0, 1), 0x162238, 0, 0);
+      B.quad(Q(-0.55, hA - 0.14, 0, -lwA, -lmL, 0, 0), Q(0.55, hA - 0.14, 0, -lwA, -lmL, 1, 0), Q(0.55, hA - 0.14, 0, lwA, lmR, 1, 1), Q(-0.55, hA - 0.14, 0, lwA, lmR, 0, 1), glowA, 10, 0);
+      B.quad(Q(x0 + 0.8, hA + 1.55, 0, -0.5, 0, 0, 0), Q(x1 - 0.8, hA + 1.55, 0, -0.5, 0, 1, 0), Q(x1 - 0.8, hA + 1.55, 0, 0.5, 0, 1, 1), Q(x0 + 0.8, hA + 1.55, 0, 0.5, 0, 0, 1), glowA, 10, 0);
+    }
+  }
+  // muralla medieval almenada pegada a la calzada (p. ej. subida estrecha del castillo en Bakú)
+  if (vis.castleWall) {
+    const cw = vis.castleWall, lenW = Math.max(40, cw.s1 - cw.s0);
+    const sides = cw.side === 0 ? [-1, 1] : [cw.side ?? 1];
+    const nSeg = Math.max(8, Math.round(lenW / 12)), segL = lenW / nSeg;
+    for (const sg of sides) {
+      busy[sg === PS ? 0 : 1].push([cw.s0 - 10, cw.s1 + 10]);
+      for (let k = 0; k < nSeg; k++) {
+        const sc = cw.s0 + (k + 0.5) * segL, i = iOf(sc), x0 = -segL / 2 - 0.15, x1 = segL / 2 + 0.15, uo = k * segL;
+        const lm = run(sg, i) + 2.2, lw = T.SH - 0.08;
+        tryAdd(() => {
+          B.at(sc, sg);
+          // lienzo de muralla de piedra arenisca cálida (patrón 16 = piedra histórica)
+          B.box(x0, x1, -3, 9.2, 0, 3.6, lw, lm, 0xdac39d, { front: [16, k % 12], back: [16, k % 12], top: [9, 0] }, uo);
+          // imposta saliente + almenas cada 3 m
+          B.box(x0, x1, 8.95, 9.45, -0.25, 3.7, lw, lm, 0xcab087, { front: [9, 0], top: [9, 0] }, uo);
+          for (let mx = x0 + 1.0; mx < x1 - 0.8; mx += 2.8) {
+            B.box(mx, Math.min(x1, mx + 1.45), 9.45, 10.65, -0.15, 0.85, lw, lm, 0xd8c19a, { front: [16, k], top: [9, 0] }, uo);
+          }
+          // torreón defensivo cada 5 tramos dominando la curva estrecha
+          if (k % 5 === 2) {
+            B.box(-2.8, 2.8, -3, 14.5, -0.7, 4.4, lw, lm, 0xd2b88f, { front: [16, k + 3], top: [9, 0] }, uo);
+            B.box(-3.0, 3.0, 14.2, 15.6, -0.85, 4.55, lw, lm, 0xc6aa80, { front: [16, k + 5], top: [9, 0] }, uo);
+          }
+        }, 1);
+      }
     }
   }
   const isBusy = (sg, s0, s1) => busy[sg === PS ? 0 : 1].some(([a, b]) => mod(s0 - a, T.L) < b - a || mod(a - s0, T.L) < s1 - s0);
@@ -3343,6 +3680,106 @@ function buildWorld() {
     const vr2 = brakes.slice().sort((a, b) => vr[a] - vr[b]).slice(0, street ? 3 : 5);
     vr2.forEach((bi, k) => { const sg = track.curv[bi] > 0 ? 1 : -1, sb = bi * T.ds; grandstand(sb - 150, sb - 10, sg, street ? 10 : 14, street ? 8 : 10.5, k + 1); });
   }
+  // ---- Segunda pasada de vegetación cercana detrás de la valla (6..28 m) en pistas arboladas y parques semiurbanos
+  // Reutiliza el mismo InstancedMesh sin draw calls extra; en vista aérea (tiny) se ocultan solo los que pisarían la pista ensanchada.
+  if (!bio.arid && !street) {
+    const isSemi = (track.urban ?? 0) > 0;
+    const isLush = vis.biome === "alpino" || vis.biome === "bosque" || vis.biome === "tropical";
+    const nearBudget = q === 0 ? (isSemi ? 45 : 110) : q === 1 ? (isSemi ? 90 : isLush ? 260 : 160) : (isSemi ? 150 : isLush ? 460 : 250);
+    const sStep = isSemi ? 24 : isLush ? 15 : 22;
+    const nearPts = [];
+    const nearRnd = (() => { let s = 54321 + T.n; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296); })();
+    const baseTreeUnit = Math.max(1, T.Wov * 1.05);
+    const nearS = mkS();
+    const pitMarginS = (s) => {
+      const sm = mod(s, T.L);
+      return sm >= track.pit.entry - 90 || sm <= track.pit.exit + 90 || pitGap(sm);
+    };
+    const inStandSpan = (sg, s) => standS.some(([sc, ssg, slen]) => ssg === sg && dCirc(s, sc) < slen * 0.56 + 16);
+    for (let pass = 0; pass < 2 && nearPts.length < nearBudget; pass++) {
+      for (let s = pass * (sStep * 0.5); s < T.L && nearPts.length < nearBudget; s += sStep) {
+        const sm = mod(s + (nearRnd() - 0.5) * sStep * 0.55, T.L);
+        if (vis.tunnel && sm >= vis.tunnel.s0 - 20 && sm <= vis.tunnel.s1 + 20) continue;
+        if (ovp && (dCirc(sm, ovp.sOver) < (ovp.halfSpan ?? 52) + 22 || dCirc(sm, ovp.sUnder) < 34)) continue;
+        sample(sm, nearS);
+        const idxS = Math.min(n - 1, Math.floor(sm / T.ds));
+        for (const sg of [-1, 1]) {
+          if (nearPts.length >= nearBudget) break;
+          if (sg === PS && pitMarginS(sm)) continue;
+          if (inStandSpan(sg, sm)) continue;
+          const runM = sg === PS ? T.rP[idxS] : T.rO[idxS];
+          const inCorridor = !!vis.forestCorridors?.some(([a, b]) => sm >= a && sm <= b);
+          const band = pass === 0 ? ((inCorridor ? 5.2 : 6.5) + nearRnd() * 8.0) : (13.0 + nearRnd() * 14.5);
+          const lat = sg * (SH * W_REAL * T.wr[idxS] + runM + band);
+          const x = nearS.x + nearS.rx * lat;
+          const z = nearS.z + nearS.rz * lat;
+          if (isSemi) {
+            // En semiurbanos (Melbourne, Montreal, Miami, Madrid), solo vegetación donde hay parque/bosque
+            const fv = useOsmForest ? Math.max(T.env.forest(x, z), T.env.forest(x + nearS.rx * sg * 14, z + nearS.rz * sg * 14)) : park(x, z);
+            if (!inCorridor && fv < 0.38) continue;
+          } else if (useOsmForest) {
+            // Respetar la máscara real OSM de bosque (los corredores arbolados declarados como Kemmel/Blanchimont cierran el bosque junto a la valla)
+            const fv = Math.max(T.env.forest(x, z), T.env.forest(x + nearS.rx * sg * 16, z + nearS.rz * sg * 16));
+            if (!inCorridor && fv < 0.22 && !(fv > 0.10 && nearRnd() < 0.18)) continue;
+          } else {
+            const cl = vnoise(x / (E * 0.085) + 31, z / (E * 0.085) + 17);
+            if (!inCorridor && cl < (isLush ? 0.34 : 0.48)) continue;
+          }
+          const td = trackDist(x, z);
+          const nearRun = Math.max(T.rP[tdNear], T.rO[tdNear]);
+          if (td < SH * W_REAL + nearRun + 4.8) continue;
+          const t = terr(x, z, 0);
+          if (t.wet) continue;
+          if (lmClear.some(([lx, lz, lr]) => (x - lx) ** 2 + (z - lz) ** 2 < (lr + 10) ** 2)) continue;
+          if (gradaClear.some(([gx, gz, gr]) => (x - gx) ** 2 + (z - gz) ** 2 < (gr + 6) ** 2)) continue;
+          if (nearPts.some(([px, pz]) => (px - x) ** 2 + (pz - z) ** 2 < 8.5 * 8.5)) continue;
+          // Altura realista en metros reales (arbustos 6..10 m pegados a valla, árboles 12..21 m detrás)
+          const realH = band < 11.5 ? (6.5 + nearRnd() * 4.8) : (12.0 + nearRnd() * 9.5);
+          const sz = realH / baseTreeUnit;
+          const aerialSafe = td >= T.SH * T.Wov + 6 ? 1 : 0;
+          nearPts.push([x, z]);
+          trees.push([x, t.h - 0.85, z, sz, nearRnd(), nearRnd() * Math.PI * 2, nearRnd(), aerialSafe]);
+        }
+      }
+    }
+  }
+  // Ordenar: primero los visibles en vista aérea (circuito), al final los pegados a la valla (solo visibles de cerca)
+  trees.sort((a, b) => (b[7] ?? 1) - (a[7] ?? 1));
+  const aerialTreeCount = trees.reduce((acc, t) => acc + ((t[7] ?? 1) ? 1 : 0), 0);
+  {
+    let tgc = collect();
+    // dos especies mezcladas en la misma malla: frondosa (copa de varios volúmenes) y conífera (tres pisos)
+    const blob = (r, x, y, z, shade) => {
+      const g = new THREE.IcosahedronGeometry(r, 0), p = g.attributes.position, nrm = g.attributes.normal, cl = new Float32Array(p.count * 3);
+      for (let i = 0; i < p.count; i++) {
+        const l = Math.hypot(p.getX(i), p.getY(i), p.getZ(i)) || 1;
+        nrm.setXYZ(i, p.getX(i) / l, p.getY(i) / l, p.getZ(i) / l);
+        const k = 0.86 + 0.28 * hash2(Math.round(p.getX(i) * 400) * 0.0225 + x, Math.round(p.getY(i) * 400) * 0.0175 + z);
+        p.setXYZ(i, p.getX(i) * k, p.getY(i) * k * 0.9, p.getZ(i) * k);
+        const wy = y + p.getY(i), out = Math.hypot(x + p.getX(i), z + p.getZ(i));
+        const sh = shade * (0.55 + 0.45 * sstep(0.45, 1.15, wy)) * (0.8 + 0.2 * sstep(0.05, 0.45, out));
+        cl[i * 3] = cl[i * 3 + 1] = cl[i * 3 + 2] = sh;
+      }
+      g.setAttribute("color", new THREE.BufferAttribute(cl, 3));
+      tgc.raw(g.translate(x, y, z));
+    };
+    blob(0.36, 0, 0.82, 0, 1); blob(0.27, 0.22, 0.66, 0.1, 0.9); blob(0.26, -0.2, 0.7, -0.12, 1.08); blob(0.22, 0.02, 1.08, 0.06, 1.14); blob(0.2, -0.05, 0.62, 0.22, 0.95);
+    tgc.add(new THREE.CylinderGeometry(0.05, 0.07, 0.55, 6).translate(0, 0.27, 0), [0.5, 0.36, 0.26]);
+    const treeGeo = tgc.done();
+    tgc = collect();
+    blob(0.47, 0, 0.8, 0, 1);
+    tgc.add(new THREE.CylinderGeometry(0.05, 0.07, 0.45, 3, 1, true).translate(0, 0.22, 0), [0.5, 0.36, 0.26]);
+    const treeFar = tgc.done();
+    treeMesh = add(new THREE.InstancedMesh(treeGeo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, metalness: 0 }), trees.length));
+    trees.forEach((t, i) => {
+      const s = T.Wov * 1.05 * t[3];
+      m4.compose(tPos.set(t[0], t[1], t[2]), tQuat.setFromAxisAngle(yUp, t[5]), tScl.set(s, s, s));
+      treeMesh.setMatrixAt(i, m4);
+      treeMesh.setColorAt(i, col.setHex(bio.treeA).lerp(c2, t[4]));
+    });
+    treeMesh.frustumCulled = false; treeMesh.castShadow = true; treeMesh.receiveShadow = true; treeMesh.name = "arboles";
+    treeMesh.userData = { near: treeGeo, far: treeFar, aerialCount: aerialTreeCount, fullCount: trees.length };
+  }
   // torres de las cámaras de tele (en el mismo sitio que la cámara «Tele» a velocidad normal)
   { const nCam = Math.max(3, Math.round(T.L / 360)), sp = T.L / nCam, h = 9 + sp * 0.012 - 1.5;
     for (let k = 0; k < nCam; k++) {
@@ -3358,20 +3795,21 @@ function buildWorld() {
         });
       }, st ? -1 : 0.5) && st) busy[1].push([cs - 6, cs + 6]); // en la calle, las casas dejan sitio a la torre
     } }
-  // puentes de publicidad sobre las rectas
-  { const bridges = [], stp = Math.max(1, Math.round(20 / T.ds));
+  // puentes y pórticos icónicos de publicidad sobre las rectas (explícitos por circuito + automáticos)
+  { const bridges = (vis.bridges || []).map((b) => ({ s: mod(b.s, T.L), brand: b.brand }));
+    const stp = Math.max(1, Math.round(20 / T.ds));
     for (let i = 0; i < n && bridges.length < 3; i += stp) {
       const s = i * T.ds;
       if (mod(s, T.L) < 220 || mod(-s, T.L) < 140 || ramp(s) > 0.01) continue;
       let ok = true; for (let d = -70; d <= 70; d += 10) if (kAbs[iOf(s + d)] > 0.0016) ok = false;
-      if (!ok || bridges.some((b) => Math.min(mod(b - s, T.L), mod(s - b, T.L)) < T.L / 5)) continue;
-      bridges.push(s);
+      if (!ok || bridges.some((b) => dCirc(b.s, s) < T.L / 5)) continue;
+      bridges.push({ s, brand: undefined });
     }
-    bridges.forEach((s, bk) => tryAdd(() => {
+    bridges.forEach(({ s, brand }, bk) => tryAdd(() => {
       const i = iOf(s), rR = (PS > 0 ? T.rP : T.rO)[i], rL = (PS > 0 ? T.rO : T.rP)[i], lw = T.SH + 0.02;
       B.at(s, 1);
       for (const [sg, r] of [[1, rR], [-1, rL]]) B.box(-0.7, 0.7, -2, 9.8, -0.7, 0.7, lw * sg, (r + 1.8) * sg, 0xd0d4d9, { front: [9, 0], top: [9, 0] });
-      const Lq = [-lw, -(rL + 1.8)], Rq = [lw, rR + 1.8], C = (x, y, e, u, v) => [x, y, 0, e[0], e[1], u, v], cell = (bk * 6 + 2) % 16;
+      const Lq = [-lw, -(rL + 1.8)], Rq = [lw, rR + 1.8], C = (x, y, e, u, v) => [x, y, 0, e[0], e[1], u, v], cell = brand !== undefined ? brand % 16 : (bk * 6 + 2) % 16;
       B.quad(C(-0.75, 7, Lq, 0, 0), C(-0.75, 7, Rq, 3, 0), C(-0.75, 9.5, Rq, 3, 1), C(-0.75, 9.5, Lq, 0, 1), 0xffffff, 4, cell);
       B.quad(C(0.75, 7, Rq, 0, 0), C(0.75, 7, Lq, 3, 0), C(0.75, 9.5, Lq, 3, 1), C(0.75, 9.5, Rq, 0, 1), 0xffffff, 4, (cell + 5) % 16);
       B.quad(C(-0.75, 9.5, Lq, 0, 0), C(-0.75, 9.5, Rq, 9, 0), C(0.75, 9.5, Rq, 9, 1), C(0.75, 9.5, Lq, 0, 1), 0x8d949c, 8, 0);
@@ -3678,10 +4116,12 @@ function buildWorld() {
   const torso = inst(TORSO_GEO, STEER_MAT, NC, 10);
   const crewS = inst(crewAttr(CREW_STAND.clone(), NC * 12, 0xe2e4e8), CREW_MAT, NC * 12, 10), crewC = inst(crewAttr(CREW_CROUCH.clone(), NC * 4, 0xe2e4e8), CREW_MAT, NC * 4, 10), jacks = inst(JACK_GEO, JACK_MAT, NC * 2, 10);
   carLoCur = CAR_LO; // hasta que llegue la del .glb (con los datos de este circuito), la integrada
-  loadCarAssets(({ carGeo, wheelGeo, carLoGeo, steer, cam }) => {
+  loadCarAssets(({ carGeo, wheelGeo, carLoGeo, steer, cam, helmPivot, mirrorPos: mp }) => {
     if (!alive3d || !world) { carGeo?.dispose(); wheelGeo?.dispose(); carLoGeo?.dispose(); return; }
     if (steer) steerPos = steer;
     if (cam) camPos = cam;
+    if (helmPivot) U.uHelmPivot.value.set(helmPivot[0], helmPivot[1], helmPivot[2]);
+    if (mp) mirrorPos = mp;
     if (carLoGeo) {
       // comparte con la integrada los datos de cada coche (segundo color, librea, daños)
       for (const a of CAR_INST) carLoGeo.setAttribute(a, CAR_LO.attributes[a]);
@@ -3804,15 +4244,26 @@ function buildWorld() {
     const pts = add(new THREE.Points(g, m)); pts.frustumCulled = false; pts.visible = false; pts.name = "pueblos";
     return pts;
   })();
+  const drsStarts = [];
+  if (track.ms?.length) {
+    const nm = track.ms.length;
+    for (let k = 0; k < nm; k++) {
+      const curM = track.ms[k], prevM = track.ms[(k - 1 + nm) % nm];
+      const onCur = !!(curM.drs || curM.xZone), onPrev = !!(prevM.drs || prevM.xZone);
+      if (onCur && !onPrev) drsStarts.push(curM.s0);
+    }
+  }
   const trackKit = createTrackKit(THREE, {
     scene, trackId: track.id, trackName: track.name, L: T.L, ds: T.ds, PS: T.PS, SH: T.SH, W_REAL, street,
     pitEntry: track.pit.entry, pitExit: track.pit.exit, brakes, standS, rP: T.rP, rO: T.rO,
+    curv: track.curv, vref: track.vref, wr: T.wr, drsStarts, tunnel: vis.tunnel ?? null, overpass: ovp ?? null,
     sample, terrY: (x, z) => terr(x, z, 0).h, trackDist,
     isWet: T.env ? (x, z) => T.env.wet(x, z) : undefined,
     loadKitGlb: modLoadKitGlb,
   });
-  const curWorld = { all, trackKit, realPit, cityRoofs, props, trees: treeMesh, treeMeshes: [treeMesh], treeLod: null, townLights, sparkMesh, fists, chk, beams, towers, night, lampPos, debris, marsh, crane, blank, gant, glit, markMesh, posts, flags, scCar, scBar, road, cars, wheels, crewS, crewC, jacks, loose, puffs, blobs, spray, discs, rings, ghostRings, lamps, poles, halos, decals, steer, torso, carIdx, c2src: c2a.slice(), hlsA: hla, hlsB: hlb, hlA: CAR_LO.attributes.aHelm, hlB: CAR_LO.attributes.aHelm2, hlAH: CAR_GEO.attributes.aHelm, hlBH: CAR_GEO.attributes.aHelm2, carsHi, wheelsHi, col2: CAR_LO.attributes.aCol2, livSrc, carData: CAR_LO.attributes.aCarData, col2H: CAR_GEO.attributes.aCol2, carDataH: CAR_GEO.attributes.aCarData, brakeH, brakeL, wheelFxH, wheelFxL, cell: dg.attributes.aCell };
+  const curWorld = { all, trackKit, realPit, cityRoofs, brakeBoards, props, trees: treeMesh, treeMeshes: [treeMesh], treeLod: null, townLights, sparkMesh, fists, chk, beams, towers, night, lampPos, debris, marsh, crane, blank, gant, glit, markMesh, posts, flags, scCar, scBar, road, cars, wheels, crewS, crewC, jacks, loose, puffs, blobs, spray, discs, rings, ghostRings, lamps, poles, halos, decals, steer, torso, carIdx, c2src: c2a.slice(), hlsA: hla, hlsB: hlb, hlA: CAR_LO.attributes.aHelm, hlB: CAR_LO.attributes.aHelm2, hlAH: CAR_GEO.attributes.aHelm, hlBH: CAR_GEO.attributes.aHelm2, carsHi, wheelsHi, col2: CAR_LO.attributes.aCol2, livSrc, carData: CAR_LO.attributes.aCarData, col2H: CAR_GEO.attributes.aCol2, carDataH: CAR_GEO.attributes.aCarData, brakeH, brakeL, wheelFxH, wheelFxL, cell: dg.attributes.aCell };
   world = curWorld;
+  syncTreeShadows();
   // ---- carga asíncrona de los .glb de entorno (árboles del bioma, mecánicos y yates) sin bloquear el arranque
   if (trees.length && bio.species?.length) {
     const spKeys = bio.species.map(([k]) => k);
@@ -3846,12 +4297,14 @@ function buildWorld() {
       const tm = new THREE.Matrix4(), tp = new THREE.Vector3(), tq = new THREE.Quaternion(), ts = new THREE.Vector3(), uy = new THREE.Vector3(0, 1, 0);
       const newMeshes = [], lodHi = [], lodLo = [];
       const tinyNow = cars.geometry === CAR_MIN;
-      const buildInst = (parts, list, scMul, visible) => {
+      const buildInst = (parts, list, scMul, visible, aerialCount) => {
         const out = [];
         for (const pt of parts) {
           const im = new THREE.InstancedMesh(pt.geo, pt.mat, list.length);
           im.userData.sharedGeo = true; im.userData.sharedMat = true;
-          im.frustumCulled = false; im.castShadow = q >= 3; im.receiveShadow = true; im.visible = visible;
+          im.userData.aerialCount = aerialCount; im.userData.fullCount = list.length;
+          im.frustumCulled = false; im.castShadow = treeCastShadowNow(); im.receiveShadow = true; im.visible = visible;
+          im.count = tinyNow ? aerialCount : list.length;
           im.name = "arboles";
           for (let i = 0; i < list.length; i++) {
             const t = list[i], s = T.Wov * 1.05 * scMul * t[3];
@@ -3865,12 +4318,15 @@ function buildWorld() {
       };
       for (const [k, list] of buckets) {
         if (!list.length) continue;
+        // conservar el orden: primeros los seguros en vista aérea, últimos los pegados a la valla
+        list.sort((a, b) => (b[7] ?? 1) - (a[7] ?? 1));
+        const aCnt = list.reduce((acc, t) => acc + ((t[7] ?? 1) ? 1 : 0), 0);
         const tpl = byKey.get(k), scMul = spScale[k] ?? 0.88;
         if (tpl.lo) {
-          lodHi.push(...buildInst(tpl.hi, list, scMul, !tinyNow));
-          lodLo.push(...buildInst(tpl.lo, list, scMul, tinyNow));
+          lodHi.push(...buildInst(tpl.hi, list, scMul, !tinyNow, aCnt));
+          lodLo.push(...buildInst(tpl.lo, list, scMul, tinyNow, aCnt));
         } else {
-          buildInst(tpl.hi, list, scMul, true);
+          buildInst(tpl.hi, list, scMul, true, aCnt);
         }
       }
       // retirar el sustituto procedural
@@ -4206,12 +4662,25 @@ const DOF_SHADER = {
     }`,
 };
 const GRADE_SHADER = {
-  uniforms: { tDiffuse: { value: null }, uWarm: { value: 0 }, uOvercast: { value: 0 }, uNight: { value: 0 }, uVig: { value: 0 } },
+  uniforms: { tDiffuse: { value: null }, uWarm: { value: 0 }, uOvercast: { value: 0 }, uNight: { value: 0 }, uVig: { value: 0 }, uSpeedBlur: { value: 0 } },
   vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-  fragmentShader: `uniform sampler2D tDiffuse; uniform float uWarm, uOvercast, uNight, uVig; varying vec2 vUv;
+  fragmentShader: `uniform sampler2D tDiffuse; uniform float uWarm, uOvercast, uNight, uVig, uSpeedBlur; varying vec2 vUv;
     void main(){
+      vec2 p = vUv * 2.0 - 1.0;
       vec4 tex = texture2D(tDiffuse, vUv);
       vec3 c = clamp(tex.rgb, 0.0, 1.0);
+      // desenfoque direccional radial suave en los bordes laterales a alta velocidad (cámara a bordo / piloto)
+      float edgeW = smoothstep(0.32, 1.02, abs(p.x)) * (0.45 + 0.55 * smoothstep(0.28, 1.0, length(p))) * (1.0 - 0.58 * smoothstep(-0.28, -0.92, p.y));
+      float sb = uSpeedBlur * edgeW;
+      if (sb > 0.005) {
+        vec2 dir = normalize(p + vec2(1e-4, 0.0)) * (0.015 * sb);
+        vec3 b = c * 0.36;
+        b += clamp(texture2D(tDiffuse, clamp(vUv + dir * 0.35, 0.001, 0.999)).rgb, 0.0, 1.0) * 0.24;
+        b += clamp(texture2D(tDiffuse, clamp(vUv + dir * 0.72, 0.001, 0.999)).rgb, 0.0, 1.0) * 0.18;
+        b += clamp(texture2D(tDiffuse, clamp(vUv + dir * 1.10, 0.001, 0.999)).rgb, 0.0, 1.0) * 0.13;
+        b += clamp(texture2D(tDiffuse, clamp(vUv + dir * 1.48, 0.001, 0.999)).rgb, 0.0, 1.0) * 0.09;
+        c = b;
+      }
       // curva S muy sutil estilo retransmisión TV (respeta los colores de las libreas)
       float ct = 0.13 + 0.08 * uNight;
       c = mix(c, c * c * (3.0 - 2.0 * c), ct);
@@ -4224,14 +4693,13 @@ const GRADE_SHADER = {
       float sat = 1.0 + 0.05 * (1.0 - uOvercast) - 0.09 * uOvercast;
       c = mix(vec3(luma), c, sat);
       // viñeta suave de lente en cámaras de retransmisión (Tele y A bordo)
-      vec2 p = vUv * 2.0 - 1.0;
       float vig = 1.0 - uVig * smoothstep(0.45, 1.32, dot(p, p));
       gl_FragColor = vec4(clamp(c * vig, 0.0, 1.0), tex.a);
     }`,
 };
 let canPost = renderer.capabilities.isWebGL2 && (renderer.extensions.has("EXT_color_buffer_half_float") || renderer.extensions.has("EXT_color_buffer_float"));
 if (!canPost) q = Math.min(q, 1);
-let post = null, dofK = 0, dofFocus = 50, aoRadius = 1, vigK = 0;
+let post = null, dofK = 0, dofFocus = 50, aoRadius = 1, vigK = 0, speedBlurK = 0;
 function makePost() {
   // profundidad en coma flotante (WebGL2): evita los anillos de cuantización en la oclusión ambiental sobre el asfalto
   const depth = new THREE.DepthTexture(2, 2, THREE.FloatType);
@@ -4287,6 +4755,12 @@ function render2() {
 // ------------------------------------------------------------------ calidad
 // 0: sin sombras ni efectos · 1: sombras · 2: + búfer HDR y resplandor · 3: + oclusión ambiental y desenfoque de tele
 const Q_PR = [1, 1.5, 2, 2], Q_SHADOW = [1024, 1024, 2048, 4096];
+const treeCastShadowNow = () => q >= 3 || (q >= 2 && (camMode === "abordo" || camMode === "piloto"));
+function syncTreeShadows() {
+  if (!world) return;
+  const cast = treeCastShadowNow();
+  for (const tr of world.treeMeshes || []) tr.castShadow = cast;
+}
 function applyQuality() {
   if (q >= 2 && !canPost) q = 1;
   const box = opt.box, w = box.clientWidth, h = box.clientHeight;
@@ -4318,8 +4792,8 @@ function applyQuality() {
     // sombra de contacto suave siempre visible: en calidad 0 sustituye a la del sol; en el resto ancla fondo y ruedas
     world.blobs.visible = true;
     BLOB_MAT.opacity = q === 0 ? 0.72 : 0.52;
-    // las sombras de cientos de árboles cuestan tanto como los árboles: solo en calidad máxima
-    for (const tr of world.treeMeshes || []) tr.castShadow = q >= 3;
+    // árboles con sombra en calidad máxima y también en calidad 2 cuando la cámara va a bordo (frustum cercano de 42 m)
+    syncTreeShadows();
     for (const r of world.cityRoofs || []) r.visible = q >= 2; // tejados de las manzanas lejanas
   }
   U.uHiQ.value = q >= 2 ? 1 : 0; // interiores detrás de los cristales
@@ -4358,6 +4832,61 @@ const rain = (() => {
     transparent: true, depthWrite: false,
   });
   const l = new THREE.LineSegments(g, m); l.frustumCulled = false; l.renderOrder = 20; scene.add(l);
+  return l;
+})();
+
+// ------------------------------------------------------------------ motas/estelas de aire a alta velocidad (solo a bordo)
+// Unas pocas trazas sutiles de aire y polvo rasante pasan junto a los flancos del coche por encima de 180 km/h (q >= 1).
+const MOTE_N = 28;
+let motePhase = 0.37;
+const speedMotes = (() => {
+  const seed = new Float32Array(MOTE_N * 6), end = new Float32Array(MOTE_N * 2);
+  let rs = 918273;
+  const r = () => ((rs = (rs * 1664525 + 1013904223) >>> 0) / 4294967296);
+  for (let i = 0; i < MOTE_N; i++) {
+    const a = r(), b = r(), c = r();
+    seed.set([a, b, c, a, b, c], i * 6);
+    end[i * 2 + 1] = 1;
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.BufferAttribute(seed, 3));
+  g.setAttribute("aEnd", new THREE.BufferAttribute(end, 1));
+  const m = new THREE.ShaderMaterial({
+    uniforms: {
+      uCarPos: { value: new THREE.Vector3() },
+      uFwd: { value: new THREE.Vector3(1, 0, 0) },
+      uRight: { value: new THREE.Vector3(0, 0, 1) },
+      uUp: { value: new THREE.Vector3(0, 1, 0) },
+      uPhase: { value: 0 },
+      uK: { value: 0 },
+      uLum: { value: 1 },
+    },
+    vertexShader: `attribute float aEnd; uniform vec3 uCarPos, uFwd, uRight, uUp; uniform float uPhase, uK; varying float vEnd, vFade;
+      void main(){
+        float side = position.x < 0.5 ? -1.0 : 1.0;
+        float latBand = abs(position.x - 0.5) * 2.0;
+        float zFrac = fract(position.z - uPhase * (0.82 + latBand * 0.48));
+        float zAlong = 1.4 + zFrac * 18.5;
+        float lat = side * (1.05 + latBand * 3.8 + zFrac * 0.9);
+        float h = 0.24 + position.y * (1.85 + zFrac * 0.45);
+        float streak = aEnd * (0.55 + 1.55 * uK);
+        vec3 p = uCarPos + uFwd * (zAlong - streak) + uRight * lat + uUp * h;
+        vEnd = aEnd;
+        vFade = smoothstep(0.0, 0.14, zFrac) * (1.0 - smoothstep(0.76, 1.0, zFrac));
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+      }`,
+    fragmentShader: `uniform float uK, uLum; varying float vEnd, vFade;
+      void main(){
+        float a = sin(vEnd * 3.14159) * vFade * uK * 0.22;
+        gl_FragColor = vec4(vec3(0.88, 0.89, 0.86) * uLum, a);
+        #include <tonemapping_fragment>
+        #include <colorspace_fragment>
+      }`,
+    transparent: true, depthWrite: false,
+  });
+  const l = new THREE.LineSegments(g, m);
+  l.frustumCulled = false; l.renderOrder = 19; l.visible = false;
+  scene.add(l);
   return l;
 })();
 
@@ -4455,9 +4984,9 @@ function followCar() {
  */
 function onboardFov(v) {
   const a = camera.aspect, R = Math.PI / 180;
-  if (!(a > 0) || a >= 1.6) return v;
-  const h = 2 * Math.atan(Math.tan(v * R / 2) * 1.6);
-  return clamp(2 * Math.atan(Math.tan(h / 2) / a) / R, v, 92);
+  if (!(a > 0) || a >= 1.48) return v;
+  const h = 2 * Math.atan(Math.tan(v * R / 2) * 1.48);
+  return clamp(2 * Math.atan(Math.tan(h / 2) / a) / R, v, 82);
 }
 /** 0 en apaisado (16:10 o más ancho), 1 en un móvil en vertical: cuánto hay que adaptar el a bordo. */
 const portraitK = () => clamp((1.6 - camera.aspect) / 1.1, 0, 1);
@@ -4794,6 +5323,7 @@ function setCam(m) {
   if (m === camMode) return;
   camMode = m; teleIdx = -1;
   clearOrbit();
+  syncTreeShadows();
   if (m === "tele") { tvDir.carId = null; tvDir.shot = "tele"; tvDir.reason = ""; tvDir.prio = 0; tvDir.since = -1e9; }
   camFrom = { pos: cur.pos.clone(), look: cur.look.clone(), fov: cur.fov }; camT = 0;
 }
@@ -4886,6 +5416,7 @@ function camTarget() {
   }
   return followCar();
 }
+let obLookLat = 0, obPitch = 0, obLift = 0, obRoll = 0, obLatShift = 0, obRumbleY = 0, obRumbleS = 0, obOnKerb = 0, obOffTrk = 0;
 function updateCamera(dt, now) {
   let tgt = followCar(), mode = camMode, cut = false, onboard = false;
   if (mode === "tele") {
@@ -4953,21 +5484,54 @@ function updateCamera(dt, now) {
     want.look.set(p.px + cx * 12, p.py + 1, p.pz + cz * 12);
     want.pos.set(p.px - cx * D * Math.cos(el), p.py + D * Math.sin(el), p.pz - cz * D * Math.cos(el));
     want.fov = 38;
-  } else if (mode === "abordo") {
-    // a bordo: sobre la toma de aire, solidaria con el coche (cabecea y se inclina con él) y mirando a donde va
+  } else if (mode === "abordo" || mode === "piloto") {
+    // a bordo: T-Cam (encima de la toma de aire) o Piloto / Halo (a la altura del casco), con inercia G y mirada al ápice
+    const isHalo = mode === "piloto";
     const k = carK(curW);
     const ux = -p.sz * p.fy, uy = p.sz * p.fx - p.sx * p.fz, uz = p.sx * p.fy;
-    const th = clamp(p.acc / 55, -1, 0.4) * 0.05, ph = p.roll * 0.04;
+    const vNow = p.c.v || 0;
+    const dipHere = arrAt(T.dip, p.s);
+    const curvNow = arrAt(track.curv, p.s);
+    // mirada anticipada al vértice combinando curvatura a 22..46 m
+    const kAhead = arrAt(track.curv, p.s + 22) * 0.45 + arrAt(track.curv, p.s + 34) * 0.35 + arrAt(track.curv, p.s + 46) * 0.20;
+    const snapOb = cut || camSnap || reduced;
+    const sm = (curV, tgtV, tau) => (snapOb ? tgtV : curV + (tgtV - curV) * (1 - Math.exp(-dt / tau)));
+    const lookLatTgt = reduced ? 0 : clamp(-kAhead * 115, -1, 1) * clamp(vNow / 45, 0.22, 1.0) * (isHalo ? 3.2 : 2.5);
+    obLookLat = sm(obLookLat, lookLatTgt, 0.22);
+    // cabeceo longitudinal por frenada/aceleración, compresión vertical en badenes (Eau Rouge) y balanceo lateral en curva
+    const pitchTgt = reduced ? 0 : clamp(p.acc / 48, -1, 0.45) * 0.085;
+    const compTgt = reduced ? 0 : clamp(dipHere * vNow * vNow * 0.018, 0, 1);
+    const latG = reduced ? 0 : clamp((vNow * vNow * curvNow) / 42, -1, 1);
+    obPitch = sm(obPitch, pitchTgt, 0.14);
+    obLift = sm(obLift, -0.058 * compTgt + clamp(p.acc / 55, -1, 0.4) * 0.018, 0.12);
+    obRoll = sm(obRoll, latG * (isHalo ? 0.042 : 0.032), 0.18);
+    obLatShift = sm(obLatShift, -latG * (isHalo ? 0.042 : 0.030), 0.18);
+    const th = clamp(p.acc / 55, -1, 0.4) * 0.05 + obPitch * 0.55 - compTgt * 0.035;
+    const ph = p.roll * 0.04;
     const hx = ux - p.fx * th + p.sx * ph, hy = uy - p.fy * th, hz = uz - p.fz * th + p.sz * ph;
-    // en vertical la imagen es alta y estrecha: la cámara se adelanta (menos coche detrás del piloto) y mira algo
-    // más abajo (menos cielo por encima, que es donde el fov abierto más deforma)
-    const pk = portraitK(), cf = camPos[0] + 0.55 * pk, ch = camPos[1] - 0.08 * pk, lookY = 0.45 - 1.5 * pk;
-    want.pos.set(p.px + p.fx * cf * k + hx * ch * k, p.py + hy * ch * k + p.fy * cf * k, p.pz + p.fz * cf * k + hz * ch * k);
-    sample(p.s + 16, _tp);
-    const la = latAt(p, p.s + 16, curW, 0) * curW * arrAt(T.wr, p.s + 16);
-    const lx = p.px + p.fx * 14 * k + hx * lookY * k, ly = p.py + p.fy * 14 * k + hy * lookY * k, lz = p.pz + p.fz * 14 * k + hz * lookY * k;
-    want.look.set(lx + (_tp.x + _tp.rx * la - lx) * 0.15, ly + (_tp.y + 0.5 - ly) * 0.15, lz + (_tp.z + _tp.rz * la - lz) * 0.15);
-    want.fov = 72;
+    const pk = portraitK();
+    // en vertical la imagen es más alta y estrecha: se ajusta levemente avance e inclinación sin deformar el horizonte
+    const cfBase = isHalo ? 0.18 + 0.12 * pk : camPos[0] + 0.42 * pk;
+    const chBase = isHalo ? 1.08 - 0.02 * pk : camPos[1] - 0.06 * pk;
+    const cf = cfBase - obPitch * 0.42;
+    const ch = chBase + obLift;
+    const lookY = (isHalo ? 0.60 - 0.85 * pk : 0.54 - 1.15 * pk) + obPitch * 2.2 + compTgt * 0.45;
+    want.pos.set(
+      p.px + p.fx * cf * k + hx * ch * k + p.sx * obLatShift * k,
+      p.py + hy * ch * k + p.fy * cf * k,
+      p.pz + p.fz * cf * k + hz * ch * k + p.sz * obLatShift * k
+    );
+    sample(p.s + 24, _tp);
+    const la = latAt(p, p.s + 24, curW, 0) * curW * arrAt(T.wr, p.s + 24);
+    const lx = p.px + p.fx * 18 * k + hx * lookY * k + p.sx * obLookLat * k;
+    const ly = p.py + p.fy * 18 * k + hy * lookY * k;
+    const lz = p.pz + p.fz * 18 * k + hz * lookY * k + p.sz * obLookLat * k;
+    want.look.set(
+      lx + (_tp.x + _tp.rx * la - lx) * 0.26,
+      ly + (_tp.y + (isHalo ? 0.65 : 0.55) - ly) * 0.34,
+      lz + (_tp.z + _tp.rz * la - lz) * 0.26
+    );
+    want.fov = isHalo ? 62 : 60;
     onboard = true;
   } else if (mode === "heli") {
     // helicóptero: alto, detrás y a un lado, que deriva despacio alrededor del coche y se acerca con suavidad
@@ -5021,27 +5585,37 @@ function updateCamera(dt, now) {
     const dist = want.pos.distanceTo(want.look);
     want.fov = clamp(2 * Math.atan(15.5 * fast / dist) * 180 / Math.PI, 6.5, 46);
   }
-  // sensación de velocidad: ligero aumento dinámico de FOV y micro-vibración en cámaras cercanas (A bordo, Trasera y Seguir)
-  if (p && !reduced && !opt.paused() && !opt.debug?.view && !photoNow && !replay && opt.speed() <= 2) {
-    const vNorm = clamp((p.c.v || 0) / 88, 0, 1.15);
-    const spdV = vNorm * vNorm;
-    const brkV = clamp((-p.acc - 11) / 30, 0, 1);
+  // sensación de velocidad: ligero aumento dinámico de FOV y vibración multi-frecuencia por asfalto, frenada y pianos (activo hasta ×4)
+  obRumbleY = 0; obRumbleS = 0; obOnKerb = 0; obOffTrk = 0;
+  if (p) {
     const iK = Math.min(T.n - 1, Math.floor(mod(p.s, T.L) / T.ds));
     const edgeFrac = Math.abs(p.l0) / Math.max(1, curW * arrAt(T.wr, p.s));
-    const onKerb = Math.abs(track.curv[iK]) > 0.009 && edgeFrac > 0.74 ? clamp((edgeFrac - 0.74) / 0.18, 0, 1) : 0;
-    const offTrk = p.gnd > 0 ? clamp(p.gnd, 0, 1) : 0;
-    const fovWant = mode === "abordo" ? 5.5 * spdV : mode === "trasera" ? 4.0 * spdV : mode === "seguir" && !orb.active ? 3.0 * spdV : 0;
-    fovBoost += (fovWant - fovBoost) * (cut || camSnap ? 1 : 1 - Math.exp(-dt / 0.35));
-    want.fov += fovBoost;
-    const tS = now * 0.001, kc = carK(curW);
-    const shakeScale = onboard ? 1.0 : mode === "seguir" && !orb.active ? 0.28 : 0;
-    const amp = shakeScale * (0.0045 * spdV + 0.0085 * brkV + 0.014 * onKerb + 0.022 * offTrk) * kc;
-    if (amp > 0.0005) {
-      const kRumble = onKerb + offTrk > 0.01 ? Math.sin(p.s * 14.5) * (0.011 * onKerb + 0.018 * offTrk) * kc * shakeScale : 0;
-      const jY = (Math.sin(tS * 47.3) * 0.55 + Math.sin(tS * 83.1) * 0.45) * amp + kRumble;
-      const jS = (Math.sin(tS * 37.7 + 1.3) * 0.6 + Math.sin(tS * 67.9) * 0.4) * amp * 0.75;
-      want.pos.x += p.sx * jS; want.pos.y += jY; want.pos.z += p.sz * jS;
-      want.look.x += p.sx * jS * 0.35; want.look.y += jY * 0.35; want.look.z += p.sz * jS * 0.35;
+    const onKerbNow = Math.abs(track.curv[iK]) > 0.009 && edgeFrac > 0.72 ? clamp((edgeFrac - 0.72) / 0.18, 0, 1) : 0;
+    const offTrkNow = p.gnd > 0 ? clamp(p.gnd, 0, 1) : 0;
+    if (mode === "abordo" || mode === "piloto") { obOnKerb = onKerbNow; obOffTrk = offTrkNow; }
+    if (!reduced && !opt.paused() && !opt.debug?.view && !photoNow && !replay && opt.speed() <= 4) {
+      const spDamp = 1 / Math.sqrt(Math.max(1, opt.speed()));
+      const vNorm = clamp((p.c.v || 0) / 88, 0, 1.15);
+      const spdV = vNorm * vNorm;
+      const brkV = clamp((-p.acc - 11) / 30, 0, 1);
+      const fovWant = mode === "abordo" || mode === "piloto" ? 4.2 * spdV : mode === "trasera" ? 3.8 * spdV : mode === "seguir" && !orb.active ? 2.8 * spdV : 0;
+      fovBoost += (fovWant - fovBoost) * (cut || camSnap ? 1 : 1 - Math.exp(-dt / 0.35));
+      want.fov += fovBoost;
+      const tS = now * 0.001, kc = carK(curW);
+      const shakeScale = (onboard ? 1.0 : mode === "seguir" && !orb.active ? 0.28 : 0) * spDamp;
+      const amp = shakeScale * (0.0055 * spdV + 0.011 * brkV + 0.022 * onKerbNow + 0.032 * offTrkNow) * kc;
+      if (amp > 0.0004) {
+        const kWave = Math.sin(p.s * 14.5) * 0.65 + Math.sin(p.s * 29.0 + 0.7) * 0.35;
+        const kRumble = onKerbNow + offTrkNow > 0.01 ? kWave * (0.018 * onKerbNow + 0.026 * offTrkNow) * kc * shakeScale : 0;
+        const jY = (Math.sin(tS * 47.3) * 0.45 + Math.sin(tS * 83.1) * 0.35 + Math.sin(tS * 127.4) * 0.20) * amp + kRumble;
+        const jS = (Math.sin(tS * 37.7 + 1.3) * 0.55 + Math.sin(tS * 67.9) * 0.30 + Math.sin(tS * 109.2) * 0.15) * amp * 0.8 + kRumble * 0.32;
+        want.pos.x += p.sx * jS; want.pos.y += jY; want.pos.z += p.sz * jS;
+        want.look.x += p.sx * jS * 0.38; want.look.y += jY * 0.38; want.look.z += p.sz * jS * 0.38;
+        if (mode === "abordo" || mode === "piloto") { obRumbleY = jY; obRumbleS = jS; }
+      }
+    } else {
+      fovBoost += (0 - fovBoost) * (cut || camSnap ? 1 : 1 - Math.exp(-dt / 0.3));
+      if (Math.abs(fovBoost) > 0.01) want.fov += fovBoost;
     }
   } else {
     fovBoost += (0 - fovBoost) * (cut || camSnap ? 1 : 1 - Math.exp(-dt / 0.3));
@@ -5079,14 +5653,15 @@ function updateCamera(dt, now) {
     cur.pos.copy(want.pos); cur.look.lerp(want.look, 1 - Math.exp(-dt / 0.08)); cur.fov += (want.fov - cur.fov) * (1 - Math.exp(-dt / 0.3));
   } else { cur.pos.copy(want.pos); cur.look.copy(want.look); cur.fov = want.fov; }
   camera.position.copy(cur.pos); camera.fov = onboard ? onboardFov(cur.fov) : cur.fov;
-  if (onboard && p && Math.abs(p.bank || 0) > 0.005 && !opt.debug?.view) {
-    const camTilt = p.bank * 0.55;
-    camera.up.set(-p.sx * Math.sin(camTilt), Math.cos(camTilt), -p.sz * Math.sin(camTilt));
+  const obTilt = (mode === "abordo" || mode === "piloto") ? obRoll : 0;
+  const totalTilt = (onboard && p ? (p.bank || 0) * 0.55 : 0) + obTilt;
+  if (onboard && p && Math.abs(totalTilt) > 0.003 && !opt.debug?.view) {
+    camera.up.set(-p.sx * Math.sin(totalTilt), Math.cos(totalTilt), -p.sz * Math.sin(totalTilt));
   } else {
     camera.up.set(0, 1, 0);
   }
   const dist = cur.pos.distanceTo(cur.look);
-  camera.near = onboard ? 0.25 : Math.max(0.35, dist * 0.04);
+  camera.near = mode === "piloto" ? 0.14 : onboard ? 0.22 : Math.max(0.35, dist * 0.04);
   camera.far = Math.max(dist * 6, Math.min(18000, T.E * 4.5));
   camera.updateProjectionMatrix(); camera.lookAt(cur.look);
   camera.updateMatrixWorld(); camera.matrixWorldInverse.copy(camera.matrixWorld).invert();
@@ -5105,7 +5680,7 @@ function updateCamera(dt, now) {
   // en calidad 3 de escritorio (fuera de vista general), 2 cascadas: cerca muy nítida (sun) + media/lejana amplia (sunFar)
   const lowSun = 1 + 0.9 * (1 - sstep(0.18, 0.55, sunDir.y));
   csmActive = q >= 3 && isDesktop && mode !== "circuito";
-  const S0 = (csmActive ? (onboard ? 42 : clamp(halfH * 1.15, 24, 130)) : (onboard ? 75 : clamp(halfH * 2.1, 40, T.E * 0.9))) * lowSun;
+  const S0 = (csmActive ? (onboard ? 42 : clamp(halfH * 1.15, 24, 130)) : (onboard ? (q >= 2 ? 42 : 70) : clamp(halfH * 2.1, 40, T.E * 0.9))) * lowSun;
   const S = Math.pow(2, Math.ceil(Math.log2(S0) * 3) / 3), sc = sun.shadow.camera;
   const texel = (2 * S) / sun.shadow.mapSize.x;
   _sr.crossVectors(_up, sunDir).normalize(); _su.crossVectors(sunDir, _sr);
@@ -5125,9 +5700,26 @@ function updateCamera(dt, now) {
   // postproceso: oclusión ambiental pegada a los contactos (sin halos enormes); el desenfoque, solo en tele
   aoRadius = clamp(halfH * 0.055, 0.45, 28);
   dofFocus = dist; dofK += ((mode === "tele" ? 1 : 0) - dofK) * (cut || camSnap ? 1 : 1 - Math.exp(-dt / 0.4));
-  const vigTgt = mode === "tele" || mode === "abordo" || mode === "trasera" ? 0.24 : mode === "circuito" ? 0.0 : 0.10;
+  const vigTgt = mode === "tele" || mode === "abordo" || mode === "piloto" || mode === "trasera" ? 0.24 : mode === "circuito" ? 0.0 : 0.10;
   vigK += (vigTgt - vigK) * (cut || camSnap ? 1 : 1 - Math.exp(-dt / 0.4));
-  if (post?.grade) post.grade.uniforms.uVig.value = vigK;
+  const sbTgt = (mode === "abordo" || mode === "piloto") && p && !reduced && !opt.debug?.view && !replay ? clamp(((p.c.v || 0) - 50) / 42, 0, 1) : 0;
+  speedBlurK += (sbTgt - speedBlurK) * (cut || camSnap ? 1 : 1 - Math.exp(-dt / 0.25));
+  if (post?.grade) {
+    post.grade.uniforms.uVig.value = vigK;
+    post.grade.uniforms.uSpeedBlur.value = speedBlurK;
+  }
+  // adaptación de exposición al atravesar y salir de un túnel (p. ej. Mónaco hacia la chicane del puerto)
+  let expTgt = 0.94;
+  const tunVis = getTrackVisual(track.id).tunnel;
+  if (tunVis && p && (mode === "abordo" || mode === "piloto") && !opt.debug?.view) {
+    const sm = mod(p.s, T.L);
+    if (sm >= tunVis.s0 + 4 && sm <= tunVis.s1 - 12) expTgt = 0.86;
+    else if (sm > tunVis.s1 - 12 && sm <= tunVis.s1 + 42) {
+      const tEx = (sm - (tunVis.s1 - 12)) / 54;
+      expTgt = 0.94 + 0.18 * Math.sin(tEx * Math.PI) * (1 - tEx * 0.45);
+    }
+  }
+  renderer.toneMappingExposure += (expTgt - renderer.toneMappingExposure) * (cut || camSnap ? 1 : 1 - Math.exp(-dt / 0.22));
   camSnap = false;
   return halfH;
 }
@@ -5417,11 +6009,19 @@ function draw3d(dt, now) {
   const tiny = far > (cars.geometry === CAR_MIN ? 0.6 : 0.7);
   if ((cars.geometry === CAR_MIN) !== tiny) {
     cars.geometry = tiny ? CAR_MIN : carLoCur; wheels.visible = !tiny;
-    const tr = world.trees; if (tr) tr.geometry = tiny ? tr.userData.far : tr.userData.near; // los árboles, igual
+    const tr = world.trees;
+    if (tr) {
+      tr.geometry = tiny ? tr.userData.far : tr.userData.near; // los árboles, igual
+      if (tr.userData.aerialCount !== undefined) tr.count = tiny ? tr.userData.aerialCount : tr.userData.fullCount;
+    }
+    for (const m of world.treeMeshes || []) {
+      if (m.userData?.aerialCount !== undefined) m.count = tiny ? m.userData.aerialCount : m.userData.fullCount;
+    }
     if (world.treeLod) {
       for (const m of world.treeLod.hi) m.visible = !tiny;
       for (const m of world.treeLod.lo) m.visible = tiny;
     }
+    for (const b of world.brakeBoards || []) b.visible = !tiny;
   }
   const fine = q >= 2 && far < 0.5, { carsHi, wheelsHi } = world, _zero = mS.clone().makeScale(0, 0, 0);
   let nH = 0;
@@ -5430,8 +6030,13 @@ function draw3d(dt, now) {
   const { fists } = world, podium = sess.chequered ? sess.cars.filter((o) => o.loc === "fin" && isFinite(o.finishT)).sort((a, b) => a.finishT - b.finishT).slice(0, 3).map((o) => o.id) : [];
   cs.d = cs.m = cs.c = cs.b = 0;
   const { crewS, crewC, jacks, loose, gant, glit, blank } = world;
-  const fcDash = camMode === "abordo" && !replay ? followCar() : null;
+  const isOnboardMode = (camMode === "abordo" || camMode === "piloto") && !replay;
+  const fcDash = isOnboardMode ? followCar() : null;
   dashMesh.visible = false;
+  mirrorL.visible = false;
+  mirrorR.visible = false;
+  U.uOnboard.value = isOnboardMode && !!fcDash ? 1 : 0;
+  U.uHeadYaw.value = isOnboardMode && !!fcDash ? clamp(-obLookLat * 0.09, -0.26, 0.26) : 0;
   for (const p of list) {
     const c = p.c;
     // base del coche: delante, lado y arriba, con cabeceo al frenar o acelerar y balanceo en curva
@@ -5566,12 +6171,20 @@ function draw3d(dt, now) {
     world.hlA.array.set(world.hlsA.subarray(ci * 3, ci * 3 + 3), i * 3); world.hlB.array.set(world.hlsB.subarray(ci * 3, ci * 3 + 3), i * 3);
     if (hi >= 0) { world.carDataH.array.set([livVal, dmgVal, p.drs, tailVal], hi * 4); world.col2H.array.set(world.col2.array.subarray(i * 3, i * 3 + 3), hi * 3); world.hlAH.array.set(world.hlsA.subarray(ci * 3, ci * 3 + 3), hi * 3); world.hlBH.array.set(world.hlsB.subarray(ci * 3, ci * 3 + 3), hi * 3); }
     const bigDash = fcDash && c === fcDash;
-    mL.makeRotationX(-steer * 2.4).multiply(mTilt);
+    const rVibY = bigDash ? obRumbleY * 0.35 : 0;
+    const rVibZ = bigDash ? obRumbleS * 0.35 : 0;
+    mL.makeRotationX(-steer * 2.4 + (bigDash ? obRumbleS * 0.6 : 0)).multiply(mTilt);
     if (bigDash) mL.scale(_ws.set(DASH_K, DASH_K, DASH_K));
-    mL.setPosition(steerPos[0], steerPos[1], steerPos[2]); mW.multiplyMatrices(m4, mL); world.steer.setMatrixAt(i, mW); world.steer.setColorAt(i, _col.set(c.team.color));
+    mL.setPosition(steerPos[0], steerPos[1] + rVibY, steerPos[2] + rVibZ); mW.multiplyMatrices(m4, mL); world.steer.setMatrixAt(i, mW); world.steer.setColorAt(i, _col.set(c.team.color));
     if (bigDash) {
       dashMesh.matrix.copy(mW); dashMesh.visible = true;
-      if (now - dashT > 65) { dashT = now; drawDash(c); }
+      if (now - dashT > 65) { dashT = now; drawDash(c, now); }
+      // retrovisores dinámicos en el coche seguido
+      mMirL.makeTranslation(mirrorPos[0], mirrorPos[1] + rVibY * 0.5, -mirrorPos[2]);
+      mirrorL.matrix.multiplyMatrices(m4, mMirL); mirrorL.visible = true;
+      mMirR.makeTranslation(mirrorPos[0], mirrorPos[1] + rVibY * 0.5, mirrorPos[2]);
+      mirrorR.matrix.multiplyMatrices(m4, mMirR); mirrorR.visible = true;
+      if (now - mirT > 90) { mirT = now; drawMirrors(p, list); }
     }
     // torso del piloto (hombros, HANS y arneses): fijo al chasis a escala real, sin tapar el casco
     mL.copy(mTilt);
@@ -5652,7 +6265,7 @@ function draw3d(dt, now) {
     });
   }
   // a bordo: gotas y suciedad del coche que se sigue
-  { const fc2 = followCar(), on = camMode === "abordo" && !!fc2;
+  { const fc2 = followCar(), on = (camMode === "abordo" || camMode === "piloto") && !!fc2;
     let dirt = 0;
     if (fc2) {
       const pp = pose.get(fc2.id), prev = dirtOf.get(fc2.id) || 0;
@@ -5678,6 +6291,26 @@ function draw3d(dt, now) {
     u.uTime.value = rainClock; u.uLum.value = 0.28 + 0.65 * dayK + 0.25 * U.uFlood.value; u.uCenter.value.copy(cur.look); u.uSize.value.set(sz, sz * 0.75, sz);
     u.uWind.value.set(Math.cos(sess.weather.windDir), -Math.sin(sess.weather.windDir));
   }
+  // motas rápidas de aire/polvo junto a la cámara a alta velocidad (solo en cámara a bordo / piloto con q >= 1)
+  {
+    const fcM = (camMode === "abordo" || camMode === "piloto") && !replay && !opt.debug?.view ? followCar() : null;
+    const fpM = fcM ? pose.get(fcM.id) : null;
+    const vM = fpM ? (fpM.c.v || 0) : 0;
+    const moteK = q > 0 && !reduced && !!fpM ? clamp((vM - 50) / 38, 0, 1) : 0;
+    speedMotes.visible = moteK > 0.02;
+    if (speedMotes.visible) {
+      if (!isPaused()) motePhase = (motePhase + dt * (vM / 18) * Math.min(4, curSpeed())) % 1000;
+      const mu = speedMotes.material.uniforms;
+      const ux = -fpM.sz * fpM.fy, uy = fpM.sz * fpM.fx - fpM.sx * fpM.fz, uz = fpM.sx * fpM.fy;
+      mu.uCarPos.value.set(fpM.px, fpM.py, fpM.pz);
+      mu.uFwd.value.set(fpM.fx, fpM.fy, fpM.fz);
+      mu.uRight.value.set(fpM.sx, 0, fpM.sz);
+      mu.uUp.value.set(ux, uy, uz);
+      mu.uPhase.value = motePhase;
+      mu.uK.value = moteK;
+      mu.uLum.value = 0.35 + 0.65 * dayK + 0.25 * U.uFlood.value;
+    }
+  }
   render();
   // rótulos tocables y enriquecidos de cerca (posición + compuesto)
   const box = opt.box, w = box.clientWidth, h = box.clientHeight, close = W < 12;
@@ -5698,7 +6331,7 @@ function draw3d(dt, now) {
     if (!rec) continue;
     const el = rec.el;
     const near = close && fp && Math.min(mod(p.s - fp.s, T.L), mod(fp.s - p.s, T.L)) < 22 * k;
-    if (ok && (p.c.player || p.c.id === selIdNow || near) && !((camMode === "abordo" || camMode === "trasera") && p === fp)) {
+    if (ok && (p.c.player || p.c.id === selIdNow || near) && !((camMode === "abordo" || camMode === "piloto" || camMode === "trasera") && p === fp)) {
       if (close) {
         const pos = posMap ? posMap.get(p.c.id) : undefined;
         const cmp = p.c.tyres?.c || "";
@@ -5808,7 +6441,7 @@ function audioView(now) {
   camera.getWorldDirection(auDir);
   const hr = Math.hypot(auDir.x, auDir.z) || 1, rx = -auDir.z / hr, rz = auDir.x / hr; // derecha de la cámara
   const sp = replay ? REPLAY_SPEED : opt.paused() ? 0 : opt.speed();
-  const tgt = camMode === "abordo" && !replay ? camTarget() : null;
+  const tgt = (camMode === "abordo" || camMode === "piloto") && !replay ? camTarget() : null;
   // en la vista general la cámara está muy alta: se oye desde el coche seguido (como en el 2D), no desde el cielo
   const fc = camMode === "circuito" && !replay ? followCar() : null, fp = fc && pose.get(fc.id);
   const lx = fp ? fp.px : cp.x, ly = fp ? fp.py + 4 : cp.y, lz = fp ? fp.pz : cp.z;
@@ -5829,7 +6462,18 @@ function audioView(now) {
     const off = curW + 14, d = Math.hypot(auS.x + auS.rx * sg * off - lx, auS.z + auS.rz * sg * off - lz);
     crowd += (len / 300) / (1 + (d / 120) ** 2);
   }
-  return { cars, stops, crowd: clamp(crowd, 0, 1), rain: clamp(rainHere / 2.5, 0, 1), onboard: !!tgt, thunders: thunders.splice(0) };
+  let onboardFx;
+  if (tgt) {
+    const tp = pose.get(tgt.id);
+    if (tp) {
+      const tun = getTrackVisual(track.id).tunnel;
+      const sm = mod(tp.s, T.L);
+      const tunnel = tun ? sstep(tun.s0 - 6, tun.s0 + 12, sm) * (1 - sstep(tun.s1 - 12, tun.s1 + 6, sm)) : 0;
+      const canyon = T.street ? clamp(0.45 + 0.35 * clamp(Math.abs(arrAt(track.curv, tp.s)) * 55, 0, 1), 0, 1) : 0;
+      onboardFx = { v: tp.c.v || 0, kerb: obOnKerb, offTrk: obOffTrk, tunnel, canyon };
+    }
+  }
+  return { cars, stops, crowd: clamp(crowd, 0, 1), rain: clamp(rainHere / 2.5, 0, 1), onboard: !!tgt, onboardFx, thunders: thunders.splice(0) };
 }
 const onCtxLost = (e) => {
   e.preventDefault();
@@ -5981,7 +6625,7 @@ return {
       if (o.geometry && !o.userData?.sharedGeo) o.geometry.dispose();
       if (o.material && !o.userData?.sharedMat) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => m.dispose());
     });
-    cloudTex.dispose(); wxTex.dispose(); dashTex.dispose(); blobTex.dispose(); FAN_U.tex.value?.dispose(); if (sun.shadow.map) sun.shadow.map.dispose();
+    cloudTex.dispose(); wxTex.dispose(); dashTex.dispose(); mirTex.dispose(); blobTex.dispose(); FAN_U.tex.value?.dispose(); if (sun.shadow.map) sun.shadow.map.dispose();
     for (const g of [CAR_GEO, WHEEL_GEO, CAR_LO, WHEEL_LO, CAR_MIN, STEER_GEO, TORSO_GEO, CREW_STAND, CREW_CROUCH, BOAT_GEO, CITY_GABLE, CITY_TOP, SC_GEO, SC_BAR, extCarLoGeo]) g?.dispose();
     for (const r of envResDispose) r?.dispose();
     envResDispose.length = 0;

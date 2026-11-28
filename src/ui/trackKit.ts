@@ -35,6 +35,12 @@ export interface TrackKitInit {
   standS: [number, number, number][]; // [s, sg, len]
   rP: Float32Array;
   rO: Float32Array;
+  curv?: Float64Array | Float32Array;
+  vref?: Float64Array | Float32Array;
+  wr?: Float32Array;
+  drsStarts?: number[]; // distancias s de inicio de zona DRS / Modo X
+  tunnel?: { s0: number; s1: number } | null;
+  overpass?: { sOver: number; sUnder: number; halfSpan?: number } | null;
   sample: (s: number, out: TrackKitSample) => TrackKitSample;
   terrY: (x: number, z: number) => number;
   trackDist: (x: number, z: number) => number;
@@ -133,6 +139,26 @@ export function createTrackKit(THREE: any, cfg: TrackKitInit): TrackKitHandle {
     return sm >= cfg.pitEntry - 45 || sm <= cfg.pitExit + 45;
   };
   const safeLat = (sg: number, s: number, extra: number) => sg * (cfg.SH * cfg.W_REAL + runAt(sg, s) + extra);
+  const wrAt = (s: number) => {
+    if (!cfg.wr?.length) return 1;
+    const i = Math.min(cfg.wr.length - 1, Math.floor(mod(s, cfg.L) / cfg.ds));
+    return cfg.wr[i];
+  };
+  const dCirc = (a: number, b: number) => Math.min(mod(a - b, cfg.L), mod(b - a, cfg.L));
+  const inTunnelOrOvp = (s: number) => {
+    const sm = mod(s, cfg.L);
+    if (cfg.tunnel && sm >= cfg.tunnel.s0 - 15 && sm <= cfg.tunnel.s1 + 15) return true;
+    if (cfg.overpass) {
+      const hs = cfg.overpass.halfSpan ?? 52;
+      if (dCirc(sm, cfg.overpass.sOver) < hs + 14) return true;
+    }
+    return false;
+  };
+  const vergeLat = (sg: number, s: number, offsetFromWhite: number) => {
+    const w = cfg.W_REAL * wrAt(s);
+    const maxLat = (cfg.SH - 0.14) * w + runAt(sg, s);
+    return sg * Math.min(w + offsetFromWhite, Math.max(w * 1.04, maxLat));
+  };
 
   // =========================================================================
   // 1. PANELES LED FIA REACTIVOS (cada ~260 m alrededor del circuito)
@@ -404,6 +430,185 @@ export function createTrackKit(THREE: any, cfg: TrackKitInit): TrackKitHandle {
   heliRoot.scale.setScalar(1.35);
   root.add(heliRoot);
 
+  // =========================================================================
+  // 7. SEÑALÉTICA FIA PEGADA AL BORDE (carteles DRS/Modo X, bolardos de vértice y balizas pit-lane)
+  // =========================================================================
+  const makeSignTex = (topTxt: string, botTxt: string, bg: string, barCol: string, txtCol: string, accentCol: string) => {
+    const cv = document.createElement("canvas");
+    cv.width = 256;
+    cv.height = 160;
+    const g = cv.getContext("2d")!;
+    g.fillStyle = bg;
+    g.fillRect(0, 0, 256, 160);
+    g.fillStyle = barCol;
+    g.fillRect(0, 0, 256, 26);
+    g.fillRect(0, 142, 256, 18);
+    g.strokeStyle = accentCol;
+    g.lineWidth = 6;
+    g.strokeRect(8, 32, 240, 102);
+    g.fillStyle = txtCol;
+    g.textAlign = "center";
+    g.textBaseline = "middle";
+    g.font = "900 58px 'Titillium Web', sans-serif";
+    g.fillText(topTxt, 128, 72, 224);
+    g.fillStyle = accentCol;
+    g.font = "800 26px 'Titillium Web', sans-serif";
+    g.fillText(botTxt, 128, 114, 224);
+    const tex = trackTex(new THREE.CanvasTexture(cv));
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.anisotropy = 4;
+    return tex;
+  };
+
+  // 7.1 Carteles de zona DRS / Modo X al borde de la pista antes de cada activación
+  const vergeGroup = new THREE.Group();
+  const drsSpots: { x: number; y: number; z: number; yaw: number }[] = [];
+  for (const s0 of cfg.drsStarts || []) {
+    const s = mod(s0 - 6, cfg.L);
+    if (inTunnelOrOvp(s)) continue;
+    cfg.sample(s, tmp);
+    for (const sg of [-cfg.PS, cfg.PS]) {
+      if (sg === cfg.PS && inPitSpan(s)) continue;
+      const lat = vergeLat(sg, s, 2.25);
+      const x = tmp.x + tmp.rx * lat;
+      const z = tmp.z + tmp.rz * lat;
+      if (cfg.isWet?.(x, z)) continue;
+      const yaw = Math.atan2(-tmp.tz, tmp.tx) + Math.PI;
+      drsSpots.push({ x, y: tmp.y, z, yaw });
+    }
+  }
+  if (drsSpots.length) {
+    const drsPoleGeo = boxGeo([
+      { w: 0.12, h: 2.05, d: 0.12, x: 0, y: 1.02, z: -0.58, col: 0x2a2f38 },
+      { w: 0.12, h: 2.05, d: 0.12, x: 0, y: 1.02, z: 0.58, col: 0x2a2f38 },
+      { w: 0.14, h: 1.05, d: 1.66, x: -0.02, y: 1.56, z: 0, col: 0x161a22 },
+    ]);
+    const drsPoleMat = trackMat(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55, metalness: 0.35 }));
+    const drsPoles = new THREE.InstancedMesh(drsPoleGeo, drsPoleMat, drsSpots.length);
+    const drsFaceGeo = trackGeo(new THREE.PlaneGeometry(1.58, 0.98));
+    drsFaceGeo.rotateY(Math.PI / 2);
+    drsFaceGeo.translate(0.06, 1.56, 0);
+    const drsTex = makeSignTex("DRS", "MODO X  >>>", "#101620", "#00c864", "#ffffff", "#00e676");
+    const drsFaceMat = trackMat(new THREE.MeshStandardMaterial({
+      map: drsTex,
+      emissive: 0xffffff,
+      emissiveMap: drsTex,
+      emissiveIntensity: 0.22,
+      roughness: 0.42,
+    }));
+    const drsFaces = new THREE.InstancedMesh(drsFaceGeo, drsFaceMat, drsSpots.length);
+    drsPoles.frustumCulled = drsFaces.frustumCulled = false;
+    drsSpots.forEach((p, idx) => {
+      m4.compose(vPos.set(p.x, p.y, p.z), q4.setFromAxisAngle(yAxis, p.yaw), vScl.set(1, 1, 1));
+      drsPoles.setMatrixAt(idx, m4);
+      drsFaces.setMatrixAt(idx, m4);
+    });
+    drsPoles.instanceMatrix.needsUpdate = drsFaces.instanceMatrix.needsUpdate = true;
+    vergeGroup.add(drsPoles, drsFaces);
+  }
+
+  // 7.2 Bolardos flexibles FIA en vértices de curvas lentas/chicanes + entrada/salida de boxes
+  const bollardSpots: { x: number; y: number; z: number }[] = [];
+  if (cfg.curv && cfg.vref) {
+    const nPts = cfg.curv.length;
+    const minSepS = 44;
+    const pickedS: number[] = [];
+    for (let i = 0; i < nPts && pickedS.length < 24; i++) {
+      const k = Math.abs(cfg.curv[i]);
+      if (k < 0.011 || cfg.vref[i] > 60) continue;
+      // comprobar máximo local en ventana ±3 muestras
+      let isPeak = true;
+      for (let d = -3; d <= 3; d++) {
+        if (d !== 0 && Math.abs(cfg.curv[(i + d + nPts) % nPts]) > k) { isPeak = false; break; }
+      }
+      if (!isPeak) continue;
+      const s = i * cfg.ds;
+      if (inTunnelOrOvp(s)) continue;
+      if (pickedS.some((ps) => dCirc(ps, s) < minSepS)) continue;
+      const sgIn = cfg.curv[i] > 0 ? -1 : 1;
+      if (sgIn === cfg.PS && inPitSpan(s)) continue;
+      const w = cfg.W_REAL * wrAt(s);
+      const latMag = w * 1.03 + 0.55;
+      // en urbanos muy pegados al muro solo se coloca si queda hueco libre dentro de la barrera
+      if (latMag > (cfg.SH - 0.16) * w + runAt(sgIn, s)) continue;
+      cfg.sample(s, tmp);
+      const x = tmp.x + tmp.rx * sgIn * latMag;
+      const z = tmp.z + tmp.rz * sgIn * latMag;
+      if (cfg.isWet?.(x, z)) continue;
+      pickedS.push(s);
+      bollardSpots.push({ x, y: tmp.y, z });
+    }
+  }
+  // Bolardos naranjas guiando la línea de separación de entrada y salida de pit-lane
+  for (let k = 0; k < 4; k++) {
+    const sIn = mod(cfg.pitEntry - 26 + k * 8.5, cfg.L);
+    if (!inTunnelOrOvp(sIn)) {
+      cfg.sample(sIn, tmp);
+      const lat = cfg.PS * (cfg.W_REAL * wrAt(sIn) * 1.04 + 0.75);
+      const x = tmp.x + tmp.rx * lat, z = tmp.z + tmp.rz * lat;
+      if (!cfg.isWet?.(x, z)) bollardSpots.push({ x, y: tmp.y, z });
+    }
+  }
+  if (bollardSpots.length) {
+    const bolGeo = boxGeo([
+      { w: 0.34, h: 0.08, d: 0.34, x: 0, y: 0.04, z: 0, col: 0x1b1e24 },
+      { w: 0.17, h: 0.44, d: 0.17, x: 0, y: 0.30, z: 0, col: 0xff5a12 },
+      { w: 0.18, h: 0.16, d: 0.18, x: 0, y: 0.60, z: 0, col: 0xf4f6f8 },
+      { w: 0.16, h: 0.24, d: 0.16, x: 0, y: 0.80, z: 0, col: 0xff5a12 },
+    ]);
+    const bolMat = trackMat(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.42, metalness: 0.05 }));
+    const bollards = new THREE.InstancedMesh(bolGeo, bolMat, bollardSpots.length);
+    bollards.frustumCulled = false;
+    bollards.castShadow = true;
+    bollardSpots.forEach((p, idx) => {
+      m4.compose(vPos.set(p.x, p.y, p.z), q4.identity(), vScl.set(1, 1, 1));
+      bollards.setMatrixAt(idx, m4);
+    });
+    bollards.instanceMatrix.needsUpdate = true;
+    vergeGroup.add(bollards);
+  }
+
+  // 7.3 Balizas de entrada y salida de pit-lane (cartel PIT ENTRY + baliza azul de PIT EXIT)
+  const addPitSign = (s: number, topTxt: string, botTxt: string, barCol: string, accCol: string, withBlueBeacon: boolean) => {
+    if (inTunnelOrOvp(s)) return;
+    cfg.sample(s, tmp);
+    const lat = vergeLat(cfg.PS, s, 2.0);
+    const x = tmp.x + tmp.rx * lat;
+    const z = tmp.z + tmp.rz * lat;
+    if (cfg.isWet?.(x, z)) return;
+    const yaw = Math.atan2(-tmp.tz, tmp.tx) + Math.PI;
+    const g = new THREE.Group();
+    g.position.set(x, tmp.y, z);
+    g.rotation.y = yaw;
+    const frameGeo = boxGeo([
+      { w: 0.12, h: 2.1, d: 0.12, x: 0, y: 1.05, z: -0.52, col: 0x2c323b },
+      { w: 0.12, h: 2.1, d: 0.12, x: 0, y: 1.05, z: 0.52, col: 0x2c323b },
+      { w: 0.14, h: 0.96, d: 1.48, x: -0.02, y: 1.56, z: 0, col: 0x151922 },
+    ]);
+    const frameMat = trackMat(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5, metalness: 0.35 }));
+    g.add(new THREE.Mesh(frameGeo, frameMat));
+    const tex = makeSignTex(topTxt, botTxt, "#111824", barCol, "#ffffff", accCol);
+    const face = new THREE.Mesh(
+      trackGeo(new THREE.PlaneGeometry(1.40, 0.88)),
+      trackMat(new THREE.MeshStandardMaterial({ map: tex, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: 0.24, roughness: 0.4 })),
+    );
+    face.rotation.y = Math.PI / 2;
+    face.position.set(0.06, 1.56, 0);
+    g.add(face);
+    if (withBlueBeacon) {
+      const lamp = new THREE.Mesh(
+        trackGeo(new THREE.BoxGeometry(0.24, 0.34, 0.24)),
+        trackMat(new THREE.MeshBasicMaterial({ color: 0x29a3ff, fog: false })),
+      );
+      lamp.position.set(0, 2.26, 0);
+      g.add(lamp);
+    }
+    vergeGroup.add(g);
+  };
+  addPitSign(mod(cfg.pitEntry - 32, cfg.L), "BOXES", cfg.PS > 0 ? "ENTRADA >>>" : "<<< ENTRADA", "#ff6b1a", "#ffd040", false);
+  addPitSign(mod(cfg.pitExit + 6, cfg.L), "PIT EXIT", "ATENCIÓN", "#0e76d8", "#4fc3ff", true);
+  root.add(vergeGroup);
+
   // Hook opcional para reemplazar vehículos procedurales por .glb de Sketchfab si existen en manifest.json
   if (cfg.loadKitGlb) {
     cfg.loadKitGlb("crane").then((tpl) => {
@@ -523,12 +728,13 @@ export function createTrackKit(THREE: any, cfg: TrackKitInit): TrackKitHandle {
       ferrisObj = obj;
     },
     update(u: TrackKitUpdate) {
-      // Escalado por calidad: q=0 solo torre; q=1 + LEDs y pantallas; q>=2 + grúas, medical y helicóptero
+      // Escalado por calidad: q=0 solo torre y señalética ligera; q=1 + LEDs y pantallas; q>=2 + grúas, medical y helicóptero
       ledGroup.visible = u.q >= 1;
       jumboGroup.visible = u.q >= 1;
       craneGroup.visible = u.q >= 2;
       medGroup.visible = u.q >= 1;
       heliRoot.visible = u.q >= 2;
+      vergeGroup.visible = u.W < cfg.W_REAL * 1.4;
 
       // 1. Paneles LED FIA reactivos
       if (ledGroup.visible && ledSpots.length) {

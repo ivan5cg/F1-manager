@@ -19,7 +19,7 @@ import { createLobato } from "./lobato";
 import { createExperta, EXPERTA } from "./experta";
 import { createVoces, voiceOf, Orden } from "./voces";
 import { moralLabel } from "../sim/morale";
-import { createAudio, type CarHeard, type PitStopHeard } from "./audio";
+import { createAudio, type CarHeard, type PitStopHeard, type OnboardAudioFx } from "./audio";
 import { saveSession, loadPrefs, savePrefs, setParked, PausePrefs, SPEEDS } from "./store";
 
 type TowerMode = "int" | "gap" | "last" | "tyre";
@@ -537,7 +537,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
   // pulsa «3D» y ocupa el mismo recuadro; lo elegido se recuerda para la próxima sesión.
   type Map3d = ReturnType<typeof import("./map3d").createMap3d>;
   let view3d = false, m3: Map3d | null = null, m3busy = false;
-  const CAM_SHORT: Record<string, string> = { circuito: "Circ.", seguir: "Seguir", tele: "Tele", abordo: "Bordo", heli: "Heli", boxes: "Boxes", trasera: "Alerón", grua: "Grúa" };
+  const CAM_SHORT: Record<string, string> = { circuito: "Circ.", seguir: "Seguir", tele: "Tele", abordo: "Bordo", piloto: "Halo", heli: "Heli", boxes: "Boxes", trasera: "Alerón", grua: "Grúa" };
   const DRAG_PX = 8;
   const ptrs = new Map<number, { x: number; y: number }>();
   let dragMode: "none" | "orbit" | "pinch" = "none";
@@ -634,10 +634,19 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
       m3.zoomBy(Math.exp(e.deltaY * 0.0012));
     }, { passive: false });
     cv.addEventListener("dblclick", (e) => {
-      if (!m3 || !m3.canOrbit()) return;
-      e.preventDefault();
-      m3.resetOrbit();
-      suppressClickUntil = performance.now() + 350;
+      if (!m3) return;
+      if (m3.canOrbit()) {
+        e.preventDefault();
+        m3.resetOrbit();
+        suppressClickUntil = performance.now() + 350;
+      } else if (m3.cam() === "abordo" || m3.cam() === "piloto") {
+        // doble toque en cámara a bordo alterna al instante entre T-Cam y Piloto / Halo
+        e.preventDefault();
+        const next = m3.cam() === "abordo" ? "piloto" : "abordo";
+        m3.setCamera(next);
+        cam3d(next);
+        suppressClickUntil = performance.now() + 350;
+      }
     });
     cv.addEventListener("click", onMap3dClick);
   }
@@ -2632,10 +2641,10 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     if (!audio.ready()) return;
     const running = !paused && !skipping && !ended && document.visibilityState === "visible";
     const w = sess.weather, wind = windNow(w).speed;
-    let cars: CarHeard[] = [], stops: PitStopHeard[] = [], crowd = 0.25, rain = Math.min(1, sess.rainOnTrack() / 4);
+    let cars: CarHeard[] = [], stops: PitStopHeard[] = [], crowd = 0.25, rain = Math.min(1, sess.rainOnTrack() / 4), onboardFx: OnboardAudioFx | undefined;
     if (view3d && m3 && !wide) {
-      const av = m3.audioView(now) as { cars: CarHeard[]; stops: PitStopHeard[]; crowd: number; rain: number; thunders: { dist: number }[] };
-      cars = av.cars; stops = av.stops;
+      const av = m3.audioView(now) as { cars: CarHeard[]; stops: PitStopHeard[]; crowd: number; rain: number; onboardFx?: OnboardAudioFx; thunders: { dist: number }[] };
+      cars = av.cars; stops = av.stops; onboardFx = av.onboardFx;
       for (const th of av.thunders) audio.thunder(th.dist); crowd = 0.1 + 0.9 * av.crowd; rain = Math.max(rain * 0.5, av.rain);
     } else {
       // el coche seguido o tu primer piloto en pista; si no hay ninguno fuera, el primero que esté rodando
@@ -2658,7 +2667,7 @@ export function sessionView(wk: Weekend, kind: SessionKind, onFinish: (s: Sessio
     // Lobato en voz alta (si está activado): su último comentario
     if (lob.list.length > lobSeen) { lobSeen = lob.list.length; if (prefs.lobato !== false) audio.lobato(plain(lob.list[lob.list.length - 1].text)); }
     if (exp.list.length > expSeen) { expSeen = exp.list.length; if (prefs.experta !== false) audio.experta(plain(exp.list[exp.list.length - 1].text)); }
-    audio.frame({ running, speed: ff ? FF_SPEED : speed, simDt, cars, crowd, rain, wind, stops }, now);
+    audio.frame({ running, speed: ff ? FF_SPEED : speed, simDt, cars, crowd, rain, wind, stops, onboardFx }, now);
     if (!running) return;
     // semáforos: un pitido por cada luz que se enciende; al apagarse, silencio y rugido
     const lights = sess.startLights();

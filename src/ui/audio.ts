@@ -25,6 +25,15 @@ export interface CarHeard {
 }
 export interface PitStopHeard { id: number; u: number; dist: number; pan: number } // u: fase de la parada (0 se para, 1 sale)
 
+/** Efectos táctiles y acústicos de la cámara a bordo (pianos, viento aerodinámico, túnel y cañón urbano). */
+export interface OnboardAudioFx {
+  v: number; // m/s del coche a bordo
+  kerb: number; // 0..1 pisando piano
+  offTrk: number; // 0..1 fuera de pista (hierba/grava)
+  tunnel: number; // 0..1 dentro de túnel (p. ej. Mónaco)
+  canyon: number; // 0..1 entre muros urbanos estrechos
+}
+
 export interface AudioFrame {
   running: boolean; // la sesión corre (fuera de pausa)
   speed: number; // velocidad de simulación (× tiempo real)
@@ -34,6 +43,7 @@ export interface AudioFrame {
   rain: number; // 0..1
   wind: number; // km/h
   stops: PitStopHeard[];
+  onboardFx?: OnboardAudioFx;
 }
 
 // caja de 8 marchas: velocidad (km/h) a la que se llega al corte en cada una
@@ -66,7 +76,7 @@ interface Voice {
   g1: GainNode; g2: GainNode; g3: GainNode;
   nz: GainNode; // escape (ruido)
   nzF: BiquadFilterNode;
-  gear: number; prevV: number; thr: number; dip: number; lastPop: number;
+  gear: number; prevV: number; thr: number; dip: number; blip: number; lastPop: number;
   free: boolean;
 }
 
@@ -78,8 +88,13 @@ export function createAudio(initial: SoundPrefs) {
   let master: GainNode, engBus: GainNode, ambBus: GainNode, sfxBus: GainNode, radioBus: GainNode, radioOut: GainNode, duckG: GainNode;
   let noiseBuf: AudioBuffer, pinkBuf: AudioBuffer;
   let crowdG: GainNode, crowdF: BiquadFilterNode, rainG: GainNode, windG: GainNode, windF: BiquadFilterNode;
+  // capas inmersivas a bordo: viento aerodinámico, retumbo de pianos, grava/baches y eco de túnel/cañón urbano
+  let aeroG: GainNode, aeroBp: BiquadFilterNode;
+  let kerbG: GainNode, kerbOsc: OscillatorNode, kerbOsc2: OscillatorNode;
+  let gravelG: GainNode, gravelF: BiquadFilterNode;
+  let echoSend: GainNode, echoFb: GainNode, echoLp: BiquadFilterNode;
   const voices: Voice[] = [];
-  let lastParam = 0, cheerUntil = 0, cheerK = 0, silenceUntil = 0;
+  let lastParam = 0, cheerUntil = 0, cheerK = 0, silenceUntil = 0, lastBump = 0;
   const stopSeen = new Map<number, { off: boolean; on: boolean }>();
   let want = false; // la sesión quiere sonar (no en pausa)
 
@@ -120,6 +135,32 @@ export function createAudio(initial: SoundPrefs) {
     const rf = filt("highpass", 1800), rf2 = filt("lowpass", 9000); rainG = gainN(0, ambBus); rf.connect(rf2).connect(rainG); loop(noiseBuf).connect(rf);
     // viento: rosa muy grave, que va y viene
     windF = filt("lowpass", 380); windG = gainN(0, ambBus); windF.connect(windG); loop(pinkBuf).connect(windF);
+    // viento aerodinámico en cámara a bordo (> 180 km/h): flujo de aire filtrado en paso-alto + paso-banda
+    const aeroHp = filt("highpass", 620, 0.7);
+    aeroBp = filt("bandpass", 1250, 0.85);
+    aeroG = gainN(0, ambBus);
+    loop(noiseBuf).connect(aeroHp).connect(aeroBp).connect(aeroG);
+    // retumbo táctil al pisar pianos (oscilación grave modulada + paso-bajo) y baches/grava fuera de pista
+    const kerbLp = filt("lowpass", 210, 0.9);
+    kerbG = gainN(0, sfxBus); kerbLp.connect(kerbG);
+    kerbOsc = c.createOscillator(); kerbOsc.type = "sawtooth"; kerbOsc.frequency.value = 46;
+    const ko1 = gainN(0.55, kerbLp); kerbOsc.connect(ko1); kerbOsc.start();
+    kerbOsc2 = c.createOscillator(); kerbOsc2.type = "triangle"; kerbOsc2.frequency.value = 23;
+    const ko2 = gainN(0.45, kerbLp); kerbOsc2.connect(ko2); kerbOsc2.start();
+    gravelF = filt("bandpass", 420, 0.75); gravelG = gainN(0, sfxBus);
+    loop(pinkBuf).connect(gravelF).connect(gravelG);
+    // eco/reverberación corta para túnel (Mónaco) y cañones urbanos estrechos
+    echoSend = c.createGain(); echoSend.gain.value = 0;
+    const echoD1 = c.createDelay(0.25); echoD1.delayTime.value = 0.041;
+    const echoD2 = c.createDelay(0.25); echoD2.delayTime.value = 0.073;
+    echoLp = filt("lowpass", 1800, 0.7);
+    echoFb = c.createGain(); echoFb.gain.value = 0.34;
+    const echoOut = gainN(0.68, duckG), echoOut2 = gainN(0.38, duckG);
+    engBus.connect(echoSend);
+    echoSend.connect(echoD1).connect(echoLp);
+    echoLp.connect(echoFb).connect(echoD1);
+    echoLp.connect(echoOut);
+    echoLp.connect(echoD2).connect(echoOut2);
     applyPrefs();
   }
 
@@ -180,7 +221,7 @@ export function createAudio(initial: SoundPrefs) {
     const nzF = filt("bandpass", 1200, 0.8), nz = c.createGain(); nz.gain.value = 0.15;
     const ns = c.createBufferSource(); ns.buffer = noiseBuf; ns.loop = true; ns.start(0, Math.random() * 1.5);
     ns.connect(nzF).connect(nz).connect(lp);
-    return { id: -1, out, pan, lp, shelf, o1, o2, o3, g1, g2, g3, nz, nzF, gear: 1, prevV: 0, thr: 1, dip: 0, lastPop: 0, free: true };
+    return { id: -1, out, pan, lp, shelf, o1, o2, o3, g1, g2, g3, nz, nzF, gear: 1, prevV: 0, thr: 1, dip: 0, blip: 0, lastPop: 0, free: true };
   }
 
   /** Un estallido corto de ruido filtrado (petardeo, pistola, choque…). */
@@ -251,8 +292,20 @@ export function createAudio(initial: SoundPrefs) {
 
   function updateVoice(vo: Voice, h: CarHeard, f: AudioFrame, t: number, nVoices: number) {
     const v = h.v;
-    const g = gearFor(v, vo.gear);
-    if (g > vo.gear) vo.dip = t + 0.07; // al subir de marcha, el régimen cae un instante
+    const prevGear = vo.gear;
+    const g = gearFor(v, prevGear);
+    if (g > prevGear) {
+      vo.dip = t + (h.onboard ? 0.085 : 0.07); // corte de encendido al subir marcha
+      if (h.onboard && f.speed <= 4 && v > 15) {
+        burst(engBus, t + 0.014, 0.055, 0.28, "bandpass", 720 + g * 85, 1.4, 0);
+      }
+    } else if (g < prevGear) {
+      vo.blip = t + (h.onboard ? 0.095 : 0.075); // golpe de gas al reducir marcha
+      if (h.onboard && f.speed <= 4 && v > 18) {
+        burst(engBus, t + 0.018, 0.048, 0.25, "bandpass", 560 + Math.random() * 260, 1.7, 0);
+        burst(engBus, t + 0.062, 0.04, 0.16, "bandpass", 480 + Math.random() * 220, 1.5, 0);
+      }
+    }
     vo.gear = g;
     // acelerador según cómo cambia la velocidad (en segundos de simulación)
     const acc = f.simDt > 0 ? (v - vo.prevV) / f.simDt : 0;
@@ -265,7 +318,9 @@ export function createAudio(initial: SoundPrefs) {
       for (let i = 0; i < 3 + Math.floor(Math.random() * 3); i++) burst(engBus, t + 0.04 + i * (0.04 + Math.random() * 0.05), 0.05, 0.35 * near, "bandpass", 500 + Math.random() * 500, 1.5, h.pan);
     }
     vo.thr += (thrWant - vo.thr) * 0.35;
-    let rpm = rpmFor(v, g) * (t < vo.dip ? 0.9 : 1);
+    const cutK = t < vo.dip ? (h.onboard ? 0.86 : 0.9) : 1;
+    const blipK = t < vo.blip ? (h.onboard ? 1.11 : 1.06) : 1;
+    let rpm = rpmFor(v, g) * cutK * blipK;
     if (v < 2) rpm = RPM_IDLE * (0.95 + 0.1 * vo.thr);
     // Doppler: más agudo al acercarse, más grave al alejarse
     const dop = h.onboard ? 1 : SOUND_C / Math.max(80, SOUND_C - Math.max(-150, Math.min(150, h.closing)));
@@ -284,7 +339,8 @@ export function createAudio(initial: SoundPrefs) {
     // ganancia por distancia (a 15 m, entera) y menos densidad a velocidades altas
     const dg = h.onboard ? 1.25 : Math.min(1, Math.pow(15 / Math.max(15, h.dist), 1.0));
     const dense = f.speed >= 4 ? 0.6 : 1;
-    vo.out.gain.setTargetAtTime(dg * (0.55 + 0.45 * vo.thr) * dense / Math.sqrt(Math.max(1, nVoices * 0.6)), t, 0.06);
+    const shiftDip = h.onboard && t < vo.dip ? 0.58 : 1;
+    vo.out.gain.setTargetAtTime(dg * (0.55 + 0.45 * vo.thr) * dense * shiftDip / Math.sqrt(Math.max(1, nVoices * 0.6)), t, h.onboard && t < vo.dip ? 0.018 : 0.06);
     vo.pan.pan.setTargetAtTime(h.onboard ? 0 : Math.max(-1, Math.min(1, h.pan)) * 0.8, t, 0.06);
   }
 
@@ -322,6 +378,38 @@ export function createAudio(initial: SoundPrefs) {
     const gust = 0.75 + 0.25 * Math.sin(now / 1700) * Math.sin(now / 2900);
     windG.gain.setTargetAtTime(Math.min(0.5, (f.wind / 45) ** 1.5) * gust, t, 0.5);
     windF.frequency.setTargetAtTime(260 + 4 * f.wind, t, 0.5);
+    // ---- capas inmersivas a bordo: viento aerodinámico (> 180 km/h), pianos, grava y eco en túnel/cañón urbano
+    const fx = !quiet && f.speed <= 4 ? f.onboardFx : undefined;
+    if (fx) {
+      const spDamp = f.speed >= 4 ? 0.6 : 1;
+      const vNorm = Math.max(0, Math.min(1, fx.v / 85));
+      // viento aerodinámico proporcional a v² por encima de ~180 km/h (50 m/s)
+      const aeroU = Math.max(0, Math.min(1, (fx.v - 50) / 42));
+      aeroG.gain.setTargetAtTime(aeroU * aeroU * 0.24 * spDamp, t, 0.09);
+      aeroBp.frequency.setTargetAtTime(1050 + 1650 * aeroU, t, 0.09);
+      // retumbo táctil al pisar pianos (frecuencia ligada a la velocidad sobre las estrías del piano)
+      const kFreq = 36 + 34 * vNorm;
+      kerbOsc.frequency.setTargetAtTime(kFreq, t, 0.03);
+      kerbOsc2.frequency.setTargetAtTime(kFreq * 0.5, t, 0.03);
+      kerbG.gain.setTargetAtTime(fx.kerb * (0.28 + 0.72 * vNorm) * 0.24 * spDamp, t, 0.03);
+      // baches y grava fuera de pista
+      gravelG.gain.setTargetAtTime(fx.offTrk * (0.25 + 0.75 * vNorm) * 0.28 * spDamp, t, 0.04);
+      gravelF.frequency.setTargetAtTime(300 + 380 * vNorm, t, 0.06);
+      if (fx.offTrk > 0.25 && fx.v > 8 && t - lastBump > 0.14) {
+        lastBump = t;
+        burst(sfxBus, t, 0.065, 0.16 * fx.offTrk * spDamp, "lowpass", 240 + Math.random() * 140, 0.9, (Math.random() - 0.5) * 0.6);
+      }
+      // eco corto en túnel (Mónaco) o cañón urbano estrecho
+      const echoWet = Math.max(fx.tunnel * 0.62, fx.canyon * 0.22) * spDamp;
+      echoSend.gain.setTargetAtTime(echoWet, t, 0.08);
+      echoFb.gain.setTargetAtTime(0.24 + 0.22 * fx.tunnel, t, 0.1);
+      echoLp.frequency.setTargetAtTime(1500 + 700 * fx.tunnel, t, 0.1);
+    } else {
+      aeroG.gain.setTargetAtTime(0, t, 0.12);
+      kerbG.gain.setTargetAtTime(0, t, 0.06);
+      gravelG.gain.setTargetAtTime(0, t, 0.08);
+      echoSend.gain.setTargetAtTime(0, t, 0.12);
+    }
     // ---- pistolas: al quitar las ruedas (u = 0,12) y al apretar las nuevas (u ≈ 0,55)
     const live = new Set<number>();
     for (const st of f.stops) {

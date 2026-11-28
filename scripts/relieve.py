@@ -24,7 +24,22 @@ CACHE = sys.argv[1] if len(sys.argv) > 1 else "/tmp/relieve-cache"
 os.makedirs(CACHE, exist_ok=True)
 N = 256      # muestras por vuelta que se guardan
 ZOOM = 14
-SUAVE = {"singapur": 600}  # metros de suavizado; por defecto 150
+SUAVE_DEFECTO = 50  # metros de suavizado por defecto (preserva compresiones y rasantes reales como Eau Rouge o T1 de Austin)
+SUAVE = {
+    "singapur": 600,
+    "lasvegas": 500,
+    "miami": 220,
+    "baku": 120,
+    "monaco": 55,
+}
+# Tramos cubiertos donde el satélite (DSM) mide el edificio/techo encima del túnel en lugar de la calzada (s0, s1 en m)
+TUNNELS = {
+    "monaco": [(1500, 2000)],
+}
+# En urbanos encajonados entre edificios junto al mar, el DSM de 10 m suma tejados adyacentes en los muelles llanos
+QUAY_CLAMP = {
+    "monaco": [(1920, 3150, 3.0)],
+}
 
 # id del juego -> (bacinger, TUM, sentido real, lado real de los boxes)
 CIRCUITS = {
@@ -116,6 +131,23 @@ def elevation(lat, lon):
     def at(i, j): return px(i // 256, j // 256, i % 256, j % 256)
     return (at(i0, j0) * (1 - fx) + at(i0 + 1, j0) * fx) * (1 - fy) + (at(i0, j0 + 1) * (1 - fx) + at(i0 + 1, j0 + 1) * fx) * fy
 
+def despike(v, win=7, max_dev=3.5):
+    """Filtra picos puntuales de copas de árboles, puentes o edificios en el DSM sin aplanar valles ni rasantes."""
+    n = len(v)
+    out = v.copy()
+    half = win // 2
+    for _ in range(2):
+        prev = out.copy()
+        for i in range(n):
+            neigh = np.array([prev[(i + d) % n] for d in range(-half, half + 1)])
+            med = float(np.median(neigh))
+            # recorta con más severidad los picos positivos (árboles/edificios/puentes sobre la pista)
+            if prev[i] - med > max_dev:
+                out[i] = med + max_dev * 0.35
+            elif med - prev[i] > max_dev * 1.6:
+                out[i] = med - max_dev * 0.6
+    return out
+
 def smooth(v, sigma):
     """Suavizado gaussiano circular (sigma en muestras)."""
     n = len(v); k = np.arange(n); k = np.minimum(k, n - k)
@@ -129,7 +161,8 @@ def signed_area(p):
 def write_fields(path, relieve, ancho, sentido, lado, nota):
     txt = open(path, encoding="utf8").read()
     txt = re.sub(r',\s*"relieve"\s*:\s*\{.*?\}', "", txt, flags=re.S)
-    txt = re.sub(r',\s*"ancho"\s*:\s*\[.*?\]', "", txt, flags=re.S)
+    if ancho:
+        txt = re.sub(r',\s*"ancho"\s*:\s*\[.*?\]', "", txt, flags=re.S)
     txt = re.sub(r',\s*"sentido"\s*:\s*"[^"]*"', "", txt)
     txt = re.sub(r'"lado"\s*:\s*"[^"]*"\s*,\s*', "", txt)
     txt = re.sub(r'("boxes"\s*:\s*\{)', lambda m: f'{m.group(1)}"lado":"{lado}",', txt, count=1)
@@ -157,8 +190,22 @@ for cid, (bac, tum, sentido_real, lado) in CIRCUITS.items():
     m = to_map(pn)
     h = np.array([elevation(lat0 + y / mlat, lon0 + x / mlon) for x, y in m])
     raw_range = h.max() - h.min()
-    # en ciudad llana el modelo recoge los edificios: se suaviza mucho más
-    hs = smooth(h, SUAVE.get(cid, 150) / (Lp / N))
+    # filtrar picos puntuales de árboles/edificios/puentes y suavizar conservando compresiones y rampas reales
+    sm_m = SUAVE.get(cid, SUAVE_DEFECTO)
+    hd = despike(h, win=7, max_dev=3.5)
+    ds_m = Lp / N
+    for s0, s1, max_rel in QUAY_CLAMP.get(cid, []):
+        i0, i1 = max(0, int(s0 / ds_m)), min(N - 1, int(s1 / ds_m))
+        base = float(np.percentile(hd[i0:i1 + 1], 15))
+        hd[i0:i1 + 1] = np.minimum(hd[i0:i1 + 1], base + max_rel)
+    for s0, s1 in TUNNELS.get(cid, []):
+        i0, i1 = max(0, int(s0 / ds_m)), min(N - 1, int(s1 / ds_m))
+        if i1 > i0:
+            # cota real en boca de entrada/salida (mínimo local para no coger tejados)
+            h0 = float(np.min(hd[max(0, i0 - 2):min(N, i0 + 3)]))
+            h1 = float(np.min(hd[max(0, i1 - 2):min(N, i1 + 5)]))
+            hd[i0:i1 + 1] = np.linspace(h0, h1, i1 - i0 + 1)
+    hs = smooth(hd, sm_m / ds_m)
     hs -= hs.min()
     # sentido real: el del trazado del juego una vez colocado sobre el mapa (x este, y norte)
     cw = signed_area(m) < 0
@@ -176,7 +223,7 @@ for cid, (bac, tum, sentido_real, lado) in CIRCUITS.items():
             ancho = [round(float(x), 1) for x in np.interp(np.linspace(0, s[-1], N, endpoint=False), s, np.concatenate([w, w[:1]]))]
         else:
             print(f"   ! {cid}: los puntos no coinciden con {tum}.csv ({len(t)} vs {len(pts)}); sin anchura")
-    nota = f"Mapzen/AWS Terrain Tiles (terrarium, z14), suavizado {SUAVE.get(cid, 150)} m; trazado situado con bacinger/f1-circuits"
+    nota = f"Mapzen/AWS Terrain Tiles (terrarium, z14), filtro antipicos + suavizado {sm_m} m; trazado situado con bacinger/f1-circuits"
     write_fields(path, [round(float(x), 1) for x in hs], ancho, medido, lado, nota)
     flags = ("  ESPEJO" if mirror else "") + ("" if medido == sentido_real else f"  ! SENTIDO {medido}, se esperaba {sentido_real}")
     print(f"{cid:12s} ajuste {rms:5.1f} m  escala {scale:.3f}  giro {rot:7.1f}°  largo juego {Lp:6.0f} / mapa {Lq:6.0f} m  desnivel {hs.max():5.1f} m (bruto {raw_range:5.1f})  {medido}  boxes {lado}"

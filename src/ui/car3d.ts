@@ -506,28 +506,51 @@ vec2 dropsAt(vec3 p, vec3 n){
   return vec2(drop * (1.0 - smoothstep(0.35, 0.8, px)), hl * (1.0 - smoothstep(0.08, 0.18, px)));
 }`;
 const CARBON_GLSL = `
-float carbonWeave(vec3 p, vec3 n){
+float carbonWeave(vec3 p, vec3 n, float closeBoost){
   vec3 a = abs(n);
   vec2 uv = a.y > max(a.x, a.z) ? p.xz : (a.z > a.x ? p.xy : p.zy);
-  uv /= 0.008;
+  uv /= mix(0.0085, 0.0062, closeBoost);
   float px = length(fwidth(uv));
-  if (px > 0.7) return 0.5;
+  if (px > 0.85) return 0.5;
   vec2 c = floor(uv);
-  float w = step(2.0, mod(c.x + c.y, 4.0));
-  return mix(0.5, w, 1.0 - smoothstep(0.25, 0.7, px));
+  // sarga 2x2 de fibra de carbono con leve brillo diagonal en primer plano
+  float diag = mod(c.x + c.y, 4.0);
+  float w = step(2.0, diag);
+  vec2 f = fract(uv) - 0.5;
+  float fiber = 0.82 + 0.18 * (w > 0.5 ? cos(f.x * 6.28318) : cos(f.y * 6.28318));
+  float twill = mix(0.18, 0.92, w) * mix(1.0, fiber, closeBoost);
+  return mix(0.5, twill, 1.0 - smoothstep(0.24, 0.82, px));
 }`;
 export function makeCarMaterial(livTex, U) {
 const uLiv = { value: livTex };
 const CAR_MAT = new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.30, metalness: 0.30, clearcoat: 1, clearcoatRoughness: 0.04, envMapIntensity: 1.28, side: THREE.DoubleSide });
 CAR_MAT.onBeforeCompile = (sh) => {
-  Object.assign(sh.uniforms, { uFlood: U.uFlood, uLight: U.uLight, uLiv, uDrops: U.uDrops || { value: 0 } });
-  sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\n" + INST_COL_DEF + "uniform float uLight; attribute vec3 aCol2, aHelm, aHelm2; attribute vec4 aCarData; attribute float aPart; varying float vPaint, vGlow, vShade, vLiv, vHelm, vMatte; varying vec3 vLP, vLN;")
+  Object.assign(sh.uniforms, {
+    uFlood: U.uFlood,
+    uLight: U.uLight,
+    uLiv,
+    uDrops: U.uDrops || { value: 0 },
+    uOnboard: U.uOnboard || { value: 0 },
+    uHeadYaw: U.uHeadYaw || { value: 0 },
+    uHelmPivot: U.uHelmPivot || { value: new THREE.Vector3(0.5, 0.79, 0) },
+  });
+  sh.vertexShader = sh.vertexShader.replace("#include <common>", "#include <common>\n" + INST_COL_DEF + "uniform float uLight, uOnboard, uHeadYaw; uniform vec3 uHelmPivot; attribute vec3 aCol2, aHelm, aHelm2; attribute vec4 aCarData; attribute float aPart; varying float vPaint, vGlow, vShade, vLiv, vHelm, vMatte, vNearCar; varying vec3 vLP, vLN;")
     .replace("#include <beginnormal_vertex>", `#include <beginnormal_vertex>
+      if (isHelmV > 0.5 && nearCarV > 0.01 && abs(uHeadYaw) > 0.001) {
+        float hy = uHeadYaw * nearCarV, hc = cos(hy), hs = sin(hy);
+        objectNormal.xz = vec2(objectNormal.x * hc - objectNormal.z * hs, objectNormal.x * hs + objectNormal.z * hc);
+      }
       if (aPart > 1.5 && aCarData.z > 0.001) {
         float da = 0.50 * aCarData.z, dc = cos(da), ds = sin(da);
         objectNormal.xy = vec2(objectNormal.x * dc - objectNormal.y * ds, objectNormal.x * ds + objectNormal.y * dc);
       }`)
     .replace("#include <begin_vertex>", `#include <begin_vertex>
+      // giro ligero del casco del piloto hacia el vértice en curva (exclusivo del coche seguido a bordo)
+      if (isHelmV > 0.5 && nearCarV > 0.01 && abs(uHeadYaw) > 0.001) {
+        float hy = uHeadYaw * nearCarV, hc = cos(hy), hs = sin(hy);
+        vec2 hp = transformed.xz - uHelmPivot.xz;
+        transformed.xz = uHelmPivot.xz + vec2(hp.x * hc - hp.y * hs, hp.x * hs + hp.y * hc);
+      }
       // alerón delantero (aPart = 1): con daño (aCarData.y), el lado derecho se descuelga; sin él (cambio de morro), no se dibuja
       if (aPart > 0.5 && aPart < 1.5 && aCarData.y != 0.0) {
         if (aCarData.y < 0.0) transformed = vec3(2.6, 0.2, 0.0);
@@ -542,7 +565,14 @@ CAR_MAT.onBeforeCompile = (sh) => {
         vec2 rp = transformed.xy - piv;
         transformed.xy = piv + vec2(rp.x * dc - rp.y * ds, rp.x * ds + rp.y * dc);
       }`)
-    .replace("#include <color_vertex>", `float kr = pow(color.r, 2.2), kb = pow(color.b, 2.2), red = step(color.g, -0.5);
+    .replace("#include <color_vertex>", `#ifdef USE_INSTANCING
+        vec3 carOrigW = (modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+      #else
+        vec3 carOrigW = (modelMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+      #endif
+      float nearCarV = uOnboard * (1.0 - smoothstep(2.2, 4.4, distance(carOrigW, cameraPosition)));
+      float isHelmV = step(1.5, color.g) * (1.0 - step(4.5, color.g));
+      float kr = pow(color.r, 2.2), kb = pow(color.b, 2.2), red = step(color.g, -0.5);
       float tcam = step(4.5, color.g), vis = step(3.5, color.g) - tcam, h2 = step(2.5, color.g) - tcam - vis, h1 = step(1.5, color.g) - tcam - vis - h2;
       float livFrac = aCarData.x - floor(aCarData.x);
       float isCar2 = step(0.20, livFrac);
@@ -551,12 +581,28 @@ CAR_MAT.onBeforeCompile = (sh) => {
       vec3 tcamCol = mix(vec3(0.014, 0.016, 0.02), vec3(0.85, 0.98, 0.03), isCar2);
       float isSpecial = h1 + h2 + vis + tcam;
       vColor = vec4(INST_COL * kr + aCol2 * kb + vec3(pow(clamp(color.g, 0.0, 1.0), 2.2)) * (1.0 - isSpecial) + aHelm * h1 + aHelm2 * h2 + vec3(0.015, 0.022, 0.038) * vis + tcamCol * tcam + vec3(0.25, 0.0, 0.0) * red, 1.0);
-      vPaint = step(0.25, color.r + color.b); vGlow = red * max(uLight, aCarData.w); vShade = max(kr, kb); vLiv = floor(aCarData.x); vLP = position; vLN = normal;`);
-  sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nuniform float uFlood, uDrops; varying float vPaint, vGlow, vShade, vLiv, vHelm, vMatte; varying vec3 vLP, vLN;" + LIV_GLSL + DROPS_GLSL + CARBON_GLSL)
-    .replace("#include <color_fragment>", "#include <color_fragment>\nvec3 nL = normalize(vLN);\nif (vPaint > 0.5) diffuseColor.rgb = liveryAt(vLP, nL, floor(vLiv + 0.5)) * vShade;\nisCarb = (1.0 - vPaint) * (1.0 - step(0.5, vHelm)) * (1.0 - step(0.06, diffuseColor.r + diffuseColor.g + diffuseColor.b));\nif (isCarb > 0.5) { cw = carbonWeave(vLP, nL); diffuseColor.rgb = mix(vec3(0.005), vec3(0.018), cw); }\ndrop = uDrops > 0.01 ? dropsAt(vLP, nL) * uDrops : vec2(0.0); diffuseColor.rgb *= 1.0 - 0.3 * drop.x;")
-    .replace("#include <roughnessmap_fragment>", "float pRough = mix(0.24, 0.48, vMatte); float baseR = mix(mix(0.62, 0.34 + 0.18 * (1.0 - cw), isCarb), pRough, vPaint); baseR = mix(baseR, mix(0.12, 0.06, step(1.5, vHelm)), step(0.5, vHelm)); float roughnessFactor = mix(baseR, 0.04, drop.x);")
+      vPaint = step(0.25, color.r + color.b); vGlow = red * max(uLight, aCarData.w); vShade = max(kr, kb); vLiv = floor(aCarData.x); vLP = position; vLN = normal; vNearCar = nearCarV;`);
+  sh.fragmentShader = sh.fragmentShader.replace("#include <common>", "#include <common>\nuniform float uFlood, uDrops; varying float vPaint, vGlow, vShade, vLiv, vHelm, vMatte, vNearCar; varying vec3 vLP, vLN;" + LIV_GLSL + DROPS_GLSL + CARBON_GLSL)
+    .replace("#include <color_fragment>", `#include <color_fragment>
+vec3 nL = normalize(vLN);
+if (vPaint > 0.5) diffuseColor.rgb = liveryAt(vLP, nL, floor(vLiv + 0.5)) * vShade;
+isCarb = (1.0 - vPaint) * (1.0 - step(0.5, vHelm)) * (1.0 - step(0.06, diffuseColor.r + diffuseColor.g + diffuseColor.b));
+float isHaloZone = step(0.76, vLP.y) * step(-0.45, vLP.x) * step(vLP.x, 1.32) * (1.0 - step(0.36, abs(vLP.z))) * (1.0 - step(0.5, vHelm));
+float isPodCarb = step(-0.35, vLP.x) * step(vLP.x, 0.92) * step(0.32, abs(vLP.z)) * step(0.50, vLP.y) * (1.0 - step(0.5, vHelm));
+if (isCarb > 0.5) {
+  cw = carbonWeave(vLP, nL, vNearCar);
+  diffuseColor.rgb = mix(vec3(0.0045), vec3(0.022 + 0.010 * vNearCar), cw);
+} else if (vNearCar > 0.01 && (isHaloZone > 0.5 || isPodCarb > 0.5)) {
+  // detalle cercano de trama de fibra de carbono en halo y bordes de pontones visibles desde a bordo
+  cw = carbonWeave(vLP, nL, 1.0);
+  float trimK = vNearCar * (isHaloZone > 0.5 ? 0.32 : 0.16);
+  diffuseColor.rgb *= mix(1.0, 0.72 + 0.46 * cw, trimK);
+  isCarb = max(isCarb, trimK * 0.65);
+}
+drop = uDrops > 0.01 ? dropsAt(vLP, nL) * uDrops : vec2(0.0); diffuseColor.rgb *= 1.0 - 0.3 * drop.x;`)
+    .replace("#include <roughnessmap_fragment>", "float pRough = mix(0.24, 0.48, vMatte); float baseR = mix(mix(0.62, 0.30 + 0.22 * (1.0 - cw), isCarb), pRough, vPaint); baseR = mix(baseR, mix(0.12, 0.06, step(1.5, vHelm)), step(0.5, vHelm)); float roughnessFactor = mix(baseR, 0.04, drop.x);")
     .replace("#include <metalnessmap_fragment>", "float pMetal = mix(0.42, 0.12, vMatte); float metalnessFactor = mix(pMetal * vPaint, 0.85, step(1.5, vHelm));")
-    .replace("#include <lights_physical_fragment>", "#include <lights_physical_fragment>\nfloat pCoat = mix(1.0, 0.35, vMatte); material.clearcoat *= max(mix(0.32 * isCarb, pCoat, vPaint), step(0.5, vHelm));")
+    .replace("#include <lights_physical_fragment>", "#include <lights_physical_fragment>\nfloat pCoat = mix(1.0, 0.35, vMatte); material.clearcoat *= max(mix((0.36 + 0.24 * vNearCar) * isCarb, pCoat, vPaint), step(0.5, vHelm));")
     .replace("vec3 totalEmissiveRadiance = emissive;", "vec2 drop = vec2(0.0); float isCarb = 0.0, cw = 0.5;\nvec3 totalEmissiveRadiance = emissive + vColor.rgb * uFlood * 0.28 + vec3(3.2, 0.16, 0.06) * vGlow;")
     .replace("#include <emissivemap_fragment>", "#include <emissivemap_fragment>\ntotalEmissiveRadiance += vec3(0.9, 0.95, 1.0) * drop.y * (0.15 + 0.6 * uFlood);");
 };
@@ -835,11 +881,17 @@ export function extractCarFromGltf(root, separateWheel = false) {
     // etiquetar la cámara en T (parte superior de la toma de aire) y el plano superior del alerón trasero (DRS/MO)
     const pos = carBase.attributes.position, prt = carBase.attributes.aPart, colAttr = carBase.attributes.color;
     if (pos && colAttr) {
+      let hx = 0, hy = 0, hz = 0, hn = 0;
+      let mx = 0, my = 0, mz = 0, mn = 0;
       for (let i = 0; i < pos.count; i++) {
-        const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+        const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i), cg = colAttr.getY(i);
         if (y > 1.07 && x > -0.68 && x < 0.18 && Math.abs(z) < 0.26) colAttr.setXYZ(i, TCAM[0], TCAM[1], TCAM[2]);
+        if (cg >= 1.5 && cg < 4.5) { hx += x; hy += y; hz += z; hn++; }
+        if (x > 0.62 && x < 1.15 && y > 0.66 && y < 0.86 && z > 0.48 && z < 0.84) { mx += x; my += y; mz += z; mn++; }
       }
       colAttr.needsUpdate = true;
+      if (hn > 0) carBase.userData.helmPivot = [hx / hn, hy / hn, hz / hn];
+      if (mn > 4) carBase.userData.mirrorPos = [mx / mn - 0.055, my / mn + 0.032, mz / mn];
     }
     if (pos && prt) {
       let hasFlap = false;
@@ -949,6 +1001,8 @@ export function loadCarAssets(onReady) {
       carLoGeo: res.carLoBase ? res.carLoBase.clone() : null,
       steer: res.steer,
       cam: res.cam,
+      helmPivot: res.carBase?.userData?.helmPivot ?? null,
+      mirrorPos: res.carBase?.userData?.mirrorPos ?? null,
     });
   });
 }
