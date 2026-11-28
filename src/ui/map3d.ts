@@ -4457,8 +4457,10 @@ function onboardFov(v) {
   const a = camera.aspect, R = Math.PI / 180;
   if (!(a > 0) || a >= 1.6) return v;
   const h = 2 * Math.atan(Math.tan(v * R / 2) * 1.6);
-  return clamp(2 * Math.atan(Math.tan(h / 2) / a) / R, v, 106);
+  return clamp(2 * Math.atan(Math.tan(h / 2) / a) / R, v, 92);
 }
+/** 0 en apaisado (16:10 o más ancho), 1 en un móvil en vertical: cuánto hay que adaptar el a bordo. */
+const portraitK = () => clamp((1.6 - camera.aspect) / 1.1, 0, 1);
 /** Escala del coche: muy agrandado de lejos, casi real de cerca. */
 function carK(W) { const t = clamp((W - W_REAL) / Math.max(1, T.Wov - W_REAL), 0, 1); return W / (5.6 - 3.3 * t); }
 
@@ -4957,10 +4959,13 @@ function updateCamera(dt, now) {
     const ux = -p.sz * p.fy, uy = p.sz * p.fx - p.sx * p.fz, uz = p.sx * p.fy;
     const th = clamp(p.acc / 55, -1, 0.4) * 0.05, ph = p.roll * 0.04;
     const hx = ux - p.fx * th + p.sx * ph, hy = uy - p.fy * th, hz = uz - p.fz * th + p.sz * ph;
-    want.pos.set(p.px + p.fx * camPos[0] * k + hx * camPos[1] * k, p.py + hy * camPos[1] * k + p.fy * camPos[0] * k, p.pz + p.fz * camPos[0] * k + hz * camPos[1] * k);
+    // en vertical la imagen es alta y estrecha: la cámara se adelanta (menos coche detrás del piloto) y mira algo
+    // más abajo (menos cielo por encima, que es donde el fov abierto más deforma)
+    const pk = portraitK(), cf = camPos[0] + 0.55 * pk, ch = camPos[1] - 0.08 * pk, lookY = 0.45 - 1.5 * pk;
+    want.pos.set(p.px + p.fx * cf * k + hx * ch * k, p.py + hy * ch * k + p.fy * cf * k, p.pz + p.fz * cf * k + hz * ch * k);
     sample(p.s + 16, _tp);
     const la = latAt(p, p.s + 16, curW, 0) * curW * arrAt(T.wr, p.s + 16);
-    const lx = p.px + p.fx * 14 * k + hx * 0.45 * k, ly = p.py + p.fy * 14 * k + hy * 0.45 * k, lz = p.pz + p.fz * 14 * k + hz * 0.45 * k;
+    const lx = p.px + p.fx * 14 * k + hx * lookY * k, ly = p.py + p.fy * 14 * k + hy * lookY * k, lz = p.pz + p.fz * 14 * k + hz * lookY * k;
     want.look.set(lx + (_tp.x + _tp.rx * la - lx) * 0.15, ly + (_tp.y + 0.5 - ly) * 0.15, lz + (_tp.z + _tp.rz * la - lz) * 0.15);
     want.fov = 72;
     onboard = true;
