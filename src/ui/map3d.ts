@@ -4119,7 +4119,10 @@ function updateLight(dt, now) {
   _c4.setHex(0xfff3dd).lerp(_c1.setHex(0xff9a52), warm);
   sun.color.setHex(0x8fa8ff).lerp(_c4, sunK);
   // intensidades en unidades físicas de three (π ≈ «blanco a pleno sol»); contraste sol/sombra nítido estilo mánager moderno
-  const sunTotal = 3.35 * day * (1 - 0.78 * cloud) + 0.35 * (1 - sunK);
+  // con lluvia no hay sol directo: si no, las sombras nítidas de pórticos y tribunas se ven sobre el asfalto mojado
+  // (que hace de espejo) como cortes rectos en la pista. Lo que se quita lo pone el entorno, que es luz difusa.
+  const rainDim = sstep(0.05, 1.2, smoothRain);
+  const sunTotal = (3.35 * day * (1 - 0.78 * cloud) + 0.35 * (1 - sunK)) * (1 - 0.9 * rainDim);
   sunFar.color.copy(sun.color);
   if (csmActive) {
     sun.intensity = sunTotal * 0.65;
@@ -4147,7 +4150,7 @@ function updateLight(dt, now) {
   const preset = pickHdriPreset(day, warm, cloud, smoothRain);
   needHdri(preset);
   const fl = flashK(now);
-  const targetEnv = hdriEnv ? (0.78 + 0.38 * (1 - day) + 0.45 * warm) : (0.94 + 0.62 * (1 - day) + 0.6 * warm);
+  const targetEnv = (hdriEnv ? (0.78 + 0.38 * (1 - day) + 0.45 * warm) : (0.94 + 0.62 * (1 - day) + 0.6 * warm)) + 0.3 * rainDim * day;
   smoothEnvInt += (targetEnv - smoothEnvInt) * (1 - Math.exp(-dt / 0.55));
   // suaviza brevemente la exposición si acaba de cambiar el HDRI para evitar un fogonazo seco
   const swapT = clamp((now - hdriSwapAt) / 600, 0, 1);
